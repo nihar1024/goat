@@ -1502,28 +1502,39 @@ class ThumbnailGeneratorTask:
 
             # Collect all items to process
             items: list[ItemToProcess] = []
+            fetch_errors: list[str] = []
 
             if params.include_projects and (params.project_ids or not has_specific_ids):
-                projects = await self._fetch_projects_to_update(
-                    params.batch_size,
-                    project_ids=params.project_ids if params.project_ids else None,
-                    use_bounds=params.use_bounds,
-                    since=since,
-                )
-                items.extend(projects)
-                logger.info(f"Found {len(projects)} projects to check")
+                try:
+                    projects = await self._fetch_projects_to_update(
+                        params.batch_size,
+                        project_ids=params.project_ids if params.project_ids else None,
+                        use_bounds=params.use_bounds,
+                        since=since,
+                    )
+                    items.extend(projects)
+                    logger.info(f"Found {len(projects)} projects to check")
+                except Exception as e:
+                    logger.error(f"Failed to fetch projects: {e}")
+                    fetch_errors.append(f"projects fetch: {e}")
 
             if params.include_layers and (params.layer_ids or not has_specific_ids):
                 remaining = params.batch_size - len(items)
                 if remaining > 0:
-                    layers = await self._fetch_layers_to_update(
-                        remaining,
-                        layer_ids=params.layer_ids if params.layer_ids else None,
-                        use_bounds=params.use_bounds,
-                        since=since,
-                    )
-                    items.extend(layers)
-                    logger.info(f"Found {len(layers)} feature/raster layers to check")
+                    try:
+                        layers = await self._fetch_layers_to_update(
+                            remaining,
+                            layer_ids=params.layer_ids if params.layer_ids else None,
+                            use_bounds=params.use_bounds,
+                            since=since,
+                        )
+                        items.extend(layers)
+                        logger.info(
+                            f"Found {len(layers)} feature/raster layers to check"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to fetch layers: {e}")
+                        fetch_errors.append(f"layers fetch: {e}")
 
             # Fetch table layers if enabled
             if params.include_table_layers and (
@@ -1531,13 +1542,17 @@ class ThumbnailGeneratorTask:
             ):
                 remaining = params.batch_size - len(items)
                 if remaining > 0:
-                    tables = await self._fetch_table_layers_to_update(
-                        remaining,
-                        layer_ids=params.layer_ids if params.layer_ids else None,
-                        since=since,
-                    )
-                    items.extend(tables)
-                    logger.info(f"Found {len(tables)} table layers to check")
+                    try:
+                        tables = await self._fetch_table_layers_to_update(
+                            remaining,
+                            layer_ids=params.layer_ids if params.layer_ids else None,
+                            since=since,
+                        )
+                        items.extend(tables)
+                        logger.info(f"Found {len(tables)} table layers to check")
+                    except Exception as e:
+                        logger.error(f"Failed to fetch table layers: {e}")
+                        fetch_errors.append(f"table layers fetch: {e}")
 
             if not items:
                 logger.info("No items found to check")
@@ -1560,21 +1575,77 @@ class ThumbnailGeneratorTask:
             # Process items with concurrency limit
             results: list[ThumbnailResult] = []
             semaphore = asyncio.Semaphore(params.max_concurrent)
+            processed_count = 0
+            total_items = len(items)
 
             async def process_item_with_semaphore(
                 item: ItemToProcess,
+                index: int,
             ) -> ThumbnailResult:
-                async with semaphore:
-                    # Route to appropriate processor based on layer_type
-                    if item.layer_type == "table":
-                        return await self._process_table_item(item, force=force_regen)
-                    else:
-                        return await self._process_item(item, force=force_regen)
+                nonlocal processed_count
+                try:
+                    async with semaphore:
+                        # Route to appropriate processor based on layer_type
+                        if item.layer_type == "table":
+                            result = await self._process_table_item(
+                                item, force=force_regen
+                            )
+                        else:
+                            result = await self._process_item(item, force=force_regen)
 
-            # Process all items
-            tasks = [process_item_with_semaphore(item) for item in items]
-            all_results = await asyncio.gather(*tasks)
-            results = list(all_results)
+                        processed_count += 1
+                        if processed_count % 10 == 0 or processed_count == total_items:
+                            logger.info(
+                                f"Progress: {processed_count}/{total_items} items processed "
+                                f"({processed_count * 100 // total_items}%)"
+                            )
+                        return result
+                except Exception as e:
+                    # Catch any unexpected errors to prevent task failure
+                    processed_count += 1
+                    item_desc = (
+                        f"{item.type}[{item.layer_type}]"
+                        if item.layer_type
+                        else item.type
+                    )
+                    logger.error(
+                        f"Unexpected error processing {item_desc}/{item.id}: {e}"
+                    )
+                    return ThumbnailResult(
+                        item_type=item.type,
+                        layer_type=item.layer_type,
+                        item_id=str(item.id),
+                        success=False,
+                        error=f"Unexpected error: {e}",
+                    )
+
+            # Process all items with return_exceptions for extra safety
+            tasks = [
+                process_item_with_semaphore(item, i) for i, item in enumerate(items)
+            ]
+            all_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Handle any exceptions that slipped through
+            for i, result in enumerate(all_results):
+                if isinstance(result, Exception):
+                    item = items[i]
+                    item_desc = (
+                        f"{item.type}[{item.layer_type}]"
+                        if item.layer_type
+                        else item.type
+                    )
+                    logger.error(f"Task exception for {item_desc}/{item.id}: {result}")
+                    results.append(
+                        ThumbnailResult(
+                            item_type=item.type,
+                            layer_type=item.layer_type,
+                            item_id=str(item.id),
+                            success=False,
+                            error=str(result),
+                        )
+                    )
+                else:
+                    results.append(result)
 
             # Collect stats
             success_count = sum(1 for r in results if r.success)
@@ -1603,13 +1674,15 @@ class ThumbnailGeneratorTask:
                 + raster_layers_processed
                 + table_layers_processed
             )
-            errors = [
+            errors = fetch_errors + [
                 f"{r.item_type}[{r.layer_type or 'n/a'}]/{r.item_id}: {r.error}"
                 for r in results
                 if not r.success
             ]
 
-            logger.info(f"Completed: {success_count} successful, {error_count} failed")
+            logger.info(
+                f"Completed: {success_count} successful, {error_count + len(fetch_errors)} failed"
+            )
 
             return ThumbnailTaskOutput(
                 total_processed=len(results),

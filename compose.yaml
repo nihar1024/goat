@@ -56,7 +56,7 @@ x-env-print: &env-print
   S3_REGION_NAME: ${S3_REGION_NAME:-us-east-1}
 
 x-service-core: &service-core
-  image: ghcr.io/plan4better/goat/core
+  image: ghcr.io/plan4better/goat/core:2.3.9
   build:
     context: .
     dockerfile: apps/core/Dockerfile
@@ -195,6 +195,7 @@ services:
 
   # Windmill Server - API, UI, scheduler
   windmill-server:
+    image: ghcr.io/plan4better/goat/windmill-server:2.3.9
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -213,6 +214,7 @@ services:
 
   # Windmill Worker - Default (cron jobs, system tasks)
   windmill-worker-default:
+    image: ghcr.io/plan4better/goat/windmill-worker-default:2.3.9
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -230,6 +232,7 @@ services:
 
   # Windmill Worker - Tools (analytics: buffer, heatmap, isochrone, etc.)
   windmill-worker-tools:
+    image: ghcr.io/plan4better/goat/windmill-worker-tools:2.3.9
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -284,6 +287,7 @@ services:
   # Standard version for prod environment
   windmill-worker-print:
     profiles: [prod]
+    image: ghcr.io/plan4better/goat/windmill-worker-print:2.3.9
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -304,6 +308,7 @@ services:
   # Uses network_mode to share network with goat-dev so localhost reaches the dev services
   windmill-worker-print-dev:
     profiles: [dev]
+    image: ghcr.io/plan4better/goat/windmill-worker-print:2.3.9
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -376,7 +381,7 @@ services:
 
   geoapi:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/geoapi
+    image: ghcr.io/plan4better/goat/geoapi:2.3.9
     build:
       context: .
       dockerfile: apps/geoapi/Dockerfile
@@ -398,7 +403,7 @@ services:
 
   processes:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/processes
+    image: ghcr.io/plan4better/goat/processes:2.3.9
     build:
       context: .
       dockerfile: apps/processes/Dockerfile
@@ -428,7 +433,8 @@ services:
         condition: service_started
 
   web:
-    image: ghcr.io/plan4better/goat/web
+    profiles: [prod]
+    image: ghcr.io/plan4better/goat/web:2.3.9
     build:
       context: .
       dockerfile: apps/web/Dockerfile

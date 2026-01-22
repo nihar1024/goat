@@ -90,7 +90,7 @@ x-env-tools: &env-tools
   GEOCODING_AUTHORIZATION: ${GEOCODING_AUTHORIZATION}
 
 x-worker-tools-base: &worker-tools-base
-  image: ghcr.io/plan4better/goat/windmill-worker-tools:2.3.9
+  image: ghcr.io/plan4better/goat/windmill-worker-tools:latest
   build:
     context: .
     dockerfile: apps/processes/workers/Dockerfile
@@ -104,7 +104,7 @@ x-worker-tools-base: &worker-tools-base
     - windmill-server
 
 x-worker-print-base: &worker-print-base
-  image: ghcr.io/plan4better/goat/windmill-worker-print:2.3.9
+  image: ghcr.io/plan4better/goat/windmill-worker-print:latest
   build:
     context: .
     dockerfile: apps/processes/workers/Dockerfile
@@ -114,7 +114,7 @@ x-worker-print-base: &worker-print-base
     - windmill-server
 
 x-service-core: &service-core
-  image: ghcr.io/plan4better/goat/core:2.3.9
+  image: ghcr.io/plan4better/goat/core:latest
   build:
     context: .
     dockerfile: apps/core/Dockerfile
@@ -131,6 +131,9 @@ x-service-core: &service-core
 networks:
   goat:
     name: goat
+
+volumes:
+  goat-data:
 
 services:
   # ===========================================================================
@@ -189,7 +192,7 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - ./data/db:/storage/data
+      - goat-data:/storage/data
       - ./scripts/db/init-db.sql:/rds/init/init-db.sql:ro
 
   minio:
@@ -201,9 +204,9 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
-    command: ["server", "--console-address", ":9001", "/data"]
+    command: ["server", "--console-address", ":9001", "/data/s3"]
     volumes:
-      - ./data/s3:/data:z
+      - goat-data:/data
     healthcheck:
       test: "mc ready local"
       interval: 2s
@@ -248,7 +251,7 @@ services:
   # ===========================================================================
 
   windmill-server:
-    image: ghcr.io/plan4better/goat/windmill-server:2.3.9
+    image: ghcr.io/plan4better/goat/windmill-server:latest
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -266,7 +269,7 @@ services:
         condition: service_healthy
 
   windmill-worker-default:
-    image: ghcr.io/plan4better/goat/windmill-worker-default:2.3.9
+    image: ghcr.io/plan4better/goat/windmill-worker-default:latest
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -291,20 +294,14 @@ services:
     profiles: [prod]
     <<: *worker-tools-base
     volumes:
-      - ./data/ducklake:/app/data/ducklake
-      - ./data/tiles:/app/data/tiles
-      - ./data/traveltime_matrices:/app/data/traveltime_matrices:ro
-      - ./data/gtfs:/app/data/gtfs:ro
+      - goat-data:/app/data
 
   windmill-worker-tools-dev:
     profiles: [dev]
     <<: *worker-tools-base
     volumes:
       - ./packages/python/goatlib/src/goatlib:/venv/lib/python3.11/site-packages/goatlib:ro
-      - ./data/ducklake:/app/data/ducklake
-      - ./data/tiles:/app/data/tiles
-      - ./data/traveltime_matrices:/app/data/traveltime_matrices:ro
-      - ./data/gtfs:/app/data/gtfs:ro
+      - goat-data:/app/data
 
   # Print worker (PDF reports, thumbnails)
   windmill-worker-print:
@@ -316,7 +313,7 @@ services:
       <<: [*env-windmill, *env-print]
       PRINT_BASE_URL: ${PRINT_BASE_URL:-http://web:3000}
     volumes:
-      - ./data/ducklake:/app/data/ducklake:ro
+      - goat-data:/app/data:ro
 
   windmill-worker-print-dev:
     profiles: [dev]
@@ -330,7 +327,7 @@ services:
       PRINT_BASE_URL: http://localhost:3000
     volumes:
       - ./packages/python/goatlib/src/goatlib:/venv/lib/python3.11/site-packages/goatlib:ro
-      - ./data/ducklake:/app/data/ducklake:ro
+      - goat-data:/app/data:ro
 
   # ===========================================================================
   # Development Environment (profile: dev)
@@ -372,7 +369,7 @@ services:
 
   ducklake-init:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/windmill-worker-tools:2.3.9
+    image: ghcr.io/plan4better/goat/windmill-worker-tools:latest
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -394,7 +391,7 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
     volumes:
       - ./scripts/db/init-ducklake.py:/app/init-ducklake.py:ro
-      - ./data/ducklake:/app/data/ducklake
+      - goat-data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -417,7 +414,7 @@ services:
       WINDMILL_TOKEN_FILE: /app/data/windmill/.token
     volumes:
       - ./scripts/windmill/init-windmill.py:/app/init-windmill.py:ro
-      - ./data/windmill:/app/data/windmill
+      - goat-data:/app/data
     depends_on:
       windmill-server:
         condition: service_started
@@ -425,7 +422,7 @@ services:
 
   windmill-sync:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/windmill-worker-tools:2.3.9
+    image: ghcr.io/plan4better/goat/windmill-worker-tools:latest
     build:
       context: .
       dockerfile: apps/processes/workers/Dockerfile
@@ -439,7 +436,7 @@ services:
       WINDMILL_WORKSPACE: goat
       WINDMILL_TOKEN_FILE: /app/data/windmill/.token
     volumes:
-      - ./data/windmill:/app/data/windmill:ro
+      - goat-data:/app/data:ro
       - ./scripts/windmill:/app/scripts/windmill:ro
     depends_on:
       windmill-init:
@@ -468,7 +465,7 @@ services:
 
   geoapi:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/geoapi:2.3.9
+    image: ghcr.io/plan4better/goat/geoapi:latest
     build:
       context: .
       dockerfile: apps/geoapi/Dockerfile
@@ -482,8 +479,7 @@ services:
       <<: *env-core
       TILES_DATA_DIR: /app/data/tiles
     volumes:
-      - ./data/ducklake:/app/data/ducklake:ro
-      - ./data/tiles:/app/data/tiles:ro
+      - goat-data:/app/data:ro
     depends_on:
       db:
         condition: service_healthy
@@ -492,7 +488,7 @@ services:
 
   processes:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/processes:2.3.9
+    image: ghcr.io/plan4better/goat/processes:latest
     build:
       context: .
       dockerfile: apps/processes/Dockerfile
@@ -513,10 +509,7 @@ services:
       TILES_DATA_DIR: /app/data/tiles
       TRAVELTIME_MATRICES_DIR: /app/data/traveltime_matrices
     volumes:
-      - ./data/ducklake:/app/data/ducklake
-      - ./data/tiles:/app/data/tiles
-      - ./data/traveltime_matrices:/app/data/traveltime_matrices:ro
-      - ./data/windmill:/app/data/windmill:ro
+      - goat-data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -529,7 +522,7 @@ services:
 
   web:
     profiles: [prod]
-    image: ghcr.io/plan4better/goat/web:2.3.9
+    image: ghcr.io/plan4better/goat/web:latest
     build:
       context: .
       dockerfile: apps/web/Dockerfile

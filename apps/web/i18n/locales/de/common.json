@@ -1126,6 +1126,8 @@
   "routing_pt_mode": "Verkehrsmittel ÖV",
   "routing_type": "Verkehrsmittel",
   "run": "Ausführen",
+  "run_node": "Knoten ausführen",
+  "run_to_here": "Bis hierhin ausführen",
   "running": "Läuft",
   "saturday": "Samstag",
   "save": "Speichern",

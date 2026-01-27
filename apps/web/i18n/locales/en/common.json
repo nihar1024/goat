@@ -1156,6 +1156,8 @@
   "routing_pt_mode": "Public transport modes",
   "routing_type": "Routing type",
   "run": "Run",
+  "run_node": "Run Node",
+  "run_to_here": "Run to Here",
   "running": "Running",
   "saturday": "Saturday",
   "save": "Save",

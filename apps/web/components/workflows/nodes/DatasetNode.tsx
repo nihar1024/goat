@@ -1,13 +1,9 @@
 "use client";
 
-import {
-  Storage as DatasetIcon,
-  Delete as DeleteIcon,
-  ContentCopy as DuplicateIcon,
-} from "@mui/icons-material";
-import { Box, IconButton, Stack, Typography } from "@mui/material";
+import { Delete as DeleteIcon, ContentCopy as DuplicateIcon } from "@mui/icons-material";
+import { Box, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import { styled } from "@mui/material/styles";
-import { Handle, type NodeProps, Position } from "@xyflow/react";
+import { Handle, type NodeProps, NodeToolbar, Position } from "@xyflow/react";
 import React, { memo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
@@ -19,10 +15,6 @@ import type { AppDispatch } from "@/lib/store";
 import { selectNodes } from "@/lib/store/workflow/selectors";
 import { addNode, removeNodes } from "@/lib/store/workflow/slice";
 import type { DatasetNodeData } from "@/lib/validations/workflow";
-
-const NodeWrapper = styled(Box)({
-  position: "relative",
-});
 
 const NodeContainer = styled(Box, {
   shouldForwardProp: (prop) => prop !== "selected",
@@ -47,21 +39,18 @@ const NodeHeader = styled(Box)(({ theme }) => ({
   alignItems: "center",
   gap: theme.spacing(1),
   marginBottom: theme.spacing(0.5),
-  paddingRight: 40,
 }));
 
-const NodeIconWrapper = styled(Box, {
-  shouldForwardProp: (prop) => prop !== "selected",
-})<{ selected?: boolean }>(({ theme, selected }) => ({
+const NodeIconWrapper = styled(Box)(({ theme }) => ({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 28,
-  height: 28,
-  minWidth: 28,
-  borderRadius: "50%",
-  backgroundColor: selected ? theme.palette.primary.main : theme.palette.grey[500],
-  color: theme.palette.common.white,
+  width: 40,
+  height: 40,
+  minWidth: 40,
+  borderRadius: theme.shape.borderRadius,
+  border: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.default,
 }));
 
 const StyledHandle = styled(Handle, {
@@ -73,25 +62,23 @@ const StyledHandle = styled(Handle, {
   border: `2px solid ${theme.palette.background.paper}`,
 }));
 
-const ActionBar = styled(Stack)(({ theme }) => ({
-  position: "absolute",
-  top: -2,
-  right: -2,
-  backgroundColor: theme.palette.primary.main,
-  borderRadius: `0 ${theme.shape.borderRadius}px 0 ${theme.shape.borderRadius}px`,
-  padding: "2px 3px",
-  gap: 1,
+const ToolbarContainer = styled(Stack)(({ theme }) => ({
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(0.5),
+  gap: theme.spacing(0.5),
   flexDirection: "row",
+  boxShadow: theme.shadows[4],
+  border: `1px solid ${theme.palette.divider}`,
 }));
 
-const ActionButton = styled(IconButton)(({ theme }) => ({
-  padding: 1,
-  color: theme.palette.common.white,
+const ToolbarButton = styled(IconButton)(({ theme }) => ({
+  padding: theme.spacing(0.5),
   "&:hover": {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: theme.palette.action.hover,
   },
   "& svg": {
-    fontSize: 12,
+    fontSize: 18,
   },
 }));
 
@@ -149,46 +136,37 @@ const DatasetNode: React.FC<DatasetNodeProps> = ({ id, data, selected }) => {
   );
 
   return (
-    <NodeWrapper>
-      <NodeContainer selected={selected}>
-        {/* Action buttons - only when selected */}
-        {selected && (
-          <ActionBar>
-            <ActionButton onClick={handleDuplicate} title={t("duplicate")}>
+    <>
+      {/* NodeToolbar - automatically shown when selected */}
+      <NodeToolbar position={Position.Top} align="end">
+        <ToolbarContainer>
+          <Tooltip title={t("duplicate")} arrow>
+            <ToolbarButton onClick={handleDuplicate}>
               <DuplicateIcon />
-            </ActionButton>
-            <ActionButton onClick={handleDelete} title={t("delete")}>
+            </ToolbarButton>
+          </Tooltip>
+          <Tooltip title={t("delete")} arrow>
+            <ToolbarButton onClick={handleDelete}>
               <DeleteIcon />
-            </ActionButton>
-          </ActionBar>
-        )}
+            </ToolbarButton>
+          </Tooltip>
+        </ToolbarContainer>
+      </NodeToolbar>
 
+      <NodeContainer selected={selected}>
         {/* Output handle - right */}
         <StyledHandle type="source" position={Position.Right} selected={selected} />
 
         <NodeHeader>
-          <NodeIconWrapper selected={selected}>
-            <DatasetIcon sx={{ fontSize: 16 }} />
+          <NodeIconWrapper>
+            <Icon iconName={getGeometryIcon()} sx={{ fontSize: 20, color: "text.secondary" }} />
           </NodeIconWrapper>
-          <Typography variant="caption" color="text.secondary" fontWeight="medium">
-            {data.layerId ? "Layer" : t("add_dataset")}
+          <Typography variant="body2" fontWeight="bold" sx={{ wordBreak: "break-word" }}>
+            {data.layerId ? data.label : t("no_dataset")}
           </Typography>
         </NodeHeader>
-
-        <Typography variant="body2" fontWeight="medium" sx={{ mb: 0.5, wordBreak: "break-word" }}>
-          {data.label}
-        </Typography>
-
-        {data.geometryType && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Icon iconName={getGeometryIcon()} sx={{ fontSize: 12, opacity: 0.7 }} />
-            <Typography variant="caption" color="text.secondary">
-              {data.geometryType}
-            </Typography>
-          </Box>
-        )}
       </NodeContainer>
-    </NodeWrapper>
+    </>
   );
 };
 

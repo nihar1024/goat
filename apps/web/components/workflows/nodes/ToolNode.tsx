@@ -3,12 +3,14 @@
 import {
   Delete as DeleteIcon,
   ContentCopy as DuplicateIcon,
+  PlayArrow as PlayIcon,
+  SkipNext as RunToHereIcon,
   Settings as ToolSettingsIcon,
   Warning as WarningIcon,
 } from "@mui/icons-material";
-import { Box, Divider, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Divider, IconButton, Stack, Tooltip, Typography } from "@mui/material";
 import { styled } from "@mui/material/styles";
-import { Handle, type NodeProps, Position, useEdges } from "@xyflow/react";
+import { Handle, type NodeProps, NodeToolbar, Position, useEdges } from "@xyflow/react";
 import React, { memo, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
@@ -29,9 +31,6 @@ import type { ToolNodeData } from "@/lib/validations/workflow";
 
 import { useProcessDescription } from "@/hooks/map/useOgcProcesses";
 
-const NodeWrapper = styled(Box)({
-  position: "relative",
-});
 const NodeContainer = styled(Box, {
   shouldForwardProp: (prop) => prop !== "selected",
 })<{ selected?: boolean }>(({ theme, selected }) => ({
@@ -55,21 +54,18 @@ const NodeHeader = styled(Box)(({ theme }) => ({
   alignItems: "center",
   gap: theme.spacing(1),
   marginBottom: theme.spacing(0.5),
-  paddingRight: 40,
 }));
 
-const NodeIconWrapper = styled(Box, {
-  shouldForwardProp: (prop) => prop !== "selected",
-})<{ selected?: boolean }>(({ theme, selected }) => ({
+const NodeIconWrapper = styled(Box)(({ theme }) => ({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 28,
-  height: 28,
-  minWidth: 28,
-  borderRadius: "50%",
-  backgroundColor: selected ? theme.palette.primary.main : theme.palette.grey[500],
-  color: theme.palette.common.white,
+  width: 40,
+  height: 40,
+  minWidth: 40,
+  borderRadius: theme.shape.borderRadius,
+  border: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.default,
 }));
 
 const StyledHandle = styled(Handle, {
@@ -81,26 +77,35 @@ const StyledHandle = styled(Handle, {
   border: `2px solid ${theme.palette.background.paper}`,
 }));
 
-const ActionBar = styled(Stack)(({ theme }) => ({
-  position: "absolute",
-  top: -2,
-  right: -2,
-  backgroundColor: theme.palette.primary.main,
-  borderRadius: `0 ${theme.shape.borderRadius}px 0 ${theme.shape.borderRadius}px`,
-  padding: "2px 3px",
-  gap: 1,
+const ToolbarContainer = styled(Stack)(({ theme }) => ({
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(0.5),
+  gap: theme.spacing(0.5),
   flexDirection: "row",
+  alignItems: "center",
+  boxShadow: theme.shadows[4],
+  border: `1px solid ${theme.palette.divider}`,
 }));
 
-const ActionButton = styled(IconButton)(({ theme }) => ({
-  padding: 1,
-  color: theme.palette.common.white,
+const ToolbarButton = styled(IconButton)(({ theme }) => ({
+  padding: theme.spacing(0.5),
   "&:hover": {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: theme.palette.action.hover,
   },
   "& svg": {
-    fontSize: 12,
+    fontSize: 18,
   },
+}));
+
+const RunButton = styled(Button)(({ theme }) => ({
+  textTransform: "uppercase",
+  fontWeight: 600,
+  fontSize: 11,
+  padding: theme.spacing(0.25, 1),
+  minWidth: "auto",
+  minHeight: "auto",
+  lineHeight: 1.5,
 }));
 
 const ParamRow = styled(Box)({
@@ -419,7 +424,34 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
   }, [missingLayerInputs, missingConfig, t]);
 
   return (
-    <NodeWrapper>
+    <>
+      {/* NodeToolbar - automatically shown when selected */}
+      <NodeToolbar position={Position.Top} align="end">
+        <ToolbarContainer>
+          <Tooltip title={t("run_node")} arrow>
+            <RunButton size="small" startIcon={<PlayIcon sx={{ fontSize: 16 }} />}>
+              {t("run_node")}
+            </RunButton>
+          </Tooltip>
+          <Tooltip title={t("run_to_here")} arrow>
+            <RunButton size="small" startIcon={<RunToHereIcon sx={{ fontSize: 16 }} />}>
+              {t("run_to_here")}
+            </RunButton>
+          </Tooltip>
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+          <Tooltip title={t("duplicate")} arrow>
+            <ToolbarButton onClick={handleDuplicate}>
+              <DuplicateIcon />
+            </ToolbarButton>
+          </Tooltip>
+          <Tooltip title={t("delete")} arrow>
+            <ToolbarButton onClick={handleDelete}>
+              <DeleteIcon />
+            </ToolbarButton>
+          </Tooltip>
+        </ToolbarContainer>
+      </NodeToolbar>
+
       <NodeContainer selected={selected}>
         {/* Warning badge for missing inputs/config */}
         {hasWarning && (
@@ -428,18 +460,6 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
               <WarningIcon sx={{ fontSize: 16 }} />
             </WarningBadge>
           </Tooltip>
-        )}
-
-        {/* Action buttons - only when selected */}
-        {selected && (
-          <ActionBar>
-            <ActionButton onClick={handleDuplicate} title={t("duplicate")}>
-              <DuplicateIcon />
-            </ActionButton>
-            <ActionButton onClick={handleDelete} title={t("delete")}>
-              <DeleteIcon />
-            </ActionButton>
-          </ActionBar>
         )}
 
         {/* Input handles - positioned vertically based on count */}
@@ -488,8 +508,8 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
         </Tooltip>
 
         <NodeHeader>
-          <NodeIconWrapper selected={selected}>
-            <ToolSettingsIcon sx={{ fontSize: 16 }} />
+          <NodeIconWrapper>
+            <ToolSettingsIcon sx={{ fontSize: 20 }} />
           </NodeIconWrapper>
           <Typography variant="body2" fontWeight="bold" sx={{ flex: 1, wordBreak: "break-word" }}>
             {process?.title || t(data.processId, { defaultValue: data.label })}
@@ -560,7 +580,7 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
           </Box>
         )}
       </NodeContainer>
-    </NodeWrapper>
+    </>
   );
 };
 

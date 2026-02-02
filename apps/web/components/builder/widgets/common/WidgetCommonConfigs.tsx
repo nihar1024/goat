@@ -608,8 +608,8 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
   const { layerFields: contextLabelFields } = useLayerFields(selectedLayerDatasetIdForStyle || "");
 
   const contextLabel = useMemo(() => {
-    return ((config as any)?.options as any)?.context_label;
-  }, [(config as any)?.options]);
+    return (config?.options as any)?.context_label;
+  }, [config?.options]);
 
   const selectedContextField = useMemo(() => {
     if (!contextLabel?.field) return undefined;
@@ -717,9 +717,9 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                       layerId={selectedLayerDatasetIdForStyle}
                       fieldName={groupByColumnNameForStyle}
                       customOrder={(config?.setup as any)?.custom_order}
-                      colorMap={((config as any)?.options as any)?.color_map}
-                      colorRange={((config as any)?.options as any)?.color_range}
-                      colorPalette={((config as any)?.options as any)?.color_range?.colors}
+                      colorMap={(config?.options as any)?.color_map}
+                      colorRange={(config?.options as any)?.color_range}
+                      colorPalette={(config?.options as any)?.color_range?.colors}
                       onChange={(order, colorMap) => {
                         // Update both setup.custom_order and options.color_map atomically
                         onChange({

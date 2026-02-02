@@ -137,9 +137,7 @@ export const filterDataConfigSchema = dataConfigSchema.extend({
       color: z.string().optional().default("#0e58ff"),
       // Multi-layer attribute filtering
       target_layers: z.array(filterTargetLayerSchema).optional(),
-      // When true, the filter's *available options* are restricted to values present in the currently
-      // cross‑filtered data. This controls applying cross‑filtering to the options list itself, and does
-      // not globally enable/disable cross‑filtering for the widget.
+      // Cross-filter options: when enabled, filter shows only values that exist in currently filtered data
       cross_filter_options: z.boolean().optional().default(true),
     })
     .default({}),

@@ -104,17 +104,6 @@ FUNCTION_REGISTRY: dict[str, FunctionDoc] = {
         min_args=1,
         max_args=1,
     ),
-    "ceiling": FunctionDoc(
-        name="ceiling",
-        syntax="ceiling(x)",
-        example='ceiling("value")',
-        category=FunctionCategory.MATH,
-        description_key="ceil",  # Same as ceil
-        return_type="BIGINT",
-        parameters=[FunctionParameter("x", "NUMERIC", "param_x")],
-        min_args=1,
-        max_args=1,
-    ),
     "trunc": FunctionDoc(
         name="trunc",
         syntax="trunc(x, decimals)",
@@ -148,20 +137,6 @@ FUNCTION_REGISTRY: dict[str, FunctionDoc] = {
         example='power("radius", 2)',
         category=FunctionCategory.MATH,
         description_key="power",
-        return_type="DOUBLE",
-        parameters=[
-            FunctionParameter("base", "NUMERIC", "param_base"),
-            FunctionParameter("exponent", "NUMERIC", "param_exponent"),
-        ],
-        min_args=2,
-        max_args=2,
-    ),
-    "pow": FunctionDoc(
-        name="pow",
-        syntax="pow(base, exponent)",
-        example='pow("radius", 2)',
-        category=FunctionCategory.MATH,
-        description_key="power",  # Same as power
         return_type="DOUBLE",
         parameters=[
             FunctionParameter("base", "NUMERIC", "param_base"),
@@ -797,21 +772,6 @@ FUNCTION_REGISTRY: dict[str, FunctionDoc] = {
         example='date_diff(\'day\', "start_date", "end_date")',
         category=FunctionCategory.DATE,
         description_key="date_diff",
-        return_type="BIGINT",
-        parameters=[
-            FunctionParameter("part", "VARCHAR", "param_part"),
-            FunctionParameter("start", "DATE", "param_start"),
-            FunctionParameter("end", "DATE", "param_end"),
-        ],
-        min_args=3,
-        max_args=3,
-    ),
-    "datediff": FunctionDoc(
-        name="datediff",
-        syntax="datediff(part, start, end)",
-        example='datediff(\'day\', "start_date", "end_date")',
-        category=FunctionCategory.DATE,
-        description_key="date_diff",  # Same as date_diff
         return_type="BIGINT",
         parameters=[
             FunctionParameter("part", "VARCHAR", "param_part"),

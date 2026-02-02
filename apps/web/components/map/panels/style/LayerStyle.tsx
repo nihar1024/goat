@@ -176,15 +176,23 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
           const actualCount = Math.min(uniqueValues.items.length, 12);
 
           // Try to find a palette with the exact number of colors needed
-          // First, look for a palette with the same name/category but correct step count
+          // First, look for a palette with the same category and type and correct step count
           let matchingPalette = COLOR_RANGES.find(
             (range) =>
               range.colors.length === actualCount &&
-              (range.category === currentRange?.category || range.type === currentRange?.type)
+              range.category === currentRange?.category &&
+              range.type === currentRange?.type
           );
 
-          // If no matching palette found, find any palette with the correct number of colors
-          if (!matchingPalette) {
+          // If no exact category+type match found, try matching only on type (still respecting palette semantics)
+          if (!matchingPalette && currentRange?.type) {
+            matchingPalette = COLOR_RANGES.find(
+              (range) => range.colors.length === actualCount && range.type === currentRange.type
+            );
+          }
+
+          // As a last resort, if no type information is available, find any palette with the correct number of colors
+          if (!matchingPalette && !currentRange?.type) {
             matchingPalette = COLOR_RANGES.find((range) => range.colors.length === actualCount);
           }
 

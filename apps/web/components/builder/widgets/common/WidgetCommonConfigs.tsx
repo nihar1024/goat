@@ -607,9 +607,12 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
   // Get layer fields for context label field selection
   const { layerFields: contextLabelFields } = useLayerFields(selectedLayerDatasetIdForStyle || "");
 
+  // Extract options for dependency tracking (text widgets don't have options)
+  const configOptions = (config as any)?.options;
+
   const contextLabel = useMemo(() => {
-    return (config?.options as any)?.context_label;
-  }, [config?.options]);
+    return configOptions?.context_label;
+  }, [configOptions]);
 
   const selectedContextField = useMemo(() => {
     if (!contextLabel?.field) return undefined;
@@ -716,10 +719,10 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                     <CategoryColorConfig
                       layerId={selectedLayerDatasetIdForStyle}
                       fieldName={groupByColumnNameForStyle}
-                      customOrder={(config?.setup as any)?.custom_order}
-                      colorMap={(config?.options as any)?.color_map}
-                      colorRange={(config?.options as any)?.color_range}
-                      colorPalette={(config?.options as any)?.color_range?.colors}
+                      customOrder={(config as any)?.setup?.custom_order}
+                      colorMap={(config as any)?.options?.color_map}
+                      colorRange={(config as any)?.options?.color_range}
+                      colorPalette={(config as any)?.options?.color_range?.colors}
                       onChange={(order, colorMap) => {
                         // Update both setup.custom_order and options.color_map atomically
                         onChange({
@@ -760,7 +763,7 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                     <CategoryOrderConfig
                       layerId={selectedLayerDatasetIdForStyle}
                       fieldName={groupByColumnNameForStyle}
-                      customOrder={(config?.setup as any)?.custom_order}
+                      customOrder={(config as any)?.setup?.custom_order}
                       onOrderChange={(order) => {
                         handleSetupChange("custom_order", order.length ? order : undefined);
                       }}

@@ -91,7 +91,6 @@ export const HistogramChartWidget = ({ config: rawConfig }: { config: HistogramC
       if (!showHighlight || !selectedStats?.bins) return 0;
 
       let count = 0;
-      const binWidth = binEnd - binStart;
 
       selectedStats.bins.forEach((selectedBin) => {
         const selectedStart = Number(selectedBin.range[0]);

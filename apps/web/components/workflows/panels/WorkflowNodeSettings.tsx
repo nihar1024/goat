@@ -192,7 +192,9 @@ export default function WorkflowNodeSettings({
     (inputName: string): string | undefined => {
       // Find the edge that connects to this input
       const edge = edges.find(
-        (e) => e.target === node.id && (e.targetHandle === inputName || (!e.targetHandle && allInputs.length === 1))
+        (e) =>
+          e.target === node.id &&
+          (e.targetHandle === inputName || (!e.targetHandle && allInputs.length === 1))
       );
       if (!edge) return undefined;
 
@@ -261,6 +263,46 @@ export default function WorkflowNodeSettings({
       geometryFlags.length > 0 && geometryFlags.every((v) => v === true);
 
     return computed;
+  }, [layers, allInputs, values, defaultValues, connectedLayerValues, getLayerIdFromSourceNode]);
+
+  // Compute dataset IDs for layer inputs (needed for field selectors)
+  // This maps layer input names to their dataset IDs, handling connected inputs
+  const layerDatasetIds = useMemo(() => {
+    if (!layers) return {};
+
+    const mapping: Record<string, string> = {};
+    const effectiveValues = { ...defaultValues, ...connectedLayerValues, ...values };
+
+    for (const input of allInputs) {
+      if (input.inputType === "layer") {
+        const projectLayerId = effectiveValues[input.name] as string | undefined;
+
+        if (projectLayerId === "__connected__") {
+          // Trace to source node to get actual layer ID
+          const sourceLayerId = getLayerIdFromSourceNode(input.name);
+
+          if (sourceLayerId && sourceLayerId !== "__tool_output__") {
+            // Find layer by numeric ID and get its dataset ID (layer_id)
+            const numericId = parseInt(sourceLayerId, 10);
+            const layer = layers.find((l) => l.id === numericId);
+            if (layer?.layer_id) {
+              mapping[input.name] = layer.layer_id;
+            }
+          }
+          // For tool outputs, we can't determine fields until execution
+          // TODO: Could store output schema in tool results for this
+        } else if (projectLayerId) {
+          // Direct layer selection
+          const numericId = parseInt(projectLayerId, 10);
+          const layer = layers.find((l) => l.id === numericId);
+          if (layer?.layer_id) {
+            mapping[input.name] = layer.layer_id;
+          }
+        }
+      }
+    }
+
+    return mapping;
   }, [layers, allInputs, values, defaultValues, connectedLayerValues, getLayerIdFromSourceNode]);
 
   // Update a single input value
@@ -473,6 +515,7 @@ export default function WorkflowNodeSettings({
                               }
                               formValues={effectiveValues}
                               schemaDefs={process.$defs}
+                              layerDatasetIds={layerDatasetIds}
                             />
                           ))}
                         </Stack>
@@ -498,6 +541,7 @@ export default function WorkflowNodeSettings({
                                 }
                                 formValues={effectiveValues}
                                 schemaDefs={process.$defs}
+                                layerDatasetIds={layerDatasetIds}
                               />
                             ))}
                           </Stack>

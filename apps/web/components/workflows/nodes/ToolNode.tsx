@@ -286,7 +286,7 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
   const edges = useEdges();
 
   // Get execution status from context
-  const { isExecuting, nodeStatuses, nodeExecutionInfo, tempLayerIds, onSaveNode } =
+  const { isExecuting: _isExecuting, nodeStatuses, nodeExecutionInfo, tempLayerIds, onSaveNode } =
     useWorkflowExecutionContext();
   const nodeStatus = nodeStatuses[id];
   const executionInfo = nodeExecutionInfo[id];

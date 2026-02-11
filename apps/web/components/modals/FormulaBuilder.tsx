@@ -30,10 +30,15 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import dynamic from "next/dynamic";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
+
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
+const SqlCodeEditor = dynamic(() => import("./SqlCodeEditor"), { ssr: false });
 
 import type {
   ExpressionPreviewResult,
@@ -213,6 +218,7 @@ export default function FormulaBuilder({
 }: FormulaBuilderProps) {
   const { t } = useTranslation("common");
   const inputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<ReactCodeMirrorRef>();
   const isSqlMode = mode === "sql";
 
   // State
@@ -244,6 +250,16 @@ export default function FormulaBuilder({
   const nonGeomFields = useMemo(() => {
     return fields.filter((f) => !f.type.toLowerCase().includes("geom"));
   }, [fields]);
+
+  // CodeMirror schema for SQL autocomplete
+  const cmSchema = useMemo(() => {
+    if (!tables) return {};
+    const schema: Record<string, string[]> = {};
+    for (const table of tables) {
+      schema[table.alias] = table.fields.map((f) => f.name);
+    }
+    return schema;
+  }, [tables]);
 
   // Track dialog open/close transitions
   const prevOpenRef = useRef(false);
@@ -353,14 +369,27 @@ export default function FormulaBuilder({
   // Insert text at cursor position
   const insertAtCursor = useCallback(
     (text: string) => {
+      // SQL mode: use CodeMirror's dispatch API
+      if (isSqlMode && editorRef.current?.view) {
+        const view = editorRef.current.view;
+        const { from } = view.state.selection.main;
+        view.dispatch(
+          view.state.update({
+            changes: { from, insert: text },
+            selection: { anchor: from + text.length },
+          })
+        );
+        view.focus();
+        return;
+      }
+
+      // Expression mode: existing logic
       const before = expression.slice(0, cursorPosition);
       const after = expression.slice(cursorPosition);
       const newExpression = before + text + after;
       setExpression(newExpression);
-      // Move cursor to end of inserted text
       const newPosition = cursorPosition + text.length;
       setCursorPosition(newPosition);
-      // Focus and set selection
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -368,7 +397,7 @@ export default function FormulaBuilder({
         }
       }, 0);
     },
-    [expression, cursorPosition]
+    [expression, cursorPosition, isSqlMode]
   );
 
   // Insert field reference
@@ -694,14 +723,18 @@ export default function FormulaBuilder({
     if (isValid) {
       return (
         <Tooltip title={isSqlMode ? t("sql_valid") : t("expression_valid")}>
-          <Icon iconName={ICON_NAME.CIRCLECHECK} fontSize="small" htmlColor="#4caf50" />
+          <span style={{ display: "flex" }}>
+            <Icon iconName={ICON_NAME.CIRCLECHECK} fontSize="small" htmlColor="#4caf50" />
+          </span>
         </Tooltip>
       );
     }
     if (isValid === false) {
       return (
         <Tooltip title={validationErrors[0]?.message || t("expression_invalid")}>
-          <Icon iconName={ICON_NAME.XCLOSE} fontSize="small" htmlColor="#f44336" />
+          <span style={{ display: "flex" }}>
+            <Icon iconName={ICON_NAME.XCLOSE} fontSize="small" htmlColor="#f44336" />
+          </span>
         </Tooltip>
       );
     }
@@ -720,40 +753,41 @@ export default function FormulaBuilder({
           minHeight: 600,
         },
       }}>
-      <DialogTitle sx={{ pb: 1 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Icon iconName={ICON_NAME.CODE} />
-            <Typography variant="h6">{title || t("formula_builder")}</Typography>
-          </Stack>
-          <IconButton onClick={onClose} size="small">
-            <Icon iconName={ICON_NAME.CLOSE} fontSize="small" />
-          </IconButton>
-        </Stack>
-      </DialogTitle>
+      <DialogTitle>{title || t("formula_builder")}</DialogTitle>
 
       <DialogContent dividers sx={{ p: 2, pb: 2, overflow: "hidden" }}>
         <Stack spacing={2}>
-          {/* Expression Input with inline validation */}
+          {/* Expression/SQL Input with inline validation */}
           <Box sx={{ position: "relative" }}>
-            <TextField
-              inputRef={inputRef}
-              fullWidth
-              multiline
-              rows={3}
-              value={expression}
-              onChange={(e) => setExpression(e.target.value)}
-              onSelect={handleInputSelect}
-              onClick={handleInputSelect}
-              placeholder={isSqlMode ? t("sql_placeholder") : t("enter_expression_placeholder")}
-              sx={{
-                "& .MuiInputBase-input": {
-                  fontFamily: "monospace",
-                  fontSize: "0.875rem",
-                },
-              }}
-              error={isValid === false}
-            />
+            {isSqlMode ? (
+              <SqlCodeEditor
+                value={expression}
+                onChange={setExpression}
+                schema={cmSchema}
+                placeholder={t("sql_placeholder")}
+                error={isValid === false}
+                editorRef={editorRef}
+              />
+            ) : (
+              <TextField
+                inputRef={inputRef}
+                fullWidth
+                multiline
+                rows={3}
+                value={expression}
+                onChange={(e) => setExpression(e.target.value)}
+                onSelect={handleInputSelect}
+                onClick={handleInputSelect}
+                placeholder={t("enter_expression_placeholder")}
+                sx={{
+                  "& .MuiInputBase-input": {
+                    fontFamily: "monospace",
+                    fontSize: "0.875rem",
+                  },
+                }}
+                error={isValid === false}
+              />
+            )}
             {/* Validation indicator in top-right corner */}
             <Box
               sx={{
@@ -762,29 +796,20 @@ export default function FormulaBuilder({
                 right: 8,
                 display: "flex",
                 alignItems: "center",
+                zIndex: 5,
               }}>
               <ValidationIndicator />
             </Box>
           </Box>
 
-          {/* Error message below editor (only when there's an error) */}
-          {isValid === false && !isValidating && (
-            <Alert severity="error" sx={{ py: 0.5 }}>
-              {validationErrors.map((err, i) => {
-                const suggestion = "suggestion" in err ? String(err.suggestion) : null;
-                return (
-                  <Box key={i}>
-                    <Typography variant="caption">{err.message}</Typography>
-                    {suggestion && (
-                      <Typography variant="caption" color="primary" sx={{ display: "block" }}>
-                        {suggestion}
-                      </Typography>
-                    )}
-                  </Box>
-                );
-              })}
-            </Alert>
-          )}
+          {/* Validation error line (fixed height to avoid layout shift, full details on hover) */}
+          <Box sx={{ minHeight: 20, display: "flex", alignItems: "center" }}>
+            {isValid === false && !isValidating && validationErrors.length > 0 && (
+              <Typography variant="caption" color="error.main" noWrap sx={{ maxWidth: "100%" }}>
+                {validationErrors[0]?.message}
+              </Typography>
+            )}
+          </Box>
 
           {/* Tabs: Build / Preview */}
           <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
@@ -1520,18 +1545,21 @@ export default function FormulaBuilder({
       </DialogContent>
 
       <DialogActions
+        disableSpacing
         sx={{
-          px: 3,
-          py: 2,
+          mt: 2,
+          pb: 2,
         }}>
-        <Stack direction="row" spacing={2}>
-          <Button onClick={onClose} color="inherit" variant="outlined">
+        <Button onClick={onClose} variant="text">
+          <Typography variant="body2" fontWeight="bold">
             {t("cancel")}
-          </Button>
-          <Button onClick={handleApply} variant="contained" disabled={isValid === false}>
+          </Typography>
+        </Button>
+        <Button onClick={handleApply} variant="text" color="primary" disabled={isValid === false}>
+          <Typography variant="body2" fontWeight="bold" color="inherit">
             {t("apply")}
-          </Button>
-        </Stack>
+          </Typography>
+        </Button>
       </DialogActions>
     </Dialog>
   );

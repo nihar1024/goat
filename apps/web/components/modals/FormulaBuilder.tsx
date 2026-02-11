@@ -550,7 +550,7 @@ export default function FormulaBuilder({
             success: false,
             columns: [],
             rows: [],
-            error: "No layers available for preview",
+            error: "No layers available for preview. Run the workflow first so input data is available.",
           });
           return;
         }

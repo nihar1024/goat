@@ -39,8 +39,10 @@ class FinalizeLayerParams(ToolInputBase):
         description="Optional name override for the layer",
     )
     delete_temp: bool = Field(
-        default=True,
-        description="Whether to delete temp files after finalization",
+        default=False,
+        description="Whether to delete temp files after finalization. "
+        "Default False to keep files available for frontend preview. "
+        "Cleanup happens at the start of the next workflow execution.",
     )
 
 

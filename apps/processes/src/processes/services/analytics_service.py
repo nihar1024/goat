@@ -528,6 +528,30 @@ class AnalyticsService:
         finally:
             con.close()
 
+    def _find_temp_parquet(self, temp_uuid: str) -> str | None:
+        """Find a temp parquet file by its UUID.
+
+        Searches DATA_DIR/temporary/ for t_{uuid}.parquet files.
+
+        Args:
+            temp_uuid: The temp file UUID (hex, no dashes)
+
+        Returns:
+            Path to parquet file as string, or None if not found
+        """
+        import os
+        from pathlib import Path
+
+        temp_root = Path(os.getenv("DATA_DIR", "/app/data")) / "temporary"
+        if not temp_root.exists():
+            return None
+
+        clean_uuid = temp_uuid.replace("-", "")
+        matches = list(temp_root.glob(f"**/t_{clean_uuid}.parquet"))
+        if matches:
+            return str(matches[0])
+        return None
+
     def preview_sql(
         self,
         sql_query: str,
@@ -536,8 +560,12 @@ class AnalyticsService:
     ) -> dict[str, Any]:
         """Preview a SQL query against actual layer data.
 
-        Loads each referenced layer from DuckLake as a named view in an
-        in-memory DuckDB connection, then executes the query with a LIMIT.
+        Loads each referenced layer from DuckLake (or temp parquet) as a named
+        view in an in-memory DuckDB connection, then executes the query with a LIMIT.
+
+        Layer IDs can be:
+        - Regular UUID: resolved from DuckLake
+        - "temp:<uuid>": read from temp parquet file in DATA_DIR/temporary/
 
         Args:
             sql_query: The SQL SELECT statement to preview
@@ -565,44 +593,77 @@ class AnalyticsService:
         try:
             con.execute("INSTALL spatial; LOAD spatial;")
 
-            # Load each layer from DuckLake as a view in isolated connection
-            with ducklake_manager.connection() as lake_con:
-                for alias, layer_id in layers.items():
-                    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", alias):
-                        return {
-                            "success": False,
-                            "columns": [],
-                            "rows": [],
-                            "error": f"Invalid table alias: {alias}",
-                        }
+            # Separate temp layers from DuckLake layers
+            temp_layers: dict[str, str] = {}
+            ducklake_layers: dict[str, str] = {}
+            for alias, layer_id in layers.items():
+                if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", alias):
+                    return {
+                        "success": False,
+                        "columns": [],
+                        "rows": [],
+                        "error": f"Invalid table alias: {alias}",
+                    }
+                if layer_id.startswith("temp:"):
+                    temp_layers[alias] = layer_id[5:]  # strip "temp:" prefix
+                else:
+                    ducklake_layers[alias] = layer_id
 
-                    # Resolve layer to DuckLake table name
-                    try:
-                        norm_id = normalize_layer_id(layer_id)
-                        schema_name = get_schema_for_layer(norm_id)
-                        table_name = _layer_id_to_table_name(norm_id)
-                        full_table = f"lake.{schema_name}.{table_name}"
-                    except Exception as e:
-                        return {
-                            "success": False,
-                            "columns": [],
-                            "rows": [],
-                            "error": f"Layer {alias} ({layer_id}): {e}",
-                        }
+            # Load temp layers from parquet files
+            for alias, temp_uuid in temp_layers.items():
+                parquet_path = self._find_temp_parquet(temp_uuid)
+                if not parquet_path:
+                    return {
+                        "success": False,
+                        "columns": [],
+                        "rows": [],
+                        "error": f"Temp layer {alias} not found (may have been cleaned up). "
+                        f"Re-run the workflow to regenerate.",
+                    }
+                try:
+                    con.execute(
+                        f'CREATE VIEW "{alias}" AS '
+                        f"SELECT * FROM read_parquet('{parquet_path}')"
+                    )
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "columns": [],
+                        "rows": [],
+                        "error": f"Failed to load temp layer {alias}: {e}",
+                    }
 
-                    # Read data from DuckLake and register in isolated connection
-                    try:
-                        data = lake_con.execute(
-                            f"SELECT * FROM {full_table}"
-                        ).fetchdf()
-                        con.register(alias, data)
-                    except Exception as e:
-                        return {
-                            "success": False,
-                            "columns": [],
-                            "rows": [],
-                            "error": f"Failed to load layer {alias}: {e}",
-                        }
+            # Load DuckLake layers
+            if ducklake_layers:
+                with ducklake_manager.connection() as lake_con:
+                    for alias, layer_id in ducklake_layers.items():
+                        # Resolve layer to DuckLake table name
+                        try:
+                            norm_id = normalize_layer_id(layer_id)
+                            schema_name = get_schema_for_layer(norm_id)
+                            table_name = _layer_id_to_table_name(norm_id)
+                            full_table = f"lake.{schema_name}.{table_name}"
+                        except Exception as e:
+                            return {
+                                "success": False,
+                                "columns": [],
+                                "rows": [],
+                                "error": f"Layer {alias} ({layer_id}): {e}",
+                            }
+
+                        # Read data from DuckLake and register in isolated connection
+                        try:
+                            data = lake_con.execute(
+                                f"SELECT * FROM {full_table}"
+                            ).fetchdf()
+                            con.register(alias, data)
+                        except Exception as e:
+                            return {
+                                "success": False,
+                                "columns": [],
+                                "rows": [],
+                                "error": f"Failed to load layer {alias}: {e}",
+                            }
 
             # Execute the query with limit
             limited_sql = (

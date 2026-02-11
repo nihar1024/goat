@@ -95,7 +95,9 @@ enum LayerSourceType {
  * Does NOT filter out id/layer_id — SQL queries need access to all columns.
  */
 function useLayerFieldsForSql(layerUuid: string | undefined) {
-  const { queryables, isLoading } = useLayerQueryables(layerUuid || "");
+  // Skip queryables fetch for temp layer references (they use predicted/metadata columns)
+  const queryableUuid = layerUuid && !layerUuid.startsWith("temp:") ? layerUuid : "";
+  const { queryables, isLoading } = useLayerQueryables(queryableUuid);
 
   const fields: FormulaField[] = useMemo(() => {
     if (!queryables || !layerUuid) return [];
@@ -290,11 +292,21 @@ export default function SqlToolSettings({ node, onBack }: SqlToolSettingsProps) 
         }
       }
 
+      // For tool source nodes with temp results, use the temp file UUID for preview
+      if (!layerUuid && sourceNode?.id && tempLayerIds[sourceNode.id]) {
+        const tempId = tempLayerIds[sourceNode.id];
+        const parts = tempId.split(":");
+        // temp_layer_id format: "workflow_id:node_id:layer_uuid"
+        if (parts.length >= 3) {
+          layerUuid = `temp:${parts[2]}`;
+        }
+      }
+
       inputs.push({ handleName, alias, sourceNodeId: sourceNode?.id, sourceNode: sourceNode as WorkflowNode | undefined, layerUuid, layerName });
     }
 
     return inputs;
-  }, [edges, node.id, nodes, projectLayers]);
+  }, [edges, node.id, nodes, projectLayers, tempLayerIds]);
 
   // Fetch fields for each connected input
   const input1Fields = useLayerFieldsForSql(connectedInputs[0]?.layerUuid);

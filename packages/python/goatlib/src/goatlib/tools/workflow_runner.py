@@ -469,6 +469,7 @@ def main(
                     "project_id": params.project_id,
                     "folder_id": params.folder_id,
                     "layer_name": dataset_name,
+                    "delete_temp": False,  # Keep temp files for frontend preview
                 }
 
                 job_id, result = run_tool_node(

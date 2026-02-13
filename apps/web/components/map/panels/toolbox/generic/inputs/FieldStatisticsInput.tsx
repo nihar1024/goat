@@ -8,19 +8,22 @@
  *
  * The related layer is determined by widget_options.source_layer.
  */
-import { Box, FormControl, InputLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Box, Stack, TextField, Typography } from "@mui/material";
 import { useParams } from "next/navigation";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LayerFieldType } from "@/lib/validations/layer";
 
+import type { SelectorItem } from "@/types/map/common";
 import type { ProcessedInput } from "@/types/map/ogc-processes";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 
+import FormLabelHelper from "@/components/common/FormLabelHelper";
 import LayerFieldSelector from "@/components/map/common/LayerFieldSelector";
+import Selector from "@/components/map/panels/common/Selector";
 
 // Define the statistic operations supported by the backend
 const STATISTIC_OPERATIONS = [
@@ -136,12 +139,26 @@ export default function FieldStatisticsInput({
     return numericFields.find((f) => f.name === currentValue.field);
   }, [currentValue.field, numericFields, requiresField]);
 
-  const handleOperationChange = (operation: string) => {
+  // Convert operations to SelectorItems for the Selector component
+  const operationItems: SelectorItem[] = useMemo(() => {
+    return STATISTIC_OPERATIONS.map((op) => ({
+      value: op.value,
+      label: t(op.labelKey),
+    }));
+  }, [t]);
+
+  // Find selected operation item
+  const selectedOperationItem = useMemo(() => {
+    if (!currentValue.operation) return undefined;
+    return operationItems.find((item) => item.value === currentValue.operation);
+  }, [currentValue.operation, operationItems]);
+
+  const handleOperationChange = (item: SelectorItem | SelectorItem[] | undefined) => {
+    if (Array.isArray(item)) return;
+    const operation = (item?.value as string) || "";
     if (operation === "count") {
-      // Count operation doesn't need a field
       emitChange({ operation, field: null, result_name: currentValue.result_name });
     } else {
-      // Preserve field if it was already selected, otherwise set to null
       emitChange({ operation, field: currentValue.field || null, result_name: currentValue.result_name });
     }
   };
@@ -154,11 +171,11 @@ export default function FieldStatisticsInput({
     });
   };
 
-  const handleResultNameChange = (resultName: string) => {
+  const handleResultNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     emitChange({
       operation: currentValue.operation,
       field: currentValue.field,
-      result_name: resultName || null,
+      result_name: event.target.value || null,
     });
   };
 
@@ -185,22 +202,16 @@ export default function FieldStatisticsInput({
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {/* Operation Selector */}
-      <FormControl size="small" fullWidth disabled={disabled}>
-        <InputLabel id={`${input.name}-operation-label`}>{t("select_operation")}</InputLabel>
-        <Select
-          labelId={`${input.name}-operation-label`}
-          value={currentValue.operation}
-          onChange={(e) => handleOperationChange(e.target.value)}
-          label={t("select_operation")}>
-          {STATISTIC_OPERATIONS.map((op) => (
-            <MenuItem key={op.value} value={op.value}>
-              {t(op.labelKey)}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+    <Stack spacing={2}>
+      {/* Operation Selector - uses Selector component like EnumInput */}
+      <Selector
+        selectedItems={selectedOperationItem}
+        setSelectedItems={handleOperationChange}
+        items={operationItems}
+        label={t("select_operation")}
+        placeholder={t("select_option")}
+        disabled={disabled}
+      />
 
       {/* Field Selector (hidden for count operation) */}
       {requiresField && (
@@ -214,19 +225,20 @@ export default function FieldStatisticsInput({
         />
       )}
 
-      {/* Result Column Name (optional) - only show when operation is selected */}
+      {/* Result Column Name (optional) - uses FormLabelHelper like StringInput */}
       {currentValue.operation && (
-        <TextField
-          size="small"
-          fullWidth
-          label={t("result_column_name")}
-          placeholder={resultNamePlaceholder}
-          value={currentValue.result_name || ""}
-          onChange={(e) => handleResultNameChange(e.target.value)}
-          disabled={disabled}
-          helperText={t("result_column_name_helper")}
-        />
+        <Stack>
+          <FormLabelHelper label={t("result_column_name")} color="inherit" tooltip={t("result_column_name_helper")} />
+          <TextField
+            size="small"
+            fullWidth
+            placeholder={resultNamePlaceholder}
+            value={currentValue.result_name || ""}
+            onChange={handleResultNameChange}
+            disabled={disabled}
+          />
+        </Stack>
       )}
-    </Box>
+    </Stack>
   );
 }

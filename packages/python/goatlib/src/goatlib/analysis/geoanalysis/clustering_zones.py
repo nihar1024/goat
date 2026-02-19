@@ -156,7 +156,7 @@ class ClusteringZones(AnalysisTool):
             batch_size = max(5, self.population_size // 4)
             for batch_start in range(0, self.population_size, batch_size):
                 batch_ids = list(range(batch_start, min(batch_start + batch_size, self.population_size)))
-                self._create_individuals_from_seeds_batch(batch_ids, k, n_points, use_compactness, self.compactness_weight)
+                self._create_individuals_from_seeds_batch(batch_ids, k, n_points, use_compactness, )
             logger.info("Created initial population of %d individuals", self.population_size)
 
             # Genetic algorithm evolution 
@@ -168,7 +168,7 @@ class ClusteringZones(AnalysisTool):
 
             for gen in range(self.n_generations + 1):
                 # Calculate fitness for current population and track best solution
-                fitness_dict = self._calculate_fitness_batch(population_ids, k, n_total_points,use_compactness, self.compactness_weight, threshold_distance)
+                fitness_dict = self._calculate_fitness_batch(population_ids, k, n_total_points,use_compactness, threshold_distance)
                 fitness_scores = [fitness_dict.get(i, {}).get('total', float("inf")) for i in population_ids]
                 gen_best_fitness = ( min(fitness_scores) if fitness_scores else float("inf") )
                 improvement_threshold = 1e-6
@@ -205,7 +205,7 @@ class ClusteringZones(AnalysisTool):
                     elite_ids = [population_ids[i] for i in sorted_indices[:n_elite]]
 
                     # Create next generation
-                    new_individual_ids, elite_ids_kept, next_individual_id = (self._evolve_generation_batch( parent_ids, elite_ids, next_individual_id, k, n_points, use_compactness, self.compactness_weight) )
+                    new_individual_ids, elite_ids_kept, next_individual_id = (self._evolve_generation_batch( parent_ids, elite_ids, next_individual_id, k, n_points, use_compactness) )
 
                     # Update population for next iteration
                     population_ids = list(elite_ids_kept) + list(new_individual_ids)

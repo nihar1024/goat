@@ -433,16 +433,28 @@ const CategoryColorConfig = ({
   // Generate display colors matching the number of categories
   // Must be defined before early returns to maintain consistent hook order
   const displayColors = useMemo(() => {
+    if (currentItems.length > 0) {
+      return currentItems.map((item) => item.color);
+    }
+
     if (categoryCount <= colorPalette.length) {
       return colorPalette.slice(0, categoryCount);
     }
     return chroma.scale(colorPalette).mode("lch").colors(categoryCount);
-  }, [colorPalette, categoryCount]);
+  }, [currentItems, colorPalette, categoryCount]);
 
   // Create an adjusted color range for the ColorRangeSelector with the correct number of steps
   // This ensures the palette picker shows palettes with the right number of colors
   const adjustedColorRange = useMemo((): ColorRange => {
     const baseRange = colorRange || DEFAULT_COLOR_RANGE;
+    const currentItemColors = currentItems.map((item) => item.color);
+
+    if (currentItemColors.length > 0) {
+      return {
+        ...baseRange,
+        colors: currentItemColors,
+      };
+    }
 
     // If current palette already has the right number of colors, use it
     if (baseRange.colors.length === categoryCount) {
@@ -489,7 +501,7 @@ const CategoryColorConfig = ({
       ...baseRange,
       colors: chroma.scale(baseRange.colors).mode("lch").colors(categoryCount),
     };
-  }, [colorRange, categoryCount]);
+  }, [colorRange, categoryCount, currentItems]);
 
   const handlePaletteSelect = useCallback(
     (newColorRange: ColorRange) => {

@@ -536,7 +536,7 @@ OEV_GUETEKLASSEN_BASE_COLOR_MAP = {
     "E": "#F69053",  # Orange
     "F": "#E4696A",  # Red - worst quality
 }
-OEV_GUETEKLASSEN_MAX_STYLE_CLASSES = 26
+OEV_GUETEKLASSEN_DEFAULT_CLASS_COUNT = len(OEV_GUETEKLASSEN_BASE_COLOR_MAP)
 
 
 def _int_to_alpha_label(value: int) -> str:
@@ -573,17 +573,23 @@ def _build_oev_gueteklassen_color_map(class_labels: list[str]) -> dict[str, str]
     return {label: color_map[label] for label in class_labels}
 
 
-def get_oev_gueteklassen_style() -> dict[str, Any]:
+def get_oev_gueteklassen_style(
+    class_count: int = OEV_GUETEKLASSEN_DEFAULT_CLASS_COUNT,
+) -> dict[str, Any]:
     """Generate style for ÖV-Güteklassen (PT quality classes) output.
 
     Uses ordinal color scale with alphabetical categories representing
     public transport accessibility quality from best (A) to worst (later labels).
     Keeps legacy A-F colors and extends with darker red shades for additional classes.
 
+    Args:
+        class_count: Number of quality classes to include in the ordinal style.
+
     Returns:
         Style dict configured for ÖV-Güteklassen visualization
     """
-    class_labels = _generate_oev_class_labels(OEV_GUETEKLASSEN_MAX_STYLE_CLASSES)
+    normalized_class_count = max(1, class_count)
+    class_labels = _generate_oev_class_labels(normalized_class_count)
     class_color_map = _build_oev_gueteklassen_color_map(class_labels)
     colors = list(class_color_map.values())
     color_map = [[[class_name], color] for class_name, color in class_color_map.items()]

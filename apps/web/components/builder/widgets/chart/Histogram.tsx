@@ -18,7 +18,8 @@ import { useChartWidget } from "@/hooks/map/DashboardBuilderHooks";
 import { StaleDataLoader } from "@/components/builder/widgets/common/StaleDataLoader";
 import { WidgetStatusContainer } from "@/components/builder/widgets/common/WidgetStatusContainer";
 
-const DEFAULT_SELECTED_COLOR = "#f5b704";
+const DEFAULT_HOVER_COLOR = "#f5b704";
+const DEFAULT_SELECTED_COLOR = "#9333EA";
 
 interface CustomTooltipProps extends TooltipProps<ValueType, NameType> {
   isHighlightMode?: boolean;
@@ -161,7 +162,11 @@ export const HistogramChartWidget = ({ config: rawConfig }: { config: HistogramC
 
   // Colors
   const baseColor = config?.options?.color || "#0e58ff";
-  const hoverColor = config?.options?.highlight_color || DEFAULT_SELECTED_COLOR;
+  const rawHoverColor = config?.options?.highlight_color;
+  const hoverColor =
+    rawHoverColor && rawHoverColor.toLowerCase() !== "#3b82f6"
+      ? rawHoverColor
+      : DEFAULT_HOVER_COLOR;
   const selectedColor = config?.options?.selected_color || DEFAULT_SELECTED_COLOR;
   const strokeColor = theme.palette.divider;
 

@@ -166,13 +166,35 @@ const ColorRangeSelector = (props: ColorRangeSelectorProps) => {
   }, [availableSteps, colorRangeConfig.steps]);
 
   const filteredColorRange = useMemo(() => {
-    return COLOR_RANGES.filter((colorRange) => {
+    const filtered = COLOR_RANGES.filter((colorRange) => {
       const isType = colorRangeConfig.type === "all" || colorRangeConfig.type === colorRange.type;
       const isStep = Number(colorRangeConfig.steps) === colorRange.colors.length;
 
       return isType && isStep;
     });
-  }, [colorRangeConfig]);
+
+    const selectedSignature = selectedColorRange.colors.map((color) => color.toLowerCase()).join("|");
+    const deduplicated = new Map<string, ColorRange>();
+
+    filtered.forEach((colorRange) => {
+      const signature = colorRange.colors.map((color) => color.toLowerCase()).join("|");
+      const existing = deduplicated.get(signature);
+
+      if (!existing) {
+        deduplicated.set(signature, colorRange);
+        return;
+      }
+
+      const isSelectedDuplicate =
+        signature === selectedSignature && colorRange.name === selectedColorRange.name;
+
+      if (isSelectedDuplicate) {
+        deduplicated.set(signature, colorRange);
+      }
+    });
+
+    return Array.from(deduplicated.values());
+  }, [colorRangeConfig, selectedColorRange.colors, selectedColorRange.name]);
 
   return (
     <Stack spacing={2}>

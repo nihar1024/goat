@@ -27,6 +27,7 @@ import { useLayerByGeomType, useLayerDatasetId } from "@/hooks/map/ToolsHooks";
 import WidgetColorPicker from "@/components/builder/widgets/common/WidgetColorPicker";
 import CategoryColorConfig from "@/components/builder/widgets/data/CategoryColorConfig";
 import CategoryOrderConfig from "@/components/builder/widgets/data/CategoryOrderConfig";
+import FormLabelHelper from "@/components/common/FormLabelHelper";
 import { ArrowPopper } from "@/components/ArrowPoper";
 import { TargetLayersConfig, WidgetFilterLayout } from "@/components/builder/widgets/data/DataConfig";
 import LayerFieldSelector from "@/components/map/common/LayerFieldSelector";
@@ -689,6 +690,13 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
 
   const [histogramXAxisTickInput, setHistogramXAxisTickInput] = useState("");
 
+  const normalizedHighlightColor = useMemo(() => {
+    const currentColor = (config as any)?.options?.highlight_color;
+    if (!currentColor) return "#f5b704";
+    if (String(currentColor).toLowerCase() === "#3b82f6") return "#f5b704";
+    return currentColor;
+  }, [config]);
+
   const usesStatisticsStyleSource = styleAttributeSource === "statistics";
   const usesGroupByStyleSource = styleAttributeSource === "group_by";
 
@@ -770,6 +778,22 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
       } as WidgetConfigSchema);
     },
     [onChange]
+  );
+
+  const commitHistogramXAxisTicks = useCallback(
+    (values: string[]) => {
+      const parsed = values
+        .flatMap((value) => String(value).split(/[;,\s]+/))
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isFinite(value));
+
+      handleOptionChange(
+        "x_axis_ticks",
+        parsed.length ? Array.from(new Set(parsed)).sort((a, b) => a - b) : undefined
+      );
+      setHistogramXAxisTickInput("");
+    },
+    [handleOptionChange]
   );
 
   const handleSetupChange = useCallback(
@@ -966,7 +990,7 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                 {hasHighlightColorDef && (
                   <WidgetColorPicker
                     label={t("highlight_color")}
-                    color={(config as any)?.options?.highlight_color || "#3b82f6"}
+                    color={normalizedHighlightColor}
                     onChange={(color) => handleOptionChange("highlight_color", color)}
                   />
                 )}
@@ -1013,7 +1037,11 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
 
                 {isHistogramChart && hasHistogramXAxisTicksDef && (
                   <Stack spacing={0.5}>
-                    <Typography variant="body2">{t("x_axis_tick_values")}</Typography>
+                    <FormLabelHelper
+                      label={t("x_axis_tick_values")}
+                      tooltip={t("x_axis_tick_values_help")}
+                      color="inherit"
+                    />
                     <Autocomplete
                       multiple
                       freeSolo
@@ -1026,16 +1054,7 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                         setHistogramXAxisTickInput(value);
                       }}
                       onChange={(_, values) => {
-                        const parsed = values
-                          .flatMap((value) => String(value).split(/[;,\s]+/))
-                          .map((value) => Number(value.trim()))
-                          .filter((value) => Number.isFinite(value));
-
-                        handleOptionChange(
-                          "x_axis_ticks",
-                          parsed.length ? Array.from(new Set(parsed)).sort((a, b) => a - b) : undefined
-                        );
-                        setHistogramXAxisTickInput("");
+                        commitHistogramXAxisTicks(values as string[]);
                       }}
                       renderTags={(value, getTagProps) =>
                         value.map((option, index) => {
@@ -1048,22 +1067,26 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                           {...params}
                           size="small"
                           placeholder={t("x_axis_tick_values_placeholder")}
+                          onKeyDown={(event) => {
+                            if (
+                              (event.key === "Enter" || event.key === ",") &&
+                              histogramXAxisTickInput.trim()
+                            ) {
+                              event.preventDefault();
+                              commitHistogramXAxisTicks([
+                                ...histogramXAxisTickValues,
+                                histogramXAxisTickInput,
+                              ]);
+                            }
+                          }}
                           onBlur={() => {
                             const pendingInput = histogramXAxisTickInput.trim();
                             if (!pendingInput) return;
 
-                            const parsed = [
+                            commitHistogramXAxisTicks([
                               ...histogramXAxisTickValues,
-                              ...pendingInput.split(/[;,\s]+/),
-                            ]
-                              .map((value) => Number(String(value).trim()))
-                              .filter((value) => Number.isFinite(value));
-
-                            handleOptionChange(
-                              "x_axis_ticks",
-                              parsed.length ? Array.from(new Set(parsed)).sort((a, b) => a - b) : undefined
-                            );
-                            setHistogramXAxisTickInput("");
+                              pendingInput,
+                            ]);
                           }}
                         />
                       )}
@@ -1075,7 +1098,7 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                 {hasSelectedColorDef && isHighlightMode && (
                   <WidgetColorPicker
                     label={t("selected_color")}
-                    color={(config as any)?.options?.selected_color || "#f5b704"}
+                    color={(config as any)?.options?.selected_color || "#9333EA"}
                     onChange={(color) => handleOptionChange("selected_color", color)}
                   />
                 )}

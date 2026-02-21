@@ -18,7 +18,7 @@ import { StaleDataLoader } from "@/components/builder/widgets/common/StaleDataLo
 import { WidgetStatusContainer } from "@/components/builder/widgets/common/WidgetStatusContainer";
 
 const FALLBACK_COLORS = ["#5A1846", "#900C3F", "#C70039", "#E3611C", "#F1920E", "#FFC300"];
-const DEFAULT_SELECTED_COLOR = "#f5b704";
+const DEFAULT_SELECTED_COLOR = "#9333EA";
 const OPACITY_MODIFIER = "33";
 
 const getQuantileThresholds = (values: number[], bins: number): number[] => {

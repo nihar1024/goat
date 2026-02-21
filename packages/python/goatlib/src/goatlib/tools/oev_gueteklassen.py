@@ -214,8 +214,17 @@ class OevGueteklassenToolRunner(BaseToolRunner[OevGueteklassenToolParams]):
         metadata: DatasetMetadata,
         table_info: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        """Return ÖV-Güteklassen style with ordinal color scale for A-F classes."""
-        return get_oev_gueteklassen_style()
+        """Return ÖV-Güteklassen style with class count from active configuration."""
+        station_config = params.station_config or STATION_CONFIG_DEFAULT
+
+        class_values = [
+            int(pt_class)
+            for distances in station_config.classification.values()
+            for pt_class in distances.values()
+        ]
+        class_count = max(class_values) if class_values else 1
+
+        return get_oev_gueteklassen_style(class_count=class_count)
 
     def process(
         self: Self, params: OevGueteklassenToolParams, temp_dir: Path

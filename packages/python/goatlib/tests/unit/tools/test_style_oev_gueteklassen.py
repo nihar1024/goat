@@ -21,12 +21,13 @@ class TestOevGueteklassenStyle:
         assert color_map["D"] == "#FFDF9A"
         assert color_map["E"] == "#F69053"
         assert color_map["F"] == "#E4696A"
+        assert "G" not in color_map
 
     def test_generates_colors_beyond_f(
         self: "TestOevGueteklassenStyle",
     ) -> None:
         """Style should include additional classes (e.g. G) for scalable configs."""
-        style = get_oev_gueteklassen_style()
+        style = get_oev_gueteklassen_style(class_count=26)
         color_map = {
             entry[0][0]: entry[1] for entry in style["color_range"]["color_map"]
         }

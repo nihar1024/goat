@@ -106,7 +106,8 @@ class ClusteringZones(AnalysisTool):
             threshold_distance = None
 
         # Determine weight expression: use numeric field if specified, otherwise 1 per point
-        if params.weight_method == "field" and params.weight_field:
+        has_field_weights = params.weight_method == "field" and params.weight_field
+        if has_field_weights:
             weight_expr = f'CAST("{params.weight_field}" AS DOUBLE)'
         else:
             weight_expr = '1'
@@ -124,7 +125,7 @@ class ClusteringZones(AnalysisTool):
             FROM {input_view}
         """)
         n_points = self.con.execute("SELECT COUNT(*) FROM points_metric").fetchone()[0]
-        n_total_points = self.con.execute("SELECT SUM(weight) FROM points_metric").fetchone()[0]
+        n_weighted_points = self.con.execute("SELECT SUM(weight) FROM points_metric").fetchone()[0]
         if n_points == 0:
             raise ValueError("No points found in input data")
         if n_points < k:
@@ -156,7 +157,7 @@ class ClusteringZones(AnalysisTool):
             batch_size = max(5, self.population_size // 4)
             for batch_start in range(0, self.population_size, batch_size):
                 batch_ids = list(range(batch_start, min(batch_start + batch_size, self.population_size)))
-                self._create_individuals_from_seeds_batch(batch_ids, k, n_points, use_compactness, )
+                self._create_individuals_from_seeds_batch(batch_ids, k, n_points, use_compactness, has_field_weights)
             logger.info("Created initial population of %d individuals", self.population_size)
 
             # Genetic algorithm evolution 
@@ -168,7 +169,7 @@ class ClusteringZones(AnalysisTool):
 
             for gen in range(self.n_generations + 1):
                 # Calculate fitness for current population and track best solution
-                fitness_dict = self._calculate_fitness_batch(population_ids, k, n_total_points,use_compactness, threshold_distance)
+                fitness_dict = self._calculate_fitness_batch(population_ids, k, n_weighted_points,use_compactness, threshold_distance)
                 fitness_scores = [fitness_dict.get(i, {}).get('total', float("inf")) for i in population_ids]
                 gen_best_fitness = ( min(fitness_scores) if fitness_scores else float("inf") )
                 improvement_threshold = 1e-6
@@ -205,7 +206,7 @@ class ClusteringZones(AnalysisTool):
                     elite_ids = [population_ids[i] for i in sorted_indices[:n_elite]]
 
                     # Create next generation
-                    new_individual_ids, elite_ids_kept, next_individual_id = (self._evolve_generation_batch( parent_ids, elite_ids, next_individual_id, k, n_points, use_compactness) )
+                    new_individual_ids, elite_ids_kept, next_individual_id = (self._evolve_generation_batch( parent_ids, elite_ids, next_individual_id, k, n_points, use_compactness, has_field_weights) )
 
                     # Update population for next iteration
                     population_ids = list(elite_ids_kept) + list(new_individual_ids)
@@ -547,7 +548,7 @@ class ClusteringZones(AnalysisTool):
         self: Self,
         individual_ids: list[int],
         k: int,
-        n_total_points: int,
+        n_weighted_points: int,
         use_compactness: bool,
         threshold_distance: float ,
     ) -> dict[int, dict]:
@@ -559,7 +560,7 @@ class ClusteringZones(AnalysisTool):
         if not individual_ids:
             return {}
 
-        target_size = n_total_points / k
+        target_size = n_weighted_points / k
         ids_str = ",".join(map(str, individual_ids))
 
         if not use_compactness:
@@ -663,7 +664,8 @@ class ClusteringZones(AnalysisTool):
         next_individual_id: int,
         k: int,
         n_points: int,
-        use_compactness: bool
+        use_compactness: bool,
+        has_field_weights: bool
     ) -> tuple[list[int], list[int], int]:
         """
         Create new generation: crossover, mutation, zone growing,
@@ -751,7 +753,7 @@ class ClusteringZones(AnalysisTool):
         batch_size = max(5, len(new_individual_ids) // 4)
         for batch_start in range(0, len(new_individual_ids), batch_size):
             batch_ids = new_individual_ids[batch_start:batch_start + batch_size]
-            self._create_individuals_from_seeds_batch(batch_ids, k, n_points, use_compactness)
+            self._create_individuals_from_seeds_batch(batch_ids, k, n_points, use_compactness, has_field_weights)
         updated_next_id = next_individual_id + len(new_individual_ids)
         return new_individual_ids, elite_ids, updated_next_id
 
@@ -760,7 +762,8 @@ class ClusteringZones(AnalysisTool):
         individual_ids: list[int],
         k: int,
         n_points: int,
-        use_compactness: bool 
+        use_compactness: bool,
+        has_field_weights: bool
     ) -> None:
         """
         Create multiple individuals from their seeds using a growing process to maintain contiguity. Infavor proximity if use_compactness is True. 
@@ -857,7 +860,7 @@ class ClusteringZones(AnalysisTool):
                         JOIN zone_sizes zs ON f.individual_id = zs.individual_id 
                                            AND f.cluster_id = zs.cluster_id
                         WHERE f.cluster_id >= 0 AND g.cluster_id = -1
-                          AND zs.size < {target_size} * 1.2
+                          {f"AND zs.size < {target_size} * 1.2" if not has_field_weights else ""}
                     ),
                     with_compactness AS (
                         SELECT 
@@ -899,7 +902,7 @@ class ClusteringZones(AnalysisTool):
                         JOIN zone_sizes zs ON f.individual_id = zs.individual_id 
                                            AND f.cluster_id = zs.cluster_id
                         WHERE f.cluster_id >= 0 AND g.cluster_id = -1
-                          AND zs.size < {target_size} * 1.2
+                          {f"AND zs.size < {target_size} * 1.2" if not has_field_weights else ""}
                     ),
                     ranked AS (
                         SELECT 

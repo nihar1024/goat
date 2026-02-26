@@ -963,7 +963,7 @@
     "m2sfca": "Modifizierte 2SFCA"
   },
   "size_method": {
-    "count": "Punktanzahl",
+    "count": "Anzahl",
     "field": "Feldwert"
   },
   "cluster_type": {

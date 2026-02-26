@@ -947,7 +947,7 @@
     "equal_size": "Balanced Zones"
   },
   "size_method": {
-    "count": "Count (Equal Points)",
+    "count": "Count",
     "field": "Field Value"
   },
   "size_field": {

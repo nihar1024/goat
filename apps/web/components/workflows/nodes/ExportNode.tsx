@@ -24,7 +24,6 @@ import { type TOOL_ICON_NAME, toolIconMap } from "@p4b/ui/assets/svg/ToolIcons";
 import { useNodeExecutionStatus } from "../context/WorkflowExecutionContext";
 import {
   AnimatedBorderWrapper,
-  BorderAnglePropertyStyles,
   IconStatusBadge,
   NodeContainer,
   NodeHeader,
@@ -93,8 +92,6 @@ const ExportNode: React.FC<ExportNodeProps> = ({ id, data, selected }) => {
 
   return (
     <>
-      {/* Global styles for animation */}
-      <BorderAnglePropertyStyles />
 
       <NodeToolbar position={Position.Top} align="end">
         <ToolbarContainer>

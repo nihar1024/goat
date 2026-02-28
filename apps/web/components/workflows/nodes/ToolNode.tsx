@@ -5,12 +5,10 @@ import {
   Cancel as CancelIcon,
   Delete as DeleteIcon,
   ContentCopy as DuplicateIcon,
-  PlayArrow as PlayIcon,
-  SkipNext as RunToHereIcon,
   Settings as SettingsIcon,
   Warning as WarningIcon,
 } from "@mui/icons-material";
-import { Box, Button, Chip, Divider, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, Stack, Tooltip, Typography } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { type NodeProps, NodeToolbar, Position, useEdges } from "@xyflow/react";
 import React, { memo, useCallback, useMemo } from "react";
@@ -37,7 +35,6 @@ import { useProcessDescription } from "@/hooks/map/useOgcProcesses";
 import { useNodeExecutionStatus } from "../context/WorkflowExecutionContext";
 import {
   AnimatedBorderWrapper,
-  BorderAnglePropertyStyles,
   IconStatusBadge,
   NodeContainer,
   NodeHeader,
@@ -64,16 +61,6 @@ const formatDuration = (ms: number): string => {
   const remainingSeconds = totalSeconds % 60;
   return `${minutes}m ${remainingSeconds.toFixed(1)}s`;
 };
-
-const RunButton = styled(Button)(({ theme }) => ({
-  textTransform: "none",
-  fontWeight: 600,
-  fontSize: 12,
-  height: 36,
-  padding: theme.spacing(0.5, 1.5),
-  minWidth: "auto",
-  borderRadius: theme.shape.borderRadius,
-}));
 
 const ParamRow = styled(Box)({
   display: "flex",
@@ -401,22 +388,9 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
 
   return (
     <>
-      {/* Global styles for @property --border-angle */}
-      <BorderAnglePropertyStyles />
       {/* NodeToolbar - automatically shown when selected */}
       <NodeToolbar position={Position.Top} align="end">
         <ToolbarContainer>
-          <Tooltip title={t("run_node")} placement="top" arrow>
-            <RunButton size="small" variant="text" startIcon={<PlayIcon fontSize="small" />}>
-              {t("run_node")}
-            </RunButton>
-          </Tooltip>
-          <Tooltip title={t("run_to_here")} placement="top" arrow>
-            <RunButton size="small" variant="text" startIcon={<RunToHereIcon fontSize="small" />}>
-              {t("run_to_here")}
-            </RunButton>
-          </Tooltip>
-          <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
           <Tooltip title={t("duplicate")} placement="top" arrow>
             <ToolbarButton onClick={handleDuplicate}>
               <DuplicateIcon fontSize="small" />

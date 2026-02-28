@@ -220,21 +220,21 @@ export default function RepeatableObjectInput({
   // Track if we've initialized to prevent infinite loops
   const hasInitialized = useRef(false);
 
-  // Initialize if empty - use useEffect, not useMemo
+  // Enforce minItems: pad with defaults if current value has fewer items than required
   useEffect(() => {
-    // Only initialize once when component mounts with empty value
-    if (hasInitialized.current) return;
-    if ((!value || value.length === 0) && minItems > 0 && itemSchema) {
+    if (!itemSchema || minItems <= 0) return;
+    const currentLength = value?.length ?? 0;
+    if (currentLength < minItems) {
       hasInitialized.current = true;
       const defaults = getObjectDefaults(itemSchema, schemaDefs);
-      const initialItems: Record<string, unknown>[] = [];
-      for (let i = 0; i < minItems; i++) {
-        initialItems.push({ ...defaults, _id: uuidv4() });
+      const padded = [...(value || [])];
+      for (let i = currentLength; i < minItems; i++) {
+        padded.push({ ...defaults, _id: uuidv4() });
       }
-      onChange(initialItems);
+      onChange(padded);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount
+  }, [minItems, itemSchema]); // Re-run when minItems or schema changes
 
   // Add new item
   const handleAdd = useCallback(() => {

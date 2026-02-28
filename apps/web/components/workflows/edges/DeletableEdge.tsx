@@ -1,7 +1,7 @@
 "use client";
 
 import { Delete as DeleteIcon } from "@mui/icons-material";
-import { GlobalStyles, IconButton, Stack, Tooltip, useTheme } from "@mui/material";
+import { IconButton, Stack, Tooltip, useTheme } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps, getBezierPath, useViewport } from "@xyflow/react";
 import React, { memo, useCallback, useMemo } from "react";
@@ -32,21 +32,6 @@ const ToolbarButton = styled(IconButton)(({ theme }) => ({
     backgroundColor: theme.palette.action.hover,
   },
 }));
-
-// Global styles for animated edge - keyframes don't work in inline styles
-const AnimatedEdgeStyles = () => (
-  <GlobalStyles
-    styles={{
-      "@keyframes dashFlow": {
-        "0%": { strokeDashoffset: 24 },
-        "100%": { strokeDashoffset: 0 },
-      },
-      ".react-flow__edge-path.animated-running": {
-        animation: "dashFlow 0.5s linear infinite",
-      },
-    }}
-  />
-);
 
 const DeletableEdge: React.FC<EdgeProps> = ({
   id,
@@ -115,7 +100,6 @@ const DeletableEdge: React.FC<EdgeProps> = ({
 
   return (
     <>
-      <AnimatedEdgeStyles />
       <BaseEdge
         path={edgePath}
         markerEnd={markerEnd}

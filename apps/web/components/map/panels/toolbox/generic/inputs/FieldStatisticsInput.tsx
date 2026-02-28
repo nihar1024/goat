@@ -175,8 +175,8 @@ export default function FieldStatisticsInput({
       }));
   }, [relatedLayerInputName, safePredictedColumns]);
 
-  // Fetch numeric fields for the layer (statistics operations like sum/min/max need numeric fields)
-  const { layerFields, isLoading } = useLayerFields(datasetId, "number");
+  // Fetch numeric fields for the layer (skip when predicted columns are available)
+  const { layerFields, isLoading } = useLayerFields(hasPredictedColumns ? "" : datasetId, "number");
 
   // Use predicted numeric fields if available, otherwise use layer fields
   const numericFields = useMemo((): LayerFieldType[] => {

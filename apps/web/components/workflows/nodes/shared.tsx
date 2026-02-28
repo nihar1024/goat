@@ -32,6 +32,21 @@ export const BorderAnglePropertyStyles = () => (
   />
 );
 
+// Global styles for animated edge - keyframes don't work in inline styles
+export const AnimatedEdgeStyles = () => (
+  <GlobalStyles
+    styles={{
+      "@keyframes dashFlow": {
+        "0%": { strokeDashoffset: 24 },
+        "100%": { strokeDashoffset: 0 },
+      },
+      ".react-flow__edge-path.animated-running": {
+        animation: "dashFlow 0.5s linear infinite",
+      },
+    }}
+  />
+);
+
 export const NodeContainer = styled(Box, {
   shouldForwardProp: (prop) => prop !== "selected",
 })<{ selected?: boolean }>(({ theme, selected }) => ({
@@ -153,11 +168,6 @@ export const AnimatedBorderWrapper = styled(Box, {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  "@property --border-angle": {
-    syntax: "'<angle>'",
-    inherits: "true",
-    initialValue: "0deg",
-  },
 }));
 
 export const StyledHandle = styled(Handle, {

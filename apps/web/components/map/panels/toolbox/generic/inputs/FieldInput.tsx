@@ -160,13 +160,13 @@ export default function FieldInput({
     return layer?.layer_id || "";
   }, [selectedLayerId, projectLayers, relatedLayerInputName, safeLayerDatasetIds]);
 
-  // Fetch fields for the layer
-  const { layerFields, isLoading } = useLayerFields(datasetId);
-
   // Check if we have predicted columns for this layer input (for connected tool outputs)
   const hasPredictedColumns = useMemo(() => {
     return relatedLayerInputName && safePredictedColumns[relatedLayerInputName] != null;
   }, [relatedLayerInputName, safePredictedColumns]);
+
+  // Fetch fields for the layer (skip when predicted columns are available)
+  const { layerFields, isLoading } = useLayerFields(hasPredictedColumns ? "" : datasetId);
 
   // Convert predicted columns to LayerFieldType format
   const predictedFields = useMemo((): LayerFieldType[] => {

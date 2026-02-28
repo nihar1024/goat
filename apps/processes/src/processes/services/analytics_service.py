@@ -492,7 +492,7 @@ class AnalyticsService:
 
         con = duckdb.connect()
         try:
-            con.execute("INSTALL spatial; LOAD spatial;")
+            con.execute("LOAD spatial;")
 
             for alias, columns in table_schemas.items():
                 if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", alias):
@@ -602,7 +602,7 @@ class AnalyticsService:
 
         con = duckdb.connect()
         try:
-            con.execute("INSTALL spatial; LOAD spatial;")
+            con.execute("LOAD spatial;")
 
             # Separate temp layers from DuckLake layers
             temp_layers: dict[str, str] = {}

@@ -66,6 +66,7 @@ import WorkflowVariablesDialog from "../dialogs/WorkflowVariablesDialog";
 import DeletableEdge from "../edges/DeletableEdge";
 import DatasetNode from "../nodes/DatasetNode";
 import ExportNode from "../nodes/ExportNode";
+import { AnimatedEdgeStyles, BorderAnglePropertyStyles } from "../nodes/shared";
 import TextAnnotationNode from "../nodes/TextAnnotationNode";
 import ToolNode from "../nodes/ToolNode";
 import CanvasToolbar from "./CanvasToolbar";
@@ -641,6 +642,8 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           style: { stroke: theme.palette.grey[500], strokeWidth: 2 },
         }}
         connectionLineStyle={{ stroke: theme.palette.grey[500], strokeWidth: 2 }}>
+        <BorderAnglePropertyStyles />
+        <AnimatedEdgeStyles />
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Panel position="bottom-left">
           <CustomControls isLocked={isLocked} onToggleLock={() => setIsLocked(!isLocked)} />

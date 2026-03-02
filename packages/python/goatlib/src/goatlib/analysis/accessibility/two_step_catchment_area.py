@@ -48,8 +48,8 @@ class Heatmap2SFCATool(HeatmapToolBase):
         logger.info("Demand table created: %s", demand_table)
 
         # Extract unique H3 IDs from opportunities and demand
-        opportunity_ids = self._extract_h3_ids(unified_table, id_column="dest_id")
-        demand_ids = self._extract_h3_ids(demand_table, id_column="orig_id")
+        opportunity_ids = self._extract_h3_ids(unified_table, column_name="dest_id")
+        demand_ids = self._extract_h3_ids(demand_table, column_name="orig_id")
         if not opportunity_ids:
             raise ValueError("No opportunity IDs found in opportunity data")
         if not demand_ids:

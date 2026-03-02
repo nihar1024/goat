@@ -51,41 +51,37 @@ class HuffmodelTool(HeatmapToolBase):
         demand_table = self._process_demand(params.demand_path, params.demand_field, h3_resolution)
         logger.info("Demand table created: %s", demand_table)
 
-        # Filter opportunities and demand to study area using SQL (more efficient than Python)
+        # Filter opportunities and demand to study area
         self.con.execute(f"""
             CREATE OR REPLACE TEMP TABLE {opportunity_table}_filtered AS
             SELECT o.* FROM {opportunity_table} o
             WHERE o.dest_id IN (SELECT study_area_id FROM {reference_table_h3})
         """)
         opportunity_table_filtered = f"{opportunity_table}_filtered"
-        
+
         self.con.execute(f"""
             CREATE OR REPLACE TEMP TABLE {demand_table}_filtered AS
             SELECT d.* FROM {demand_table} d
             WHERE d.orig_id IN (SELECT study_area_id FROM {reference_table_h3})
         """)
         demand_table_filtered = f"{demand_table}_filtered"
-        
-        # Get counts for logging and validation
-        dest_count = self.con.execute(f"SELECT COUNT(DISTINCT dest_id) FROM {opportunity_table_filtered}").fetchone()[0]
-        demand_count = self.con.execute(f"SELECT COUNT(DISTINCT orig_id) FROM {demand_table_filtered}").fetchone()[0]
-        
-        if dest_count == 0:
+
+        # Extract unique H3 IDs from filtered tables using base methods
+        opportunity_ids = self._extract_h3_ids(opportunity_table_filtered, column_name="dest_id")
+        demand_ids = self._extract_h3_ids(demand_table_filtered, column_name="orig_id")
+
+        if not opportunity_ids:
             raise ValueError("No opportunity IDs found in opportunity data within study area")
-        if demand_count == 0:
+        if not demand_ids:
             raise ValueError("No demand IDs found in demand data within study area")
 
-        logger.info("Found %d unique opportunity IDs in study area", dest_count)
-        logger.info("Found %d unique demand IDs in study area", demand_count)
+        logger.info("Found %d unique opportunity IDs in study area", len(opportunity_ids))
+        logger.info("Found %d unique demand IDs in study area", len(demand_ids))
 
-        # Filter OD matrix using SQL JOINs (more efficient than Python list filtering)
-        filtered_matrix = "od_matrix_filtered"
-        self.con.execute(f"""
-            CREATE OR REPLACE TEMP TABLE {filtered_matrix} AS
-            SELECT m.* FROM {od_table} m
-            WHERE m.dest_id IN (SELECT dest_id FROM {opportunity_table_filtered})
-              AND m.orig_id IN (SELECT orig_id FROM {demand_table_filtered})
-        """)
+        # Filter OD matrix using base method
+        filtered_matrix = self._filter_od_matrix(
+            od_table, origin_ids=demand_ids, destination_ids=opportunity_ids, max_cost=params.max_cost
+        )
 
         # Compute Huff model using filtered tables
         result_table = self._compute_huff_model(

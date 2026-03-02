@@ -114,8 +114,8 @@ class ClusteringZones(AnalysisTool):
                 ST_X({input_geom}) AS lon,
                 ST_Y({input_geom}) AS lat,
                 {weight_expr} AS weight,
-                ST_X(ST_Transform({input_geom}, 'EPSG:4326', 'EPSG:3857')) AS x,
-                ST_Y(ST_Transform({input_geom}, 'EPSG:4326', 'EPSG:3857')) AS y
+                ST_X(ST_Transform({input_geom}, '{crs_str}', 'EPSG:3857')) AS x,
+                ST_Y(ST_Transform({input_geom}, '{crs_str}', 'EPSG:3857')) AS y
             FROM {input_view}
         """)
         n_features = self.con.execute("SELECT COUNT(*) FROM features_metric").fetchone()[0]
@@ -292,7 +292,7 @@ class ClusteringZones(AnalysisTool):
             SELECT
                 a.cluster_id,
                 ST_Collect(LIST(p.{input_geom})) AS geometry,
-                COUNT(*) AS cluster_size,
+                SUM(p.weight) AS cluster_size,
                 COALESCE(pd.max_distance, 0) AS max_distance
             FROM final_assignments a
             JOIN features_metric p ON a.feature_id = p.feature_id
@@ -408,7 +408,7 @@ class ClusteringZones(AnalysisTool):
             SELECT from_id, to_id FROM all_picks
         """)
 
-            # Add reverse edges to make graph bidirectional
+        # Add reverse edges to make graph bidirectional
         self.con.execute("""
             INSERT INTO neighbors (from_id, to_id)
             SELECT DISTINCT n.to_id, n.from_id
@@ -1050,6 +1050,7 @@ class ClusteringZones(AnalysisTool):
             ).fetchone()[0]
             if unassigned_count == 0:
                 break
+        unassigned_count = self.con.execute("SELECT COUNT(*) FROM batch_zone_grow WHERE cluster_id = -1" ).fetchone()[0]
         if unassigned_count > 0:
             self.con.execute("""
                 WITH unassigned AS (

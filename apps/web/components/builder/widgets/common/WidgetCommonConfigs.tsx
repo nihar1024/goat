@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Autocomplete, Checkbox, Chip, FormControlLabel, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
+import { Autocomplete, Box, Button, Checkbox, Chip, Divider, FormControlLabel, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +15,8 @@ import type { FormatNumberTypes, WidgetConfigSchema } from "@/lib/validations/wi
 import {
   formatNumberTypes,
   pieLayoutTypes,
+  tableQueryModeTypes,
+  tableModeTypes,
   widgetSchemaMap,
   widgetTypes,
 } from "@/lib/validations/widget";
@@ -36,6 +38,8 @@ import SectionHeader from "@/components/map/panels/common/SectionHeader";
 import SectionOptions from "@/components/map/panels/common/SectionOptions";
 import Selector from "@/components/map/panels/common/Selector";
 import TextFieldInput from "@/components/map/panels/common/TextFieldInput";
+import FormulaBuilder from "@/components/modals/FormulaBuilder";
+import type { FormulaField, SqlTable } from "@/components/modals/FormulaBuilder";
 import ColorPalette from "@/components/map/panels/style/color/ColorPalette";
 import ColorRangeSelector from "@/components/map/panels/style/color/ColorRangeSelector";
 
@@ -218,6 +222,7 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
   const { t } = useTranslation("common");
   const schema = widgetSchemaMap[config.type];
   const { projectId } = useParams();
+  const [formulaBuilderOpen, setFormulaBuilderOpen] = useState(false);
   const { filteredLayers } = useLayerByGeomType(["feature", "table"], undefined, projectId as string);
 
   const hasLayerProjectIdDef = useMemo(() => {
@@ -234,6 +239,38 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
 
   const hasGroupColumnNameDef = useMemo(() => {
     return hasNestedSchemaPath(schema, "setup.group_by_column_name");
+  }, [schema]);
+
+  const hasModeDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "setup.mode");
+  }, [schema]);
+
+  const hasQueryModeDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "setup.query_mode");
+  }, [schema]);
+
+  const hasSqlQueryDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "setup.sql_query");
+  }, [schema]);
+
+  const hasAdditionalMetricsDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "setup.additional_metrics");
+  }, [schema]);
+
+  const hasVisibleColumnsDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "setup.visible_columns");
+  }, [schema]);
+
+  const hasSortByDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.sort_by");
+  }, [schema]);
+
+  const hasSortingDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.sorting");
+  }, [schema]);
+
+  const hasSizeDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.size");
   }, [schema]);
 
   const selectedLayer = useMemo(() => {
@@ -257,6 +294,168 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return layerFields.find((field) => field.name === (config?.setup as any)?.column_name);
   }, [hasColumnNameDef, selectedLayer, layerFields, config?.setup]);
+
+  const selectedMode = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (config?.setup as any)?.mode || tableModeTypes.Values.records;
+  }, [config?.setup]);
+
+  const selectedQueryMode = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (config?.setup as any)?.query_mode || tableQueryModeTypes.Values.builder;
+  }, [config?.setup]);
+
+  const isSqlMode = selectedQueryMode === tableQueryModeTypes.Values.sql;
+  const isTableWidget = config.type === widgetTypes.Enum.table;
+
+  const isRecordsMode = selectedMode === tableModeTypes.Values.records;
+  const isGroupedBuilderMode = !isSqlMode && (!hasModeDef || !isRecordsMode);
+
+  const modeOptions = useMemo(
+    () => [
+      { value: tableModeTypes.Values.records, label: t("records", { defaultValue: "Records" }) },
+      { value: tableModeTypes.Values.grouped, label: t("grouped", { defaultValue: "Grouped" }) },
+    ],
+    [t]
+  );
+
+  const selectedModeOption = useMemo(() => {
+    return modeOptions.find((option) => option.value === selectedMode);
+  }, [modeOptions, selectedMode]);
+
+  const queryModeOptions = useMemo(
+    () => [
+      {
+        value: tableQueryModeTypes.Values.builder,
+        label: t("table_data_source_dashboard", { defaultValue: "Dashboard setup" }),
+      },
+      {
+        value: tableQueryModeTypes.Values.sql,
+        label: t("table_data_source_sql", { defaultValue: "SQL query" }),
+      },
+    ],
+    [t]
+  );
+
+  const selectedQueryModeOption = useMemo(() => {
+    return queryModeOptions.find((option) => option.value === selectedQueryMode);
+  }, [queryModeOptions, selectedQueryMode]);
+
+  const selectedVisibleColumns = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const visibleColumns = (config?.setup as any)?.visible_columns as string[] | undefined;
+    if (!visibleColumns?.length) return [];
+    return layerFields
+      .filter((field) => visibleColumns.includes(field.name))
+      .map((field) => ({ value: field.name, label: field.name }));
+  }, [config?.setup, layerFields]);
+
+  const visibleColumnOptions = useMemo(() => {
+    return layerFields.map((field) => ({ value: field.name, label: field.name }));
+  }, [layerFields]);
+
+  const sortByOptions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const additionalMetrics = ((config?.setup as any)?.additional_metrics || []) as Array<Record<string, unknown>>;
+
+    if (hasModeDef && !isRecordsMode) {
+      return [
+        { value: "grouped_value", label: t("group", { defaultValue: "Group" }) },
+        { value: "metric_0", label: t("value", { defaultValue: "Value" }) },
+        ...additionalMetrics.map((_, index) => ({
+          value: `metric_${index + 1}`,
+          label: `${t("value", { defaultValue: "Value" })} ${index + 2}`,
+        })),
+      ];
+    }
+    return layerFields.map((field) => ({ value: field.name, label: field.name }));
+  }, [config?.setup, hasModeDef, isRecordsMode, layerFields, t]);
+
+  const selectedSortBy = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sortBy = (config as any)?.options?.sort_by;
+    return sortByOptions.find((option) => option.value === sortBy);
+  }, [config, sortByOptions]);
+
+  const sortingOptions = useMemo(
+    () => [
+      { value: "asc", label: t("ascending", { defaultValue: "Ascending" }) },
+      { value: "desc", label: t("descending", { defaultValue: "Descending" }) },
+    ],
+    [t]
+  );
+
+  const selectedSorting = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sorting = (config as any)?.options?.sorting || "desc";
+    return sortingOptions.find((option) => option.value === sorting);
+  }, [config, sortingOptions]);
+
+  const handleSetupChange = useCallback(
+    (key: string, value: any) => {
+      onChange({
+        ...config,
+        setup: {
+          ...(config.setup as any),
+          [key]: value,
+        },
+      } as WidgetConfigSchema);
+    },
+    [config, onChange]
+  );
+
+  const handleOptionChange = useCallback(
+    (key: string, value: any) => {
+      onChange({
+        ...config,
+        options: {
+          ...((config as any).options || {}),
+          [key]: value,
+        },
+      } as WidgetConfigSchema);
+    },
+    [config, onChange]
+  );
+
+  const sqlBuilderFields = useMemo<FormulaField[]>(() => {
+    return layerFields.map((field) => ({ name: field.name, type: field.type }));
+  }, [layerFields]);
+
+  const sqlTables = useMemo<SqlTable[]>(() => {
+    const sqlAlias = "input_1";
+    const selectedLayerName = selectedLayer?.label || t("layer", { defaultValue: "Layer" });
+    return [
+      {
+        alias: sqlAlias,
+        fields: sqlBuilderFields,
+        layerName: String(selectedLayerName),
+        layerId: selectedLayerDatasetId,
+      },
+    ];
+  }, [selectedLayer?.label, selectedLayerDatasetId, sqlBuilderFields, t]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const additionalMetrics = ((config?.setup as any)?.additional_metrics || []) as Array<{
+    operation_type?: string;
+    operation_value?: string;
+  }>;
+
+  const selectedGroupByField = useMemo(() => {
+    const groupByName = (config.setup as any)?.group_by_column_name as string | undefined;
+    if (!groupByName) return undefined;
+    return layerFields.find((field) => field.name === groupByName);
+  }, [config.setup, layerFields]);
+
+  const groupedValueColumns = useMemo(
+    () => [
+      {
+        operation_type: (config.setup as any)?.operation_type,
+        operation_value: (config.setup as any)?.operation_value,
+      },
+      ...additionalMetrics,
+    ],
+    [additionalMetrics, config.setup]
+  );
 
   return (
     <>
@@ -282,6 +481,9 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                     ...(hasColumnNameDef && { column_name: undefined }),
                     ...(hasOperationDef && { operation_type: undefined, operation_value: undefined }),
                     ...(hasGroupColumnNameDef && { group_by_column_name: undefined }),
+                    ...(hasGroupColumnNameDef && { group_by_label: undefined, primary_metric_label: undefined }),
+                    ...(hasAdditionalMetricsDef && { additional_metrics: [] }),
+                    ...(hasVisibleColumnsDef && { visible_columns: undefined }),
                   };
 
                   onChange({
@@ -294,6 +496,70 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 emptyMessageIcon={ICON_NAME.LAYERS}
                 label={t("select_layer")}
                 placeholder={t("select_layer")}
+              />
+            )}
+            {selectedLayer && hasQueryModeDef && (
+              <Selector
+                selectedItems={selectedQueryModeOption}
+                setSelectedItems={(item: SelectorItem | undefined) => {
+                  const nextQueryMode = item?.value || tableQueryModeTypes.Values.builder;
+                  onChange({
+                    ...config,
+                    setup: {
+                      ...(config.setup as any),
+                      query_mode: nextQueryMode,
+                    },
+                  } as WidgetConfigSchema);
+                }}
+                items={queryModeOptions}
+                label={t("table_data_source", { defaultValue: "Data source" })}
+              />
+            )}
+            {selectedLayer && hasModeDef && !isSqlMode && (
+              <Selector
+                selectedItems={selectedModeOption}
+                setSelectedItems={(item: SelectorItem | undefined) => {
+                  const nextMode = item?.value || tableModeTypes.Values.records;
+                  onChange({
+                    ...config,
+                    setup: {
+                      ...(config.setup as any),
+                      mode: nextMode,
+                      ...(nextMode === tableModeTypes.Values.records && {
+                        operation_type: undefined,
+                        operation_value: undefined,
+                        group_by_column_name: undefined,
+                        group_by_label: undefined,
+                        primary_metric_label: undefined,
+                        additional_metrics: [],
+                      }),
+                    },
+                    ...(nextMode === tableModeTypes.Values.grouped && {
+                      options: {
+                        ...((config as any).options || {}),
+                        sort_by: "metric_0",
+                      },
+                    }),
+                  } as WidgetConfigSchema);
+                }}
+                items={modeOptions}
+                label={t("mode")}
+              />
+            )}
+            {selectedLayer && hasVisibleColumnsDef && isRecordsMode && !isSqlMode && (
+              <Selector
+                selectedItems={selectedVisibleColumns}
+                setSelectedItems={(items: SelectorItem[] | SelectorItem | undefined) => {
+                  const nextItems = Array.isArray(items) ? items : [];
+                  handleSetupChange(
+                    "visible_columns",
+                    nextItems.length ? nextItems.map((item) => String(item.value)) : undefined
+                  );
+                }}
+                items={visibleColumnOptions}
+                multiple
+                enableSearch
+                label={t("visible_fields", { defaultValue: "Visible fields" })}
               />
             )}
             {/* For widgets such as filter etc */}
@@ -316,21 +582,115 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 label={t("select_field")}
               />
             )}
-            {/* For widgets that support operations (like statistics) */}
-            {selectedLayer && hasOperationDef && (
+            {/* Grouped mode: unified value columns list + group-by selector */}
+            {selectedLayer && hasOperationDef && hasAdditionalMetricsDef && isGroupedBuilderMode && (
+              <>
+                <Typography variant="body2" color="text.secondary">
+                  {t("value_columns", { defaultValue: "Value columns" })}
+                </Typography>
+                <Stack spacing={1}>
+                  {groupedValueColumns.map((metric, index) => {
+                    const isPrimaryRow = index === 0;
+                    const canRemove = groupedValueColumns.length > 1;
+
+                    return (
+                    <Box
+                      key={`metric-${index}`}
+                      sx={{
+                        p: 2,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: 1,
+                      }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {t("value_column", { defaultValue: "Value column" })} {index + 1}
+                        </Typography>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="text"
+                          disabled={!canRemove}
+                          onClick={() => {
+                            if (!canRemove) return;
+
+                            if (isPrimaryRow) {
+                              const [nextPrimary, ...remaining] = additionalMetrics;
+                              onChange({
+                                ...config,
+                                setup: {
+                                  ...(config.setup as any),
+                                  operation_type: nextPrimary?.operation_type,
+                                  operation_value: nextPrimary?.operation_value,
+                                  additional_metrics: remaining,
+                                },
+                              } as WidgetConfigSchema);
+                              return;
+                            }
+
+                            const nextMetrics = additionalMetrics.filter((_, metricIndex) => metricIndex !== index - 1);
+                            handleSetupChange("additional_metrics", nextMetrics);
+                          }}>
+                          {t("remove", { defaultValue: "Remove" })}
+                        </Button>
+                      </Stack>
+                      <StatisticSelector
+                        layerProjectId={selectedLayer.value as number}
+                        hasGroupBy={false}
+                        value={{
+                          method: metric.operation_type as any,
+                          value: metric.operation_value,
+                        }}
+                        onChange={(nextValue) => {
+                          if (isPrimaryRow) {
+                            onChange({
+                              ...config,
+                              setup: {
+                                ...(config.setup as any),
+                                operation_type: nextValue.method,
+                                operation_value: nextValue.value,
+                              },
+                            } as WidgetConfigSchema);
+                            return;
+                          }
+
+                          const nextMetrics = [...additionalMetrics];
+                          nextMetrics[index - 1] = {
+                            ...nextMetrics[index - 1],
+                            operation_type: nextValue.method,
+                            operation_value: nextValue.value,
+                          };
+                          handleSetupChange("additional_metrics", nextMetrics);
+                        }}
+                      />
+                    </Box>
+                    );
+                  })}
+                </Stack>
+
+                <Divider />
+                <Button
+                  variant="text"
+                  fullWidth
+                  onClick={() => {
+                    const nextMetrics = [...additionalMetrics, { operation_type: "count", operation_value: undefined }];
+                    handleSetupChange("additional_metrics", nextMetrics);
+                  }}>
+                  {t("add_column", { defaultValue: "Add column" })}
+                </Button>
+              </>
+            )}
+            {/* Non-table widgets with statistics support (charts/numbers) */}
+            {selectedLayer && hasOperationDef && !isTableWidget && (
               <StatisticSelector
                 layerProjectId={selectedLayer.value as number}
                 hasGroupBy={hasGroupColumnNameDef}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 value={{
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   method: (config.setup as any).operation_type,
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   value: (config.setup as any).operation_value,
                   groupBy: (config.setup as any).group_by_column_name,
                 }}
                 onChange={(value) => {
-                  // Check if group_by changed - if so, reset custom_order and color_map
                   const currentGroupBy = (config.setup as any).group_by_column_name;
                   const groupByChanged = hasGroupColumnNameDef && value.groupBy !== currentGroupBy;
 
@@ -341,10 +701,8 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                       operation_type: value.method,
                       operation_value: value.value,
                       ...(hasGroupColumnNameDef && { group_by_column_name: value.groupBy }),
-                      // Reset custom_order when group_by changes
                       ...(groupByChanged && { custom_order: undefined }),
                     },
-                    // Reset color_map when group_by changes
                     ...(groupByChanged && {
                       options: {
                         ...((config as any).options || {}),
@@ -352,6 +710,97 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                       },
                     }),
                   } as WidgetConfigSchema);
+                }}
+              />
+            )}
+            {selectedLayer && isTableWidget && hasGroupColumnNameDef && isGroupedBuilderMode && (
+              <LayerFieldSelector
+                fields={layerFields}
+                selectedField={selectedGroupByField}
+                disabled={!selectedLayer}
+                setSelectedField={(field) => {
+                  const currentGroupBy = (config.setup as any).group_by_column_name;
+                  const nextGroupBy = field?.name;
+                  const groupByChanged = nextGroupBy !== currentGroupBy;
+
+                  onChange({
+                    ...config,
+                    setup: {
+                      ...(config.setup as any),
+                      group_by_column_name: nextGroupBy,
+                      ...(groupByChanged && { custom_order: undefined }),
+                    },
+                    ...(groupByChanged && {
+                      options: {
+                        ...((config as any).options || {}),
+                        color_map: undefined,
+                      },
+                    }),
+                  } as WidgetConfigSchema);
+                }}
+                label={t("group_by_field", { defaultValue: "Group-by field" })}
+              />
+            )}
+            {selectedLayer && hasSqlQueryDef && isSqlMode && (
+              <>
+                <Button variant="outlined" onClick={() => setFormulaBuilderOpen(true)}>
+                  {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ((config?.setup as any)?.sql_query as string)
+                      ? t("edit_sql_query")
+                      : t("write_sql_query")
+                  }
+                </Button>
+                <FormulaBuilder
+                  open={formulaBuilderOpen}
+                  onClose={() => setFormulaBuilderOpen(false)}
+                  onApply={(expression: string) => {
+                    handleSetupChange("sql_query", expression || undefined);
+                    setFormulaBuilderOpen(false);
+                  }}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  initialExpression={((config?.setup as any)?.sql_query as string) || ""}
+                  fields={sqlBuilderFields}
+                  mode="sql"
+                  tables={sqlTables}
+                  title={t("custom_sql_editor")}
+                  showGroupBy={false}
+                />
+              </>
+            )}
+            {selectedLayer && isTableWidget && hasSortByDef && !isSqlMode && (
+              <Selector
+                selectedItems={selectedSortBy}
+                setSelectedItems={(item: SelectorItem | undefined) => {
+                  handleOptionChange("sort_by", item?.value);
+                }}
+                items={sortByOptions}
+                label={t("sort_by")}
+              />
+            )}
+            {selectedLayer && isTableWidget && hasSortingDef && !isSqlMode && (
+              <Selector
+                selectedItems={selectedSorting}
+                setSelectedItems={(item: SelectorItem | undefined) => {
+                  handleOptionChange("sorting", item?.value || "desc");
+                }}
+                items={sortingOptions}
+                label={t("sort")}
+              />
+            )}
+            {selectedLayer && hasSizeDef && hasModeDef && !isRecordsMode && !isSqlMode && (
+              <TextFieldInput
+                type="number"
+                label={t("top_n", { defaultValue: "Top N" })}
+                tooltip={t("top_n_tooltip", { defaultValue: "Keeps only the first N rows after sorting." })}
+                clearable={false}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                value={String((config as any)?.options?.size || 50)}
+                onChange={(value: string) => {
+                  const parsed = Number(value);
+                  if (!Number.isNaN(parsed) && parsed > 0) {
+                    handleOptionChange("size", parsed);
+                  }
                 }}
               />
             )}
@@ -402,6 +851,14 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     return hasNestedSchemaPath(schema, "options.selection_response");
   }, [schema]);
 
+  const hasPageSizeDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.page_size");
+  }, [schema]);
+
+  const hasShowTotalsDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.show_totals");
+  }, [schema]);
+
   // Get project layers for target layer selection
   const { layers: projectLayers } = useProjectLayers(projectId as string);
 
@@ -440,7 +897,9 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
       hasZoomToSelectionDef ||
       hasNumberFormatDef ||
       hasPaddingDef ||
-      hasSelectionResponseDef
+      hasSelectionResponseDef ||
+      hasPageSizeDef ||
+      hasShowTotalsDef
     );
   }, [
     hasTargetLayersDef,
@@ -449,7 +908,32 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     hasNumberFormatDef,
     hasPaddingDef,
     hasSelectionResponseDef,
+    hasPageSizeDef,
+    hasShowTotalsDef,
   ]);
+
+  const pageSizeOptions = useMemo(
+    () => {
+      if (config.type === widgetTypes.Enum.table) {
+        return Array.from({ length: 20 }, (_, index) => {
+          const value = index + 1;
+          return { value, label: String(value) };
+        });
+      }
+      return [10, 25, 50, 100].map((value) => ({ value, label: String(value) }));
+    },
+    [config.type]
+  );
+
+  const selectedPageSize = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawPageSize = Number((config as any)?.options?.page_size || (config.type === widgetTypes.Enum.table ? 10 : 25));
+    const clampedPageSize =
+      config.type === widgetTypes.Enum.table
+        ? Math.max(1, Math.min(20, Number.isFinite(rawPageSize) ? rawPageSize : 10))
+        : rawPageSize;
+    return pageSizeOptions.find((option) => option.value === clampedPageSize) || pageSizeOptions[0];
+  }, [config, pageSizeOptions]);
 
   return (
     <>
@@ -536,6 +1020,47 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
                     />
                   </Stack>
                 )}
+
+                {hasPageSizeDef && (
+                  <Selector
+                    selectedItems={selectedPageSize}
+                    setSelectedItems={(item: SelectorItem) => {
+                      const fallback = config.type === widgetTypes.Enum.table ? 10 : 25;
+                      handleOptionChange("page_size", Number(item?.value || fallback));
+                    }}
+                    items={pageSizeOptions}
+                    label={
+                      config.type === widgetTypes.Enum.table
+                        ? t("rows_shown", { defaultValue: "Rows shown" })
+                        : t("rows_per_page", { defaultValue: "Rows per page" })
+                    }
+                    tooltip={
+                      config.type === widgetTypes.Enum.table
+                        ? t("rows_shown_tooltip", {
+                            defaultValue: "Initial rows shown and load chunk size while scrolling.",
+                          })
+                        : undefined
+                    }
+                  />
+                )}
+
+                {hasShowTotalsDef && (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        color="primary"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        checked={!!(config as any)?.options?.show_totals}
+                        onChange={(e) => {
+                          handleOptionChange("show_totals", e.target.checked);
+                        }}
+                      />
+                    }
+                    label={<Typography variant="body2">{t("show_totals", { defaultValue: "Show totals" })}</Typography>}
+                  />
+                )}
+
                 {hasPaddingDef && (
                   <FormControlLabel
                     control={

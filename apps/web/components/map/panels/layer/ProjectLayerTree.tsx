@@ -192,6 +192,7 @@ function formatApiDataForDnd(nodes: ProjectLayerTreeNode[]): ProjectTreeItem[] {
   // Function to check if a node should be hidden (invisible group or child of invisible group)
   const shouldHideNode = (node: ProjectLayerTreeNode): boolean => {
     const nodeVisibility = node.properties?.visibility ?? true;
+
     if (node.type === "group" && !nodeVisibility) {
       return false; // Show invisible groups themselves, but hide their children
     }

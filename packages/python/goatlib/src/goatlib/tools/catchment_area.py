@@ -272,7 +272,8 @@ class CatchmentAreaWindmillParams(ToolInputBase):
             field_order=4,
             label_key="speed",
             enum_labels=SPEED_LABELS,
-            visible_when={"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
+            visible_when={"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}, 
+                         "measure_type": CatchmentAreaMeasureType.time},
             widget_options={
                 "default_by_field": {
                     "field": "routing_mode",

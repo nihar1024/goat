@@ -205,11 +205,11 @@ function ToolsTabContent({ onSelectTool }: ToolsTabContentProps) {
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          "--icon-color-1": isDark ? "#FAFAFA" : "#283648",
-          "--icon-color-2": isDark ? "#B2AFB6" : "#74707A",
-          "--icon-color-3": isDark ? "#74707A" : "#B2AFB6",
-          "--icon-color-4": isDark ? "rgba(255, 255, 255, 0.12)" : "#E5E4E7",
-          "--icon-color-5": isDark ? "rgba(0, 0, 0, 0.5)" : "#FAFAFA",
+          "--icon-color-1": isDark ? "#FAFAFA" : "#666666",
+          "--icon-color-2": "#999999",
+          "--icon-color-3": "#BDBDBD",
+          "--icon-color-4": "#E3E3E3",
+          "--icon-color-5": isDark ? "#666666" : "#FAFAFA",
         }}>
         <Stack spacing={4} sx={{ p: 3 }}>
           {error && (

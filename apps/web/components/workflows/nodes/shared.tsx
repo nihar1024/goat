@@ -6,7 +6,7 @@
  * consistent visual appearance across the workflow canvas.
  */
 import { Box, GlobalStyles, IconButton, Stack } from "@mui/material";
-import { alpha, keyframes, styled } from "@mui/material/styles";
+import { keyframes, lighten, styled } from "@mui/material/styles";
 import { Handle } from "@xyflow/react";
 
 // Keyframe animation for border angle (animates CSS custom property)
@@ -81,23 +81,25 @@ export const NodeIconWrapper = styled(Box, {
   const isDark = theme.palette.mode === "dark";
   
   // Default colors (adapt to theme)
-  let color1 = isDark ? "#FAFAFA" : "#283648";
-  let color2 = isDark ? "#B2AFB6" : "#74707A";
-  let color3 = isDark ? "#74707A" : "#B2AFB6";
-  let color4 = isDark ? "rgba(255, 255, 255, 0.12)" : "#E5E4E7";
-  const color5 = isDark ? "rgba(0, 0, 0, 0.5)" : "#FAFAFA";
+  let color1 = isDark ? "#FAFAFA" : "#666666";
+  let color2 = "#999999";
+  let color3 = "#BDBDBD";
+  let color4 = "#E3E3E3";
+  let color5 = isDark ? "#666666" : "#FAFAFA";
 
-  // Success state colors
+  // Success state colors (solid tints to avoid alpha compounding with fillOpacity in SVGs)
   if (status === "completed") {
     color1 = theme.palette.primary.main;
-    color2 = alpha(theme.palette.primary.main, 0.6);
-    color3 = alpha(theme.palette.primary.main, 0.4);
-    color4 = alpha(theme.palette.primary.main, 0.12);
+    color2 = lighten(theme.palette.primary.main, 0.4);
+    color3 = lighten(theme.palette.primary.main, 0.6);
+    color4 = lighten(theme.palette.primary.main, 0.88);
+    color5 = lighten(theme.palette.primary.main, 0.92);
   } else if (status === "failed") {
     color1 = theme.palette.error.main;
-    color2 = alpha(theme.palette.error.main, 0.6);
-    color3 = alpha(theme.palette.error.main, 0.4);
-    color4 = alpha(theme.palette.error.main, 0.12);
+    color2 = lighten(theme.palette.error.main, 0.4);
+    color3 = lighten(theme.palette.error.main, 0.6);
+    color4 = lighten(theme.palette.error.main, 0.88);
+    color5 = lighten(theme.palette.error.main, 0.92);
   }
 
   return {

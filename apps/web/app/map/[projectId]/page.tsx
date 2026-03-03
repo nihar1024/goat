@@ -74,7 +74,7 @@ export default function MapPage({ params: { projectId } }) {
     mutate: mutateProjectLayers,
   } = useFilteredProjectLayers(projectId, ["table"], []);
 
-  // Fetch all layers including tables for workflow (tables can be data inputs)
+  // Fetch all layers including tables for widgets/workflows
   const { layers: allProjectLayersIncludingTables } = useFilteredProjectLayers(projectId, [], []);
 
   const {
@@ -133,6 +133,10 @@ export default function MapPage({ params: { projectId } }) {
       return !invisibleGroupIds.has(layer.layer_project_group_id);
     });
   }, [allProjectLayers, projectLayerGroups]);
+
+  const widgetProjectLayers = useMemo(() => {
+    return allProjectLayersIncludingTables || [];
+  }, [allProjectLayersIncludingTables]);
 
   const { activeBasemap } = useBasemap(project);
 
@@ -486,7 +490,7 @@ export default function MapPage({ params: { projectId } }) {
                               inset: "20px",
                             }}>
                             <PublicProjectLayout
-                              projectLayers={projectLayers}
+                              projectLayers={widgetProjectLayers}
                               project={project}
                               onProjectUpdate={handleProjectUpdate}
                             />

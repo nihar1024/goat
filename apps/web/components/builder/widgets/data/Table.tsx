@@ -15,7 +15,7 @@ import { tableDataConfigSchema, tableModeTypes, tableQueryModeTypes, type TableD
 import useLayerFields from "@/hooks/map/CommonHooks";
 import { useChartWidget } from "@/hooks/map/DashboardBuilderHooks";
 
-import DatasetTable from "@/components/common/DatasetTable";
+import WidgetRecordsTable from "@/components/builder/widgets/data/WidgetRecordsTable";
 import { WidgetStatusContainer } from "@/components/builder/widgets/common/WidgetStatusContainer";
 
 interface TableDataWidgetProps {
@@ -27,7 +27,7 @@ interface TableDataWidgetProps {
 }
 
 type GroupedMetricConfig = {
-  operation_type: string;
+  operation_type: NonNullable<TableDataSchema["setup"]["operation_type"]>;
   operation_value?: string;
   label?: string;
 };
@@ -67,13 +67,17 @@ export const TableDataWidget = ({
   const [sqlHasMore, setSqlHasMore] = useState(true);
   const [isSqlLoading, setIsSqlLoading] = useState(false);
   const [sqlError, setSqlError] = useState<string | null>(null);
+  const [recordsColumnWidths, setRecordsColumnWidths] = useState<Record<string, number>>({});
   const [groupedColumnWidths, setGroupedColumnWidths] = useState<Record<string, number>>({});
   const [sqlColumnWidths, setSqlColumnWidths] = useState<Record<string, number>>({});
   const [areWidthsHydrated, setAreWidthsHydrated] = useState(false);
+  const [isResizingColumns, setIsResizingColumns] = useState(false);
   const [editingHeaderKey, setEditingHeaderKey] = useState<string | null>(null);
   const [editingHeaderValue, setEditingHeaderValue] = useState("");
+  const recordsScrollRef = useRef<HTMLDivElement | null>(null);
+  const lastSqlQuerySignatureRef = useRef("");
   const activeResizeRef = useRef<{
-    tableType: "grouped" | "sql";
+    tableType: "records" | "grouped" | "sql";
     columnKey: string;
     startX: number;
     startWidth: number;
@@ -117,8 +121,9 @@ export const TableDataWidget = ({
       });
     }
 
-    const additionalMetrics = (config?.setup?.additional_metrics || []).filter((metric) => metric.operation_type);
+    const additionalMetrics = config?.setup?.additional_metrics || [];
     additionalMetrics.forEach((metric) => {
+      if (!metric.operation_type) return;
       metrics.push({
         operation_type: metric.operation_type,
         operation_value: metric.operation_value,
@@ -150,20 +155,28 @@ export const TableDataWidget = ({
   const { layerFields, isLoading: areFieldsLoading } = useLayerFields(recordsLayerId || "");
 
   const visibleFields = useMemo(() => {
-    if (!config?.setup?.visible_columns?.length) return layerFields;
-    const visibleFieldSet = new Set(config.setup.visible_columns);
+    const selectedVisibleColumns = config?.setup?.visible_columns;
+    if (!selectedVisibleColumns || selectedVisibleColumns.length === 0) return [];
+    const visibleFieldSet = new Set(selectedVisibleColumns);
     return layerFields.filter((field) => visibleFieldSet.has(field.name));
   }, [layerFields, config?.setup?.visible_columns]);
 
+  const isRecordsColumnsConfigured = visibleFields.length > 0;
+
   const recordsQueryParams = useMemo(() => {
-    if (!recordsLayerId || isGroupedMode || isSqlMode) return undefined;
+    if (!recordsLayerId || isGroupedMode || isSqlMode || !isRecordsColumnsConfigured) return undefined;
 
     const params: GetCollectionItemsQueryParams = {
       limit: rowsPerPage,
       offset: recordsPage * rowsPerPage,
     };
 
-    const defaultSortField = config?.options?.sort_by || visibleFields[0]?.name || layerFields[0]?.name;
+    const configuredSortBy = config?.options?.sort_by;
+    const isGroupedOnlySortKey =
+      typeof configuredSortBy === "string" &&
+      (configuredSortBy === "grouped_value" || configuredSortBy.startsWith("metric_"));
+
+    const defaultSortField = !isGroupedOnlySortKey && configuredSortBy ? configuredSortBy : visibleFields[0]?.name;
 
     if (defaultSortField) {
       const sortDirectionPrefix = config?.options?.sorting === "desc" ? "-" : "";
@@ -180,7 +193,7 @@ export const TableDataWidget = ({
     config?.options?.sort_by,
     config?.options?.sorting,
     visibleFields,
-    layerFields,
+    isRecordsColumnsConfigured,
   ]);
 
   const {
@@ -320,11 +333,24 @@ export const TableDataWidget = ({
     tableMetrics,
   ]);
 
+  const sqlQuerySignature = useMemo(() => {
+    return `${recordsLayerId || ""}|${config?.setup?.sql_query || ""}|${rowsPerPage}|${isSqlMode}`;
+  }, [config?.setup?.sql_query, isSqlMode, recordsLayerId, rowsPerPage]);
+
+  useEffect(() => {
+    setSqlPage(0);
+    setSqlHasMore(true);
+    setSqlRows([]);
+  }, [sqlQuerySignature]);
+
   useEffect(() => {
     let isCancelled = false;
 
     async function loadSqlPreview() {
+      const currentSqlQuerySignature = sqlQuerySignature;
+
       if (!isSqlMode || !recordsLayerId || !config?.setup?.sql_query) {
+        lastSqlQuerySignatureRef.current = currentSqlQuerySignature;
         if (!isCancelled) {
           setSqlPage(0);
           setSqlHasMore(true);
@@ -335,6 +361,12 @@ export const TableDataWidget = ({
         }
         return;
       }
+
+      if (sqlPage > 0 && currentSqlQuerySignature !== lastSqlQuerySignatureRef.current) {
+        return;
+      }
+
+      lastSqlQuerySignatureRef.current = currentSqlQuerySignature;
 
       setIsSqlLoading(true);
       setSqlError(null);
@@ -387,24 +419,20 @@ export const TableDataWidget = ({
     recordsLayerId,
     rowsPerPage,
     sqlPage,
+    sqlQuerySignature,
   ]);
 
-  const sqlQuerySignature = useMemo(() => {
-    return `${recordsLayerId || ""}|${config?.setup?.sql_query || ""}|${rowsPerPage}|${isSqlMode}`;
-  }, [config?.setup?.sql_query, isSqlMode, recordsLayerId, rowsPerPage]);
-
-  useEffect(() => {
-    setSqlPage(0);
-    setSqlHasMore(true);
-    setSqlRows([]);
-  }, [sqlQuerySignature]);
-
   const startColumnResize = useCallback(
-    (event: React.MouseEvent, tableType: "grouped" | "sql", columnKey: string) => {
+    (event: React.MouseEvent, tableType: "records" | "grouped" | "sql", columnKey: string) => {
       event.preventDefault();
       event.stopPropagation();
 
-      const widthMap = tableType === "grouped" ? groupedColumnWidths : sqlColumnWidths;
+      const widthMap =
+        tableType === "records"
+          ? recordsColumnWidths
+          : tableType === "grouped"
+            ? groupedColumnWidths
+            : sqlColumnWidths;
       const currentRenderedWidth = (event.currentTarget.parentElement as HTMLElement | null)?.getBoundingClientRect().width;
       activeResizeRef.current = {
         tableType,
@@ -412,8 +440,9 @@ export const TableDataWidget = ({
         startX: event.clientX,
         startWidth: widthMap[columnKey] ?? currentRenderedWidth ?? 140,
       };
+      setIsResizingColumns(true);
     },
-    [groupedColumnWidths, sqlColumnWidths]
+    [groupedColumnWidths, recordsColumnWidths, sqlColumnWidths]
   );
 
   useEffect(() => {
@@ -422,7 +451,12 @@ export const TableDataWidget = ({
       if (!activeResize) return;
 
       const nextWidth = Math.max(0, Math.min(900, activeResize.startWidth + (event.clientX - activeResize.startX)));
-      if (activeResize.tableType === "grouped") {
+      if (activeResize.tableType === "records") {
+        setRecordsColumnWidths((previous) => ({
+          ...previous,
+          [activeResize.columnKey]: nextWidth,
+        }));
+      } else if (activeResize.tableType === "grouped") {
         setGroupedColumnWidths((previous) => ({
           ...previous,
           [activeResize.columnKey]: nextWidth,
@@ -437,6 +471,7 @@ export const TableDataWidget = ({
 
     const handleMouseUp = () => {
       activeResizeRef.current = null;
+      setIsResizingColumns(false);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -524,7 +559,7 @@ export const TableDataWidget = ({
     return totals;
   }, [config?.options?.show_totals, sqlNumericColumnNames, sqlRows]);
 
-  const isRecordsConfigured = !!recordsLayerId;
+  const isRecordsConfigured = !!recordsLayerId && isRecordsColumnsConfigured;
   const isGroupedConfigured = !!layerId && tableMetrics.length > 0;
   const isSqlConfigured = !!recordsLayerId && !!config?.setup?.sql_query;
 
@@ -537,7 +572,8 @@ export const TableDataWidget = ({
     const totalMatched = displayRecordsData.numberMatched;
 
     if (typeof totalMatched === "number" && Number.isFinite(totalMatched)) {
-      return loadedCount < totalMatched;
+      if (loadedCount < totalMatched) return true;
+      return recordsHasMore;
     }
 
     return recordsHasMore;
@@ -561,17 +597,30 @@ export const TableDataWidget = ({
     return Math.max(180, headerHeight + rowsPerPage * rowHeight);
   }, [rowsPerPage]);
 
+  const loadMoreRecordsIfNeeded = useCallback((target: HTMLDivElement) => {
+    if (!hasMoreRecords || isRecordsLoading || !displayRecordsData) return;
+    const reachedBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 48;
+    if (reachedBottom) {
+      setRecordsPage((previous) => previous + 1);
+    }
+  }, [displayRecordsData, hasMoreRecords, isRecordsLoading]);
+
   const handleRecordsScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
-      if (!hasMoreRecords || isRecordsLoading || !displayRecordsData) return;
-      const target = event.currentTarget;
-      const reachedBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 48;
-      if (reachedBottom) {
-        setRecordsPage((previous) => previous + 1);
-      }
+      loadMoreRecordsIfNeeded(event.currentTarget);
     },
-    [displayRecordsData, hasMoreRecords, isRecordsLoading]
+    [loadMoreRecordsIfNeeded]
   );
+
+  useEffect(() => {
+    if (isGroupedMode || isSqlMode) return;
+    if (!hasMoreRecords || isRecordsLoading || !displayRecordsData) return;
+    const target = recordsScrollRef.current;
+    if (!target) return;
+    if (target.scrollHeight <= target.clientHeight + 1) {
+      setRecordsPage((previous) => previous + 1);
+    }
+  }, [displayRecordsData, hasMoreRecords, isGroupedMode, isRecordsLoading, isSqlMode]);
 
   const handleGroupedScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
@@ -609,9 +658,13 @@ export const TableDataWidget = ({
       const saved = window.localStorage.getItem(widthStorageKey);
       if (!saved) return;
       const parsed = JSON.parse(saved) as {
+        records?: Record<string, number>;
         grouped?: Record<string, number>;
         sql?: Record<string, number>;
       };
+      if (parsed.records) {
+        setRecordsColumnWidths(parsed.records);
+      }
       if (parsed.grouped) {
         setGroupedColumnWidths(parsed.grouped);
       }
@@ -628,15 +681,25 @@ export const TableDataWidget = ({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!areWidthsHydrated) return;
-    window.localStorage.setItem(
-      widthStorageKey,
-      JSON.stringify({
-        grouped: groupedColumnWidths,
-        sql: sqlColumnWidths,
-      })
-    );
-  }, [areWidthsHydrated, groupedColumnWidths, sqlColumnWidths, widthStorageKey]);
+    if (isResizingColumns) return;
 
+    const persistTimer = window.setTimeout(() => {
+      window.localStorage.setItem(
+        widthStorageKey,
+        JSON.stringify({
+          records: recordsColumnWidths,
+          grouped: groupedColumnWidths,
+          sql: sqlColumnWidths,
+        })
+      );
+    }, 150);
+
+    return () => {
+      window.clearTimeout(persistTimer);
+    };
+  }, [areWidthsHydrated, groupedColumnWidths, isResizingColumns, recordsColumnWidths, sqlColumnWidths, widthStorageKey]);
+
+  const recordsColWidth = useCallback((columnKey: string) => recordsColumnWidths[columnKey], [recordsColumnWidths]);
   const groupedColWidth = useCallback((columnKey: string) => groupedColumnWidths[columnKey], [groupedColumnWidths]);
 
   const sqlColWidth = useCallback((columnKey: string) => sqlColumnWidths[columnKey], [sqlColumnWidths]);
@@ -644,6 +707,10 @@ export const TableDataWidget = ({
   const sqlColumnLabelMap = useMemo(() => {
     return config?.setup?.sql_column_labels || {};
   }, [config?.setup?.sql_column_labels]);
+
+  const recordColumnLabelMap = useMemo(() => {
+    return config?.setup?.record_column_labels || {};
+  }, [config?.setup?.record_column_labels]);
 
   const beginHeaderRename = useCallback(
     (headerKey: string, currentLabel: string) => {
@@ -667,6 +734,15 @@ export const TableDataWidget = ({
 
     if (editingHeaderKey === "grouped_value") {
       nextSetup.group_by_label = nextLabel || undefined;
+    } else if (editingHeaderKey.startsWith("record:")) {
+      const sourceColumnName = editingHeaderKey.slice(7);
+      const recordLabels = { ...(nextSetup.record_column_labels || {}) };
+      if (nextLabel) {
+        recordLabels[sourceColumnName] = nextLabel;
+      } else {
+        delete recordLabels[sourceColumnName];
+      }
+      nextSetup.record_column_labels = Object.keys(recordLabels).length ? recordLabels : undefined;
     } else if (editingHeaderKey === "metric_0") {
       nextSetup.primary_metric_label = nextLabel || undefined;
     } else if (editingHeaderKey.startsWith("metric_")) {
@@ -763,16 +839,25 @@ export const TableDataWidget = ({
       {!isSqlMode && !isGroupedMode && displayRecordsData && isRecordsConfigured && (
         <Box>
           <Box
+            ref={recordsScrollRef}
             sx={{
               maxHeight: `${tableViewportHeight}px`,
               overflowX: "auto",
               overflowY: "auto",
             }}
             onScroll={handleRecordsScroll}>
-            <DatasetTable
+            <WidgetRecordsTable
               areFieldsLoading={areFieldsLoading}
               displayData={displayRecordsData}
               fields={visibleFields}
+              headerLabelMap={recordColumnLabelMap}
+              getColumnWidth={recordsColWidth}
+              renderHeaderLabel={(fieldName, label) => renderHeaderLabel(`record:${fieldName}`, label)}
+              onHeaderResizeStart={
+                viewOnly || !onConfigChange
+                  ? undefined
+                  : (event, fieldName) => startColumnResize(event, "records", fieldName)
+              }
             />
           </Box>
           {hasMoreRecords && (

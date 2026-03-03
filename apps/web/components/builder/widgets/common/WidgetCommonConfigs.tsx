@@ -520,6 +520,12 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 selectedItems={selectedModeOption}
                 setSelectedItems={(item: SelectorItem | undefined) => {
                   const nextMode = item?.value || tableModeTypes.Values.records;
+                  const currentOptions = { ...((config as any).options || {}) };
+
+                  if (nextMode === tableModeTypes.Values.records) {
+                    delete currentOptions.sort_by;
+                  }
+
                   onChange({
                     ...config,
                     setup: {
@@ -534,9 +540,12 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                         additional_metrics: [],
                       }),
                     },
+                    ...(nextMode === tableModeTypes.Values.records && {
+                      options: currentOptions,
+                    }),
                     ...(nextMode === tableModeTypes.Values.grouped && {
                       options: {
-                        ...((config as any).options || {}),
+                        ...currentOptions,
                         sort_by: "metric_0",
                       },
                     }),

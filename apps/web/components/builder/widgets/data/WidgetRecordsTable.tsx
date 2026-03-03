@@ -6,7 +6,6 @@ import React, { useMemo, useState } from "react";
 
 import type { DatasetCollectionItems } from "@/lib/validations/layer";
 
-import { FieldTypeTag } from "@/components/map/common/LayerFieldSelector";
 import NoValuesFound from "@/components/map/common/NoValuesFound";
 
 const TWO_LINE_CLAMP_SX = {
@@ -64,7 +63,6 @@ const Row = ({ row, fields }) => {
               <Box sx={{ margin: 2 }}>
                 {objectFields.map((field) => {
                   const rawValue = row.properties[field.name];
-                  // Handle both string (JSON) and object values
                   let jsonData = rawValue;
                   if (typeof rawValue === "string") {
                     try {
@@ -85,7 +83,6 @@ const Row = ({ row, fields }) => {
                         <Typography variant="body2" fontWeight="bold">
                           {field.name}
                         </Typography>
-                        <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>
                       </Stack>
                       {isJsonDataArrayOfObjects ? (
                         <Table size="small" aria-label="purchases" key={field.name}>
@@ -107,8 +104,6 @@ const Row = ({ row, fields }) => {
                           </TableBody>
                         </Table>
                       ) : (
-                        // Handle the case where jsonData is not an array of objects
-                        // This could be rendering it as a string or handling other data structures in the future.
                         <Typography>{JSON.stringify(jsonData, null, 2)}</Typography>
                       )}
                     </React.Fragment>
@@ -123,17 +118,27 @@ const Row = ({ row, fields }) => {
   );
 };
 
-interface DatasetTableProps {
+interface WidgetRecordsTableProps {
   areFieldsLoading: boolean;
   displayData?: DatasetCollectionItems;
-  fields: Array<{ name: string; type: string }>; // Adjust the type based on your data structure
+  fields: Array<{ name: string; type: string }>;
+  headerLabelMap?: Record<string, string>;
+  getColumnWidth?: (columnName: string) => number | undefined;
+  renderHeaderLabel?: (columnName: string, label: string) => React.ReactNode;
+  onHeaderResizeStart?: (event: React.MouseEvent, columnName: string) => void;
 }
 
-const DatasetTable: React.FC<DatasetTableProps> = ({
+const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
   areFieldsLoading,
   displayData,
   fields,
+  headerLabelMap,
+  getColumnWidth,
+  renderHeaderLabel,
+  onHeaderResizeStart,
 }) => {
+  const primitiveFields = useMemo(() => fields.filter((field) => field.type !== "object"), [fields]);
+
   return (
     <>
       {areFieldsLoading && !displayData && (
@@ -154,23 +159,47 @@ const DatasetTable: React.FC<DatasetTableProps> = ({
             minWidth: "100%",
             "& .MuiTableCell-root": {
               verticalAlign: "top",
+              borderRight: 1,
+              borderColor: "divider",
+            },
+            "& .MuiTableRow-root > .MuiTableCell-root:last-of-type": {
+              borderRight: 0,
             },
           }}>
           <TableHead>
             <TableRow>
               {fields.some((field) => field.type === "object") && <TableCell />}
-              {fields
-                .filter((field) => field.type !== "object")
-                .map((field) => (
-                  <TableCell key={field.name}>
+              {primitiveFields.map((field) => {
+                const label = headerLabelMap?.[field.name] || field.name;
+                return (
+                  <TableCell key={field.name} sx={{ width: getColumnWidth?.(field.name), maxWidth: 900, position: "relative" }}>
                     <Stack direction="column" spacing={1} sx={{ py: 1 }}>
-                      <Typography variant="body2" fontWeight="bold" sx={TWO_LINE_CLAMP_SX}>
-                        {field.name}
-                      </Typography>
-                      <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>
+                      {renderHeaderLabel ? (
+                        renderHeaderLabel(field.name, label)
+                      ) : (
+                        <Typography variant="body2" fontWeight="bold" sx={TWO_LINE_CLAMP_SX}>
+                          {label}
+                        </Typography>
+                      )}
                     </Stack>
+                    {onHeaderResizeStart && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 12,
+                          height: "100%",
+                          cursor: "col-resize",
+                          userSelect: "none",
+                          zIndex: 2,
+                        }}
+                        onMouseDown={(event) => onHeaderResizeStart(event, field.name)}
+                      />
+                    )}
                   </TableCell>
-                ))}
+                );
+              })}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -190,4 +219,4 @@ const DatasetTable: React.FC<DatasetTableProps> = ({
   );
 };
 
-export default DatasetTable;
+export default WidgetRecordsTable;

@@ -1,8 +1,8 @@
-import { Box } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
 import chroma from "chroma-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Cell, Label, Legend, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Cell, Label, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 import { useProjectLayerAggregationStats } from "@/lib/api/projects";
 import { formatNumber } from "@/lib/utils/format-number";
@@ -23,6 +23,7 @@ const OPACITY_MODIFIER = "33";
 
 export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }) => {
   const { t, i18n } = useTranslation("common");
+  const theme = useTheme();
   const { config, queryParams, layerId } = useChartWidget(
     rawConfig,
     pieChartConfigSchema,
@@ -90,8 +91,10 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
     top: 8,
     right: isAllLabelsOutsideLayout ? 24 : 8,
     left: isAllLabelsOutsideLayout ? 24 : 8,
-    bottom: isLegendLayout ? 48 : 12,
+    bottom: 12,
   };
+
+  const chartAspect = isAllLabelsOutsideLayout ? 1.35 : 1.2;
 
   const displayData = useMemo(() => {
     return data.length > 0 ? data : [{ grouped_value: t("no_data"), operation_value: 1 }];
@@ -145,14 +148,17 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
   }, [config?.options?.label_map]);
 
   const getDisplayLabel = useCallback(
-    (groupedValue: string) => {
-      return labelMapLookup.get(normalizeValue(groupedValue)) || groupedValue;
+    (groupedValue: unknown) => {
+      const fallback = String(groupedValue ?? t("no_data", { defaultValue: "No data" }));
+      const mapped = labelMapLookup.get(normalizeValue(fallback));
+      return mapped ? String(mapped) : fallback;
     },
-    [labelMapLookup]
+    [labelMapLookup, t]
   );
 
-  const truncateLabel = useCallback((value: string, maxLength = 16) => {
-    return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+  const truncateLabel = useCallback((value: unknown, maxLength = 16) => {
+    const safeValue = String(value ?? "");
+    return safeValue.length > maxLength ? `${safeValue.slice(0, maxLength - 1)}…` : safeValue;
   }, []);
 
   const baseColors = useMemo(() => {
@@ -193,14 +199,6 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
     });
   }, [displayData, baseColors, selectedValues, data.length, isHovering]);
 
-  const labelColorLookup = useMemo(() => {
-    const lookup = new Map<string, string>();
-    displayData.forEach((item, index) => {
-      lookup.set(normalizeValue(item.grouped_value), baseColors[index % baseColors.length]);
-    });
-    return lookup;
-  }, [displayData, baseColors]);
-
   const piePaddingAngle = useMemo(() => {
     if (data.length === 0) return 0;
     if (data.length <= 5) return 3;
@@ -208,6 +206,44 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
     if (data.length <= 20) return 1;
     return 0;
   }, [data.length]);
+
+  const legendItems = useMemo(() => {
+    if (!isLegendLayout || totalOperationValue <= 0) return [] as Array<{ label: string; percent: string; color: string }>;
+
+    return displayData.map((item, index) => ({
+      label: getDisplayLabel(item.grouped_value),
+      percent: formatNumber(item.operation_value / totalOperationValue, "percent_1d", i18n.language),
+      color: baseColors[index % baseColors.length] || "#999",
+    }));
+  }, [baseColors, displayData, getDisplayLabel, i18n.language, isLegendLayout, totalOperationValue]);
+
+  const renderLegendPercentOutsideLabel = useCallback(
+    ({
+      x,
+      y,
+      textAnchor,
+      percent,
+    }: {
+      x?: number;
+      y?: number;
+      textAnchor?: "start" | "middle" | "end";
+      percent?: number;
+    }) => {
+      return (
+        <text
+          x={x}
+          y={y}
+          textAnchor={textAnchor}
+          dominantBaseline="central"
+          fontSize={10}
+          fontWeight={500}
+          fill={theme.palette.text.primary}>
+          {formatNumber(percent || 0, "percent_1d", i18n.language)}
+        </text>
+      );
+    },
+    [i18n.language, theme.palette.text.primary]
+  );
 
   useEffect(() => {
     const newIndex = calculateDefaultActiveIndex();
@@ -244,7 +280,7 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
 
       {config && !isError && aggregationStats && isChartConfigured && (
         <Box sx={{ position: "relative", width: "100%" }}>
-          <ResponsiveContainer width="100%" aspect={isAllLabelsOutsideLayout ? 1.35 : 1.2}>
+          <ResponsiveContainer width="100%" aspect={chartAspect}>
             <PieChart
               margin={chartMargin}
               onMouseEnter={() => handleChartHover(true)}
@@ -259,14 +295,14 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
                 dataKey="operation_value"
                 nameKey="grouped_value"
                 cx="50%"
-                cy={isLegendLayout ? "44%" : isAllLabelsOutsideLayout ? "46%" : "50%"}
+                cy={isAllLabelsOutsideLayout ? "46%" : "50%"}
                 innerRadius={isAllLabelsOutsideLayout ? "50%" : "65%"}
                 outerRadius={isAllLabelsOutsideLayout ? "68%" : undefined}
                 cursor="pointer"
                 isAnimationActive={false}
                 paddingAngle={piePaddingAngle}
                 onMouseEnter={handlePieEnter}
-                labelLine={isAllLabelsOutsideLayout && data.length > 0}
+                labelLine={(isAllLabelsOutsideLayout || isLegendLayout) && data.length > 0}
                 label={
                   isAllLabelsOutsideLayout && data.length > 0
                     ? ({
@@ -286,10 +322,6 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
                         const label = getDisplayLabel(groupedValue);
                         const shortLabel = truncateLabel(label, 22);
                         const percentLabel = formatNumber(percent || 0, "percent_1d", i18n.language);
-                        const labelColor =
-                          labelColorLookup.get(normalizeValue(groupedValue)) ||
-                          baseColors[0] ||
-                          "currentColor";
                         return (
                           <text
                             x={x}
@@ -297,13 +329,15 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
                             textAnchor={textAnchor}
                             dominantBaseline="central"
                             fontSize={11}
-                            fill={labelColor}>
+                            fill={theme.palette.text.primary}>
                             <tspan x={x} dy="0">{shortLabel}</tspan>
                             <tspan x={x} dy="1.1em">{percentLabel}</tspan>
                           </text>
                         );
                       }
-                    : false
+                    : isLegendLayout && data.length > 0
+                      ? renderLegendPercentOutsideLabel
+                      : false
                 }>
                 {displayData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={computedColors[index]} stroke="none" />
@@ -334,19 +368,43 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
                   </>
                 )}
               </Pie>
-              {isLegendLayout && (
-                <Legend
-                  layout="horizontal"
-                  verticalAlign="bottom"
-                  align="center"
-                  iconSize={10}
-                  formatter={(value) => (
-                    <span style={{ fontSize: 11 }}>{truncateLabel(getDisplayLabel(String(value)), 16)}</span>
-                  )}
-                />
-              )}
             </PieChart>
           </ResponsiveContainer>
+          {isLegendLayout && legendItems.length > 0 && (
+            <Box
+              sx={{
+                mt: 1,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+                justifyContent: "center",
+              }}>
+              {legendItems.map((item, index) => (
+                <Box
+                  key={`${item.label}-${index}`}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    minWidth: 0,
+                    maxWidth: 220,
+                  }}>
+                  <Box
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      backgroundColor: item.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ minWidth: 0, color: "text.primary" }} title={item.label}>
+                    {truncateLabel(item.label, 22)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          )}
         </Box>
       )}
       <StaleDataLoader isLoading={isLoading} hasData={!!aggregationStats} />

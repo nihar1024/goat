@@ -145,6 +145,63 @@ function databaseTypeToJsonType(dbType: string): string {
   return "string";
 }
 
+// Convert field/database type to SQL type names accepted by DuckDB parser/validator
+function databaseTypeToSqlType(dbType: string): string {
+  const normalizedType = dbType.toLowerCase();
+
+  if (normalizedType === "number") {
+    return "numeric";
+  }
+  if (normalizedType === "integer") {
+    return "integer";
+  }
+  if (normalizedType === "string") {
+    return "varchar";
+  }
+  if (normalizedType === "boolean") {
+    return "boolean";
+  }
+  if (normalizedType === "geometry") {
+    return "geometry";
+  }
+
+  if (
+    normalizedType.includes("int") ||
+    normalizedType.includes("bigint") ||
+    normalizedType.includes("smallint")
+  ) {
+    return "integer";
+  }
+
+  if (
+    normalizedType.includes("float") ||
+    normalizedType.includes("double") ||
+    normalizedType.includes("decimal") ||
+    normalizedType.includes("numeric") ||
+    normalizedType.includes("real")
+  ) {
+    return "numeric";
+  }
+
+  if (normalizedType.includes("bool")) {
+    return "boolean";
+  }
+
+  if (
+    normalizedType.includes("date") ||
+    normalizedType.includes("time") ||
+    normalizedType.includes("timestamp")
+  ) {
+    return "timestamp";
+  }
+
+  if (normalizedType.includes("geom") || normalizedType.includes("geography")) {
+    return "geometry";
+  }
+
+  return "varchar";
+}
+
 // Get icon for field type
 function getFieldTypeIcon(type: string): ICON_NAME {
   const normalizedType = type.toLowerCase();
@@ -496,7 +553,7 @@ export default function FormulaBuilder({
           for (const table of tables) {
             const colTypes: Record<string, string> = {};
             for (const field of table.fields) {
-              colTypes[field.name] = field.type;
+              colTypes[field.name] = databaseTypeToSqlType(field.type);
             }
             tableSchemas[table.alias] = colTypes;
           }
@@ -600,7 +657,7 @@ export default function FormulaBuilder({
             if (table.fields.length > 0) {
               const colMap: Record<string, string> = {};
               for (const f of table.fields) {
-                colMap[f.name] = f.type;
+                colMap[f.name] = databaseTypeToSqlType(f.type);
               }
               tableSchemas[table.alias] = colMap;
             }
@@ -718,7 +775,7 @@ export default function FormulaBuilder({
         handlePreviewRef.current();
       }
     }
-  }, [activeTab, expression, collectionId, isValid, groupByColumn, isSqlMode]);
+  }, [activeTab, expression, collectionId, isValid, groupByColumn, isSqlMode, tables]);
 
   // Handle apply
   const handleApply = () => {

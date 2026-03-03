@@ -103,6 +103,9 @@ const WidgetWrapper: React.FC<WidgetWrapperProps> = ({
           config={widget.config as WidgetDataConfig}
           projectLayers={projectLayers}
           viewOnly={viewOnly}
+          onConfigChange={(nextConfig) => {
+            onWidgetUpdate?.({ ...widget, config: nextConfig });
+          }}
         />
       )}
       {widget.config?.type && chartTypes.options.includes(widget.config?.type as any) && (

@@ -176,6 +176,7 @@ def _execute_analytics_sync(process_id: str, inputs: dict[str, Any]) -> dict[str
                 sql_query=inputs.get("sql_query", ""),
                 layers=inputs.get("layers", {}),
                 limit=inputs.get("limit", 10),
+                offset=inputs.get("offset", 0),
             )
         else:
             raise HTTPException(

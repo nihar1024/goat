@@ -582,6 +582,7 @@ class AnalyticsService:
         sql_query: str,
         layers: dict[str, str],
         limit: int = 10,
+        offset: int = 0,
     ) -> dict[str, Any]:
         """Preview a SQL query against actual layer data.
 
@@ -596,6 +597,7 @@ class AnalyticsService:
             sql_query: The SQL SELECT statement to preview
             layers: Layer mapping {alias: layer_id}
             limit: Max rows to return
+            offset: Number of rows to skip
 
         Returns:
             Dict with success, columns, rows, error
@@ -708,10 +710,15 @@ class AnalyticsService:
             for row in describe.fetchall():
                 columns.append({"name": row[0], "type": row[1]})
 
-            # Execute the query with limit
+            # Compute total count for pagination/infinite scrolling
+            total_count = con.execute(
+                f"SELECT COUNT(*) FROM ({sql_query}) _preview"
+            ).fetchone()[0]
+
+            # Execute the query with limit/offset
             limited_sql = (
                 f"SELECT * FROM ({sql_query}) _preview "
-                f"LIMIT {limit}"
+                f"LIMIT {max(int(limit), 1)} OFFSET {max(int(offset), 0)}"
             )
             rows_data = con.execute(limited_sql).fetchall()
             col_names = [c["name"] for c in columns]
@@ -739,6 +746,7 @@ class AnalyticsService:
                 "success": True,
                 "columns": columns,
                 "rows": rows,
+                "total_count": total_count,
             }
 
         except duckdb.Error as e:

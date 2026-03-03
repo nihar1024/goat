@@ -128,17 +128,6 @@ class ClusteringZones(AnalysisTool):
        
         
         if params.cluster_type == ClusterType.equal_size:
-            # Validate feature limit for performance reasons
-            max_features = 10000
-            if n_features > max_features:
-                raise ValueError( f"Clustering zones support a maximum of {max_features} features. Got {n_features} features." )
-            # Adaptive GA parameters based on dataset size to balance convergence and runtime
-            if n_features > 3000:
-                self.population_size = min(self.population_size, 40)
-                self.n_generations = min(self.n_generations, 40)
-            elif n_features > 1000:
-                self.population_size = min(self.population_size, 45)
-                self.n_generations = min(self.n_generations, 45)
 
             # Step 1: Create initial population using K-means for seeding
             self._run_kmeans(k, max_iter=50)
@@ -329,20 +318,11 @@ class ClusteringZones(AnalysisTool):
         """
         Build neighbor graph: find nearest candidates per feature, then select
         a subset that balances proximity with directional diversity (angular spread).
-        Parameters adapt when points_per_cluster <= 25 to avoid over-connecting sparse clusters.
         """
-        points_per_cluster = n_features // k
-
-        # Adaptive parameters: reduce graph density for small clusters
-        if points_per_cluster <= 25:
-            n_candidates = 6
-            n_sectors = 3
-            n_neighbors = 3
-        else:
-            n_candidates = 8
-            n_sectors = 4
-            n_neighbors = 4
-
+        n_candidates = 6
+        n_sectors = 3
+        n_neighbors = 3
+        
         # Step 1: Find nearest candidates with angle to each
         self.con.execute(f"""
             CREATE OR REPLACE TEMP TABLE neighbor_candidates AS

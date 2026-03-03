@@ -31,6 +31,7 @@ from goatlib.analysis.core.base import AnalysisTool
 from goatlib.analysis.schemas.catchment_area import (
     AccessEgressMode,
     CatchmentAreaRoutingMode,
+    CatchmentAreaMeasureType,
     CatchmentAreaToolParams,
     CatchmentAreaType,
     PTMode,
@@ -1011,30 +1012,48 @@ class CatchmentAreaTool(AnalysisTool):
             if isinstance(params.routing_mode, CatchmentAreaRoutingMode)
             else params.routing_mode
         )
-
+        # Get measure type string
+        measure_type = (
+            params.measure_type.value
+            if isinstance(params.measure_type, CatchmentAreaMeasureType)
+            else params.measure_type
+        )
         # Get catchment area type string
         area_type = (
             params.catchment_area_type.value
             if isinstance(params.catchment_area_type, CatchmentAreaType)
             else params.catchment_area_type
         )
-
         # Build payload
-        payload = {
-            "starting_points": {
-                "latitude": lat_list,
-                "longitude": lon_list,
-            },
-            "routing_type": routing_type,
-            "travel_cost": {
-                "max_traveltime": params.travel_time,
-                "steps": params.steps,
-                "speed": params.speed or 5.0,
-            },
-            "catchment_area_type": area_type,
-            "output_format": "parquet",
-        }
-
+        if measure_type == CatchmentAreaMeasureType.time:
+            payload = {
+                "starting_points": {
+                    "latitude": lat_list,
+                    "longitude": lon_list,
+                },
+                "routing_type": routing_type,
+                "travel_cost": {
+                    "max_traveltime": params.travel_time,
+                    "steps": params.steps,
+                    "speed": params.speed or 5.0,
+                },
+                "catchment_area_type": area_type,
+                "output_format": "parquet",
+            }
+        elif measure_type == CatchmentAreaMeasureType.distance:
+            payload = {
+                "starting_points": {
+                    "latitude": lat_list,
+                    "longitude": lon_list,
+                },
+                "routing_type": routing_type,
+                "travel_cost": {
+                    "max_distance": params.distance,
+                    "steps": params.steps
+                },
+                "catchment_area_type": area_type,
+                "output_format": "parquet",
+            }
         if area_type == "polygon":
             payload["polygon_difference"] = params.polygon_difference
 
@@ -1045,6 +1064,7 @@ class CatchmentAreaTool(AnalysisTool):
             payload["scenario_id"] = params.scenario_id
             payload["street_network"] = params.street_network
 
+        logger.info(payload)
         return await self._post_with_retry(url, payload, authorization)
 
     # =========================================================================
@@ -1071,7 +1091,11 @@ class CatchmentAreaTool(AnalysisTool):
             if isinstance(params.longitude, (int, float))
             else list(params.longitude)
         )
-
+        measure_type = (
+            params.measure_type.value
+            if isinstance(params.measure_type, CatchmentAreaMeasureType)
+            else params.measure_type
+        )
         # Get catchment area type string
         area_type = (
             params.catchment_area_type.value
@@ -1080,20 +1104,34 @@ class CatchmentAreaTool(AnalysisTool):
         )
 
         # Build payload
-        payload = {
-            "starting_points": {
-                "latitude": lat_list,
-                "longitude": lon_list,
-            },
-            "routing_type": "car",
-            "travel_cost": {
-                "max_traveltime": params.travel_time,
-                "steps": params.steps,
-            },
-            "catchment_area_type": area_type,
-            "output_format": "parquet",
-        }
-
+        if measure_type == CatchmentAreaMeasureType.time:
+            payload = {
+                "starting_points": {
+                    "latitude": lat_list,
+                    "longitude": lon_list,
+                },
+                "routing_type": "car",
+                "travel_cost": {
+                    "max_traveltime": params.travel_time,
+                    "steps": params.steps,
+                },
+                "catchment_area_type": area_type,
+                "output_format": "parquet",
+            }
+        elif measure_type == CatchmentAreaMeasureType.distance:
+            payload = {
+                "starting_points": {
+                    "latitude": lat_list,
+                    "longitude": lon_list,
+                },
+                "routing_type": "car",
+                "travel_cost": {
+                    "max_distance": params.distance,
+                    "steps": params.steps
+                },
+                "catchment_area_type": area_type,
+                "output_format": "parquet",
+            }
         if area_type == "polygon":
             payload["polygon_difference"] = params.polygon_difference
 
@@ -1386,6 +1424,9 @@ class CatchmentAreaTool(AnalysisTool):
             if "geometry" in col_info and "VARCHAR" in col_info["geometry"].upper():
                 # Geometry is WKT string - convert to proper GEOMETRY
                 non_geom_cols = [c for c in col_info.keys() if c != "geometry"]
+                if "minute" in non_geom_cols:
+                    # remove minutes as not adapted to distance
+                    non_geom_cols.remove("minute")
                 select_cols = ", ".join(non_geom_cols)
                 if select_cols:
                     select_cols += ", "

@@ -272,7 +272,8 @@ class CatchmentAreaWindmillParams(ToolInputBase):
             field_order=4,
             label_key="speed",
             enum_labels=SPEED_LABELS,
-            visible_when={"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
+            visible_when={"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}, 
+                         "measure_type": CatchmentAreaMeasureType.time},
             widget_options={
                 "default_by_field": {
                     "field": "routing_mode",
@@ -460,7 +461,7 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
         """
         return {
             "id": "INTEGER",
-            "minute": "INTEGER",
+            "cost_step": "INTEGER", 
             "geometry": "GEOMETRY",
         }
 
@@ -480,8 +481,7 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
         from goatlib.analysis.statistics import calculate_unique_values
         from goatlib.tools.style import get_ordinal_polygon_style
 
-        # Use 'minute' as the color field
-        color_field = "minute"
+        color_field = "cost_step"
 
         # Determine table expression: DuckLake table or read_parquet()
         table_expr = None
@@ -502,7 +502,7 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
                     limit=20,  # Allow more values with interpolation
                 )
                 unique_values = [v.value for v in result.values]
-                logger.info("Found unique minute values: %s", unique_values)
+                logger.info("Found unique %s values: %s", color_field, unique_values)
             except Exception as e:
                 logger.warning("Failed to query unique values: %s", e)
 
@@ -760,7 +760,7 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
 
         # Determine travel_time based on routing mode and measure type
         # For distance-based catchment areas, we don't use travel_time
-        travel_time: int | None = None
+        distance: int | None = None
         # Determine travel_time/travel_distance based on routing mode and measure type
         travel_time: int | None = None
 
@@ -771,29 +771,13 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
         ]:
             # Active mobility modes support both time and distance
             if params.measure_type == CatchmentAreaMeasureType.distance:
-                # TODO: CatchmentAreaToolParams doesn't support travel_distance yet
-                # For now, convert distance to approximate time using speed
-                # distance (m) / speed (km/h) * 60 / 1000 = time (min)
-                speed_kmh = params.speed or 5  # Default walking speed
-                travel_time = int(params.max_distance / (speed_kmh * 1000 / 60))
-                logger.info(
-                    "Converting distance %dm to ~%d min at %d km/h",
-                    params.max_distance,
-                    travel_time,
-                    speed_kmh,
-                )
+                distance = params.max_distance
             else:
                 travel_time = params.max_traveltime_active
         elif params.routing_mode == CatchmentAreaRoutingMode.car:
             # Car mode supports both time and distance
             if params.measure_type == CatchmentAreaMeasureType.distance:
-                # Convert distance to approximate time (assume ~50 km/h average)
-                travel_time = int(params.max_distance / (50 * 1000 / 60))
-                logger.info(
-                    "Converting distance %dm to ~%d min at 50 km/h (car)",
-                    params.max_distance,
-                    travel_time,
-                )
+                distance = params.max_distance
             else:
                 travel_time = params.max_traveltime_car
         else:
@@ -805,7 +789,9 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
             latitude=latitudes,
             longitude=longitudes,
             routing_mode=params.routing_mode,
+            measure_type=params.measure_type,
             travel_time=travel_time or 15,  # Fallback
+            distance=distance or 500,
             steps=params.steps,
             speed=params.speed,
             transit_modes=params.pt_modes,

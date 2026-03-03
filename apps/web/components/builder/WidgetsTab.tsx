@@ -45,7 +45,7 @@ const WidgetTab = () => {
         group: "data",
         widgets: [
           dataTypes.enum.filter,
-          // dataTypes.enum.table, //Todo
+          dataTypes.enum.table,
           dataTypes.enum.numbers,
           // dataTypes.enum.feature_list, //Todo
         ] as WidgetTypes[],

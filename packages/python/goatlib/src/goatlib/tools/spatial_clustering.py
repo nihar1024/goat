@@ -15,7 +15,7 @@ from typing import Any, Self
 from pydantic import ConfigDict, Field
 
 from goatlib.analysis.geoanalysis.spatial_clustering import ClusteringZones
-from goatlib.analysis.schemas.clustering import ClusteringParams, SizeMethod
+from goatlib.analysis.schemas.clustering import ClusteringParams, SizeMethod, ClusterType
 from goatlib.analysis.schemas.ui import (
     SECTION_INPUT,
     SECTION_OUTPUT,
@@ -206,9 +206,30 @@ class ZonesClusteringToolRunner(BaseToolRunner[ClusteringZonesToolParams]):
             scenario_id=params.scenario_id,
             project_id=params.project_id,
         )
+        
+        # Validate feature limit and adapt GA parameters for equal_size clustering
+        population_size = 50
+        n_generations = 50
+        if params.cluster_type == ClusterType.equal_size:
+            n_features = self.duckdb_con.execute(
+                f"SELECT COUNT(*) FROM '{input_layer_path}'"
+            ).fetchone()[0]
+            max_features = 10000
+            if n_features > max_features:
+                raise ValueError(
+                    f"Clustering zones support a maximum of {max_features} features. "
+                    f"Got {n_features} features."
+                )
+            if n_features > 3000:
+                population_size = min(population_size, 40)
+                n_generations = min(n_generations, 40)
+            elif n_features > 1000:
+                population_size = min(population_size, 45)
+                n_generations = min(n_generations, 45)
 
         # Initialize the clustering tool with algorithm parameters
-        tool = self.tool_class()
+        tool = self.tool_class( population_size=population_size,
+            n_generations=n_generations)
         # Convert tool params to analysis params
         analysis_params = ClusteringParams(
             **params.model_dump(

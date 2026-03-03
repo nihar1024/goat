@@ -459,6 +459,21 @@ class CatchmentAreaToolParams(BaseModel):
             enum_icons=ROUTING_MODE_ICONS,
         ),
     )
+
+    measure_type: CatchmentAreaMeasureType = Field(
+        default=CatchmentAreaMeasureType.time,
+        description="Measure catchment area by travel time or distance.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=1,
+            label_key="measure_type",
+            enum_labels=MEASURE_TYPE_LABELS,
+            enum_icons=MEASURE_TYPE_ICONS,
+            visible_when={
+                "routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}
+            },
+        ),
+    )
     travel_time: int = Field(
         default=15,
         ge=1,
@@ -467,6 +482,24 @@ class CatchmentAreaToolParams(BaseModel):
         json_schema_extra=ui_field(
             section="routing",
             field_order=2,
+        ),
+    )
+
+    distance: int = Field(
+        default=500,
+        ge=50,
+        le=100000,
+        description="Maximum distance in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label_key="max_distance",
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"measure_type": CatchmentAreaMeasureType.time},
+                ]
+            },
         ),
     )
     steps: int = Field(
@@ -488,7 +521,8 @@ class CatchmentAreaToolParams(BaseModel):
             section="routing",
             field_order=4,
             visible_when={
-                "routing_mode": {"$in": ["walking", "bicycle", "pedelec", "wheelchair"]}
+                "routing_mode": {"$in": ["walking", "bicycle", "pedelec", "wheelchair"]},
+                "measure_type": CatchmentAreaMeasureType.time,
             },
         ),
     )

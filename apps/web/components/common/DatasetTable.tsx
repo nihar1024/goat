@@ -6,8 +6,19 @@ import React, { useMemo, useState } from "react";
 
 import type { DatasetCollectionItems } from "@/lib/validations/layer";
 
-import { FieldTypeTag } from "@/components/map/common/LayerFieldSelector";
 import NoValuesFound from "@/components/map/common/NoValuesFound";
+
+const TWO_LINE_CLAMP_SX = {
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical" as const,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "normal",
+  wordBreak: "break-word",
+  lineHeight: 1.25,
+  maxHeight: "2.5em",
+};
 
 const formatCellValue = (value: unknown): string => {
   if (value === null || value === undefined) {
@@ -37,7 +48,11 @@ const Row = ({ row, fields }) => {
           </TableCell>
         )}
         {primitiveFields.map((field, fieldIndex) => (
-          <TableCell key={fieldIndex}>{formatCellValue(row.properties[field.name])}</TableCell>
+          <TableCell key={fieldIndex}>
+            <Typography variant="body2" sx={TWO_LINE_CLAMP_SX}>
+              {formatCellValue(row.properties[field.name])}
+            </Typography>
+          </TableCell>
         ))}
       </TableRow>
 
@@ -69,7 +84,6 @@ const Row = ({ row, fields }) => {
                         <Typography variant="body2" fontWeight="bold">
                           {field.name}
                         </Typography>
-                        <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>
                       </Stack>
                       {isJsonDataArrayOfObjects ? (
                         <Table size="small" aria-label="purchases" key={field.name}>
@@ -124,7 +138,18 @@ const DatasetTable: React.FC<DatasetTableProps> = ({ areFieldsLoading, displayDa
       )}
 
       {!areFieldsLoading && displayData && (
-        <Table size="small" aria-label="simple table" stickyHeader>
+        <Table
+          size="small"
+          aria-label="simple table"
+          stickyHeader
+          sx={{
+            tableLayout: "auto",
+            width: "max-content",
+            minWidth: "100%",
+            "& .MuiTableCell-root": {
+              verticalAlign: "top",
+            },
+          }}>
           <TableHead>
             <TableRow>
               {fields.some((field) => field.type === "object") && <TableCell />}
@@ -133,10 +158,9 @@ const DatasetTable: React.FC<DatasetTableProps> = ({ areFieldsLoading, displayDa
                 .map((field) => (
                   <TableCell key={field.name}>
                     <Stack direction="column" spacing={1} sx={{ py: 1 }}>
-                      <Typography variant="body2" fontWeight="bold">
+                      <Typography variant="body2" fontWeight="bold" sx={TWO_LINE_CLAMP_SX}>
                         {field.name}
                       </Typography>
-                      <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>
                     </Stack>
                   </TableCell>
                 ))}

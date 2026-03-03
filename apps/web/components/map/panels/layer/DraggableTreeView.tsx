@@ -168,13 +168,16 @@ const EmptyPlaceholderBox = styled("div")(({ theme }) => ({
 // ----------------------------------------------------------------------
 
 const TruncatedLabel = ({ label }: { label: string }) => {
-  const textRef = useRef<HTMLSpanElement>(null);
+  const textRef = useRef<HTMLElement>(null);
   const [isTooltipEnabled, setIsTooltipEnabled] = useState(false);
 
   useEffect(() => {
     const compareSize = () => {
       if (textRef.current) {
-        setIsTooltipEnabled(textRef.current.scrollWidth > textRef.current.clientWidth);
+        setIsTooltipEnabled(
+          textRef.current.scrollWidth > textRef.current.clientWidth ||
+            textRef.current.scrollHeight > textRef.current.clientHeight,
+        );
       }
     };
     compareSize();
@@ -190,10 +193,12 @@ const TruncatedLabel = ({ label }: { label: string }) => {
         sx={{
           fontWeight: "inherit",
           flexGrow: 1,
-          whiteSpace: "nowrap",
           overflow: "hidden",
           textOverflow: "ellipsis",
-          display: "block",
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: 2,
+          overflowWrap: "anywhere",
           minWidth: 0,
         }}>
         {label}

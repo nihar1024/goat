@@ -140,6 +140,47 @@ export const numbersDataConfigSchema = dataConfigSchema.extend({
     .default({}),
 });
 
+export const tableModeTypes = z.enum(["records", "grouped"]);
+export const tableQueryModeTypes = z.enum(["builder", "sql"]);
+
+const tableMetricSchema = z.object({
+  operation_type: statisticOperationEnum,
+  operation_value: z.string().optional(),
+  label: z.string().optional(),
+});
+
+export const tableDataConfigSchema = dataConfigSchema.extend({
+  type: z.literal("table"),
+  setup: chartConfigSetupBaseSchema
+    .extend({
+      query_mode: tableQueryModeTypes.optional().default("builder"),
+      mode: tableModeTypes.optional().default("records"),
+      sql_query: z.string().optional(),
+      visible_columns: z.array(z.string()).optional(),
+      operation_type: statisticOperationEnum.optional(),
+      operation_value: z.string().optional(),
+      group_by_column_name: z.string().optional(),
+      group_by_label: z.string().optional(),
+      primary_metric_label: z.string().optional(),
+      sql_column_labels: z.record(z.string()).optional(),
+      additional_metrics: z.array(tableMetricSchema).optional().default([]),
+    })
+    .default({}),
+  options: dataConfigOptionsBaseSchema
+    .extend({
+      filter_by_viewport: z.boolean().optional().default(true),
+      cross_filter: z.boolean().optional().default(true),
+      sort_by: z.string().optional(),
+      sorting: sortTypes.optional().default("desc"),
+      page_size: z.number().min(1).max(100).optional().default(10),
+      size: z.number().min(1).max(5000).optional().default(50),
+      show_totals: z.boolean().optional().default(true),
+      format: formatNumberTypes.optional().default("none"),
+      description: z.string().optional(),
+    })
+    .default({}),
+});
+
 export const filterLayoutTypes = z.enum(["checkbox", "cards", "chips", "select", "range"]);
 export const pieLayoutTypes = z.enum(["center_active", "all_labels_outside", "legend"]);
 
@@ -362,6 +403,7 @@ export const tabsContainerConfigSchema = z.object({
 export const configSchemas = z.union([
   informationLayersConfigSchema,
   numbersDataConfigSchema,
+  tableDataConfigSchema,
   filterDataConfigSchema,
   categoriesChartConfigSchema,
   histogramChartConfigSchema,
@@ -375,6 +417,7 @@ export const configSchemas = z.union([
 export const widgetSchemaMap = {
   layers: informationLayersConfigSchema,
   numbers: numbersDataConfigSchema,
+  table: tableDataConfigSchema,
   filter: filterDataConfigSchema,
   histogram_chart: histogramChartConfigSchema,
   categories_chart: categoriesChartConfigSchema,
@@ -398,6 +441,7 @@ export type TabItemSchema = z.infer<typeof tabItemSchema>;
 export type TabsContainerSchema = z.infer<typeof tabsContainerConfigSchema>;
 export type LayerInformationSchema = z.infer<typeof informationLayersConfigSchema>;
 export type NumbersDataSchema = z.infer<typeof numbersDataConfigSchema>;
+export type TableDataSchema = z.infer<typeof tableDataConfigSchema>;
 export type FilterDataSchema = z.infer<typeof filterDataConfigSchema>;
 export type FilterLayoutTypes = z.infer<typeof filterLayoutTypes>;
 
@@ -408,6 +452,6 @@ export type WidgetElementConfig =
   | ImageElementSchema
   | TabsContainerSchema;
 export type WidgetInformationConfig = LayerInformationSchema;
-export type WidgetDataConfig = NumbersDataSchema | FilterDataSchema;
+export type WidgetDataConfig = NumbersDataSchema | TableDataSchema | FilterDataSchema;
 
 export type WidgetConfigSchema = z.infer<typeof configSchemas>;

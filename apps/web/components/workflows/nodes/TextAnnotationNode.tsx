@@ -6,7 +6,6 @@ import { styled } from "@mui/material/styles";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import TextAlign from "@tiptap/extension-text-align";
-import Underline from "@tiptap/extension-underline";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -37,7 +36,6 @@ const extensions = [
   StarterKit,
   Subscript,
   Superscript,
-  Underline,
   TextAlign.configure({
     types: ["heading", "paragraph"],
   }),

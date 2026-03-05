@@ -118,6 +118,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="input",
             field_order=1,
             widget="layer-selector",
+            widget_options={"data_types": ["vector", "table"]},
         ),
     )
     target_layer_filter: dict[str, Any] | None = Field(
@@ -132,6 +133,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_layer",
             field_order=1,
             widget="layer-selector",
+            widget_options={"data_types": ["vector", "table"]},
         ),
     )
     join_layer_filter: dict[str, Any] | None = Field(
@@ -148,9 +150,9 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_settings",
             field_order=1,
             widget="switch",
-            # Only show spatial relationship option when at least one layer has geometry
-            # The _any_layer_has_geometry value is computed by the frontend from selected layers
-            visible_when={"_any_layer_has_geometry": True},
+            # Only show spatial relationship option when both layers have geometry
+            # The _all_layers_have_geometry value is computed by the frontend from selected layers
+            visible_when={"_all_layers_have_geometry": True},
         ),
     )
     use_attribute_relationship: bool = Field(

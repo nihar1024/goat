@@ -32,11 +32,13 @@ from goatlib.tools.schemas import ToolInputBase
 logger = logging.getLogger(__name__)
 
 # Default timeouts
-DEFAULT_PAGE_TIMEOUT = 60000  # 60 seconds
-DEFAULT_RENDER_TIMEOUT = 30000  # 30 seconds
+DEFAULT_PAGE_TIMEOUT = 120000  # 120 seconds
+DEFAULT_RENDER_TIMEOUT = 90000  # 90 seconds (SwiftShader WebGL rendering is slow)
 
 # Batch size for parallel atlas rendering
-ATLAS_BATCH_SIZE = 5
+# Keep low (2) because each page runs a full MapLibre GL map with software WebGL (SwiftShader),
+# which is CPU-intensive. Higher values cause GPU stalls and data-print-ready timeouts.
+ATLAS_BATCH_SIZE = 2
 
 
 class PrintReportParams(ToolInputBase):

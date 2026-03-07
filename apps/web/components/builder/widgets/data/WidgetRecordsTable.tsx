@@ -85,7 +85,11 @@ const Row = ({ row, fields }) => {
                         </Typography>
                       </Stack>
                       {isJsonDataArrayOfObjects ? (
-                        <Table size="small" aria-label="purchases" key={field.name}>
+                        <Table
+                          size="small"
+                          aria-label={field?.name ? `${field.name} object field values` : "expanded object field values"}
+                          key={field.name}
+                        >
                           <TableHead>
                             <TableRow>
                               {Object.keys(jsonData[0]).map((key) => (

@@ -6,6 +6,7 @@ import React, { useMemo, useState } from "react";
 
 import type { DatasetCollectionItems } from "@/lib/validations/layer";
 
+import { FieldTypeTag } from "@/components/map/common/LayerFieldSelector";
 import NoValuesFound from "@/components/map/common/NoValuesFound";
 
 const TWO_LINE_CLAMP_SX = {
@@ -84,6 +85,7 @@ const Row = ({ row, fields }) => {
                         <Typography variant="body2" fontWeight="bold">
                           {field.name}
                         </Typography>
+                        <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>
                       </Stack>
                       {isJsonDataArrayOfObjects ? (
                         <Table size="small" aria-label="purchases" key={field.name}>
@@ -127,7 +129,11 @@ interface DatasetTableProps {
   fields: Array<{ name: string; type: string }>; // Adjust the type based on your data structure
 }
 
-const DatasetTable: React.FC<DatasetTableProps> = ({ areFieldsLoading, displayData, fields }) => {
+const DatasetTable: React.FC<DatasetTableProps> = ({
+  areFieldsLoading,
+  displayData,
+  fields,
+}) => {
   return (
     <>
       {areFieldsLoading && !displayData && (
@@ -161,6 +167,7 @@ const DatasetTable: React.FC<DatasetTableProps> = ({ areFieldsLoading, displayDa
                       <Typography variant="body2" fontWeight="bold" sx={TWO_LINE_CLAMP_SX}>
                         {field.name}
                       </Typography>
+                      <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>
                     </Stack>
                   </TableCell>
                 ))}

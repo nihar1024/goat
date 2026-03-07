@@ -269,10 +269,6 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
     return hasNestedSchemaPath(schema, "options.sorting");
   }, [schema]);
 
-  const hasSizeDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "options.size");
-  }, [schema]);
-
   const selectedLayer = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return filteredLayers.find((layer) => layer.value === (config?.setup as any)?.layer_project_id);
@@ -520,10 +516,20 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 selectedItems={selectedModeOption}
                 setSelectedItems={(item: SelectorItem | undefined) => {
                   const nextMode = item?.value || tableModeTypes.Values.records;
+                  const currentOptions = { ...((config as any).options || {}) };
+                  const currentSetup = (config.setup as any) || {};
+                  const groupedOperationType = currentSetup.operation_type || "count";
+                  const groupedOperationValue =
+                    groupedOperationType === "count" ? undefined : currentSetup.operation_value;
+
+                  if (nextMode === tableModeTypes.Values.records) {
+                    delete currentOptions.sort_by;
+                  }
+
                   onChange({
                     ...config,
                     setup: {
-                      ...(config.setup as any),
+                      ...currentSetup,
                       mode: nextMode,
                       ...(nextMode === tableModeTypes.Values.records && {
                         operation_type: undefined,
@@ -533,10 +539,17 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                         primary_metric_label: undefined,
                         additional_metrics: [],
                       }),
+                      ...(nextMode === tableModeTypes.Values.grouped && {
+                        operation_type: groupedOperationType,
+                        operation_value: groupedOperationValue,
+                      }),
                     },
+                    ...(nextMode === tableModeTypes.Values.records && {
+                      options: currentOptions,
+                    }),
                     ...(nextMode === tableModeTypes.Values.grouped && {
                       options: {
-                        ...((config as any).options || {}),
+                        ...currentOptions,
                         sort_by: "metric_0",
                       },
                     }),
@@ -788,22 +801,6 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 label={t("sort")}
               />
             )}
-            {selectedLayer && hasSizeDef && hasModeDef && !isRecordsMode && !isSqlMode && (
-              <TextFieldInput
-                type="number"
-                label={t("top_n", { defaultValue: "Top N" })}
-                tooltip={t("top_n_tooltip", { defaultValue: "Keeps only the first N rows after sorting." })}
-                clearable={false}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                value={String((config as any)?.options?.size || 50)}
-                onChange={(value: string) => {
-                  const parsed = Number(value);
-                  if (!Number.isNaN(parsed) && parsed > 0) {
-                    handleOptionChange("size", parsed);
-                  }
-                }}
-              />
-            )}
           </>
         }
       />
@@ -859,6 +856,10 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     return hasNestedSchemaPath(schema, "options.show_totals");
   }, [schema]);
 
+  const hasStickyHeaderDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.sticky_header");
+  }, [schema]);
+
   // Get project layers for target layer selection
   const { layers: projectLayers } = useProjectLayers(projectId as string);
 
@@ -899,7 +900,8 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
       hasPaddingDef ||
       hasSelectionResponseDef ||
       hasPageSizeDef ||
-      hasShowTotalsDef
+      hasShowTotalsDef ||
+      hasStickyHeaderDef
     );
   }, [
     hasTargetLayersDef,
@@ -910,6 +912,7 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     hasSelectionResponseDef,
     hasPageSizeDef,
     hasShowTotalsDef,
+    hasStickyHeaderDef,
   ]);
 
   const pageSizeOptions = useMemo(
@@ -1058,6 +1061,23 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
                       />
                     }
                     label={<Typography variant="body2">{t("show_totals", { defaultValue: "Show totals" })}</Typography>}
+                  />
+                )}
+
+                {hasStickyHeaderDef && (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        size="small"
+                        color="primary"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        checked={((config as any)?.options?.sticky_header ?? true) === true}
+                        onChange={(e) => {
+                          handleOptionChange("sticky_header", e.target.checked);
+                        }}
+                      />
+                    }
+                    label={<Typography variant="body2">{t("sticky_header", { defaultValue: "Sticky header" })}</Typography>}
                   />
                 )}
 

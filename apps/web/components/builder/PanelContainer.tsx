@@ -18,6 +18,7 @@ import type {
   ProjectLayer,
   ProjectLayerGroup,
 } from "@/lib/validations/project";
+import type { TabsContainerSchema } from "@/lib/validations/widget";
 
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -140,6 +141,12 @@ export const Container: React.FC<ContainerProps> = ({
 
   const handleToggleCollapse = () => {
     dispatch(setCollapsedPanels({ [panel.id]: !isCollapsed }));
+  };
+
+  const shouldForceFullWidth = (widget: BuilderWidgetSchema) => {
+    if (widget.config?.type !== "tabs") return false;
+    if (panel.orientation !== "horizontal") return false;
+    return Boolean((widget.config as TabsContainerSchema)?.setup?.full_width);
   };
 
   const collapsedSize = 40; // width/height of mini sidebar
@@ -302,7 +309,7 @@ export const Container: React.FC<ContainerProps> = ({
               alignSelf: "stretch",
               ...(panel.orientation === "horizontal" && {
                 flexDirection: "row",
-                overflow: isCollapsed ? "hidden" : "auto hidden",
+                overflow: isCollapsed ? "hidden" : "auto",
               }),
               ...(panel.orientation === "vertical" && {
                 flexDirection: "column",
@@ -355,6 +362,11 @@ export const Container: React.FC<ContainerProps> = ({
                         position: "absolute",
                       }),
                       ...(!isCollapsed && {
+                        ...(shouldForceFullWidth(widget) && {
+                          flex: "1 1 100%",
+                          width: "100%",
+                          minWidth: 0,
+                        }),
                         ...(panel.config?.options?.style === "floated" && {
                           justifyContent: "center",
                           alignItems: "center",
@@ -397,6 +409,11 @@ export const Container: React.FC<ContainerProps> = ({
                       position: "absolute",
                     }),
                     ...(!isCollapsed && {
+                      ...(shouldForceFullWidth(widget) && {
+                        flex: "1 1 100%",
+                        width: "100%",
+                        minWidth: 0,
+                      }),
                       ...(panel.config?.options?.style === "floated" && {
                         justifyContent: "center",
                         alignItems: "center",

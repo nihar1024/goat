@@ -31,7 +31,7 @@ interface TabsWidgetProps {
   projectLayerGroups: ProjectLayerGroup[];
   viewOnly?: boolean;
   panelWidgets?: BuilderWidgetSchema[];
-  onWidgetUpdate?: (updatedWidget: BuilderWidgetSchema) => void;
+  onNestedWidgetUpdate?: (updatedWidget: BuilderWidgetSchema) => void;
 }
 
 interface TabPanelProps {
@@ -70,7 +70,16 @@ const TabChildWidget: React.FC<{
   viewOnly?: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
-}> = ({ childWidget, projectLayers, projectLayerGroups, viewOnly, isSelected, onSelect }) => {
+  onNestedWidgetUpdate?: (updatedWidget: BuilderWidgetSchema) => void;
+}> = ({
+  childWidget,
+  projectLayers,
+  projectLayerGroups,
+  viewOnly,
+  isSelected,
+  onSelect,
+  onNestedWidgetUpdate,
+}) => {
   const theme = useTheme();
   const config = childWidget.config as WidgetConfigSchema;
 
@@ -103,7 +112,19 @@ const TabChildWidget: React.FC<{
     }
     // Exclude tabs from being rendered inside tabs (prevent recursive tabs)
     if ((elementTypes.options as readonly string[]).includes(config.type) && config.type !== "tabs") {
-      return <WidgetElement config={config as WidgetElementConfig} viewOnly={viewOnly} />;
+      return (
+        <WidgetElement
+          widget={childWidget}
+          config={config as WidgetElementConfig}
+          viewOnly={viewOnly}
+          onWidgetUpdate={(newConfig) => {
+            onNestedWidgetUpdate?.({
+              ...childWidget,
+              config: newConfig,
+            });
+          }}
+        />
+      );
     }
     return null;
   };
@@ -139,11 +160,13 @@ const TabsWidget: React.FC<TabsWidgetProps> = ({
   projectLayerGroups,
   viewOnly,
   panelWidgets = [],
+  onNestedWidgetUpdate,
 }) => {
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
   const selectedBuilderItem = useAppSelector((state) => state.map.selectedBuilderItem);
   const [activeTab, setActiveTab] = useState(0);
+  const useFullWidth = Boolean(config.setup?.full_width);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -213,8 +236,8 @@ const TabsWidget: React.FC<TabsWidgetProps> = ({
           value={Math.min(activeTab, Math.max(0, tabs.length - 1))}
           onChange={handleTabChange}
           aria-label="tabs widget"
-          variant="scrollable"
-          scrollButtons="auto"
+          variant={useFullWidth ? "fullWidth" : "scrollable"}
+          scrollButtons={useFullWidth ? false : "auto"}
           sx={{ minHeight: 32 }}>
           {tabs.map((tab, index) => (
             <Tab
@@ -256,6 +279,7 @@ const TabsWidget: React.FC<TabsWidgetProps> = ({
                       selectedBuilderItem?.type === "widget" && selectedBuilderItem?.id === childWidget.id
                     }
                     onSelect={() => dispatch(setSelectedBuilderItem(childWidget))}
+                    onNestedWidgetUpdate={onNestedWidgetUpdate}
                   />
                 ))}
               </Stack>

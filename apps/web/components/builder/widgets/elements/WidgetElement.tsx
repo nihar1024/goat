@@ -13,6 +13,7 @@ interface WidgetElementProps {
   config: WidgetElementConfig;
   viewOnly?: boolean;
   onWidgetUpdate?: (newData: WidgetElementConfig) => void;
+  onNestedWidgetUpdate?: (updatedWidget: BuilderWidgetSchema) => void;
   fitMode?: "auto" | "contain";
   // For tabs widget
   projectLayers?: ProjectLayer[];
@@ -29,6 +30,7 @@ const WidgetElement: React.FC<WidgetElementProps> = ({
   widget,
   config,
   onWidgetUpdate,
+  onNestedWidgetUpdate,
   viewOnly,
   fitMode,
   projectLayers,
@@ -57,11 +59,7 @@ const WidgetElement: React.FC<WidgetElementProps> = ({
           projectLayerGroups={projectLayerGroups}
           viewOnly={viewOnly}
           panelWidgets={panelWidgets}
-          onWidgetUpdate={(updatedWidget) => {
-            if (updatedWidget.config) {
-              onWidgetUpdate?.(updatedWidget.config as WidgetElementConfig);
-            }
-          }}
+          onNestedWidgetUpdate={onNestedWidgetUpdate}
         />
       )}
       {hasOptions(config) && config.options.description && (

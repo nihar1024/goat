@@ -13,7 +13,9 @@ import {
 } from "@mui/icons-material";
 import {
   Box,
+  Checkbox,
   Collapse,
+  FormControlLabel,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -463,7 +465,7 @@ const TabsWidgetConfig: React.FC<TabsWidgetConfigProps> = ({
       <SectionOptions
         active
         baseOptions={
-          <>
+          <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {t("tabs_widget_description")}
             </Typography>
@@ -491,13 +493,35 @@ const TabsWidgetConfig: React.FC<TabsWidgetConfigProps> = ({
               sx={{
                 display: "flex",
                 justifyContent: "center",
-                mt: 2,
               }}>
               <IconButton onClick={handleAddTab} color="primary">
                 <AddIcon />
               </IconButton>
             </Box>
-          </>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  color="primary"
+                  checked={Boolean(config.setup?.full_width)}
+                  onChange={(event) => {
+                    handleConfigChange({
+                      setup: {
+                        ...config.setup,
+                        full_width: event.target.checked,
+                      },
+                    });
+                  }}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  {t("full_width", { defaultValue: "Use full panel width" })}
+                </Typography>
+              }
+            />
+          </Stack>
         }
       />
     </Stack>

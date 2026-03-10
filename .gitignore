@@ -1,6 +1,9 @@
 # MCP config (contains tokens)
 .mcp.json
 
+# Playwright
+test-results/
+
 # Logs
 logs
 *.log

@@ -507,7 +507,7 @@ class Opportunity2SFCA(OpportunityBase):
                     "capacity_constant must be set when capacity_type is 'constant'."
                 )
         elif self.capacity_type == PotentialType.expression:
-            if not self.potential_expression:
+            if not self.capacity_expression:
                 raise ValueError(
                     "capacity_expression must be set when capacity_type is 'expression'."
                 )

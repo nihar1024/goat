@@ -211,7 +211,7 @@
     },
     "demand_field": {
       "label": "Demand Field",
-      "description": "Field with population or user number"
+      "description": "Field with population or number of users"
     },
     "demand_path": {
       "label": "Demand Layer",

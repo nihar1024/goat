@@ -9,7 +9,7 @@ from goatlib.analysis.schemas.heatmap import (
     Opportunity2SFCA,
     ImpedanceFunction,
     TwoSFCAType,
-    PotentialType
+    PotentialType,
 )
 from goatlib.io.utils import Metadata
 from goatlib.models.io import DatasetMetadata

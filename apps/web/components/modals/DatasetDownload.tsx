@@ -6,8 +6,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
-  ListSubheader,
   MenuItem,
   Select,
   Stack,
@@ -134,11 +132,12 @@ const DatasetDownloadModal: React.FC<DownloadDatasetDialogProps> = ({
     }
   };
 
-  // Group CRS suggestions for rendering
-  const globalCrs = crsSuggestions.filter((s) => s.group === "global");
-  const utmCrs = crsSuggestions.filter((s) => s.group === "utm");
-  const regionalCrs = crsSuggestions.filter((s) => s.group === "regional");
-  const hasRecommended = utmCrs.length > 0 || regionalCrs.length > 0;
+  // Order: global first, then UTM, then regional
+  const orderedCrs = [
+    ...crsSuggestions.filter((s) => s.group === "global"),
+    ...crsSuggestions.filter((s) => s.group === "utm"),
+    ...crsSuggestions.filter((s) => s.group === "regional"),
+  ];
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
@@ -187,22 +186,7 @@ const DatasetDownloadModal: React.FC<DownloadDatasetDialogProps> = ({
                   id="download-crs-select"
                   value={dataCrs}
                   onChange={(e) => setDataCrs(e.target.value as string)}>
-                  <ListSubheader>{t("crs_global")}</ListSubheader>
-                  {globalCrs.map((crs) => (
-                    <MenuItem key={crs.code} value={crs.code}>
-                      {crs.label}
-                    </MenuItem>
-                  ))}
-                  {hasRecommended && <Divider />}
-                  {hasRecommended && (
-                    <ListSubheader>{t("crs_recommended")}</ListSubheader>
-                  )}
-                  {utmCrs.map((crs) => (
-                    <MenuItem key={crs.code} value={crs.code}>
-                      {crs.label}
-                    </MenuItem>
-                  ))}
-                  {regionalCrs.map((crs) => (
+                  {orderedCrs.map((crs) => (
                     <MenuItem key={crs.code} value={crs.code}>
                       {crs.label}
                     </MenuItem>

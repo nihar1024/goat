@@ -555,8 +555,9 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
         Returns:
             Tuple of (latitudes, longitudes) lists
         """
-        if scenario_id and project_id:
-            # Use export_layer_to_parquet which handles scenario merging
+        is_temp_layer = ":" in layer_id
+        if scenario_id and project_id or is_temp_layer:
+            # Use export_layer_to_parquet which handles scenario merging and temp layers
             temp_parquet = self.export_layer_to_parquet(
                 layer_id=layer_id,
                 user_id=user_id,

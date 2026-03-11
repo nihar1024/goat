@@ -212,7 +212,7 @@ export function getSymbolStyleSpec(data: TextLabelSchemaData | undefined, layer:
     iconLayout["icon-anchor"] = pointProperties.marker_anchor || "center";
     iconLayout["icon-offset"] = pointProperties.marker_offset || [0, 0];
     iconPaint["icon-opacity"] = pointProperties.filled ? pointProperties.opacity : 1;
-    iconPaint["icon-color"] = getMapboxStyleColor(layer, "color");
+    iconPaint["icon-color"] = pointProperties.filled ? getMapboxStyleColor(layer, "color") : "#000000";
   }
   if (data?.field) {
     textLayout["text-field"] = ["get", data.field];

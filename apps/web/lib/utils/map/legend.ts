@@ -43,6 +43,10 @@ export function getLegendColorMap(
   const colorMap: ColorMapItem[] = [];
   if (!properties) return colorMap;
 
+  // Skip if the corresponding style toggle is inactive
+  if (type === "color" && properties.filled === false) return colorMap;
+  if (type === "stroke_color" && properties.stroked === false) return colorMap;
+
   // Read color_legends for custom labels
   const colorLegends = (properties[`${type}_range`] as Record<string, unknown>)?.color_legends as
     | Record<string, string>

@@ -221,6 +221,28 @@ export const LayerLegendPanel = ({ properties, geometryType, itemTypographySx, h
     );
   }
 
+  // C2. Multiple markers only (no fill/stroke colors) - show markers without color section
+  if (markerMap.length > 1 && geometryType === "point" && colorMap.length <= 1 && strokeMap.length <= 1) {
+    return (
+      <Box sx={sectionSx}>
+        {renderHeading(markerFieldName ? t("icons_based_on", { field: markerFieldName }) : t("icons"), "heading_marker")}
+        {markerMap.map((item, index) => (
+          <React.Fragment key={`${item.marker}-${item.value?.join(",") || index}`}>
+            {renderRow(
+              item.value?.join(", ") || "Other",
+              <LayerIcon
+                type="point"
+                iconUrl={item.marker || ""}
+                color={item.color || undefined}
+                iconSource={item.source}
+              />
+            )}
+          </React.Fragment>
+        ))}
+      </Box>
+    );
+  }
+
   // D. Attribute-based Colors (Fill) with or without stroke
   if (colorMap.length > 1) {
     // Check if stroke color is also attribute-based on a different field

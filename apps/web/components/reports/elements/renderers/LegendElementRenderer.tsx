@@ -10,6 +10,7 @@ import type { RGBColor } from "@/types/map/color";
 import type { ProjectLayer } from "@/lib/validations/project";
 import type { ReportElement } from "@/lib/validations/reportLayout";
 
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import { LayerIcon } from "@/components/map/panels/layer/legend/LayerIcon";
 import { LayerLegendPanel } from "@/components/map/panels/layer/legend/LayerLegend";
 
@@ -396,10 +397,20 @@ const LayerLegendItem: React.FC<LayerLegendItemProps> = ({
   return (
     <Box sx={{ minWidth: 0 }}>
       {/* Layer name with icon */}
-      {showLayerName && (
+      {showLayerName && (() => {
+        const isComplex = hasComplexLegend || hasRasterLegend;
+        const hasColors = gradientColors.length > 0;
+        const showMarkerIcon = isComplex && !hasColors && !!props.marker_field && !!props.custom_marker;
+        const showGeometryIcon = !isComplex || (isComplex && !hasColors && !showMarkerIcon);
+        const showGradient = isComplex && hasColors;
+        return (
         <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
-          {/* Simple layer: geometry icon */}
-          {!hasComplexLegend && !hasRasterLegend && (
+          {showMarkerIcon && (
+            <Box sx={{ flexShrink: 0, width: 20, height: 20, display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <Icon iconName={ICON_NAME.LOCATION_MARKER} style={{ fontSize: "14px", color: "#999" }} />
+            </Box>
+          )}
+          {showGeometryIcon && (
             <Box sx={{ flexShrink: 0 }}>
               <LayerIcon
                 type={geomType}
@@ -419,8 +430,7 @@ const LayerLegendItem: React.FC<LayerLegendItemProps> = ({
               />
             </Box>
           )}
-          {/* Complex layer: gradient swatch icon */}
-          {(hasComplexLegend || hasRasterLegend) && gradientColors.length > 0 && (
+          {showGradient && (
             <GradientSwatch colors={gradientColors} />
           )}
           <EditableText
@@ -434,7 +444,8 @@ const LayerLegendItem: React.FC<LayerLegendItemProps> = ({
             }}
           />
         </Stack>
-      )}
+        );
+      })()}
 
       {/* Legend caption */}
       {!!(props.legend && (props.legend as Record<string, unknown>).caption) && (

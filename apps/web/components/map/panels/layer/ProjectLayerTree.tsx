@@ -15,7 +15,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
@@ -342,6 +342,8 @@ export const ProjectLayerTree = ({
   const { t } = useTranslation("common");
   const theme = useTheme();
   const { map } = useMap();
+  const mapRef = useRef(map);
+  mapRef.current = map;
   const dispatch = useAppDispatch();
   // Only subscribe to currentZoom in view mode to avoid re-renders during map interaction in edit mode
   const currentZoom = useAppSelector((state) => (viewMode === "view" ? state.map.currentZoom : undefined));
@@ -670,14 +672,15 @@ export const ProjectLayerTree = ({
             onSelect={async (menuItem: PopperMenuItem) => {
               // Handle Zoom To for both layers and groups
               if (menuItem.id === MapLayerActions.ZOOM_TO) {
-                if (map) {
+                const currentMap = mapRef.current;
+                if (currentMap) {
                   if (node.type === "layer") {
                     // For layers, use smart zoom with filter support
                     const target = castNodeToProjectLayer(node);
-                    await zoomToProjectLayer(map, target);
+                    await zoomToProjectLayer(currentMap, target);
                   } else if (node.extent) {
                     // For groups, use stored extent
-                    zoomToLayer(map, node.extent);
+                    zoomToLayer(currentMap, node.extent);
                   }
                 }
                 return;

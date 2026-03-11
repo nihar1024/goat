@@ -511,7 +511,7 @@ def build_tool_inputs(
 
     # For heatmap gravity/closest_average: build opportunities list from
     # numbered opportunity_layer_N_id inputs and per-opportunity config keys.
-    if process_id in ("heatmap_gravity", "heatmap_closest_average"):
+    if process_id in ("heatmap_gravity", "heatmap_closest_average", "heatmap_2sfca"):
         opp_keys = sorted(
             k
             for k in list(inputs)

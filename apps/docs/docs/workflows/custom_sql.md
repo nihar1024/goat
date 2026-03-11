@@ -156,10 +156,10 @@ Common issues and solutions:
 
 ## Output and Integration
 
-The Custom SQL tool creates a new [temporary layer](../further_reading/glossary.md#temporary-layer) containing your query results. You can:
+The Custom SQL tool creates a new temporary layer containing your query results. You can:
 
 - Connect the output to other workflow tools for further analysis
-- Add an [export node](../further_reading/glossary.md#export-node) to save results as a permanent dataset
+- Add an export node to save results as a permanent dataset
 - Use the results in visualizations and styling
 
 :::info Variables Support

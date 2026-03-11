@@ -1385,9 +1385,16 @@ class CatchmentAreaTool(AnalysisTool):
                 select_cols += ", "
 
             # Export with geometry converted to proper GEOMETRY type
-            query = f"""
-                SELECT {select_cols}ST_GeomFromText(geometry) AS geometry
-                FROM gdf_table
+            query = f"""(
+                WITH src AS (
+                        SELECT {select_cols}ST_GeomFromText(geometry) AS geom
+                        FROM gdftable
+                    )
+                    SELECT {select_cols}CASE
+                            WHEN NOT ST_IsValid(geom) THEN ST_CollectionExtract(ST_MakeValid(geom), 3)
+                            ELSE geom
+                        END AS geometry
+                    FROM src)
             """
             write_optimized_parquet(
                 con,
@@ -1432,8 +1439,15 @@ class CatchmentAreaTool(AnalysisTool):
                     select_cols += ", "
 
                 query = f"""
-                    SELECT {select_cols}ST_GeomFromText(geometry) AS geometry
-                    FROM '{temp_path}'
+                     (WITH src AS (
+                        SELECT {select_cols}ST_GeomFromText(geometry) AS geom
+                        FROM '{temp_path}'
+                    )
+                    SELECT {select_cols}CASE
+                            WHEN NOT ST_IsValid(geom) THEN ST_CollectionExtract(ST_MakeValid(geom), 3)
+                            ELSE geom
+                        END AS geometry
+                    FROM src)
                 """
                 write_optimized_parquet(
                     con,

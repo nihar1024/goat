@@ -369,9 +369,17 @@ export const ATLAS_MAX_PAGES = 40;
  */
 export function resolveAtlasText(
   htmlContent: string,
-  atlasPage: AtlasPage | null
+  atlasPage: AtlasPage | null | undefined
 ): string {
-  if (!atlasPage || !htmlContent) return htmlContent;
+  if (!htmlContent) return htmlContent;
+
+  // When no atlas page is available, strip all dynamic placeholders
+  if (!atlasPage) {
+    return htmlContent.replace(
+      /\{\{@(page_number|total_pages|feature\.[^}]+)\}\}/g,
+      ""
+    );
+  }
 
   return htmlContent.replace(
     /\{\{@(page_number|total_pages|feature\.([^}]+))\}\}/g,

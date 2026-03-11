@@ -1063,16 +1063,21 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   }, []);
 
   // Handle scroll wheel zoom (Ctrl + scroll to avoid conflict with map widget)
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!e.ctrlKey) return; // Only zoom when Ctrl is held
-    e.preventDefault();
-    if (e.deltaY < 0) {
-      // Scroll up - zoom in
-      setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
-    } else {
-      // Scroll down - zoom out
-      setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
-    }
+  // Must use native listener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = canvasAreaRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
+      } else {
+        setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
+      }
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
   }, []);
 
   // Cursor style based on panning state
@@ -1146,7 +1151,6 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
             onMouseMove={handlePanMove}
             onMouseUp={handlePanEnd}
             onMouseLeave={handlePanEnd}
-            onWheel={handleWheel}
             onClick={handleCanvasClick}
             sx={{
               cursor: canvasCursor,

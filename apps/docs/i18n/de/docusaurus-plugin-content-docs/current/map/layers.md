@@ -202,12 +202,6 @@ Layer-Gruppen ermöglichen es Ihnen:
 - **Gruppenebenen-Operationen** wie das Anzeigen/Verbergen aller Layer in einer Gruppe anzuwenden
 - **Visuelle Hierarchie** in komplexen Projekten mit vielen Layern zu erhalten
 
-:::tip Technische Dokumentation
-
-Für detaillierte Informationen über die zugrundeliegenden Prozesse und Werkzeuge besuchen Sie bitte die **Prozesse API** im **Geoapi Ordner**. Weitere Low-Level-Werkzeugbeschreibungen finden Sie auch in der **goatlib** im Packages-Verzeichnis.
-
-::: 
-
 
 #### Optionen
 

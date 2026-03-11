@@ -189,20 +189,28 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
     // Get bearing from config to preserve rotation during fitBounds
     const configBearing = configViewState?.bearing ?? DEFAULT_VIEW_STATE.bearing;
 
-    // Fit the map to the atlas page bounds with some padding
+    // Compute padding from margin_percent (percentage of map container size)
+    const marginPercent = (element.config?.atlas?.margin_percent as number) ?? 10;
+    const container = mapRef.current.getContainer();
+    const containerWidth = container?.clientWidth ?? 400;
+    const containerHeight = container?.clientHeight ?? 300;
+    const minDim = Math.min(containerWidth, containerHeight);
+    const paddingPx = Math.round((marginPercent / 100) * minDim);
+
+    // Fit the map to the atlas page bounds with margin-based padding
     mapRef.current.fitBounds(
       [
         [west, south],
         [east, north],
       ],
       {
-        padding: 20, // Add some padding around the feature
+        padding: paddingPx,
         duration: 0, // No animation for print preview
         maxZoom: 18, // Prevent excessive zoom for small features
         bearing: configBearing, // Preserve rotation from config
       }
     );
-  }, [atlasPage, isAtlasControlled, mapLoaded, configViewState?.bearing]);
+  }, [atlasPage, isAtlasControlled, mapLoaded, configViewState?.bearing, element.config?.atlas?.margin_percent]);
 
   // Handle double-click to enter navigation mode
   const handleDoubleClick = useCallback(

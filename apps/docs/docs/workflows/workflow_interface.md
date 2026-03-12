@@ -88,13 +88,13 @@ This tab contains categorized tools available for workflow construction, similar
   - <code>Save Dataset</code>: Save workflow results as permanent datasets
 
 - **Accessibility Indicators**
-  - All tools available in the [Accessibility Indicators](../toolbox/accessibility_indicators.md) section of the Toolbox
+  - All tools available in the [Accessibility Indicators](../category/accessibility-indicators) section of the Toolbox
 
-- **Geoanalysis** 
-  - All tools available in the [Geoanalysis](../toolbox/geoanalysis.md) section of the Toolbox
-  
+- **Geoanalysis**
+  - All tools available in the [Geoanalysis](../category/geoanalysis) section of the Toolbox
+
 - **Geoprocessing**
-  - All tools available in the [Geoprocessing](../toolbox/geoprocessing.md) section of the Toolbox
+  - All tools available in the [Geoprocessing](../category/geoprocessing) section of the Toolbox
   
 - **Data Management**
   - [Join](../toolbox/data_management/join.md) and other data manipulation tools

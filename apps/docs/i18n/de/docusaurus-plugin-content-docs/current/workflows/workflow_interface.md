@@ -88,13 +88,13 @@ Dieser Tab enthält kategorisierte Werkzeuge, die für die Workflow-Konstruktion
   - <code>Datensatz speichern</code>: Speichert Workflow-Ergebnisse als permanente Datensätze
 
 - **Erreichbarkeitsindikatoren**
-  - Alle Werkzeuge, die im Abschnitt [Erreichbarkeitsindikatoren](../toolbox/accessibility_indicators.md) der Toolbox verfügbar sind
+  - Alle Werkzeuge, die im Abschnitt [Erreichbarkeitsindikatoren](../category/accessibility-indicators) der Toolbox verfügbar sind
 
-- **Geoanalyse** 
-  - Alle Werkzeuge, die im Abschnitt [Geoanalyse](../toolbox/geoanalysis.md) der Toolbox verfügbar sind
-  
+- **Geoanalyse**
+  - Alle Werkzeuge, die im Abschnitt [Geoanalyse](../category/geoanalysis) der Toolbox verfügbar sind
+
 - **Geoprozessierung**
-  - Alle Werkzeuge, die im Abschnitt [Geoprozessierung](../toolbox/geoprocessing.md) der Toolbox verfügbar sind
+  - Alle Werkzeuge, die im Abschnitt [Geoprozessierung](../category/geoprocessing) der Toolbox verfügbar sind
   
 - **Datenmanagement**
   - [Verknüpfen](../toolbox/data_management/join.md) und andere Datenmanipulations-Werkzeuge

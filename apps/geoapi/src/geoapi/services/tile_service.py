@@ -485,6 +485,7 @@ class TileService:
         z: int,
         x: int,
         y: int,
+        label: bool = False,
     ) -> Optional[tuple[bytes, bool, str]]:
         """Get tile directly from PMTiles without metadata lookup.
 
@@ -495,6 +496,7 @@ class TileService:
             z: Zoom level
             x: Tile X coordinate
             y: Tile Y coordinate
+            label: If True, serve anchor PMTiles (polygon label points) instead of main tiles
 
         Returns:
             Tuple of (tile_data, is_gzip, source) or None if PMTiles not available
@@ -502,7 +504,7 @@ class TileService:
         if not self._pmtiles_exists(layer_info):
             return None
 
-        result = await self._get_tile_from_pmtiles(layer_info, z, x, y)
+        result = await self._get_tile_from_pmtiles(layer_info, z, x, y, label=label)
         if result is None:
             return None
 
@@ -540,6 +542,7 @@ class TileService:
         z: int,
         x: int,
         y: int,
+        label: bool = False,
     ) -> Optional[tuple[bytes, bool, str]]:
         """Get tile directly from PMTiles using only layer_id (no schema lookup).
 
@@ -551,20 +554,24 @@ class TileService:
             z: Zoom level
             x: Tile X coordinate
             y: Tile Y coordinate
+            label: If True, serve anchor PMTiles (polygon label points) instead of main tiles
 
         Returns:
             Tuple of (tile_data, is_gzip, source) or None if PMTiles not available
         """
         start_time = time.monotonic()
 
+        # Anchor tiles are cached under a separate key to avoid collision
+        cache_layer_id = layer_id + "_anchor" if label else layer_id
+
         # Check Redis cache first (fast path for distributed deployments)
-        cached = get_cached_tile(layer_id, z, x, y)
+        cached = get_cached_tile(cache_layer_id, z, x, y)
         if cached is not None:
             tile_data, is_gzip = cached
             elapsed_ms = (time.monotonic() - start_time) * 1000
             logger.debug(
                 "Redis cache hit for %s tile %d/%d/%d: %d bytes (%.1fms)",
-                layer_id[:8],
+                cache_layer_id[:8],
                 z,
                 x,
                 y,
@@ -595,14 +602,15 @@ class TileService:
 
         tile_data, is_gzip = result
 
-        # Step 3: For polygon layers, also read from anchor PMTiles and concatenate
-        tile_data, is_gzip = await self._concat_anchor_tile(
-            pmtiles_path, z, x, y, tile_data, is_gzip
-        )
+        # Step 3: When label=True, merge anchor tile (polygon label points)
+        if label:
+            tile_data, is_gzip = await self._merge_anchor_tile(
+                pmtiles_path, z, x, y, tile_data, is_gzip
+            )
 
         # Cache in Redis for other pods
         if tile_data:
-            cache_tile(layer_id, z, x, y, tile_data, is_gzip)
+            cache_tile(cache_layer_id, z, x, y, tile_data, is_gzip)
 
         logger.info(
             "PMTiles %s tile %d/%d/%d: %d bytes (%.1fms)",
@@ -769,7 +777,7 @@ class TileService:
         return result
 
     async def _get_tile_from_pmtiles(
-        self, layer_info: LayerInfo, z: int, x: int, y: int
+        self, layer_info: LayerInfo, z: int, x: int, y: int, label: bool = False
     ) -> Optional[tuple[bytes, bool]]:
         """Get tile data from PMTiles file using pmtiles library.
 
@@ -784,6 +792,7 @@ class TileService:
             z: Zoom level
             x: Tile X coordinate
             y: Tile Y coordinate
+            label: If True, serve anchor PMTiles (polygon label points) instead of main tiles
 
         Returns:
             Tuple of (tile_data, is_gzip_compressed) or None if tile not found
@@ -907,14 +916,17 @@ class TileService:
             else:
                 result = b"", False
 
-        # Concatenate anchor tile for polygon layers (separate anchor PMTiles)
         tile_data, is_gzip = result
-        tile_data, is_gzip = await self._concat_anchor_tile(
-            pmtiles_path, z, x, y, tile_data, is_gzip
-        )
+
+        # Merge anchor tile when labels are requested
+        if label:
+            tile_data, is_gzip = await self._merge_anchor_tile(
+                pmtiles_path, z, x, y, tile_data, is_gzip
+            )
+
         return tile_data, is_gzip
 
-    async def _concat_anchor_tile(
+    async def _merge_anchor_tile(
         self,
         pmtiles_path: Path,
         z: int,
@@ -923,11 +935,10 @@ class TileService:
         tile_data: bytes,
         is_gzip: bool,
     ) -> tuple[bytes, bool]:
-        """Concatenate anchor tile data for polygon layers.
+        """Merge anchor tile data into the main tile for polygon label support.
 
-        Checks if a separate anchor PMTiles file exists (containing label
-        anchor points from --convert-polygons-to-label-points). If so, reads
-        the anchor tile and concatenates the raw MVT bytes with the main tile.
+        Reads the anchor PMTiles file (label points from --convert-polygons-to-label-points)
+        and concatenates the raw MVT bytes with the main tile. Only called when label=True.
 
         Args:
             pmtiles_path: Path to the main PMTiles file
@@ -936,28 +947,25 @@ class TileService:
             is_gzip: Whether tile_data is gzip compressed
 
         Returns:
-            Tuple of (concatenated_tile_data, is_gzip)
+            Tuple of (merged_tile_data, is_gzip)
         """
         if not tile_data:
             return tile_data, is_gzip
 
-        # Derive anchor path: t_{layer_id}.pmtiles -> t_{layer_id}_anchor.pmtiles
         anchor_path = pmtiles_path.with_name(pmtiles_path.stem + "_anchor.pmtiles")
         if not anchor_path.exists():
             return tile_data, is_gzip
 
-        # Read anchor tile (has its own variable-depth pyramid + overzoom)
         anchor_result = await self._get_tile_from_pmtiles_path(anchor_path, z, x, y)
         if not anchor_result or not anchor_result[0]:
             return tile_data, is_gzip
 
         anchor_data, anchor_is_gzip = anchor_result
 
-        # Decompress both if needed — MVT concatenation requires raw protobuf
+        # MVT concatenation requires raw protobuf bytes
         main_bytes = gzip.decompress(tile_data) if is_gzip else tile_data
         anchor_bytes = gzip.decompress(anchor_data) if anchor_is_gzip else anchor_data
 
-        # MVT is protobuf — multiple layers can be concatenated at the byte level
         return main_bytes + anchor_bytes, False
 
     async def _overzoom_tile(

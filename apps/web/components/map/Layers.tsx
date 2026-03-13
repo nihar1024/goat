@@ -108,14 +108,18 @@ const Layers = (props: LayersProps) => {
     return extendedFilter;
   };
 
-  const getFeatureTileUrl = (layer: ProjectLayer | Layer) => {
+  const getFeatureTileUrl = (layer: ProjectLayer | Layer, label = false) => {
     const extendedQuery = getLayerQueryFilter(layer);
-    let query = "";
+    const params = new URLSearchParams();
 
     if (extendedQuery && Object.keys(extendedQuery).length > 0) {
-      query = `?filter=${encodeURIComponent(JSON.stringify(extendedQuery))}`;
+      params.set("filter", JSON.stringify(extendedQuery));
+    }
+    if (label) {
+      params.set("label", "true");
     }
 
+    const query = params.size > 0 ? `?${params.toString()}` : "";
     const layerId = layer["layer_id"] || layer["id"];
     return `${GEOAPI_BASE_URL}/collections/${layerId}/tiles/WebMercatorQuad/{z}/{x}/{y}${query}`;
   };
@@ -215,8 +219,16 @@ const Layers = (props: LayersProps) => {
                 );
                 const mapLabelFilter = getMapLayerFilter(labelFilter);
 
+                const needsLabel =
+                  layer.feature_layer_geometry_type === "polygon" &&
+                  !!(layer.properties as FeatureLayerProperties)?.text_label;
+
                 return (
-                  <Source key={layer.id} type="vector" tiles={[getFeatureTileUrl(layer)]} maxzoom={14}>
+                  <Source
+                    key={layer.id}
+                    type="vector"
+                    tiles={[getFeatureTileUrl(layer, needsLabel)]}
+                    maxzoom={14}>
                     {!layer.properties?.["custom_marker"] && (
                       <MapLayer
                         key={getLayerKey(layer)}

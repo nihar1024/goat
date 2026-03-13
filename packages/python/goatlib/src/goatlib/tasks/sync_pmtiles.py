@@ -411,28 +411,9 @@ class PMTilesSyncTask:
 
     @staticmethod
     def _has_anchor_layer(pmtiles_path: "Path") -> bool:
-        """Check if a layer already has anchor label points.
-
-        Checks for a separate anchor PMTiles file (new two-file approach)
-        or a default_anchor layer in the main file (legacy merged approach).
-        """
-        # New approach: separate anchor PMTiles file
+        """Check if a layer already has a separate anchor PMTiles file."""
         anchor_path = pmtiles_path.with_name(pmtiles_path.stem + "_anchor.pmtiles")
-        if anchor_path.exists():
-            return True
-
-        # Legacy: check for default_anchor layer inside merged PMTiles
-        try:
-            from pmtiles.reader import MmapSource
-            from pmtiles.reader import Reader as PMTilesReader
-
-            with open(pmtiles_path, "rb") as f:
-                reader = PMTilesReader(MmapSource(f))
-                meta = reader.metadata()
-                layers = [layer["id"] for layer in meta.get("vector_layers", [])]
-                return "default_anchor" in layers
-        except Exception:
-            return False
+        return anchor_path.exists()
 
     def _process_layer(
         self: Self,

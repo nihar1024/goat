@@ -110,16 +110,16 @@ const Layers = (props: LayersProps) => {
 
   const getFeatureTileUrl = (layer: ProjectLayer | Layer, label = false) => {
     const extendedQuery = getLayerQueryFilter(layer);
-    const params = new URLSearchParams();
+    const parts: string[] = [];
 
     if (extendedQuery && Object.keys(extendedQuery).length > 0) {
-      params.set("filter", JSON.stringify(extendedQuery));
+      parts.push(`filter=${encodeURIComponent(JSON.stringify(extendedQuery))}`);
     }
     if (label) {
-      params.set("label", "true");
+      parts.push("label=true");
     }
 
-    const query = params.size > 0 ? `?${params.toString()}` : "";
+    const query = parts.length > 0 ? `?${parts.join("&")}` : "";
     const layerId = layer["layer_id"] || layer["id"];
     return `${GEOAPI_BASE_URL}/collections/${layerId}/tiles/WebMercatorQuad/{z}/{x}/{y}${query}`;
   };

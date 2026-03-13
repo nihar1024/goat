@@ -405,18 +405,43 @@ class PMTilesSyncTask:
             )
         return "unknown"
 
+    @staticmethod
+    def _has_anchor_layer(pmtiles_path: "Path") -> bool:
+        """Check if a PMTiles file already contains a default_anchor layer."""
+        try:
+            from pmtiles.reader import MmapSource
+            from pmtiles.reader import Reader as PMTilesReader
+
+            with open(pmtiles_path, "rb") as f:
+                reader = PMTilesReader(MmapSource(f))
+                meta = reader.metadata()
+                layers = [l["id"] for l in meta.get("vector_layers", [])]
+                return "default_anchor" in layers
+        except Exception:
+            return False
+
     def _process_layer(
         self: Self,
         layer: LayerInfo,
         force: bool = False,
         dry_run: bool = False,
         show_progress: bool = True,
+        skip_existing_anchors: bool = False,
     ) -> SyncResult:
         """Process a single layer - generate PMTiles if needed."""
         generator = self._get_generator()
 
         try:
             pmtiles_path = generator.get_pmtiles_path(layer.user_id, layer.layer_id)
+
+            # Skip if already has anchor layer (for resumable polygon migration)
+            if skip_existing_anchors and pmtiles_path.exists():
+                if self._has_anchor_layer(pmtiles_path):
+                    return SyncResult(
+                        layer_id=layer.layer_id,
+                        status="skipped",
+                        message="Already has anchor layer",
+                    )
 
             # Check if regeneration is needed
             if pmtiles_path.exists() and not force:
@@ -613,6 +638,7 @@ class PMTilesSyncTask:
                     force=params.force,
                     dry_run=params.dry_run,
                     show_progress=params.show_progress,
+                    skip_existing_anchors=params.geometry_type_filter == "polygon",
                 )
 
                 if result.status == "generated":

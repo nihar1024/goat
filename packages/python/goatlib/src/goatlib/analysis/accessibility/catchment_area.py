@@ -1388,7 +1388,7 @@ class CatchmentAreaTool(AnalysisTool):
             query = f"""(
                 WITH src AS (
                         SELECT {select_cols}ST_GeomFromText(geometry) AS geom
-                        FROM gdftable
+                        FROM gdf_table
                     )
                     SELECT {select_cols}CASE
                             WHEN NOT ST_IsValid(geom) THEN ST_CollectionExtract(ST_MakeValid(geom), 3)

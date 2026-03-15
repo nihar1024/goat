@@ -637,7 +637,8 @@ class PrintReportRunner(SimpleToolRunner):
                 page_indices = [None]
 
             logger.info(
-                f"Rendering {len(page_indices)} pages in {params.format} format"
+                f"Rendering {len(page_indices)} pages in {params.format} format "
+                f"(batch size: {settings.print.atlas_batch_size})"
             )
 
             # Render pages in batches

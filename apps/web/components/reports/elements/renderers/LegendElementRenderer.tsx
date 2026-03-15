@@ -332,7 +332,11 @@ const LayerLegendItem: React.FC<LayerLegendItemProps> = ({
       : "polygon";
 
   // Same check as ProjectLayerTree line 756
-  const hasComplexLegend = !!(props.color_field || props.stroke_color_field || props.marker_field);
+  const hasComplexLegend = !!(
+    (props.filled !== false && props.color_field) ||
+    (props.stroked !== false && props.stroke_color_field) ||
+    props.marker_field
+  );
 
   // Raster legend check
   const rasterStyle = props.style as { style_type?: string; categories?: unknown[]; color_map?: unknown[] } | undefined;
@@ -350,7 +354,8 @@ const LayerLegendItem: React.FC<LayerLegendItemProps> = ({
         ? `rgb(${(props.color as number[]).join(",")})`
         : String(props.color)
     : "#ccc";
-  const strokeColor: string | undefined = props.stroke_color
+  const stroked = props.stroked !== false;
+  const strokeColor: string | undefined = stroked && props.stroke_color
     ? Array.isArray(props.stroke_color) && (props.stroke_color as number[]).length >= 3
       ? rgbToHex(props.stroke_color as RGBColor)
       : Array.isArray(props.stroke_color)

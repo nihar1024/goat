@@ -125,7 +125,7 @@ class ThumbnailTaskParams(BaseModel):
         description="Fetch all items regardless of updated_at (ignores hours_lookback)",
     )
     dry_run: bool = Field(
-        default=True,
+        default=False,
         description="Test mode: only test DB connection and fetch items without generating thumbnails",
     )
 

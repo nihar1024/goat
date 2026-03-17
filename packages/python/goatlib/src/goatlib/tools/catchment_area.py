@@ -475,11 +475,11 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
         """Return style for catchment area with ordinal scale based on minute values.
 
         Queries unique minute values from the table or parquet and builds a color_map.
-        Uses the shared get_ordinal_polygon_style utility with color interpolation.
+        Uses polygon style for polygon/grid output and line style for network output.
         """
         from goatlib.analysis.schemas.statistics import SortOrder
         from goatlib.analysis.statistics import calculate_unique_values
-        from goatlib.tools.style import get_ordinal_polygon_style
+        from goatlib.tools.style import get_ordinal_line_style, get_ordinal_polygon_style
 
         color_field = "cost_step"
 
@@ -524,7 +524,16 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
                 int(round(step_size * (i + 1))) for i in range(params.steps)
             ]
 
-        # Use shared ordinal style utility with YlGn (yellow-green) palette
+        # Use line style for network output, polygon style for polygon/grid output
+        is_network = params.catchment_area_type == CatchmentAreaType.network
+        if is_network:
+            return get_ordinal_line_style(
+                color_field=color_field,
+                values=unique_values,
+                palette="YlGn",
+                opacity=1.0,
+                stroke_width=3,
+            )
         return get_ordinal_polygon_style(
             color_field=color_field,
             values=unique_values,

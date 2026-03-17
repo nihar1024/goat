@@ -96,7 +96,6 @@ VALID_CAR_CLASSES = [
     "trunk",
     "unclassified",
     "service",
-    "track",
 ]
 
 

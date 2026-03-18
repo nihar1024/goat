@@ -223,6 +223,7 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
             viewState: newViewState,
           });
         }
+        setAtlasViewStateReady(true);
       } else {
         // Best fit: fitBounds to feature with margin padding
         const marginPercent = (element.config?.atlas?.margin_percent as number) ?? 10;
@@ -264,6 +265,7 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
               viewState: newViewState,
             });
           }
+          setAtlasViewStateReady(true);
         });
       }
     } catch {
@@ -339,16 +341,27 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
 
   // Track if we've already notified parent that map is ready
   const hasNotifiedReady = useRef(false);
+  // Track if atlas viewState writeback is done (only relevant for atlas-controlled maps)
+  const [atlasViewStateReady, setAtlasViewStateReady] = useState(!isAtlasControlled);
+
+  // For atlas-controlled maps, notify parent once atlas viewState is written back
+  useEffect(() => {
+    if (mapLoaded && atlasViewStateReady && !hasNotifiedReady.current) {
+      hasNotifiedReady.current = true;
+      onMapLoaded?.();
+    }
+  }, [mapLoaded, atlasViewStateReady, onMapLoaded]);
 
   // Handle map idle - called when the map has finished rendering
   // This is more reliable for print than onLoad which fires when style is loaded
   const handleMapIdle = useCallback(() => {
     // Only notify once when the map first becomes idle after loading
-    if (mapLoaded && !hasNotifiedReady.current) {
+    // For atlas-controlled maps, the useEffect above handles notification
+    if (mapLoaded && !hasNotifiedReady.current && !isAtlasControlled) {
       hasNotifiedReady.current = true;
       onMapLoaded?.();
     }
-  }, [mapLoaded, onMapLoaded]);
+  }, [mapLoaded, onMapLoaded, isAtlasControlled]);
 
   // Calculate inverse scale to render map at native size
   // The parent container is already scaled by zoom, so we render the map

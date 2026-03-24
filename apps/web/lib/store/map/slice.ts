@@ -94,6 +94,7 @@ export interface MapState {
   isDataPanelOpen: boolean;
   dataPanelLayerId: number | null;
   dataPanelHeight: number;
+  reportCanvasZoom: number;
 }
 
 const initialState = {
@@ -124,6 +125,7 @@ const initialState = {
   isDataPanelOpen: false,
   dataPanelLayerId: null,
   dataPanelHeight: 0,
+  reportCanvasZoom: 1,
 } as MapState;
 
 const mapSlice = createSlice({
@@ -285,6 +287,9 @@ const mapSlice = createSlice({
     setDataPanelHeight: (state, action: PayloadAction<number>) => {
       state.dataPanelHeight = action.payload;
     },
+    setReportCanvasZoom: (state, action: PayloadAction<number>) => {
+      state.reportCanvasZoom = action.payload;
+    },
   },
 });
 
@@ -322,6 +327,7 @@ export const {
   setIsDataPanelOpen,
   setDataPanelLayerId,
   setDataPanelHeight,
+  setReportCanvasZoom,
 } = mapSlice.actions;
 
 export const mapReducer = mapSlice.reducer;

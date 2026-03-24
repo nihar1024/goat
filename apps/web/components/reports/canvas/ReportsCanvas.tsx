@@ -22,6 +22,9 @@ import { PAGE_SIZES, mmToPx, pxToMm } from "@/lib/print/units";
 import type { Project, ProjectLayer } from "@/lib/validations/project";
 import type { ReportElement, ReportLayoutConfig } from "@/lib/validations/reportLayout";
 
+import { setReportCanvasZoom } from "@/lib/store/map/slice";
+
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useAtlasFeatures } from "@/hooks/reports/useAtlasFeatures";
 
@@ -284,6 +287,7 @@ interface ReportElementRendererProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, updates: Partial<ReportElement>) => void;
+  onInteractionEnd?: () => void;
 }
 
 const ReportElementRenderer: React.FC<ReportElementRendererProps> = ({
@@ -303,6 +307,7 @@ const ReportElementRenderer: React.FC<ReportElementRendererProps> = ({
   onSelect,
   onDelete,
   onUpdate,
+  onInteractionEnd,
 }) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -450,11 +455,13 @@ const ReportElementRenderer: React.FC<ReportElementRendererProps> = ({
           y: Math.max(0, newYMm),
         },
       });
+      onInteractionEnd?.();
     },
     [
       element.id,
       element.position,
       onUpdate,
+      onInteractionEnd,
       zoom,
       width,
       height,
@@ -603,8 +610,9 @@ const ReportElementRenderer: React.FC<ReportElementRendererProps> = ({
           height: newHeightMm,
         },
       });
+      onInteractionEnd?.();
     },
-    [element.id, element.position, onUpdate, zoom, snapPoints, onSnapGuidesChange, isSnappingEnabled]
+    [element.id, element.position, onUpdate, onInteractionEnd, zoom, snapPoints, onSnapGuidesChange, isSnappingEnabled]
   );
 
   // Custom resize handle styles
@@ -659,7 +667,7 @@ const ReportElementRenderer: React.FC<ReportElementRendererProps> = ({
       onDragStop={handleDragStop}
       onResize={handleResize}
       onResizeStop={handleResizeStop}
-      enableResizing={isSelected && !isMapNavigating && element.type !== "scalebar"}
+      enableResizing={isSelected && !isMapNavigating}
       disableDragging={!isSelected || isMapNavigating}
       cancel=".ProseMirror, .tiptap-toolbar, .MuiMenu-root, .MuiPopover-root, .legend-editable-text"
       bounds="parent"
@@ -779,11 +787,21 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   onElementDelete,
 }) => {
   const { t } = useTranslation("common");
-  const [zoom, setZoom] = useState(0.6);
+  const dispatch = useAppDispatch();
+  const zoom = useAppSelector((state) => state.map.reportCanvasZoom);
+  const setZoom = useCallback(
+    (val: number | ((prev: number) => number)) => {
+      dispatch(setReportCanvasZoom(typeof val === "function" ? val(zoom) : val));
+    },
+    [dispatch, zoom]
+  );
   const [atlasPageIndex, setAtlasPageIndex] = useState(0);
   const paperRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
+
+  // Track recent drag/resize to prevent click-deselect after interaction
+  const lastInteractionRef = useRef<number>(0);
 
   // State for snap guides (shown during drag)
   const [activeSnapGuides, setActiveSnapGuides] = useState<SnapGuide[]>([]);
@@ -926,6 +944,8 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   };
 
   const handleCanvasClick = () => {
+    // Skip deselect if a drag/resize just ended (prevents losing selection when mouseup lands on paper)
+    if (Date.now() - lastInteractionRef.current < 200) return;
     // Deselect element when clicking on empty canvas area
     onElementSelect?.(null);
   };
@@ -1043,16 +1063,21 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   }, []);
 
   // Handle scroll wheel zoom (Ctrl + scroll to avoid conflict with map widget)
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!e.ctrlKey) return; // Only zoom when Ctrl is held
-    e.preventDefault();
-    if (e.deltaY < 0) {
-      // Scroll up - zoom in
-      setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
-    } else {
-      // Scroll down - zoom out
-      setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
-    }
+  // Must use native listener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const el = canvasAreaRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
+      } else {
+        setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
+      }
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
   }, []);
 
   // Cursor style based on panning state
@@ -1126,7 +1151,6 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
             onMouseMove={handlePanMove}
             onMouseUp={handlePanEnd}
             onMouseLeave={handlePanEnd}
-            onWheel={handleWheel}
             onClick={handleCanvasClick}
             sx={{
               cursor: canvasCursor,
@@ -1202,6 +1226,7 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
                         onSelect={(id) => onElementSelect?.(id)}
                         onDelete={(id) => onElementDelete?.(id)}
                         onUpdate={(id, updates) => onElementUpdate?.(id, updates)}
+                        onInteractionEnd={() => { lastInteractionRef.current = Date.now(); }}
                       />
                     ))}
                   </ThemeProvider>

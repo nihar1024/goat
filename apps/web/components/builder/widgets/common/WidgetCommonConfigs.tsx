@@ -269,10 +269,6 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
     return hasNestedSchemaPath(schema, "options.sorting");
   }, [schema]);
 
-  const hasSizeDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "options.size");
-  }, [schema]);
-
   const selectedLayer = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return filteredLayers.find((layer) => layer.value === (config?.setup as any)?.layer_project_id);
@@ -359,14 +355,19 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
     const additionalMetrics = ((config?.setup as any)?.additional_metrics || []) as Array<Record<string, unknown>>;
 
     if (hasModeDef && !isRecordsMode) {
-      return [
+      const hasSecondary = !!(config?.setup as any)?.group_by_secondary_column_name;
+      const options = [
         { value: "grouped_value", label: t("group", { defaultValue: "Group" }) },
+        ...(hasSecondary
+          ? [{ value: "grouped_secondary_value", label: t("secondary_group", { defaultValue: "Secondary group" }) }]
+          : []),
         { value: "metric_0", label: t("value", { defaultValue: "Value" }) },
         ...additionalMetrics.map((_, index) => ({
           value: `metric_${index + 1}`,
           label: `${t("value", { defaultValue: "Value" })} ${index + 2}`,
         })),
       ];
+      return options;
     }
     return layerFields.map((field) => ({ value: field.name, label: field.name }));
   }, [config?.setup, hasModeDef, isRecordsMode, layerFields, t]);
@@ -434,16 +435,31 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
     ];
   }, [selectedLayer?.label, selectedLayerDatasetId, sqlBuilderFields, t]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const additionalMetrics = ((config?.setup as any)?.additional_metrics || []) as Array<{
-    operation_type?: string;
-    operation_value?: string;
-  }>;
+  const additionalMetrics = useMemo(
+    () =>
+      (((config?.setup as any)?.additional_metrics || []) as Array<{
+        operation_type?: string;
+        operation_value?: string;
+      }>),
+    [config?.setup]
+  );
 
   const selectedGroupByField = useMemo(() => {
     const groupByName = (config.setup as any)?.group_by_column_name as string | undefined;
     if (!groupByName) return undefined;
     return layerFields.find((field) => field.name === groupByName);
+  }, [config.setup, layerFields]);
+
+  const selectedSecondaryGroupByField = useMemo(() => {
+    const name = (config.setup as any)?.group_by_secondary_column_name as string | undefined;
+    if (!name) return undefined;
+    return layerFields.find((field) => field.name === name);
+  }, [config.setup, layerFields]);
+
+  const secondaryGroupByFields = useMemo(() => {
+    const primaryName = (config.setup as any)?.group_by_column_name as string | undefined;
+    if (!primaryName) return layerFields;
+    return layerFields.filter((field) => field.name !== primaryName);
   }, [config.setup, layerFields]);
 
   const groupedValueColumns = useMemo(
@@ -482,6 +498,8 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                     ...(hasOperationDef && { operation_type: undefined, operation_value: undefined }),
                     ...(hasGroupColumnNameDef && { group_by_column_name: undefined }),
                     ...(hasGroupColumnNameDef && { group_by_label: undefined, primary_metric_label: undefined }),
+                    ...(hasGroupColumnNameDef && { group_by_secondary_column_name: undefined, group_by_secondary_label: undefined }),
+                    ...(hasGroupColumnNameDef && { grouped_display_mode: "flat", grouped_collapse_initial: "collapsed", grouped_show_subtotals: true }),
                     ...(hasAdditionalMetricsDef && { additional_metrics: [] }),
                     ...(hasVisibleColumnsDef && { visible_columns: undefined }),
                   };
@@ -520,10 +538,20 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 selectedItems={selectedModeOption}
                 setSelectedItems={(item: SelectorItem | undefined) => {
                   const nextMode = item?.value || tableModeTypes.Values.records;
+                  const currentOptions = { ...((config as any).options || {}) };
+                  const currentSetup = (config.setup as any) || {};
+                  const groupedOperationType = currentSetup.operation_type || "count";
+                  const groupedOperationValue =
+                    groupedOperationType === "count" ? undefined : currentSetup.operation_value;
+
+                  if (nextMode === tableModeTypes.Values.records) {
+                    delete currentOptions.sort_by;
+                  }
+
                   onChange({
                     ...config,
                     setup: {
-                      ...(config.setup as any),
+                      ...currentSetup,
                       mode: nextMode,
                       ...(nextMode === tableModeTypes.Values.records && {
                         operation_type: undefined,
@@ -531,12 +559,22 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                         group_by_column_name: undefined,
                         group_by_label: undefined,
                         primary_metric_label: undefined,
+                        group_by_secondary_column_name: undefined,
+                        group_by_secondary_label: undefined,
+                        grouped_display_mode: "flat",
                         additional_metrics: [],
                       }),
+                      ...(nextMode === tableModeTypes.Values.grouped && {
+                        operation_type: groupedOperationType,
+                        operation_value: groupedOperationValue,
+                      }),
                     },
+                    ...(nextMode === tableModeTypes.Values.records && {
+                      options: currentOptions,
+                    }),
                     ...(nextMode === tableModeTypes.Values.grouped && {
                       options: {
-                        ...((config as any).options || {}),
+                        ...currentOptions,
                         sort_by: "metric_0",
                       },
                     }),
@@ -729,6 +767,11 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                       ...(config.setup as any),
                       group_by_column_name: nextGroupBy,
                       ...(groupByChanged && { custom_order: undefined }),
+                      ...(groupByChanged && {
+                        group_by_secondary_column_name: undefined,
+                        group_by_secondary_label: undefined,
+                        grouped_display_mode: "flat",
+                      }),
                     },
                     ...(groupByChanged && {
                       options: {
@@ -739,6 +782,29 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                   } as WidgetConfigSchema);
                 }}
                 label={t("group_by_field", { defaultValue: "Group-by field" })}
+              />
+            )}
+            {selectedLayer && isTableWidget && hasGroupColumnNameDef && isGroupedBuilderMode && selectedGroupByField && (
+              <LayerFieldSelector
+                fields={secondaryGroupByFields}
+                selectedField={selectedSecondaryGroupByField}
+                disabled={!selectedLayer}
+                setSelectedField={(field) => {
+                  onChange({
+                    ...config,
+                    setup: {
+                      ...(config.setup as any),
+                      group_by_secondary_column_name: field?.name,
+                      group_by_secondary_label: undefined,
+                      ...(!field && {
+                        grouped_display_mode: "flat",
+                        grouped_collapse_initial: "collapsed",
+                        grouped_show_subtotals: true,
+                      }),
+                    },
+                  } as WidgetConfigSchema);
+                }}
+                label={t("secondary_group_by_field", { defaultValue: "Secondary group-by field (optional)" })}
               />
             )}
             {selectedLayer && hasSqlQueryDef && isSqlMode && (
@@ -788,23 +854,142 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                 label={t("sort")}
               />
             )}
-            {selectedLayer && hasSizeDef && hasModeDef && !isRecordsMode && !isSqlMode && (
-              <TextFieldInput
-                type="number"
-                label={t("top_n", { defaultValue: "Top N" })}
-                tooltip={t("top_n_tooltip", { defaultValue: "Keeps only the first N rows after sorting." })}
-                clearable={false}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                value={String((config as any)?.options?.size || 50)}
-                onChange={(value: string) => {
-                  const parsed = Number(value);
-                  if (!Number.isNaN(parsed) && parsed > 0) {
-                    handleOptionChange("size", parsed);
-                  }
-                }}
-              />
-            )}
           </>
+        }
+      />
+    </>
+  );
+};
+
+export const WidgetLayout = ({ config, onChange }: WidgetConfigProps) => {
+  const { t } = useTranslation("common");
+  const isTableWidget = config.type === widgetTypes.Enum.table;
+  if (!isTableWidget) return null;
+
+  const selectedQueryMode = (config?.setup as any)?.query_mode || tableQueryModeTypes.Values.builder;
+  const isSqlMode = selectedQueryMode === tableQueryModeTypes.Values.sql;
+  const selectedMode = (config?.setup as any)?.mode || tableModeTypes.Values.records;
+  const isGroupedBuilderMode = !isSqlMode && selectedMode === tableModeTypes.Values.grouped;
+  const hasSecondaryGroup = !!(config?.setup as any)?.group_by_secondary_column_name;
+
+  // Collapsible options only for: builder grouped mode with secondary group, or SQL mode
+  const showCollapsibleOptions = (isGroupedBuilderMode && hasSecondaryGroup) || isSqlMode;
+
+  const groupedDisplayMode = ((config?.setup as any)?.grouped_display_mode || "flat") as string;
+  const isCollapsible = groupedDisplayMode === "collapsible";
+
+  const handleSetupChange = (key: string, value: unknown) => {
+    onChange({
+      ...config,
+      setup: { ...(config.setup as any), [key]: value },
+    } as WidgetConfigSchema);
+  };
+
+  const handleOptionChange = (key: string, value: unknown) => {
+    onChange({
+      ...config,
+      options: { ...(config.options as any), [key]: value },
+    } as WidgetConfigSchema);
+  };
+
+  return (
+    <>
+      <SectionHeader
+        active
+        alwaysActive
+        label={t("layout", { defaultValue: "Layout" })}
+        disableAdvanceOptions
+        icon={ICON_NAME.TABLE}
+      />
+      <SectionOptions
+        active
+        baseOptions={
+          <Stack spacing={2}>
+            <Stack spacing={0}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    color="primary"
+                    checked={((config as any)?.options?.sticky_header ?? true) === true}
+                    onChange={(e) => {
+                      handleOptionChange("sticky_header", e.target.checked);
+                    }}
+                  />
+                }
+                label={<Typography variant="body2">{t("sticky_header", { defaultValue: "Sticky header" })}</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    color="primary"
+                    checked={!!(config as any)?.options?.show_totals}
+                    onChange={(e) => {
+                      handleOptionChange("show_totals", e.target.checked);
+                    }}
+                  />
+                }
+                label={<Typography variant="body2">{t("show_totals", { defaultValue: "Show totals" })}</Typography>}
+              />
+            </Stack>
+            {showCollapsibleOptions && (
+              <>
+                <Selector
+                  selectedItems={{
+                    value: groupedDisplayMode,
+                    label: isCollapsible
+                      ? t("collapsible", { defaultValue: "Collapsible" })
+                      : t("flat", { defaultValue: "Flat" }),
+                  }}
+                  setSelectedItems={(item: SelectorItem | undefined) => {
+                    handleSetupChange("grouped_display_mode", item?.value || "flat");
+                  }}
+                  items={[
+                    { value: "flat", label: t("flat", { defaultValue: "Flat" }) },
+                    { value: "collapsible", label: t("collapsible", { defaultValue: "Collapsible" }) },
+                  ]}
+                  label={t("display_mode", { defaultValue: "Display mode" })}
+                />
+                {isCollapsible && (
+                  <Stack spacing={0} sx={{ mt: -1 }}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={((config.setup as any)?.grouped_collapse_initial || "collapsed") === "expanded"}
+                          onChange={(event) => {
+                            handleSetupChange("grouped_collapse_initial", event.target.checked ? "expanded" : "collapsed");
+                          }}
+                        />
+                      }
+                      label={
+                        <Typography variant="body2">
+                          {t("start_expanded", { defaultValue: "Start expanded" })}
+                        </Typography>
+                      }
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={(config.setup as any)?.grouped_show_subtotals !== false}
+                          onChange={(event) => {
+                            handleSetupChange("grouped_show_subtotals", event.target.checked);
+                          }}
+                        />
+                      }
+                      label={
+                        <Typography variant="body2">
+                          {t("show_subtotals", { defaultValue: "Show subtotals" })}
+                        </Typography>
+                      }
+                    />
+                  </Stack>
+                )}
+              </>
+            )}
+          </Stack>
         }
       />
     </>
@@ -855,10 +1040,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     return hasNestedSchemaPath(schema, "options.page_size");
   }, [schema]);
 
-  const hasShowTotalsDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "options.show_totals");
-  }, [schema]);
-
   // Get project layers for target layer selection
   const { layers: projectLayers } = useProjectLayers(projectId as string);
 
@@ -898,8 +1079,7 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
       hasNumberFormatDef ||
       hasPaddingDef ||
       hasSelectionResponseDef ||
-      hasPageSizeDef ||
-      hasShowTotalsDef
+      hasPageSizeDef
     );
   }, [
     hasTargetLayersDef,
@@ -909,7 +1089,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     hasPaddingDef,
     hasSelectionResponseDef,
     hasPageSizeDef,
-    hasShowTotalsDef,
   ]);
 
   const pageSizeOptions = useMemo(
@@ -1011,7 +1190,7 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
                   />
                 )}
 
-                {hasNumberFormatDef && (
+                {hasNumberFormatDef && config.type !== widgetTypes.Enum.table && (
                   <Stack sx={{ mt: 2 }}>
                     <NumberFormatSelector
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1041,23 +1220,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
                           })
                         : undefined
                     }
-                  />
-                )}
-
-                {hasShowTotalsDef && (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        size="small"
-                        color="primary"
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        checked={!!(config as any)?.options?.show_totals}
-                        onChange={(e) => {
-                          handleOptionChange("show_totals", e.target.checked);
-                        }}
-                      />
-                    }
-                    label={<Typography variant="body2">{t("show_totals", { defaultValue: "Show totals" })}</Typography>}
                   />
                 )}
 

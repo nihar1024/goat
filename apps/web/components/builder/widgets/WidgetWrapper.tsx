@@ -122,6 +122,9 @@ const WidgetWrapper: React.FC<WidgetWrapperProps> = ({
           onWidgetUpdate={(newConfig) => {
             onWidgetUpdate?.({ ...widget, config: newConfig });
           }}
+          onNestedWidgetUpdate={(updatedWidget) => {
+            onWidgetUpdate?.(updatedWidget);
+          }}
         />
       )}
     </Box>

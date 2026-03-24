@@ -15,7 +15,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
@@ -64,6 +64,7 @@ import type { BaseTreeItem } from "./DraggableTreeView";
 import { DraggableTreeView } from "./DraggableTreeView";
 import { LayerIcon } from "./legend/LayerIcon";
 import { LayerLegendPanel } from "./legend/LayerLegend";
+import { getLegendColorMap, getLegendMarkerMap } from "@/lib/utils/map/legend";
 
 // Extended tree item interface to include project layer data
 interface ProjectTreeItem extends BaseTreeItem {
@@ -342,6 +343,8 @@ export const ProjectLayerTree = ({
   const { t } = useTranslation("common");
   const theme = useTheme();
   const { map } = useMap();
+  const mapRef = useRef(map);
+  mapRef.current = map;
   const dispatch = useAppDispatch();
   // Only subscribe to currentZoom in view mode to avoid re-renders during map interaction in edit mode
   const currentZoom = useAppSelector((state) => (viewMode === "view" ? state.map.currentZoom : undefined));
@@ -675,14 +678,15 @@ export const ProjectLayerTree = ({
             onSelect={async (menuItem: PopperMenuItem) => {
               // Handle Zoom To for both layers and groups
               if (menuItem.id === MapLayerActions.ZOOM_TO) {
-                if (map) {
+                const currentMap = mapRef.current;
+                if (currentMap) {
                   if (node.type === "layer") {
                     // For layers, use smart zoom with filter support
                     const target = castNodeToProjectLayer(node);
-                    await zoomToProjectLayer(map, target);
+                    await zoomToProjectLayer(currentMap, target);
                   } else if (node.extent) {
                     // For groups, use stored extent
-                    zoomToLayer(map, node.extent);
+                    zoomToLayer(currentMap, node.extent);
                   }
                 }
                 return;
@@ -814,13 +818,65 @@ export const ProjectLayerTree = ({
       }
       // 4. Complex Legend - Only show legend if layer is visible
       else if (hasComplexLegend) {
-        if (isVisible) {
+        // Check if legend panel will actually have content to show
+        const colorMap = getLegendColorMap(props, "color");
+        const strokeMap = getLegendColorMap(props, "stroke_color");
+        const markerMap = getLegendMarkerMap(props);
+        const hasLegendContent = colorMap.length > 1 || strokeMap.length > 1 || markerMap.length > 1;
+
+        if (isVisible && hasLegendContent) {
           // Show legend content for visible layers
           // TODO: Add collapse/expand functionality to LayerLegendPanel component
           legendNode = <LayerLegendPanel properties={props} geometryType={geomType} />;
-        } else {
+        } else if (!isVisible) {
           // If not visible, don't show anything and make it non-selectable
           isSelectable = false;
+        }
+
+        // Fallback icon when legend panel has no content (e.g. fill/stroke disabled)
+        if (!hasLegendContent) {
+          if (props.marker_field && props.custom_marker) {
+            // Attribute-based markers with no colors: generic location marker icon
+            iconNode = (
+              <Icon
+                iconName={ICON_NAME.LOCATION_MARKER}
+                style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+              />
+            );
+          } else {
+            const baseColor = props.color
+              ? Array.isArray(props.color) && props.color.length >= 3
+                ? rgbToHex(props.color as [number, number, number])
+                : Array.isArray(props.color)
+                  ? `rgb(${props.color.join(",")})`
+                  : props.color
+              : "#ccc";
+            const strokeColor = props.stroke_color
+              ? Array.isArray(props.stroke_color) && props.stroke_color.length >= 3
+                ? rgbToHex(props.stroke_color as [number, number, number])
+                : Array.isArray(props.stroke_color)
+                  ? `rgb(${props.stroke_color.join(",")})`
+                  : props.stroke_color
+              : undefined;
+            // When fill is disabled and custom marker is active, use black to match map behavior
+            const iconColor = props.filled === false && props.custom_marker ? "#000000" : baseColor;
+            iconNode = (
+              <LayerIcon
+                type={geomType}
+                color={iconColor}
+                strokeColor={props.stroked !== false ? strokeColor : undefined}
+                filled={props.filled !== false}
+                iconUrl={
+                  !props.marker_field && props.custom_marker && props.marker?.url ? props.marker.url : undefined
+                }
+                iconSource={
+                  !props.marker_field && props.custom_marker && props.marker?.source
+                    ? props.marker.source
+                    : "library"
+                }
+              />
+            );
+          }
         }
       }
       // 5. Simple Feature (Geometry Preview) - for layers without complex legends
@@ -839,10 +895,12 @@ export const ProjectLayerTree = ({
               ? `rgb(${props.stroke_color.join(",")})`
               : props.stroke_color
           : undefined;
+        // When fill is disabled and custom marker is active, use black to match map behavior
+        const iconColor = props.filled === false && props.custom_marker ? "#000000" : baseColor;
         iconNode = (
           <LayerIcon
             type={geomType} // Use geometry type for vector preview
-            color={baseColor}
+            color={iconColor}
             strokeColor={props.stroked !== false ? strokeColor : undefined}
             filled={props.filled !== false}
             iconUrl={

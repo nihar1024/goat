@@ -16,6 +16,7 @@ import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import SaveIcon from "@mui/icons-material/Save";
 import SearchIcon from "@mui/icons-material/Search";
 import UndoIcon from "@mui/icons-material/Undo";
+import { emphasize } from "@mui/material/styles";
 import {
   Badge,
   Box,
@@ -699,7 +700,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
             py: 0.5,
             borderBottom: "1px solid",
             borderColor: "divider",
-            backgroundColor: "action.hover",
+            backgroundColor: (theme) => emphasize(theme.palette.background.paper, 0.03),
             flexShrink: 0,
           }}>
           <Typography variant="caption" color="text.secondary" noWrap>
@@ -733,11 +734,11 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           flex: 1,
           minHeight: 0,
           overflow: "auto",
-          // Thin scrollbar that starts below the sticky header
-          "&::-webkit-scrollbar": { width: 8, height: 8 },
+          // Thin, unobtrusive scrollbar
+          "&::-webkit-scrollbar": { width: 6, height: 6 },
           "&::-webkit-scrollbar-thumb": {
-            backgroundColor: "rgba(0,0,0,0.2)",
-            borderRadius: 4,
+            backgroundColor: "action.disabled",
+            borderRadius: 3,
           },
           "&::-webkit-scrollbar-track": { backgroundColor: "transparent" },
           scrollbarWidth: "thin",
@@ -762,7 +763,8 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                 borderRight: 0,
               },
               "& .MuiTableCell-stickyHeader": {
-                backgroundColor: "background.paper",
+                backgroundColor: (theme) => emphasize(theme.palette.background.paper, 0.03),
+                zIndex: 3,
               },
             }}>
             <TableHead>
@@ -775,8 +777,8 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                     maxWidth: 48,
                     position: "sticky",
                     left: 0,
-                    zIndex: 3,
-                    backgroundColor: "background.paper",
+                    zIndex: 4,
+                    backgroundColor: (theme) => emphasize(theme.palette.background.paper, 0.03),
                     textAlign: "center",
                     px: 0,
                   }}>
@@ -860,7 +862,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                         position: "sticky",
                         left: 0,
                         zIndex: 1,
-                        backgroundColor: isSelected ? "action.selected" : "background.paper",
+                        backgroundColor: isSelected ? "action.selected" : "action.hover",
                         textAlign: "center",
                         px: 0,
                       }}>

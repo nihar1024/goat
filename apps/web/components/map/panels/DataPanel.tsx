@@ -1,4 +1,4 @@
-import { Box, alpha, useTheme } from "@mui/material";
+import { Box, useTheme } from "@mui/material";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { setDataPanelHeight, setIsDataPanelOpen } from "@/lib/store/map/slice";
@@ -173,8 +173,7 @@ const DataPanel: React.FC<DataPanelProps> = ({ projectLayers }) => {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          backgroundColor: isExpanded ? theme.palette.background.paper : alpha(theme.palette.background.paper, 0.9),
-          backdropFilter: isExpanded ? "none" : "blur(10px)",
+          backgroundColor: theme.palette.background.paper,
           transition: "background-color 0.15s ease-out",
         }}>
         <EditableDataTable

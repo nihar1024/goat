@@ -1,6 +1,9 @@
 # MCP config (contains tokens)
 .mcp.json
 
+# Superpowers brainstorm sessions
+.superpowers/
+
 # Playwright
 test-results/
 

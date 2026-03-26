@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { removeTemporaryFilter } from "@/lib/store/map/slice";
 import { hasNestedSchemaPath } from "@/lib/utils/zod";
 import type { BuilderWidgetSchema } from "@/lib/validations/project";
-import type { TabsContainerSchema } from "@/lib/validations/widget";
+import type { LinksElementSchema, RichTextDataSchema, TabsContainerSchema } from "@/lib/validations/widget";
 import { widgetSchemaMap } from "@/lib/validations/widget";
 
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
@@ -17,6 +17,8 @@ import {
   WidgetSetup,
   WidgetStyle,
 } from "@/components/builder/widgets/common/WidgetCommonConfigs";
+import RichTextConfig from "@/components/builder/widgets/data/RichTextConfig";
+import LinksConfiguration from "@/components/builder/widgets/elements/LinksConfiguration";
 import TabsWidgetConfig from "@/components/builder/widgets/elements/TabsWidgetConfig";
 
 interface WidgetConfigurationProps {
@@ -78,6 +80,26 @@ const WidgetConfiguration = ({ onChange, samePanelWidgets }: WidgetConfiguration
 
   if (!widgetConfig || !schema) {
     return null;
+  }
+
+  // Special handling for links widget
+  if (widgetConfig.type === "links") {
+    return (
+      <LinksConfiguration
+        config={widgetConfig as LinksElementSchema}
+        onChange={handleConfigChange}
+      />
+    );
+  }
+
+  // Special handling for rich_text widget
+  if (widgetConfig.type === "rich_text") {
+    return (
+      <RichTextConfig
+        config={widgetConfig as unknown as RichTextDataSchema}
+        onChange={handleConfigChange}
+      />
+    );
   }
 
   // Special handling for tabs widget

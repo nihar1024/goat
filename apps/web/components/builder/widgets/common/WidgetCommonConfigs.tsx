@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Autocomplete, Box, Button, Checkbox, Chip, Divider, FormControlLabel, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
+import { Autocomplete, Button, Checkbox, Chip, Divider, FormControlLabel, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,7 @@ import type { SelectorItem } from "@/types/map/common";
 import useLayerFields from "@/hooks/map/CommonHooks";
 import { useLayerByGeomType, useLayerDatasetId } from "@/hooks/map/ToolsHooks";
 
+import CollapsibleConfigCard from "@/components/builder/widgets/common/CollapsibleConfigCard";
 import WidgetColorPicker from "@/components/builder/widgets/common/WidgetColorPicker";
 import CategoryColorConfig from "@/components/builder/widgets/data/CategoryColorConfig";
 import CategoryOrderConfig from "@/components/builder/widgets/data/CategoryOrderConfig";
@@ -223,6 +224,7 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
   const schema = widgetSchemaMap[config.type];
   const { projectId } = useParams();
   const [formulaBuilderOpen, setFormulaBuilderOpen] = useState(false);
+  const [expandedMetricIndex, setExpandedMetricIndex] = useState<number | null>(null);
   const { filteredLayers } = useLayerByGeomType(["feature", "table"], undefined, projectId as string);
 
   const hasLayerProjectIdDef = useMemo(() => {
@@ -630,78 +632,72 @@ export const WidgetData = ({ sectionLabel, config, onChange }: WidgetConfigProps
                   {groupedValueColumns.map((metric, index) => {
                     const isPrimaryRow = index === 0;
                     const canRemove = groupedValueColumns.length > 1;
+                    const isExpanded = expandedMetricIndex === index;
+
+                    // Build summary for collapsed state
+                    const methodLabel = metric.operation_type || "";
+                    const fieldLabel = metric.operation_value || "";
+                    const summary = [methodLabel, fieldLabel].filter(Boolean).join(" · ");
 
                     return (
-                    <Box
-                      key={`metric-${index}`}
-                      sx={{
-                        p: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        borderRadius: 1,
-                      }}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          {t("value_column", { defaultValue: "Value column" })} {index + 1}
-                        </Typography>
-                        <Button
-                          size="small"
-                          color="error"
-                          variant="text"
-                          disabled={!canRemove}
-                          onClick={() => {
-                            if (!canRemove) return;
+                      <CollapsibleConfigCard
+                        key={`metric-${index}`}
+                        title={`${t("value_column", { defaultValue: "Value column" })} ${index + 1}`}
+                        summary={summary}
+                        expanded={isExpanded}
+                        onToggle={() => setExpandedMetricIndex(isExpanded ? null : index)}
+                        onRemove={() => {
+                          if (!canRemove) return;
 
-                            if (isPrimaryRow) {
-                              const [nextPrimary, ...remaining] = additionalMetrics;
-                              onChange({
-                                ...config,
-                                setup: {
-                                  ...(config.setup as any),
-                                  operation_type: nextPrimary?.operation_type,
-                                  operation_value: nextPrimary?.operation_value,
-                                  additional_metrics: remaining,
-                                },
-                              } as WidgetConfigSchema);
-                              return;
-                            }
-
-                            const nextMetrics = additionalMetrics.filter((_, metricIndex) => metricIndex !== index - 1);
-                            handleSetupChange("additional_metrics", nextMetrics);
-                          }}>
-                          {t("remove", { defaultValue: "Remove" })}
-                        </Button>
-                      </Stack>
-                      <StatisticSelector
-                        layerProjectId={selectedLayer.value as number}
-                        hasGroupBy={false}
-                        value={{
-                          method: metric.operation_type as any,
-                          value: metric.operation_value,
-                        }}
-                        onChange={(nextValue) => {
                           if (isPrimaryRow) {
+                            const [nextPrimary, ...remaining] = additionalMetrics;
                             onChange({
                               ...config,
                               setup: {
                                 ...(config.setup as any),
-                                operation_type: nextValue.method,
-                                operation_value: nextValue.value,
+                                operation_type: nextPrimary?.operation_type,
+                                operation_value: nextPrimary?.operation_value,
+                                additional_metrics: remaining,
                               },
                             } as WidgetConfigSchema);
-                            return;
+                          } else {
+                            const nextMetrics = additionalMetrics.filter(
+                              (_, metricIndex) => metricIndex !== index - 1
+                            );
+                            handleSetupChange("additional_metrics", nextMetrics);
                           }
-
-                          const nextMetrics = [...additionalMetrics];
-                          nextMetrics[index - 1] = {
-                            ...nextMetrics[index - 1],
-                            operation_type: nextValue.method,
-                            operation_value: nextValue.value,
-                          };
-                          handleSetupChange("additional_metrics", nextMetrics);
+                          setExpandedMetricIndex(null);
                         }}
-                      />
-                    </Box>
+                        canRemove={canRemove}>
+                        <StatisticSelector
+                          layerProjectId={selectedLayer.value as number}
+                          hasGroupBy={false}
+                          value={{
+                            method: metric.operation_type as any,
+                            value: metric.operation_value,
+                          }}
+                          onChange={(nextValue) => {
+                            if (isPrimaryRow) {
+                              onChange({
+                                ...config,
+                                setup: {
+                                  ...(config.setup as any),
+                                  operation_type: nextValue.method,
+                                  operation_value: nextValue.value,
+                                },
+                              } as WidgetConfigSchema);
+                            } else {
+                              const nextMetrics = [...additionalMetrics];
+                              nextMetrics[index - 1] = {
+                                ...nextMetrics[index - 1],
+                                operation_type: nextValue.method,
+                                operation_value: nextValue.value,
+                              };
+                              handleSetupChange("additional_metrics", nextMetrics);
+                            }
+                          }}
+                        />
+                      </CollapsibleConfigCard>
                     );
                   })}
                 </Stack>

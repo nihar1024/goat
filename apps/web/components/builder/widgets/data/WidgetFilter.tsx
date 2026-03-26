@@ -16,7 +16,7 @@ import { WidgetStatusContainer } from "@/components/builder/widgets/common/Widge
 import CheckboxFilter from "@/components/builder/widgets/data/CheckboxFilter";
 import ChipsFilter from "@/components/builder/widgets/data/ChipsFilter";
 import RangeFilter from "@/components/builder/widgets/data/RangeFilter";
-import SelectorLayerValue from "@/components/map/panels/common/SelectorLayerValue";
+import AutocompleteLayerValue from "@/components/builder/widgets/data/AutocompleteLayerValue";
 
 // Deep compare helper
 const areFiltersEqual = (a: TemporaryFilter | undefined, b: TemporaryFilter) => {
@@ -389,8 +389,7 @@ export const FilterDataWidget = ({ id, config: rawConfig, projectLayers }: Filte
       {layer &&
         rawConfig?.setup.column_name &&
         rawConfig?.setup.layout === filterLayoutTypes.Values.select && (
-          <SelectorLayerValue
-            clearable
+          <AutocompleteLayerValue
             selectedValues={selectedValues as any}
             onSelectedValuesChange={(values: string[] | string | null) => {
               if (values === null || (Array.isArray(values) && values.length === 0)) {

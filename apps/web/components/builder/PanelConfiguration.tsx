@@ -85,6 +85,8 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
   const [spacing, setSpacing] = useState(panel.config?.position?.spacing ?? 0);
   const [collapsible, setCollapsible] = useState(panel.config?.options?.collapsible ?? false);
   const [collapsedDefault, setCollapsedDefault] = useState(panel.config?.options?.collapsed_default ?? false);
+  const [panelWidth, setPanelWidth] = useState(panel.config?.size?.width ?? 300);
+  const [panelHeight, setPanelHeight] = useState(panel.config?.size?.height ?? 300);
 
   useEffect(() => {
     setOpacity(panel.config?.appearance?.opacity ?? 1);
@@ -93,6 +95,8 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
     setSpacing(panel.config?.position?.spacing ?? 0);
     setCollapsible(panel.config?.options?.collapsible ?? false);
     setCollapsedDefault(panel.config?.options?.collapsed_default ?? false);
+    setPanelWidth(panel.config?.size?.width ?? 300);
+    setPanelHeight(panel.config?.size?.height ?? 300);
   }, [panel]);
 
   // Handlers
@@ -217,6 +221,12 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
               case "spacing":
                 setSpacing(val);
                 break;
+              case "width":
+                setPanelWidth(val);
+                break;
+              case "height":
+                setPanelHeight(val);
+                break;
             }
           }
         }}
@@ -255,6 +265,13 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
         <ConfigSection title={t("position")} icon={ICON_NAME.PANEL_POSITION}>
           {renderSelector(panelAlignItem, panelAlignItemOptions, t("align_items"), "position.alignItems")}
           {renderSlider(t("spacing"), spacing, "position.spacing", 0, 10, 1)}
+        </ConfigSection>
+
+        <ConfigSection title={t("size")} icon={ICON_NAME.RULER_HORIZONTAL}>
+          {(panel.position === "left" || panel.position === "right") &&
+            renderSlider(`${t("width")} (px)`, panelWidth, "size.width", 200, 800, 10)}
+          {(panel.position === "top" || panel.position === "bottom") &&
+            renderSlider(`${t("height")} (px)`, panelHeight, "size.height", 150, 600, 10)}
         </ConfigSection>
       </Stack>
 

@@ -63,8 +63,16 @@ const PublicProjectLayout = ({
   onProjectUpdate,
   viewOnly,
 }: PublicProjectLayoutProps) => {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const dispatch = useAppDispatch();
+
+  // Apply dashboard language override only for public/shared view
+  const dashboardLanguage = project?.builder_config?.settings?.language;
+  useEffect(() => {
+    if (viewOnly && dashboardLanguage && dashboardLanguage !== "auto" && dashboardLanguage !== i18n.language) {
+      i18n.changeLanguage(dashboardLanguage);
+    }
+  }, [viewOnly, dashboardLanguage, i18n]);
   // Layer style change hook
   const { handleStyleChange } = useLayerStyleChange(projectLayers, viewOnly);
 
@@ -77,7 +85,6 @@ const PublicProjectLayout = ({
   const collapsedPanels = useAppSelector((state) => state.map.collapsedPanels);
   const builderConfig = project?.builder_config;
   const panels = useMemo(() => builderConfig?.interface ?? [], [builderConfig]);
-  const PANEL_SIZE = 300;
   const COLLAPSED_SIZE = 40; // Should match the collapsedSize in Container component
 
   // Initialize collapsed state from panel config once per project load.
@@ -139,10 +146,18 @@ const PublicProjectLayout = ({
   const leftPanels = useMemo(() => panels.filter((panel) => panel.position === "left"), [panels]);
   const rightPanels = useMemo(() => panels.filter((panel) => panel.position === "right"), [panels]);
 
+  // Returns the configured size for a panel (width for left/right, height for top/bottom)
+  const getPanelConfigSize = (panel: BuilderPanelSchema) => {
+    if (panel.position === "left" || panel.position === "right") {
+      return panel.config?.size?.width ?? 300;
+    }
+    return panel.config?.size?.height ?? 300;
+  };
+
   // Helper function to get actual panel size considering collapsed state
   const getPanelSize = (panel: BuilderPanelSchema) => {
     const isCollapsed = !!collapsedPanels?.[panel.id];
-    return isCollapsed ? COLLAPSED_SIZE : PANEL_SIZE;
+    return isCollapsed ? COLLAPSED_SIZE : getPanelConfigSize(panel);
   };
 
   // Calculate the actual occupied space for each position considering collapsed panels
@@ -193,7 +208,7 @@ const PublicProjectLayout = ({
               left: leftSpaceBefore,
               top: topSpaceBefore,
               bottom: bottomSpaceBefore,
-              width: PANEL_SIZE,
+              width: getPanelConfigSize(panel),
             },
           };
         case "right":
@@ -204,7 +219,7 @@ const PublicProjectLayout = ({
               right: rightSpaceBefore,
               top: topSpaceBefore,
               bottom: bottomSpaceBefore,
-              width: PANEL_SIZE,
+              width: getPanelConfigSize(panel),
             },
           };
         case "top":
@@ -215,7 +230,7 @@ const PublicProjectLayout = ({
               top: topSpaceBefore,
               left: leftSpaceBefore,
               right: rightSpaceBefore,
-              height: PANEL_SIZE,
+              height: getPanelConfigSize(panel),
             },
           };
         case "bottom":
@@ -226,7 +241,7 @@ const PublicProjectLayout = ({
               bottom: bottomSpaceBefore,
               left: leftSpaceBefore,
               right: rightSpaceBefore,
-              height: PANEL_SIZE, // Keep original height for smooth transition
+              height: getPanelConfigSize(panel), // Keep original height for smooth transition
             },
           };
         default:

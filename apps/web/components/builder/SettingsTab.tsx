@@ -1,5 +1,7 @@
-import { Box, Button, Stack, Switch, Typography } from "@mui/material";
+import { Box, Button, FormControl, MenuItem, Select, Stack, Switch, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
+
+import { languages } from "@/i18n/settings";
 
 import SettingsGroupHeader from "@/components/builder/widgets/common/SettingsGroupHeader";
 
@@ -75,6 +77,21 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ settings, onChange, onReset }
             </Stack>
           </Box>
         ))}
+        <Box sx={{ mb: 6 }}>
+          <SettingsGroupHeader label={t("dashboard_language")} />
+          <FormControl size="small" fullWidth>
+            <Select
+              value={(settings?.language as string) ?? "auto"}
+              onChange={(e) => onChange("language", e.target.value)}>
+              <MenuItem value="auto">{t("auto_browser_default")}</MenuItem>
+              {languages.map((lng) => (
+                <MenuItem key={lng} value={lng}>
+                  {lng === "en" ? "English" : lng === "de" ? "Deutsch" : lng}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
       </Stack>
       <Stack>
         <Button onClick={onReset} fullWidth size="small" color="error">

@@ -5,9 +5,9 @@ import { sortTypes, statisticOperationEnum } from "@/lib/validations/common";
 import { colorRange } from "@/lib/validations/layer";
 
 export const informationTypes = z.enum(["layers", "bookmarks", "comments"]);
-export const dataTypes = z.enum(["filter", "table", "numbers", "feature_list"]);
+export const dataTypes = z.enum(["filter", "table", "numbers", "feature_list", "rich_text"]);
 export const chartTypes = z.enum(["histogram_chart", "categories_chart", "pie_chart"]);
-export const elementTypes = z.enum(["text", "divider", "image", "tabs"]);
+export const elementTypes = z.enum(["text", "divider", "image", "tabs", "links"]);
 export const widgetTypes = z.enum([
   ...informationTypes.options,
   ...dataTypes.options,
@@ -136,6 +136,37 @@ export const numbersDataConfigSchema = dataConfigSchema.extend({
       cross_filter: z.boolean().optional().default(true),
       format: formatNumberTypes.optional().default("none"),
       description: z.string().optional(),
+    })
+    .default({}),
+});
+
+export const richTextVariableSchema = z.object({
+  id: z.string(),
+  name: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
+  layer_project_id: z.number().optional(),
+  operation_type: statisticOperationEnum.optional(),
+  operation_value: z.string().optional(),
+  format: formatNumberTypes.optional().default("none"),
+});
+
+export const richTextDataConfigSchema = z.object({
+  type: z.literal("rich_text"),
+  setup: z
+    .object({
+      title: z.string().optional().default("Rich Text"),
+      text: z.string().optional().default(""),
+      variables: z.array(richTextVariableSchema).optional().default([]),
+    })
+    .default({}),
+  options: z
+    .object({
+      description: z.string().optional(),
+      filter_by_viewport: z.boolean().optional().default(false),
+      cross_filter: z.boolean().optional().default(false),
     })
     .default({}),
 });
@@ -412,6 +443,32 @@ export const tabsContainerConfigSchema = z.object({
   ]),
 });
 
+export const linksSeparatorTypes = z.enum(["vertical_line", "dot", "dash"]);
+
+export const linksItemSchema = z.object({
+  label: z.string(),
+  url: z.string(),
+});
+
+export const linksElementConfigSchema = z.object({
+  type: z.literal("links"),
+  setup: z
+    .object({
+      title: z.string().optional(),
+      links: z.array(linksItemSchema).default([]),
+    })
+    .default({}),
+  options: z
+    .object({
+      description: z.string().optional(),
+      show_external_icon: z.boolean().optional().default(true),
+      open_in_new_tab: z.boolean().optional().default(true),
+      secondary_text: z.string().optional(),
+      separator: linksSeparatorTypes.optional().default("vertical_line"),
+    })
+    .default({}),
+});
+
 export const configSchemas = z.union([
   informationLayersConfigSchema,
   numbersDataConfigSchema,
@@ -424,6 +481,8 @@ export const configSchemas = z.union([
   dividerElementConfigSchema,
   imageElementConfigSchema,
   tabsContainerConfigSchema,
+  linksElementConfigSchema,
+  richTextDataConfigSchema,
 ]);
 
 export const widgetSchemaMap = {
@@ -438,6 +497,8 @@ export const widgetSchemaMap = {
   divider: dividerElementConfigSchema,
   image: imageElementConfigSchema,
   tabs: tabsContainerConfigSchema,
+  links: linksElementConfigSchema,
+  rich_text: richTextDataConfigSchema,
 };
 
 export type WidgetTypes = z.infer<typeof widgetTypes>;
@@ -456,14 +517,18 @@ export type NumbersDataSchema = z.infer<typeof numbersDataConfigSchema>;
 export type TableDataSchema = z.infer<typeof tableDataConfigSchema>;
 export type FilterDataSchema = z.infer<typeof filterDataConfigSchema>;
 export type FilterLayoutTypes = z.infer<typeof filterLayoutTypes>;
+export type RichTextVariableSchema = z.infer<typeof richTextVariableSchema>;
+export type RichTextDataSchema = z.infer<typeof richTextDataConfigSchema>;
 
 export type WidgetChartConfig = HistogramChartSchema | CategoriesChartSchema | PieChartSchema;
+export type LinksElementSchema = z.infer<typeof linksElementConfigSchema>;
 export type WidgetElementConfig =
   | TextElementSchema
   | DividerElementSchema
   | ImageElementSchema
-  | TabsContainerSchema;
+  | TabsContainerSchema
+  | LinksElementSchema;
 export type WidgetInformationConfig = LayerInformationSchema;
-export type WidgetDataConfig = NumbersDataSchema | TableDataSchema | FilterDataSchema;
+export type WidgetDataConfig = NumbersDataSchema | TableDataSchema | FilterDataSchema | RichTextDataSchema;
 
 export type WidgetConfigSchema = z.infer<typeof configSchemas>;

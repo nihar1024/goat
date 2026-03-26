@@ -51,7 +51,7 @@ export const TableDataWidget = ({
   onConfigChange,
 }: TableDataWidgetProps) => {
   const { t, i18n } = useTranslation("common");
-  const { config, queryParams, layerId } = useChartWidget(rawConfig, tableDataConfigSchema, aggregationStatsQueryParams);
+  const { config, queryParams, cqlFilter, layerId } = useChartWidget(rawConfig, tableDataConfigSchema, aggregationStatsQueryParams);
   const rowsShownSetting = Math.max(1, Math.min(20, Number(config?.options?.page_size ?? 10)));
 
   const queryMode = config?.setup?.query_mode ?? tableQueryModeTypes.Values.builder;
@@ -229,6 +229,11 @@ export const TableDataWidget = ({
       offset: recordsPage * rowsPerPage,
     };
 
+    // Apply cross-filter (built by useChartWidget independently of query schema validation)
+    if (cqlFilter) {
+      params.filter = cqlFilter;
+    }
+
     const configuredSortBy = config?.options?.sort_by;
     const isGroupedOnlySortKey =
       typeof configuredSortBy === "string" &&
@@ -249,6 +254,7 @@ export const TableDataWidget = ({
     isSqlMode,
     rowsPerPage,
     recordsPage,
+    cqlFilter,
     config?.options?.sort_by,
     config?.options?.sorting,
     visibleFields,
@@ -264,8 +270,8 @@ export const TableDataWidget = ({
   const recordsQuerySignature = useMemo(() => {
     const sortBy = config?.options?.sort_by || "";
     const sorting = config?.options?.sorting || "desc";
-    return `${recordsLayerId || ""}|${rowsPerPage}|${sortBy}|${sorting}|${isGroupedMode}|${isSqlMode}`;
-  }, [config?.options?.sort_by, config?.options?.sorting, isGroupedMode, isSqlMode, recordsLayerId, rowsPerPage]);
+    return `${recordsLayerId || ""}|${rowsPerPage}|${sortBy}|${sorting}|${isGroupedMode}|${isSqlMode}|${cqlFilter || ""}`;
+  }, [config?.options?.sort_by, config?.options?.sorting, isGroupedMode, isSqlMode, cqlFilter, recordsLayerId, rowsPerPage]);
 
   useEffect(() => {
     setRecordsPage(0);

@@ -29,6 +29,9 @@ dependencies = [
   "sqlglot>=26.0.0",
 ]
 
+[tool.uv.sources]
+routing = { workspace = true }
+
 [build-system]
 requires = ["uv_build>=0.9.2,<0.10.0"]
 build-backend = "uv_build"

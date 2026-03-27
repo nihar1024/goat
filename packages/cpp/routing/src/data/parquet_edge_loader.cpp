@@ -131,37 +131,7 @@ namespace routing::data
     {
         auto t_total_start = std::chrono::steady_clock::now();
 
-        // Install and load the H3 extension, then compute cell coverage
-        auto install_result = con.Query("INSTALL h3 FROM community");
-        if (install_result->HasError())
-        {
-            throw std::runtime_error(
-                "Failed to install DuckDB H3 extension: " +
-                install_result->GetError());
-        }
-        auto load_result = con.Query("LOAD h3");
-        if (load_result->HasError())
-            throw std::runtime_error(
-                "Failed to load DuckDB H3 extension: " +
-                load_result->GetError());
-
-        // Node geometries are stored as HEXEWKB and need spatial conversion.
-        auto install_spatial_result = con.Query("INSTALL spatial");
-        if (install_spatial_result->HasError())
-        {
-            throw std::runtime_error(
-                "Failed to install DuckDB spatial extension: " +
-                install_spatial_result->GetError());
-        }
-        auto load_spatial_result = con.Query("LOAD spatial");
-        if (load_spatial_result->HasError())
-        {
-            throw std::runtime_error(
-                "Failed to load DuckDB spatial extension: " +
-                load_spatial_result->GetError());
-        }
-
-        // Verify H3 extension is functional
+        // Verify H3 extension is functional.
         auto verify_result = con.Query("SELECT h3_latlng_to_cell(48.0, 11.0, 6)");
         if (verify_result->HasError())
             throw std::runtime_error(

@@ -14,23 +14,6 @@ namespace
 static constexpr char kLoadedEdgesTempTable[] = "routing_loaded_edges_tmp";
 static constexpr char kNetworkFeaturesTempTable[] = "routing_network_features_tmp";
 
-void ensure_spatial_loaded(duckdb::Connection &con)
-{
-    auto install_spatial = con.Query("INSTALL spatial");
-    if (install_spatial->HasError())
-    {
-        throw std::runtime_error("Failed to install DuckDB spatial extension: " +
-                                 install_spatial->GetError());
-    }
-
-    auto load_spatial = con.Query("LOAD spatial");
-    if (load_spatial->HasError())
-    {
-        throw std::runtime_error("Failed to load DuckDB spatial extension: " +
-                                 load_spatial->GetError());
-    }
-}
-
 int64_t count_rows(duckdb::Connection &con, std::string const &table)
 {
     auto result = con.Query("SELECT count(*) FROM " + table);
@@ -63,8 +46,6 @@ int64_t materialize_network_features_table(ReachabilityField const &field,
         throw std::runtime_error("Failed to drop network features temp table: " +
                                  drop_features->GetError());
     }
-
-    ensure_spatial_loaded(con);
 
     auto drop_reached = con.Query("DROP TABLE IF EXISTS reached_edges");
     if (drop_reached->HasError())

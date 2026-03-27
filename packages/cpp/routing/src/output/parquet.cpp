@@ -2,6 +2,7 @@
 
 #include "hexagon_builder.h"
 #include "network_builder.h"
+#include "polygon_builder.h"
 
 #include <duckdb.hpp>
 #include <filesystem>
@@ -108,6 +109,44 @@ void write_hexagonal_grid_parquet(ReachabilityField const &field,
     }
 }
 
+void write_polygon_parquet(ReachabilityField const &field,
+                           RequestConfig const &cfg,
+                           duckdb::Connection &con,
+                           std::string const &output_path)
+{
+    auto const feature_count = materialize_polygon_features_table(field, cfg, con);
+    if (feature_count == 0)
+    {
+        throw std::runtime_error("No reachable polygons found for parquet export.");
+    }
+
+    namespace fs = std::filesystem;
+    fs::path out_path(output_path);
+    if (!out_path.parent_path().empty())
+    {
+        fs::create_directories(out_path.parent_path());
+    }
+
+    std::string escaped_path = sql_escape(out_path.string());
+
+    std::ostringstream sql;
+    sql << "COPY ("
+        << "  SELECT "
+        << "    CAST(row_number() OVER (ORDER BY step_cost) AS INTEGER) AS id, "
+        << "    CAST(ROUND(step_cost) AS INTEGER) AS cost_step, "
+        << "    geometry "
+        << "  FROM " << polygon_features_table_name()
+        << ") TO '" << escaped_path << "' "
+        << "(FORMAT PARQUET, COMPRESSION ZSTD)";
+
+    auto copy_result = con.Query(sql.str());
+    if (copy_result->HasError())
+    {
+        throw std::runtime_error("Polygon parquet export failed: " +
+                                 copy_result->GetError());
+    }
+}
+
 void write_empty_parquet(std::string const &output_path,
                          duckdb::Connection &con)
 {
@@ -149,8 +188,7 @@ void write_parquet_output(ReachabilityField const &field,
         write_network_parquet(field, cfg, con, cfg.output_path);
         return;
     case CatchmentType::Polygon:
-        // Polygon parquet output is intentionally not implemented yet.
-        write_empty_parquet(cfg.output_path, con);
+        write_polygon_parquet(field, cfg, con, cfg.output_path);
         return;
     case CatchmentType::HexagonalGrid:
         write_hexagonal_grid_parquet(field, cfg, con, cfg.output_path);

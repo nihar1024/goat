@@ -170,6 +170,7 @@ export const richTextDataConfigSchema = z.object({
     .object({
       description: z.string().optional(),
       filter_by_viewport: z.boolean().optional().default(false),
+      cross_filter: z.boolean().optional().default(true),
     })
     .default({}),
 });

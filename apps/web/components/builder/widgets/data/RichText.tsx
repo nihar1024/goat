@@ -11,6 +11,7 @@ import type { Editor } from "@tiptap/react";
 import { useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMap } from "react-map-gl/maplibre";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
@@ -21,8 +22,11 @@ import VariableChip from "@/lib/extensions/variable-chip";
 import FontSize from "@/lib/extensions/font-size";
 import LineHeight from "@/lib/extensions/line-height";
 import { formatNumber } from "@/lib/utils/format-number";
+import { getMapExtentCQL } from "@/lib/utils/map/navigate";
 import type { AggregationStatsQueryParams, ProjectLayer } from "@/lib/validations/project";
 import type { RichTextDataSchema, RichTextVariableSchema } from "@/lib/validations/widget";
+
+import { useTemporaryFilters } from "@/hooks/map/DashboardBuilderHooks";
 
 
 import { TipTapEditorContent } from "@/components/builder/widgets/elements/text/Text";
@@ -657,35 +661,93 @@ const RichTextEditable = ({
 /**
  * Headless component that resolves a single variable value via the aggregation API.
  * Renders nothing — just fires the onResolved callback when the value is ready.
+ * Applies cross-filter, viewport filter, and layer base filter — same as chart widgets.
  */
 const VariableResolver: React.FC<{
   variable: RichTextVariableSchema;
   projectLayers: ProjectLayer[];
+  filterByViewport?: boolean;
+  crossFilter?: boolean;
   onResolved: (name: string, value: string | number) => void;
-}> = ({ variable, projectLayers, onResolved }) => {
+}> = ({ variable, projectLayers, filterByViewport, crossFilter = true, onResolved }) => {
   const { i18n } = useTranslation("common");
+  const { map } = useMap();
 
-  // Resolve layer_project_id (numeric) to layer_id (UUID) needed by the aggregation API
-  const layerId = useMemo(() => {
+  // Resolve layer_project_id (numeric) to layer_id (UUID) and get layer object
+  const layer = useMemo(() => {
     if (!variable.layer_project_id) return undefined;
-    const layer = projectLayers.find((l) => l.id === variable.layer_project_id);
-    return layer?.layer_id;
+    return projectLayers.find((l) => l.id === variable.layer_project_id);
   }, [variable.layer_project_id, projectLayers]);
+
+  const layerId = layer?.layer_id;
+
+  // Get layer's base filter and temporary (cross) filters
+  const layerBaseFilter = useMemo(() => {
+    return layer?.query?.cql as Record<string, unknown> | undefined;
+  }, [layer?.query?.cql]);
+
+  const tempFilters = useTemporaryFilters({ layerId: variable.layer_project_id });
+
+  // Build CQL filter combining base filter, cross-filter, and viewport filter
+  const buildFilter = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let cqlQuery: any = layerBaseFilter ? JSON.parse(JSON.stringify(layerBaseFilter)) : undefined;
+
+    if (crossFilter && tempFilters) {
+      const cf = JSON.parse(JSON.stringify(tempFilters));
+      cqlQuery = cqlQuery ? { op: "and", args: [cqlQuery, cf] } : cf;
+    }
+
+    if (filterByViewport && map) {
+      const extentRaw = getMapExtentCQL(map);
+      if (extentRaw) {
+        const extent = JSON.parse(extentRaw);
+        if (cqlQuery) {
+          if (cqlQuery.op === "and" && cqlQuery.args) {
+            cqlQuery.args.push(extent);
+          } else {
+            cqlQuery = { op: "and", args: [cqlQuery, extent] };
+          }
+        } else {
+          cqlQuery = extent;
+        }
+      }
+    }
+
+    return cqlQuery ? JSON.stringify(cqlQuery) : undefined;
+  }, [layerBaseFilter, crossFilter, tempFilters, filterByViewport, map]);
+
+  const [filter, setFilter] = useState(() => buildFilter());
+
+  useEffect(() => {
+    setFilter(buildFilter());
+  }, [buildFilter]);
+
+  // Update on map moves if viewport filtering is enabled
+  useEffect(() => {
+    if (!map || !filterByViewport) return;
+    const onMoveEnd = () => setFilter(buildFilter());
+    map.on("moveend", onMoveEnd);
+    return () => { map.off("moveend", onMoveEnd); };
+  }, [map, filterByViewport, buildFilter]);
 
   const queryParams = useMemo((): AggregationStatsQueryParams | undefined => {
     if (!variable.layer_project_id || !variable.operation_type) return undefined;
+    // operation_value is required for all operations except count
+    if (variable.operation_type !== "count" && !variable.operation_value) return undefined;
     return {
       operation_type: variable.operation_type,
       operation_value: variable.operation_value,
+      query: filter,
     } as AggregationStatsQueryParams;
-  }, [variable.layer_project_id, variable.operation_type, variable.operation_value]);
+  }, [variable.layer_project_id, variable.operation_type, variable.operation_value, filter]);
 
   const { aggregationStats } = useProjectLayerAggregationStats(layerId, queryParams);
 
   useEffect(() => {
     if (aggregationStats?.items?.[0]) {
       const raw = aggregationStats.items[0].operation_value;
-      const formatted = formatNumber(raw, variable.format, i18n.language);
+      const formatted = typeof raw === "string" ? raw : formatNumber(raw, variable.format, i18n.language);
       onResolved(variable.name, formatted);
     }
   }, [aggregationStats, variable.format, variable.name, i18n.language, onResolved]);
@@ -724,6 +786,8 @@ export const RichTextDataWidget = ({
           key={v.id}
           variable={v}
           projectLayers={projectLayers}
+          filterByViewport={rawConfig.options?.filter_by_viewport}
+          crossFilter={rawConfig.options?.cross_filter}
           onResolved={handleVariableResolved}
         />
       ))}

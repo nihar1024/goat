@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { selectProject } from "@/lib/store/layer/selectors";
+import type { Project } from "@/lib/validations/project";
 
 import { useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -35,9 +36,13 @@ function loadGoogleFont(fontName: string) {
 /**
  * Hook that reads the dashboard font setting from the project config,
  * loads the Google Font if needed, and returns the CSS font-family value.
+ *
+ * Accepts an optional project prop (used in the builder where the project
+ * lives in component props rather than the Redux store).
  */
-export function useDashboardFont(): string {
-  const project = useAppSelector(selectProject);
+export function useDashboardFont(projectProp?: Project): string {
+  const storeProject = useAppSelector(selectProject);
+  const project = projectProp ?? storeProject;
   const fontFamily = project?.builder_config?.settings?.font_family || DEFAULT_DASHBOARD_FONT;
   const fontName = extractFontName(fontFamily);
 

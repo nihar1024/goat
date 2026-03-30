@@ -24,7 +24,8 @@ PYBIND11_MODULE(_routing, m)
         .value("Walking", routing::RoutingMode::Walking)
         .value("Bicycle", routing::RoutingMode::Bicycle)
         .value("Pedelec", routing::RoutingMode::Pedelec)
-        .value("Car", routing::RoutingMode::Car);
+        .value("Car", routing::RoutingMode::Car)
+        .value("PublicTransport", routing::RoutingMode::PublicTransport);
 
     py::enum_<routing::CostMode>(m, "CostMode")
         .value("Time", routing::CostMode::Time)
@@ -55,11 +56,14 @@ PYBIND11_MODULE(_routing, m)
         .def_readwrite("steps", &routing::RequestConfig::steps)
         .def_readwrite("speed_km_h", &routing::RequestConfig::speed_km_h)
         .def_readwrite("edge_dir", &routing::RequestConfig::edge_dir)
+        .def_readwrite("timetable_path", &routing::RequestConfig::timetable_path)
         .def_readwrite("output_path", &routing::RequestConfig::output_path)
         .def_readwrite("catchment_type", &routing::RequestConfig::catchment_type)
         .def_readwrite("output_format", &routing::RequestConfig::output_format)
         .def_readwrite("polygon_difference",
-                       &routing::RequestConfig::polygon_difference);
+                       &routing::RequestConfig::polygon_difference)
+        .def_readwrite("departure_time", &routing::RequestConfig::departure_time)
+        .def_readwrite("max_transfers", &routing::RequestConfig::max_transfers);
 
     m.def("compute_catchment",
           [elapsed_ms](routing::RequestConfig const &config)

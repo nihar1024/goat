@@ -43,6 +43,25 @@ namespace routing::input
         if (cfg.output_format == OutputFormat::Parquet && cfg.output_path.empty())
             throw std::invalid_argument(
                 "output_path is required when output_format is Parquet");
+
+        if (cfg.mode == RoutingMode::PublicTransport)
+        {
+            if (cfg.timetable_path.empty())
+                throw std::invalid_argument(
+                    "timetable_path is required for PublicTransport mode");
+            if (cfg.departure_time <= 0)
+                throw std::invalid_argument(
+                    "departure_time (unix minutes) must be set for PublicTransport mode");
+            if (cfg.speed_km_h <= 0)
+                throw std::invalid_argument(
+                    "speed_km_h (walk speed) is required for PublicTransport mode");
+            if (cfg.cost_mode != CostMode::Time)
+                throw std::invalid_argument(
+                    "PublicTransport mode only supports CostMode::Time");
+            if (cfg.max_traveltime > 120)
+                throw std::invalid_argument(
+                    "PublicTransport max_traveltime cannot exceed 120 min");
+        }
     }
 
 } // namespace routing::input

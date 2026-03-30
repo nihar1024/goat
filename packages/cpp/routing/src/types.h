@@ -43,6 +43,7 @@ namespace routing
         Bicycle,
         Pedelec,
         Car,
+        PublicTransport,
     };
 
     enum class CostMode : uint8_t
@@ -73,11 +74,13 @@ namespace routing
         int steps;
         double speed_km_h;
         std::string edge_dir;
-        std::string gtfs_path;
+        std::string timetable_path;  // nigiri binary (PT mode)
         std::string output_path;
         CatchmentType catchment_type = CatchmentType::Network;
         OutputFormat output_format = OutputFormat::GeoJSON;
         bool polygon_difference;
+        int64_t departure_time = 0;  // unix minutes since epoch (PT mode)
+        int max_transfers = 5;       // RAPTOR transfer limit (PT mode)
     };
 
     struct AdjEntry

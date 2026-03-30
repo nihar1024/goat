@@ -24,6 +24,12 @@ namespace routing::input
             return {"motorway", "primary", "secondary", "tertiary",
                     "residential", "living_street", "trunk", "unclassified",
                     "service", "track"};
+        case RoutingMode::PublicTransport:
+            // Access/egress legs are on foot
+            return {"primary", "secondary", "tertiary", "residential",
+                    "living_street", "trunk", "unclassified", "service",
+                    "pedestrian", "footway", "steps", "path",
+                    "track", "cycleway", "bridleway", "unknown"};
         }
         return {};
     }
@@ -32,9 +38,13 @@ namespace routing::input
     {
         if (cfg.cost_mode == CostMode::Time)
         {
-            double speed_km_h = (cfg.mode == RoutingMode::Car)
-                                    ? kCarBufferSpeedKmH
-                                    : cfg.speed_km_h;
+            double speed_km_h;
+            if (cfg.mode == RoutingMode::Car)
+                speed_km_h = kCarBufferSpeedKmH;
+            else if (cfg.mode == RoutingMode::PublicTransport)
+                speed_km_h = cfg.speed_km_h;  // walk speed only — transit range irrelevant
+            else
+                speed_km_h = cfg.speed_km_h;
             return cfg.max_traveltime * (speed_km_h * 1000.0 / 60.0);
         }
         return cfg.max_traveltime; // distance mode: value is already in meters

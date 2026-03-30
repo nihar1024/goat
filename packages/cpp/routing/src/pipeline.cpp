@@ -10,6 +10,7 @@
 #include "kernel/snap.h"
 #include "output/geojson.h"
 #include "output/parquet.h"
+#include "pt/pt_pipeline.h"
 
 #include <chrono>
 #include <duckdb.hpp>
@@ -150,6 +151,10 @@ namespace routing
             duckdb::Connection &con)
         {
             validate_request(cfg);
+
+            if (cfg.mode == RoutingMode::PublicTransport)
+                return pt::run_pt_pipeline(cfg, con);
+
             auto classes = select_valid_classes(cfg);
             auto edges = load_filtered_edges(cfg, con, classes);
             compute_edge_costs(edges, cfg);

@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import time
+from datetime import date, datetime, time as time_of_day, timedelta, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self, Sequence
@@ -846,7 +847,7 @@ class CatchmentAreaTool(AnalysisTool):
     This tool computes isochrones for various transport modes:
     - Active mobility: walking, bicycle, pedelec (via local routing backend)
     - Motorized: car (via local routing backend)
-    - Public transport: bus, tram, rail, etc. (via R5)
+    - Public transport: bus, tram, rail, etc. (via local routing backend)
 
     Routing URL and authorization can be provided either:
     1. In CatchmentAreaToolParams (per-request)
@@ -889,6 +890,7 @@ class CatchmentAreaTool(AnalysisTool):
     DEFAULT_RETRIES = 60
     DEFAULT_RETRY_INTERVAL = 2
     DEFAULT_ROUTING_EDGE_DIR = "/app/apps/routing/cache/street_network/hive"
+    DEFAULT_ROUTING_TIMETABLE_PATH = "/app/data/gtfs/latest_de.bin"
 
     def __init__(
         self: Self,
@@ -931,6 +933,45 @@ class CatchmentAreaTool(AnalysisTool):
         self._routing_edge_dir = getattr(
             settings.routing, "street_network_dir", self.DEFAULT_ROUTING_EDGE_DIR
         )
+        self._routing_timetable_path = getattr(
+            settings.routing,
+            "pt_timetable_path",
+            self.DEFAULT_ROUTING_TIMETABLE_PATH,
+        )
+        self._routing_pt_max_transfers = int(
+            getattr(settings.routing, "pt_max_transfers", 4)
+        )
+
+    @staticmethod
+    def _seconds_from_time_value(value: time_of_day | int) -> int:
+        """Convert a time-of-day value to seconds from midnight."""
+        if hasattr(value, "hour"):
+            return int(value.hour * 3600 + value.minute * 60 + value.second)
+        return int(value)
+
+    def _pt_departure_unix_minutes(self: Self, params: CatchmentAreaToolParams) -> int:
+        """Build deterministic unix-minute departure timestamp for local PT routing."""
+        weekday_value = "weekday"
+        from_seconds = 25200  # 07:00 default
+
+        if params.time_window:
+            weekday_value = (
+                params.time_window.weekday.value
+                if hasattr(params.time_window.weekday, "value")
+                else str(params.time_window.weekday)
+            )
+            from_seconds = self._seconds_from_time_value(params.time_window.from_time)
+
+        weekday_dates = {
+            "weekday": date(2026, 3, 10),
+            "saturday": date(2026, 3, 14),
+            "sunday": date(2026, 3, 15),
+        }
+        anchor_date = weekday_dates.get(weekday_value, weekday_dates["weekday"])
+        departure_dt = datetime.combine(
+            anchor_date, time_of_day.min, tzinfo=timezone.utc
+        ) + timedelta(seconds=from_seconds)
+        return int(departure_dt.timestamp() // 60)
 
     @staticmethod
     def _enum_value(value: Any) -> Any:
@@ -990,6 +1031,7 @@ class CatchmentAreaTool(AnalysisTool):
             "bicycle": routing.RoutingMode.Bicycle,
             "pedelec": routing.RoutingMode.Pedelec,
             "car": routing.RoutingMode.Car,
+            "pt": routing.RoutingMode.PublicTransport,
         }
         catchment_map = {
             CatchmentAreaType.polygon.value: routing.CatchmentType.Polygon,
@@ -1004,7 +1046,7 @@ class CatchmentAreaTool(AnalysisTool):
 
         if routing_type not in mode_map:
             raise ValueError(
-                "Local routing backend supports only walking, bicycle, pedelec, and car modes"
+                "Local routing backend supports walking, bicycle, pedelec, car, and pt modes"
             )
 
         cfg = routing.RequestConfig()
@@ -1034,6 +1076,12 @@ class CatchmentAreaTool(AnalysisTool):
             else routing.OutputFormat.Parquet
         )
         cfg.polygon_difference = bool(params.polygon_difference)
+
+        if routing_type == CatchmentAreaRoutingMode.pt.value:
+            cfg.timetable_path = str(self._routing_timetable_path)
+            cfg.departure_time = int(self._pt_departure_unix_minutes(params))
+            cfg.max_transfers = self._routing_pt_max_transfers
+
         return cfg
 
     def _save_geojson_payload(self: Self, geojson_payload: str, output_path: str) -> Path:
@@ -1119,8 +1167,12 @@ class CatchmentAreaTool(AnalysisTool):
         )
 
         if routing_mode == CatchmentAreaRoutingMode.pt.value:
-            result_gdf = loop.run_until_complete(self._compute_pt_catchment(params))
-            path = self._save_geodataframe(result_gdf, params.output_path)
+            path = loop.run_until_complete(
+                self._compute_routing_catchment(
+                    params,
+                    CatchmentAreaRoutingMode.pt.value,
+                )
+            )
             return [(path, metadata)]
 
         if routing_mode == CatchmentAreaRoutingMode.car.value:
@@ -1211,7 +1263,7 @@ class CatchmentAreaTool(AnalysisTool):
         # Extract time window settings
         from_time = 25200  # 07:00 default
         to_time = 32400  # 09:00 default
-        weekday_date = "2025-09-16"  # Weekday (Tuesday) default - matches core
+        weekday_date = "2026-03-10"  # Weekday (Tuesday) default
 
         if params.time_window:
             # Convert time to seconds if needed
@@ -1231,13 +1283,12 @@ class CatchmentAreaTool(AnalysisTool):
             else:
                 to_time = params.time_window.to_time
 
-            # Map day type to sample dates (R5 needs actual dates)
-            # These must match the GTFS validity period in the R5 bundle
-            # Using September 2025 dates (same as core app)
+            # Map day type to sample dates within the GTFS timetable validity period.
+            # Chosen from first half of 2026, avoiding German public holidays.
             weekday_dates = {
-                "weekday": "2025-09-16",  # Tuesday
-                "saturday": "2025-09-20",  # Saturday
-                "sunday": "2025-09-21",  # Sunday
+                "weekday": "2026-03-10",  # Tuesday
+                "saturday": "2026-03-14",  # Saturday
+                "sunday": "2026-03-15",  # Sunday
             }
             weekday_date = weekday_dates.get(params.time_window.weekday, weekday_date)
 

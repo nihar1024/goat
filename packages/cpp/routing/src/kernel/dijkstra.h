@@ -78,4 +78,55 @@ namespace routing::kernel
         return dist;
     }
 
+    // Multi-source Dijkstra where each source starts with a pre-set cost.
+    // Used for egress: destination stops seed the search at their transit cost.
+    inline std::vector<double>
+    dijkstra(std::vector<std::vector<AdjEntry>> const &adj,
+             std::vector<std::pair<int32_t, double>> const &starts_with_costs,
+             double travel_budget, bool use_distance)
+    {
+        int32_t n = static_cast<int32_t>(adj.size());
+        constexpr double kInf = std::numeric_limits<double>::infinity();
+        std::vector<double> dist(n, kInf);
+        std::vector<bool> visited(n, false);
+
+        using PQEntry = std::pair<double, int32_t>;
+        std::priority_queue<PQEntry, std::vector<PQEntry>, std::greater<>> pq;
+
+        for (auto const &[s, initial_cost] : starts_with_costs)
+        {
+            if (s >= 0 && s < n && initial_cost < travel_budget)
+            {
+                if (initial_cost < dist[s])
+                {
+                    dist[s] = initial_cost;
+                    pq.push({initial_cost, s});
+                }
+            }
+        }
+
+        while (!pq.empty())
+        {
+            auto [d, u] = pq.top();
+            pq.pop();
+            if (d >= travel_budget)
+                break;
+            if (visited[u])
+                continue;
+            visited[u] = true;
+
+            for (auto const &[v, w] : adj[u])
+            {
+                double edge_cost = use_distance ? w : (w / 60.0);
+                double new_dist  = dist[u] + edge_cost;
+                if (new_dist < dist[v])
+                {
+                    dist[v] = new_dist;
+                    pq.push({new_dist, v});
+                }
+            }
+        }
+        return dist;
+    }
+
 } // namespace routing::kernel

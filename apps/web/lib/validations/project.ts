@@ -266,7 +266,7 @@ export const aggregationStatsResponseSchema = z.object({
   items: z.array(
     z.object({
       grouped_value: z.string(),
-      operation_value: z.number(),
+      operation_value: z.union([z.number(), z.string()]),
     })
   ),
   total_items: z.number(),

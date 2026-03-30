@@ -69,7 +69,7 @@ const PublicProjectLayout = ({
 
   // Apply dashboard language override only for public/shared view
   const dashboardLanguage = project?.builder_config?.settings?.language;
-  const dashboardFont = useDashboardFont();
+  const dashboardFont = useDashboardFont(project);
   useEffect(() => {
     if (viewOnly && dashboardLanguage && dashboardLanguage !== "auto" && dashboardLanguage !== i18n.language) {
       const prevLang = i18n.language;

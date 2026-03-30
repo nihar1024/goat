@@ -120,21 +120,28 @@ export const CategoriesChartWidget = ({ config: rawConfig }: { config: Categorie
   );
 
   // Data handling
-  const originalData = useMemo(() => aggregationStats?.items || [], [aggregationStats]);
+  const originalData = useMemo(
+    () =>
+      (aggregationStats?.items || []).map((item) => ({
+        ...item,
+        operation_value: typeof item.operation_value === "number" ? item.operation_value : Number(item.operation_value) || 0,
+      })),
+    [aggregationStats]
+  );
 
   // Only show highlight visualization when there's actually filtered data
   const showHighlight = useMemo(() => {
     if (!isHighlightMode || !selectedStats || !aggregationStats) return false;
     // Calculate total counts to check if there's any filtering
     const totalMain = originalData.reduce((sum, item) => sum + item.operation_value, 0);
-    const totalSelected = (selectedStats.items || []).reduce((sum, item) => sum + item.operation_value, 0);
+    const totalSelected = (selectedStats.items || []).reduce((sum, item) => sum + Number(item.operation_value), 0);
     return totalSelected < totalMain;
   }, [isHighlightMode, selectedStats, aggregationStats, originalData]);
 
   // Create a map of selected counts by category
   const selectedCountMap = useMemo(() => {
     if (!showHighlight || !selectedStats?.items) return new Map<string, number>();
-    return new Map(selectedStats.items.map((item) => [item.grouped_value, item.operation_value]));
+    return new Map(selectedStats.items.map((item) => [item.grouped_value, Number(item.operation_value)]));
   }, [showHighlight, selectedStats]);
 
   // Apply custom order if defined

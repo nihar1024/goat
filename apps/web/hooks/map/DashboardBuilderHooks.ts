@@ -18,7 +18,7 @@ interface UseLayerFiltersParams {
  * Returns a combined CQL filter from temporary filters in the store,
  * merging per-layer filters and additional target filters for the specified layer.
  */
-function useTemporaryFilters({ layerId }: UseLayerFiltersParams) {
+export function useTemporaryFilters({ layerId }: UseLayerFiltersParams) {
   const { temporaryFilters } = useAppSelector((state) => state.map);
 
   return useMemo(() => {

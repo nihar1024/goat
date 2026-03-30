@@ -88,7 +88,14 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
     effectiveQueryParams as AggregationStatsQueryParams
   );
 
-  const originalData = useMemo(() => aggregationStats?.items || [], [aggregationStats]);
+  const originalData = useMemo(
+    () =>
+      (aggregationStats?.items || []).map((item) => ({
+        ...item,
+        operation_value: typeof item.operation_value === "number" ? item.operation_value : Number(item.operation_value) || 0,
+      })),
+    [aggregationStats]
+  );
 
   // Apply custom order if defined
   const orderedData = useMemo(() => {

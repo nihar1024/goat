@@ -305,15 +305,20 @@ export const FilterDataWidget = ({ id, config: rawConfig, projectLayers }: Filte
     };
 
     // Zoom to selection if enabled and we have geometry data,
-    // but only when the user actually changed their selection (not on unrelated re-renders)
+    // but only when the user actually changed their selection (not on unrelated re-renders).
+    // Only update the ref after a successful zoom so we retry when geometryData arrives late.
     const selectionChanged =
       JSON.stringify(prevSelectedValuesRef.current) !== JSON.stringify(selectedValues);
-    if (selectionChanged && geometryData?.features?.length && rawConfig?.options?.zoom_to_selection && map) {
-      zoomToFeatureCollection(map, geometryData as GeoJSON.FeatureCollection, {
-        duration: 200,
-      });
+    if (selectionChanged && rawConfig?.options?.zoom_to_selection) {
+      if (geometryData?.features?.length && map) {
+        zoomToFeatureCollection(map, geometryData as GeoJSON.FeatureCollection, {
+          duration: 200,
+        });
+        prevSelectedValuesRef.current = selectedValues;
+      }
+    } else if (!rawConfig?.options?.zoom_to_selection) {
+      prevSelectedValuesRef.current = selectedValues;
     }
-    prevSelectedValuesRef.current = selectedValues;
 
     if (!areFiltersEqual(existingFilter, newFilter)) {
       if (existingFilter) {

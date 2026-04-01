@@ -34,7 +34,8 @@ PYBIND11_MODULE(_routing, m)
     py::enum_<routing::CatchmentType>(m, "CatchmentType")
         .value("Polygon", routing::CatchmentType::Polygon)
         .value("Network", routing::CatchmentType::Network)
-        .value("HexagonalGrid", routing::CatchmentType::HexagonalGrid);
+        .value("HexagonalGrid", routing::CatchmentType::HexagonalGrid)
+        .value("PointGrid", routing::CatchmentType::PointGrid);
 
     py::enum_<routing::OutputFormat>(m, "OutputFormat")
         .value("GeoJSON", routing::OutputFormat::GeoJSON)
@@ -78,6 +79,9 @@ PYBIND11_MODULE(_routing, m)
         // Transit mode filter, departure window, and explicit cutoffs
         .def_readwrite("transit_modes", &routing::RequestConfig::transit_modes)
         .def_readwrite("departure_window", &routing::RequestConfig::departure_window)
+        // PointGrid settings
+        .def_readwrite("grid_points_path", &routing::RequestConfig::grid_points_path)
+        .def_readwrite("grid_snap_distance", &routing::RequestConfig::grid_snap_distance)
         .def_readwrite("cutoffs", &routing::RequestConfig::cutoffs);
 
     m.def("compute_catchment",

@@ -2,6 +2,7 @@
 
 #include "hexagon_builder.h"
 #include "network_builder.h"
+#include "point_grid_builder.h"
 #include "polygon_builder.h"
 
 #include "../geometry/grid_surface_builder.h"
@@ -253,6 +254,46 @@ void write_grid_contour_parquet(ReachabilityField const &field,
                                  copy_result->GetError());
 }
 
+void write_point_grid_parquet(ReachabilityField const &field,
+                              RequestConfig const &cfg,
+                              duckdb::Connection &con,
+                              std::string const &output_path)
+{
+    auto const feature_count = materialize_point_grid_features_table(field, cfg, con);
+    if (feature_count == 0)
+    {
+        throw std::runtime_error("No reachable grid points for parquet export.");
+    }
+
+    namespace fs = std::filesystem;
+    fs::path out_path(output_path);
+    if (!out_path.parent_path().empty())
+    {
+        fs::create_directories(out_path.parent_path());
+    }
+
+    std::string escaped_path = sql_escape(out_path.string());
+
+    std::ostringstream sql;
+    sql << "COPY ("
+        << "  SELECT "
+        << "    CAST(id AS INTEGER) AS id, "
+        << "    CAST(ROUND(cost) AS DOUBLE) AS cost, "
+        << "    CAST(ROUND(step_cost) AS INTEGER) AS cost_step, "
+        << "    geometry "
+        << "  FROM " << point_grid_features_table_name() << " "
+        << "  ORDER BY id"
+        << ") TO '" << escaped_path << "' "
+        << "(FORMAT PARQUET, COMPRESSION ZSTD)";
+
+    auto copy_result = con.Query(sql.str());
+    if (copy_result->HasError())
+    {
+        throw std::runtime_error("Point grid parquet export failed: " +
+                                 copy_result->GetError());
+    }
+}
+
 void write_empty_parquet(std::string const &output_path,
                          duckdb::Connection &con)
 {
@@ -305,6 +346,9 @@ void write_parquet_output(ReachabilityField const &field,
         return;
     case CatchmentType::HexagonalGrid:
         write_hexagonal_grid_parquet(field, cfg, con, cfg.output_path);
+        return;
+    case CatchmentType::PointGrid:
+        write_point_grid_parquet(field, cfg, con, cfg.output_path);
         return;
     default:
         write_empty_parquet(cfg.output_path, con);

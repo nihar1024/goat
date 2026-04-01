@@ -57,6 +57,7 @@ namespace routing
         Polygon,
         Network,
         HexagonalGrid,
+        PointGrid,
     };
 
     enum class OutputFormat : uint8_t
@@ -108,6 +109,11 @@ namespace routing
         // Runs RAPTOR for each minute in [departure_time, departure_time + window)
         // and keeps the best (minimum) arrival cost per destination stop.
         int departure_window = 0;
+
+        // PointGrid: path to parquet file with grid points (id, x_3857, y_3857)
+        std::string grid_points_path;
+        // PointGrid: max snapping distance in meters (0 → default 500m)
+        double grid_snap_distance = 0.0;
 
         // Explicit output step thresholds (empty → derive from max_traveltime / steps)
         std::vector<int> cutoffs;

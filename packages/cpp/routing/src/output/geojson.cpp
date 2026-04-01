@@ -2,6 +2,7 @@
 
 #include "hexagon_builder.h"
 #include "network_builder.h"
+#include "point_grid_builder.h"
 #include "polygon_builder.h"
 
 #include "../geometry/grid_surface_builder.h"
@@ -80,6 +81,29 @@ std::string build_hexagon_geojson(duckdb::Connection &con)
         << "  ORDER BY h3_h3_to_string(cell)"
         << ") t";
     return run_single_value_query(con, sql.str(), "Hexagon GeoJSON export failed: ");
+}
+
+std::string build_point_grid_geojson(duckdb::Connection &con)
+{
+    std::ostringstream sql;
+    sql << "SELECT CAST(json_object("
+        << "  'type', 'FeatureCollection', "
+        << "  'features', COALESCE(json_group_array(feature), CAST('[]' AS JSON))"
+        << ") AS VARCHAR) "
+        << "FROM ("
+        << "  SELECT json_object("
+        << "    'type', 'Feature', "
+        << "    'geometry', CAST(ST_AsGeoJSON(geometry) AS JSON), "
+        << "    'properties', json_object("
+        << "      'id', id, "
+        << "      'cost', cost, "
+        << "      'step_cost', step_cost"
+        << "    )"
+        << "  ) AS feature "
+        << "  FROM " << point_grid_features_table_name() << " "
+        << "  ORDER BY id"
+        << ") t";
+    return run_single_value_query(con, sql.str(), "Point grid GeoJSON export failed: ");
 }
 
 std::string build_polygon_geojson(duckdb::Connection &con)
@@ -249,6 +273,15 @@ std::string build_geojson_output(ReachabilityField const &field,
             return empty_feature_collection();
         }
         return build_hexagon_geojson(con);
+    }
+    case CatchmentType::PointGrid:
+    {
+        auto const feature_count = materialize_point_grid_features_table(field, cfg, con);
+        if (feature_count == 0)
+        {
+            return empty_feature_collection();
+        }
+        return build_point_grid_geojson(con);
     }
     default:
         return empty_feature_collection();

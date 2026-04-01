@@ -434,6 +434,7 @@ const RichTextEditable = ({
 
   // Toolbar positioning
   const containerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0, width: 0 });
 
   useEffect(() => {
@@ -442,9 +443,17 @@ const RichTextEditable = ({
     const updatePosition = () => {
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
+        const centeredLeft = rect.left + rect.width / 2;
+        const toolbarWidth = toolbarRef.current?.offsetWidth ?? 0;
+        const halfToolbar = toolbarWidth / 2;
+        const padding = 8;
+        // Clamp so toolbar stays within viewport
+        const clampedLeft = halfToolbar > 0
+          ? Math.max(halfToolbar + padding, Math.min(centeredLeft, window.innerWidth - halfToolbar - padding))
+          : centeredLeft;
         setToolbarPosition({
           top: rect.top - 8,
-          left: rect.left + rect.width / 2,
+          left: clampedLeft,
           width: rect.width,
         });
       }
@@ -472,6 +481,7 @@ const RichTextEditable = ({
       {toolbarOpen && (
         <Portal>
           <Box
+            ref={toolbarRef}
             className="tiptap-toolbar"
             onMouseDown={(e) => {
               e.stopPropagation();

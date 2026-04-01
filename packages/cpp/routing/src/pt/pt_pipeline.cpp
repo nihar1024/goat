@@ -95,7 +95,6 @@ namespace routing::pt
             (cfg.access_speed_km_h > 0.0 &&
              cfg.access_speed_km_h != cfg.egress_speed_km_h))
         {
-            // Different mode/speed: recompute costs on a copy for access leg
             RequestConfig access_cfg = cfg;
             access_cfg.mode = cfg.access_mode;
             if (cfg.access_speed_km_h > 0.0)

@@ -4,7 +4,11 @@
 #include "network_builder.h"
 #include "polygon_builder.h"
 
+#include "../geometry/grid_surface_builder.h"
+#include "../geometry/jsolines_processor.h"
+
 #include <duckdb.hpp>
+#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -97,6 +101,114 @@ std::string build_polygon_geojson(duckdb::Connection &con)
     return run_single_value_query(con, sql.str(), "Polygon GeoJSON export failed: ");
 }
 
+std::string build_grid_contour_geojson(ReachabilityField const &field,
+                                       RequestConfig const &cfg)
+{
+    // 1. Build the cost surface grid
+    auto grid = geometry::build_cost_grid(field, cfg);
+    if (grid.surface.empty() || grid.width < 2 || grid.height < 2)
+        return empty_feature_collection();
+
+    // 2. Build cutoff list
+    std::vector<double> cutoffs;
+    if (!cfg.cutoffs.empty())
+    {
+        cutoffs.reserve(cfg.cutoffs.size());
+        for (int c : cfg.cutoffs)
+            cutoffs.push_back(static_cast<double>(c));
+    }
+    else if (cfg.steps > 0)
+    {
+        double step_size = cfg.cost_budget() / static_cast<double>(cfg.steps);
+        for (int i = 1; i <= cfg.steps; ++i)
+            cutoffs.push_back(step_size * static_cast<double>(i));
+    }
+    else
+    {
+        cutoffs.push_back(cfg.cost_budget());
+    }
+
+    // 3. Run marching squares
+    auto features = geometry::build_jsolines_wkt(
+        grid.surface, grid.width, grid.height,
+        grid.west, grid.north, grid.step_x, grid.step_y,
+        cutoffs);
+
+    if (features.empty())
+        return empty_feature_collection();
+
+    // 4. Convert WKT multipolygons to GeoJSON, applying polygon_difference
+    //    if requested. The jsolines features are cumulative (each cutoff
+    //    contains all area up to that cost), so difference = current - previous.
+    //    We use DuckDB for the ST_Difference + GeoJSON conversion.
+    duckdb::DuckDB db(nullptr);
+    duckdb::Connection con(db);
+    con.Query("INSTALL spatial; LOAD spatial;");
+
+    std::ostringstream values;
+    values << std::setprecision(15);
+    for (size_t i = 0; i < features.size(); ++i)
+    {
+        if (i > 0) values << ",";
+        values << "(" << features[i].step_cost << ", "
+               << "ST_GeomFromText('" << features[i].multipolygon_wkt << "'))";
+    }
+
+    // Simplification tolerance in degrees.  The jsolines output is in WGS84;
+    // at zoom 10 one pixel ≈ 0.001°.  Half a pixel smooths the staircase
+    // while preserving the overall shape.
+    constexpr double kSimplifyTolerance = 0.0005;
+
+    std::ostringstream sql;
+    sql << "WITH raw_input(step_cost, geom) AS (VALUES " << values.str() << "), "
+        << "raw AS (SELECT step_cost, "
+        << "  ST_Simplify(ST_MakeValid(geom), " << kSimplifyTolerance << ") AS geom "
+        << "  FROM raw_input) ";
+
+    if (cfg.polygon_difference)
+    {
+        sql << ", bands AS ("
+            << "  SELECT r.step_cost, "
+            << "    CASE WHEN p.geom IS NULL THEN r.geom "
+            << "         ELSE ST_MakeValid(ST_Difference("
+            << "           ST_MakeValid(r.geom), ST_MakeValid(p.geom))) END AS geom "
+            << "  FROM raw r "
+            << "  LEFT JOIN raw p ON p.step_cost = ("
+            << "    SELECT MAX(x.step_cost) FROM raw x WHERE x.step_cost < r.step_cost"
+            << "  )"
+            << ") ";
+    }
+
+    sql << "SELECT CAST(json_object("
+        << "  'type', 'FeatureCollection', "
+        << "  'features', COALESCE(json_group_array(feature), CAST('[]' AS JSON))"
+        << ") AS VARCHAR) "
+        << "FROM ("
+        << "  SELECT json_object("
+        << "    'type', 'Feature', "
+        << "    'geometry', CAST(ST_AsGeoJSON(geom) AS JSON), "
+        << "    'properties', json_object('step_cost', step_cost)"
+        << "  ) AS feature "
+        << "  FROM ("
+        << "    SELECT step_cost, "
+        << "      CASE WHEN ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON') THEN geom "
+        << "           WHEN ST_GeometryType(geom) = 'GEOMETRYCOLLECTION' "
+        << "             THEN ST_CollectionExtract(geom, 3) "
+        << "           ELSE NULL END AS geom "
+        << "    FROM " << (cfg.polygon_difference ? "bands" : "raw")
+        << "  ) sub "
+        << "  WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom) "
+        << "  ORDER BY step_cost"
+        << ") t";
+
+    auto result = con.Query(sql.str());
+    if (result->HasError())
+        throw std::runtime_error("Grid contour GeoJSON failed: " + result->GetError());
+    if (result->RowCount() == 0 || result->GetValue(0, 0).IsNull())
+        return empty_feature_collection();
+    return result->GetValue(0, 0).GetValue<std::string>();
+}
+
 } // namespace
 
 std::string build_geojson_output(ReachabilityField const &field,
@@ -116,6 +228,12 @@ std::string build_geojson_output(ReachabilityField const &field,
     }
     case CatchmentType::Polygon:
     {
+        // Active mobility and PT use grid contour (marching squares) for
+        // tighter, network-faithful polygons. Car uses concave hull.
+        if (cfg.mode != RoutingMode::Car)
+        {
+            return build_grid_contour_geojson(field, cfg);
+        }
         auto const feature_count = materialize_polygon_features_table(field, cfg, con);
         if (feature_count == 0)
         {

@@ -65,6 +65,7 @@ namespace routing
         Parquet,
     };
 
+
     struct RequestConfig
     {
         std::vector<Point3857> starting_points;

@@ -40,6 +40,7 @@ PYBIND11_MODULE(_routing, m)
         .value("GeoJSON", routing::OutputFormat::GeoJSON)
         .value("Parquet", routing::OutputFormat::Parquet);
 
+
     py::class_<routing::Point3857>(m, "Point3857")
         .def(py::init<double, double>())
         .def_readwrite("x", &routing::Point3857::x)

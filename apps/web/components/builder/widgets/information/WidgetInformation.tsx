@@ -38,7 +38,7 @@ const WidgetInformation: React.FC<WidgetInformationProps> = ({
         />
       )}
       {config.options?.description && (
-        <Typography variant="body2" align="left">
+        <Typography variant="body2" align="left" sx={{ mt: 1 }}>
           {config.options.description}
         </Typography>
       )}

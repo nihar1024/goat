@@ -3,6 +3,7 @@
 
 # Superpowers brainstorm sessions
 .superpowers/
+docs/superpowers/
 
 # Playwright
 test-results/

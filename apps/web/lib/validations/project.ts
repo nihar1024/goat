@@ -65,6 +65,13 @@ export const builderPanelConfigSchema = z.object({
     })
     .optional()
     .default({ alignItems: "start" }),
+  size: z
+    .object({
+      width: z.number().min(200).max(800).optional().default(300),
+      height: z.number().min(150).max(600).optional().default(300),
+    })
+    .optional()
+    .default({}),
 });
 
 export const builderPanelSchema = z.object({
@@ -74,6 +81,8 @@ export const builderPanelSchema = z.object({
   config: builderPanelConfigSchema.optional().default({}),
   widgets: z.array(builderWidgetSchema).optional().default([]),
 });
+
+export const dashboardLanguageEnum = z.enum(["auto", "en", "de"]);
 
 export const builderConfigSchema = z.object({
   settings: z.object({
@@ -87,6 +96,8 @@ export const builderConfigSchema = z.object({
     toolbar: z.boolean().default(true),
     project_info: z.boolean().default(false),
     project_info_content: z.string().default(""),
+    language: dashboardLanguageEnum.default("auto"),
+    font_family: z.string().default("Mulish, sans-serif"),
   }),
   interface: z.preprocess(
     // Convert empty arrays to `undefined` to trigger the default, todo: remove this when dashboard is completed
@@ -254,8 +265,8 @@ export const aggregationStatsQueryParams = z
 export const aggregationStatsResponseSchema = z.object({
   items: z.array(
     z.object({
-      grouped_value: z.string(),
-      operation_value: z.number(),
+      grouped_value: z.string().nullable(),
+      operation_value: z.union([z.number(), z.string()]),
     })
   ),
   total_items: z.number(),

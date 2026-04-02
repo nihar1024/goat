@@ -90,6 +90,7 @@ const TabChildWidget: React.FC<{
     if ((informationTypes.options as readonly string[]).includes(config.type)) {
       return (
         <WidgetInformation
+          widgetId={childWidget.id}
           config={config as WidgetInformationConfig}
           projectLayers={projectLayers}
           projectLayerGroups={projectLayerGroups}
@@ -104,6 +105,12 @@ const TabChildWidget: React.FC<{
           config={config as WidgetDataConfig}
           projectLayers={projectLayers}
           viewOnly={viewOnly}
+          onConfigChange={(nextConfig) => {
+            onNestedWidgetUpdate?.({
+              ...childWidget,
+              config: nextConfig,
+            });
+          }}
         />
       );
     }
@@ -142,6 +149,9 @@ const TabChildWidget: React.FC<{
         borderRadius: 1,
         border: isSelected ? `2px solid ${theme.palette.primary.main}` : "2px solid transparent",
         transition: "border-color 0.2s ease-in-out",
+        // Override parent's pointerEvents: "none" (from ElementWrapper when tabs widget is deselected)
+        // so that child widgets inside tabs remain interactive
+        pointerEvents: "all",
         "&:hover": !viewOnly
           ? {
               borderColor: theme.palette.primary.light,

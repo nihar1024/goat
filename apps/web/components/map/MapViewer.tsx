@@ -4,6 +4,7 @@ import type { Theme } from "@mui/material";
 import { Box, useMediaQuery, useTheme } from "@mui/material";
 import maplibregl from "maplibre-gl";
 import { useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Map, type MapLayerMouseEvent, type MapRef, type ViewState } from "react-map-gl/maplibre";
 import type { ViewStateChangeEvent } from "react-map-gl/maplibre";
 import { useTranslation } from "react-i18next";
@@ -12,7 +13,9 @@ import { v4 } from "uuid";
 import { PATTERN_IMAGES } from "@/lib/constants/pattern-images";
 import { setCurrentZoom, setHighlightedFeature, setPopupInfo } from "@/lib/store/map/slice";
 import { addOrUpdateMarkerImages, addPatternImages } from "@/lib/transformers/map-image";
+import { formatNumber } from "@/lib/utils/format-number";
 import createPulsingDot from "@/lib/utils/map/pulsing-dot-image";
+import type { FormatNumberTypes } from "@/lib/validations/common";
 import type { LayerInteractionFieldListContent } from "@/lib/validations/layer";
 import {
   type FeatureLayerPointProperties,
@@ -86,6 +89,7 @@ const MapViewer: React.FC<MapProps> = ({
 }) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
+  const { i18n } = useTranslation("common");
   const dispatch = useAppDispatch();
   const isGetInfoActive = useAppSelector((state) => state.map.isMapGetInfoActive);
   const mapCursor = useAppSelector((state) => state.map.mapCursor);
@@ -184,9 +188,16 @@ const MapViewer: React.FC<MapProps> = ({
         const propertyLabels = interactionFieldLists?.reduce(
           (acc, content) => {
             content.attributes.forEach((attr) => {
-              if (attr.label) {
-                acc[attr.label] = interactiveFeature.properties[attr.name] || "";
+              const displayName = attr.label || attr.name;
+              const rawValue = interactiveFeature.properties[attr.name];
+              let displayValue = rawValue != null ? String(rawValue) : "";
+              if (attr.type === "number" && rawValue != null && !isNaN(Number(rawValue))) {
+                const formatted = attr.format
+                  ? formatNumber(Number(rawValue), attr.format as FormatNumberTypes, i18n.language)
+                  : String(rawValue);
+                displayValue = `${attr.prefix || ""}${formatted}${attr.suffix || ""}`;
               }
+              acc[displayName] = displayValue;
             });
             return acc;
           },

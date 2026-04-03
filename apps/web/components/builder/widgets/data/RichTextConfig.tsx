@@ -1,5 +1,5 @@
 import { Add } from "@mui/icons-material";
-import { Box, Button, Checkbox, FormControlLabel, Stack, Typography } from "@mui/material";
+import { Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
@@ -137,7 +137,7 @@ const RichTextConfig = ({ config, onChange }: RichTextConfigProps) => {
       <SectionOptions
         active
         baseOptions={
-          <Box>
+          <Stack spacing={1}>
             <FormControlLabel
               control={
                 <Checkbox
@@ -149,7 +149,29 @@ const RichTextConfig = ({ config, onChange }: RichTextConfigProps) => {
               }
               label={<Typography variant="body2">{t("filter_viewport")}</Typography>}
             />
-          </Box>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  color="primary"
+                  checked={!!options.hide_when_no_filter}
+                  onChange={(e) => handleOptionChange("hide_when_no_filter", e.target.checked)}
+                />
+              }
+              label={<Typography variant="body2">{t("hide_when_no_filter", { defaultValue: "Hide when no filter" })}</Typography>}
+            />
+            {!options.hide_when_no_filter && (
+              <TextField
+                size="small"
+                fullWidth
+                label={t("no_filter_text", { defaultValue: "Fallback text" })}
+                placeholder={t("no_filter_text_placeholder", { defaultValue: "e.g. Select a city to see details" })}
+                value={options.no_filter_text || ""}
+                onChange={(e) => handleOptionChange("no_filter_text", e.target.value)}
+                helperText={t("no_filter_text_helper", { defaultValue: "Shown when no filter is active" })}
+              />
+            )}
+          </Stack>
         }
       />
     </Stack>

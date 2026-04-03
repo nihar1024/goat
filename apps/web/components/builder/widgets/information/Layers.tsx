@@ -37,7 +37,12 @@ export const LayerInformationWidget = ({
   const dispatch = useAppDispatch();
   const { projectId } = useParams() as { projectId: string };
   const { mutate: mutateProjectLayers } = useFilteredProjectLayers(projectId);
-  const currentZoom = useAppSelector((state) => (viewOnly ? state.map.currentZoom : undefined));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outOfZoomBehaviorRaw = ((configProp.options as Record<string, any>)?.out_of_zoom_behavior) ?? "hide";
+  // Only subscribe to currentZoom when we need it for filtering (hide mode)
+  const currentZoom = useAppSelector((state) =>
+    viewOnly && outOfZoomBehaviorRaw === "hide" ? state.map.currentZoom : undefined
+  );
   const [searchText, setSearchText] = useState("");
 
   // In edit mode, read the latest config from Redux for instant updates — but ONLY for THIS widget
@@ -65,6 +70,8 @@ export const LayerInformationWidget = ({
   const legendHiddenLayers: number[] = opts?.legend_hidden_layers ?? [];
   const downloadableLayers: number[] = opts?.downloadable_layers ?? [];
 
+  const outOfZoomBehavior = opts?.out_of_zoom_behavior ?? "hide";
+
   const filteredLayers = useMemo(() => {
     const layersToUse = viewOnly ? reduxProjectLayers : editProjectLayers || [];
     return layersToUse.filter((layer) => {
@@ -73,10 +80,11 @@ export const LayerInformationWidget = ({
       if (excludedLayers.includes(layer.id)) return false;
       // Hidden from legend by "Show in legend" toggle
       if (legendHiddenLayers.includes(layer.id)) return false;
-      if (viewOnly && currentZoom !== undefined) {
+      // Hide layers outside zoom range (only when behavior is "hide")
+      if (viewOnly && outOfZoomBehavior === "hide" && currentZoom !== undefined) {
         const minZoom = layer.properties?.min_zoom;
         const maxZoom = layer.properties?.max_zoom;
-        if (minZoom && maxZoom) {
+        if (minZoom !== undefined && maxZoom !== undefined) {
           return currentZoom >= minZoom && currentZoom <= maxZoom;
         }
       }
@@ -85,7 +93,7 @@ export const LayerInformationWidget = ({
       }
       return true;
     });
-  }, [viewOnly, reduxProjectLayers, editProjectLayers, currentZoom, searchText, excludedLayers, legendHiddenLayers]);
+  }, [viewOnly, reduxProjectLayers, editProjectLayers, currentZoom, searchText, excludedLayers, legendHiddenLayers, outOfZoomBehavior]);
 
   // Filter out groups that have no visible layers
   const allGroups = viewOnly ? reduxProjectLayerGroups : editProjectLayerGroups || [];

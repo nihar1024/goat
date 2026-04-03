@@ -173,17 +173,15 @@ const TruncatedLabel = ({ label }: { label: string }) => {
   const [isTooltipEnabled, setIsTooltipEnabled] = useState(false);
 
   useEffect(() => {
-    const compareSize = () => {
-      if (textRef.current) {
-        setIsTooltipEnabled(
-          textRef.current.scrollWidth > textRef.current.clientWidth ||
-            textRef.current.scrollHeight > textRef.current.clientHeight,
-        );
-      }
-    };
-    compareSize();
-    window.addEventListener("resize", compareSize);
-    return () => window.removeEventListener("resize", compareSize);
+    const el = textRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      setIsTooltipEnabled(
+        el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight,
+      );
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [label]);
 
   return (

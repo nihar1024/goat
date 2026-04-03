@@ -86,6 +86,7 @@ export const layersLayoutStyleTypes = z.enum(["tree", "tabs"]);
 export const layersToggleStyleTypes = z.enum(["eye", "checkbox", "switch"]);
 export const layersTogglePositionTypes = z.enum(["left", "right"]);
 export const layersMoreOptionsStyleTypes = z.enum(["compact", "direct_actions"]);
+export const layersOutOfZoomBehaviorTypes = z.enum(["hide", "dim"]);
 export const informationLayersConfigSchema = informationConfigSchema.extend({
   type: z.literal("layers"),
   setup: informationConfigSetupBaseSchema.extend({}).default({}),
@@ -93,6 +94,7 @@ export const informationLayersConfigSchema = informationConfigSchema.extend({
     .extend({
       show_search: z.boolean().optional().default(false),
       open_legend_by_default: z.boolean().optional().default(false),
+      out_of_zoom_behavior: layersOutOfZoomBehaviorTypes.optional().default("hide"),
       layout_style: layersLayoutStyleTypes.optional().default("tree"),
       toggle_style: layersToggleStyleTypes.optional().default("eye"),
       toggle_position: layersTogglePositionTypes.optional().default("right"),
@@ -171,6 +173,8 @@ export const richTextDataConfigSchema = z.object({
       description: z.string().optional(),
       filter_by_viewport: z.boolean().optional().default(false),
       cross_filter: z.boolean().optional().default(true),
+      hide_when_no_filter: z.boolean().optional().default(false),
+      no_filter_text: z.string().optional().default(""),
     })
     .default({}),
 });

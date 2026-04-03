@@ -1886,5 +1886,9 @@
   "zoom_to_feature": "Zoom to feature",
   "zoom_to_selection": "Zoom to selection",
   "zoom_to_starting_point": "Zoom to starting point",
-  "zoom_visibility": "Zoom Visibility"
+  "zoom_behavior": "Zoom Behavior",
+  "zoom_visibility": "Zoom Visibility",
+  "out_of_zoom_behavior": "Out of zoom range",
+  "out_of_zoom_hide": "Hide layers",
+  "out_of_zoom_dim": "Show greyed out"
 }

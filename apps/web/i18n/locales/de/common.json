@@ -1886,5 +1886,9 @@
   "zoom_to_feature": "Zum Objekt zoomen",
   "zoom_to_selection": "Zoomen zur Auswahl",
   "zoom_to_starting_point": "Zoomen zum Startpunkt",
-  "zoom_visibility": "Zoom-Sichtbarkeit"
+  "zoom_behavior": "Zoom-Verhalten",
+  "zoom_visibility": "Zoom-Sichtbarkeit",
+  "out_of_zoom_behavior": "Außerhalb des Zoombereichs",
+  "out_of_zoom_hide": "Ebenen ausblenden",
+  "out_of_zoom_dim": "Ausgegraut anzeigen"
 }

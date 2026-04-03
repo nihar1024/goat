@@ -18,6 +18,7 @@ import type { ReportLayoutConfig } from "@/lib/validations/reportLayout";
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useAtlasFeatures } from "@/hooks/reports/useAtlasFeatures";
+import { usePrintConfig } from "@/hooks/reports/usePrintConfig";
 import { useProjectLayerGroups } from "@/lib/api/projects";
 
 import { ElementContentRenderer } from "@/components/reports/elements/renderers/ElementRenderers";
@@ -97,6 +98,9 @@ export default function PrintPage() {
   }, [allProjectLayers, projectLayerGroups]);
   const [isReady, setIsReady] = useState(false);
 
+  // Print config (atlas limits from backend)
+  const { atlasMaxPages } = usePrintConfig();
+
   // Atlas support - fetch features and generate pages
   const {
     atlasResult,
@@ -107,6 +111,7 @@ export default function PrintPage() {
     atlasConfig: reportLayout?.config?.atlas,
     projectLayers,
     currentPageIndex: atlasPageIndex,
+    atlasMaxPages,
   });
 
   // Check if atlas is enabled

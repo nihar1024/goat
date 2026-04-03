@@ -36,7 +36,6 @@ import {
 } from "@/lib/api/reportLayouts";
 import { useLayerQueryables } from "@/lib/api/layers";
 import { useProjectInitialViewState } from "@/lib/api/projects";
-import { ATLAS_MAX_PAGES } from "@/lib/print/atlas-utils";
 import { PAGE_SIZES, type PageSize } from "@/lib/print/units";
 import type { Project, ProjectLayer } from "@/lib/validations/project";
 import type {
@@ -49,6 +48,7 @@ import type {
 import type { SelectorItem } from "@/types/map/common";
 
 import { useAtlasFeatures } from "@/hooks/reports/useAtlasFeatures";
+import { usePrintConfig } from "@/hooks/reports/usePrintConfig";
 import { type ExportFormat, useExportReport } from "@/hooks/useExportReport";
 
 import MoreMenu from "@/components/common/PopperMenu";
@@ -663,11 +663,15 @@ const ReportsConfigPanel: React.FC<ReportsConfigPanelProps> = ({
   // Print hook (server-side PDF generation via Playwright)
   const { isBusy: isPrinting, exportReport } = useExportReport();
 
+  // Print config (atlas limits from backend)
+  const { atlasMaxPages } = usePrintConfig();
+
   // Get atlas info for print job and UI display
   const { totalPages: atlasTotalPages, wasTruncated: atlasWasTruncated, totalFeatureCount: atlasTotalFeatureCount } =
     useAtlasFeatures({
       atlasConfig: selectedReport?.config?.atlas,
       projectLayers,
+      atlasMaxPages,
     });
 
   // Example preview for the active template
@@ -1090,7 +1094,7 @@ const ReportsConfigPanel: React.FC<ReportsConfigPanelProps> = ({
                       <Alert severity="warning" sx={{ py: 0, "& .MuiAlert-message": { py: 0.5 } }}>
                         <Typography variant="caption">
                           {t("atlas_page_limit_warning", {
-                            max: ATLAS_MAX_PAGES,
+                            max: atlasMaxPages,
                             count: atlasTotalFeatureCount,
                           })}
                           {" "}

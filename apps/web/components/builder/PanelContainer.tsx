@@ -384,7 +384,7 @@ export const Container: React.FC<ContainerProps> = ({
                           width: "100%",
                           minWidth: 0,
                         }),
-                        ...(shouldFillAvailableHeight(widget) && {
+                        ...(panel.orientation === "horizontal" && shouldFillAvailableHeight(widget) && {
                           flex: 1,
                           minHeight: 0,
                           overflow: "hidden",
@@ -437,7 +437,7 @@ export const Container: React.FC<ContainerProps> = ({
                         width: "100%",
                         minWidth: 0,
                       }),
-                      ...(shouldFillAvailableHeight(widget) && {
+                      ...(panel.orientation === "horizontal" && shouldFillAvailableHeight(widget) && {
                         flex: 1,
                         minHeight: 0,
                         overflow: "hidden",

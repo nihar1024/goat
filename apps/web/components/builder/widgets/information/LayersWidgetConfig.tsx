@@ -18,6 +18,7 @@ import { Icon, ICON_NAME } from "@p4b/ui/components/Icon";
 import { useProjectLayerGroups, useProjectLayers } from "@/lib/api/projects";
 import { SYSTEM_LAYERS_IDS } from "@/lib/constants";
 import type { LayerInformationSchema } from "@/lib/validations/widget";
+import { layersOutOfZoomBehaviorTypes } from "@/lib/validations/widget";
 import type { Marker } from "@/lib/validations/layer";
 
 import type { SelectorItem } from "@/types/map/common";
@@ -131,6 +132,11 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
     { value: "left", label: t("left") },
     { value: "right", label: t("right") },
   ];
+
+  const outOfZoomBehaviorItems: SelectorItem[] = layersOutOfZoomBehaviorTypes.options.map((value) => ({
+    value,
+    label: t(`out_of_zoom_${value}`),
+  }));
 
   const moreOptionsStyleItems: SelectorItem[] = [
     { value: "compact", label: t("compact_mode"), icon: ICON_NAME.MORE_VERT },
@@ -294,6 +300,20 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
               />
             </Stack>
           </>
+        }
+      />
+
+      {/* Zoom Behavior */}
+      <SectionHeader active alwaysActive label={t("zoom_behavior")} icon={ICON_NAME.ZOOM_IN} disableAdvanceOptions />
+      <SectionOptions
+        active
+        baseOptions={
+          <Selector
+            selectedItems={outOfZoomBehaviorItems.find((i) => i.value === (options.out_of_zoom_behavior || "hide"))}
+            setSelectedItems={(item: SelectorItem) => handleOptionChange("out_of_zoom_behavior", item.value)}
+            items={outOfZoomBehaviorItems}
+            label={t("out_of_zoom_behavior")}
+          />
         }
       />
 

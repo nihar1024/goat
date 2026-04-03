@@ -1,4 +1,4 @@
-import { Box, Divider, Paper, Portal, Stack, styled } from "@mui/material";
+import { Box, Divider, Paper, Portal, Stack, Typography, styled } from "@mui/material";
 import { debounce } from "@mui/material/utils";
 import Color from "@tiptap/extension-color";
 import FontFamily from "@tiptap/extension-font-family";
@@ -27,6 +27,7 @@ import type { AggregationStatsQueryParams, ProjectLayer } from "@/lib/validation
 import type { RichTextDataSchema, RichTextVariableSchema } from "@/lib/validations/widget";
 
 import { useTemporaryFilters } from "@/hooks/map/DashboardBuilderHooks";
+import { useAppSelector } from "@/hooks/store/ContextHooks";
 
 
 import { TipTapEditorContent } from "@/components/builder/widgets/elements/text/Text";
@@ -775,18 +776,63 @@ export const RichTextDataWidget = ({
   viewOnly,
   onConfigChange,
 }: RichTextDataWidgetProps) => {
+  const { t } = useTranslation("common");
   const [resolvedValues, setResolvedValues] = useState<Record<string, string | number | null>>({});
   const variables = rawConfig.setup?.variables ?? [];
+  const options = rawConfig.options ?? {};
+
+  // Check if any variable's layer has active cross-filters
+  const { temporaryFilters } = useAppSelector((state) => state.map);
+  const variableLayerIds = useMemo(
+    () => variables.map((v) => v.layer_project_id).filter(Boolean),
+    [variables]
+  );
+  const hasActiveFilters = useMemo(() => {
+    if (variableLayerIds.length === 0) return false;
+    return temporaryFilters.some(
+      (f) =>
+        variableLayerIds.includes(f.layer_id) ||
+        f.additional_targets?.some((t) => variableLayerIds.includes(t.layer_id))
+    );
+  }, [temporaryFilters, variableLayerIds]);
 
   const handleVariableResolved = useCallback(
     (name: string, value: string | number) => {
       setResolvedValues((prev) => {
-        if (prev[name] === value) return prev; // Avoid unnecessary re-renders
+        if (prev[name] === value) return prev;
         return { ...prev, [name]: value };
       });
     },
     []
   );
+
+  // Determine what to show when no filter is active
+  const showNoFilterState = !hasActiveFilters && variables.length > 0;
+  const shouldHide = showNoFilterState && !!options.hide_when_no_filter;
+  const fallbackText = showNoFilterState && !shouldHide ? options.no_filter_text : undefined;
+
+  // In public view, the WidgetWrapper handles hiding entirely.
+  // In builder, show a placeholder so the widget is still visible and configurable.
+  if (shouldHide) {
+    return (
+      <Box
+        sx={{
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: 1,
+          opacity: 0.5,
+          border: "1px dashed",
+          borderColor: "divider",
+          borderRadius: 1,
+        }}>
+        <Typography variant="body2" color="text.secondary" fontStyle="italic">
+          {t("hidden_when_no_filter", { defaultValue: "Hidden until a filter is applied" })}
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <>
@@ -796,13 +842,19 @@ export const RichTextDataWidget = ({
           key={v.id}
           variable={v}
           projectLayers={projectLayers}
-          filterByViewport={rawConfig.options?.filter_by_viewport}
-          crossFilter={rawConfig.options?.cross_filter}
+          filterByViewport={options.filter_by_viewport}
+          crossFilter={options.cross_filter}
           onResolved={handleVariableResolved}
         />
       ))}
 
-      {viewOnly ? (
+      {fallbackText ? (
+        <Box sx={{ height: "100%", display: "flex", alignItems: "center", p: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {fallbackText}
+          </Typography>
+        </Box>
+      ) : viewOnly ? (
         <RichTextPreviewResolved config={rawConfig} resolvedValues={resolvedValues} />
       ) : (
         <RichTextEditable config={rawConfig} onConfigChange={onConfigChange} resolvedValues={resolvedValues} />

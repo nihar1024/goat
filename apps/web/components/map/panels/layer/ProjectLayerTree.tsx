@@ -450,7 +450,27 @@ export const ProjectLayerTree = ({
   }, [projectLayers, projectLayerGroups]);
 
   useEffect(() => {
-    if (treeData) setItems(formatApiDataForDnd(treeData));
+    if (treeData) {
+      setItems((prevItems) => {
+        const newItems = formatApiDataForDnd(treeData);
+        if (prevItems.length === 0) return newItems;
+        // For items that already existed, preserve their collapsed state.
+        // Newly appearing layer items (e.g. inside a group that was just toggled visible)
+        // are expanded so their legends are immediately visible.
+        const prevById = new Map(prevItems.map((item) => [item.id, item]));
+        return newItems.map((item) => {
+          const prev = prevById.get(item.id);
+          if (prev) {
+            return { ...item, collapsed: prev.collapsed };
+          }
+          // New layer items: expand legend so attribute-based styling is shown
+          if (!item.isGroup) {
+            return { ...item, collapsed: false };
+          }
+          return item;
+        });
+      });
+    }
   }, [treeData]);
 
   const treeSelectedIds = useMemo(() => {

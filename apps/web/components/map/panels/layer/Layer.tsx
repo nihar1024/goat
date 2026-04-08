@@ -41,7 +41,9 @@ import { setActiveLayer } from "@/lib/store/layer/slice";
 import {
   setActiveLeftPanel,
   setActiveRightPanel,
+  setDataPanelLayerId,
   setEditingScenario,
+  setIsDataPanelOpen,
   setSelectedScenarioLayer,
 } from "@/lib/store/map/slice";
 import { zoomToProjectLayer } from "@/lib/utils/map/navigate";
@@ -297,6 +299,7 @@ const LayerPanel = ({ projectId }: PanelProps) => {
   const [previousRightPanel, setPreviousRightPanel] = useState<MapSidebarItemID | undefined>(undefined);
   const activeLayerId = useAppSelector((state) => state.layers.activeLayerId);
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
   const selectedScenarioLayer = useAppSelector((state) => state.map.selectedScenarioLayer);
   const { scenarios } = useProjectScenarios(projectId);
   const { project, mutate: mutateProject } = useProject(projectId);
@@ -671,7 +674,12 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                                   );
                                 }
                               } else if (menuItem.id === ContentActions.TABLE) {
-                                openMoreMenu(menuItem, layer);
+                                if (mapMode === "data") {
+                                  dispatch(setDataPanelLayerId(layer.id));
+                                  dispatch(setIsDataPanelOpen(true));
+                                } else {
+                                  openMoreMenu(menuItem, layer);
+                                }
                               } else {
                                 openMoreMenu(menuItem, layer);
                               }

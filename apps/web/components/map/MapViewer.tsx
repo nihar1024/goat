@@ -257,6 +257,8 @@ const MapViewer: React.FC<MapProps> = ({
 
   // Store ref to last dispatched zoom to avoid unnecessary Redux updates
   const lastDispatchedZoomRef = useRef<number | undefined>(undefined);
+  const pendingZoomRef = useRef<number | undefined>(undefined);
+  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMapLoad = useCallback(() => {
     if (mapRef?.current) {
@@ -317,8 +319,18 @@ const MapViewer: React.FC<MapProps> = ({
         // This prevents re-renders of components subscribed to currentZoom (like LayerTree)
         const roundedZoom = Math.round(zoom * 10) / 10;
         if (lastDispatchedZoomRef.current !== roundedZoom) {
-          lastDispatchedZoomRef.current = roundedZoom;
-          dispatch(setCurrentZoom(roundedZoom));
+          // Debounce the Redux dispatch — zoom visibility dimming in the layer tree
+          // doesn't need real-time updates during zoom animation
+          pendingZoomRef.current = roundedZoom;
+          if (zoomDebounceRef.current) {
+            clearTimeout(zoomDebounceRef.current);
+          }
+          zoomDebounceRef.current = setTimeout(() => {
+            if (pendingZoomRef.current !== undefined) {
+              lastDispatchedZoomRef.current = pendingZoomRef.current;
+              dispatch(setCurrentZoom(pendingZoomRef.current));
+            }
+          }, 150);
         }
       }
     },

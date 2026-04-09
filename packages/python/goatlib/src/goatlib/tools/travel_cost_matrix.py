@@ -460,7 +460,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
             COPY (
                 SELECT
                     d.* EXCLUDE (_dest_idx),
-                    m.min_cost as travel_cost
+                    m.avg_cost as travel_cost
                 FROM (
                     SELECT *, ROW_NUMBER() OVER () - 1 AS _dest_idx
                     FROM read_parquet('{dest_layer_parquet}')
@@ -468,7 +468,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                 LEFT JOIN (
                     SELECT
                         destination_id,
-                        MIN(cost) as min_cost
+                        AVG(cost) as avg_cost
                     FROM read_parquet('{matrix_path}')
                     WHERE cost IS NOT NULL
                     GROUP BY destination_id

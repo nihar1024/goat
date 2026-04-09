@@ -27,12 +27,23 @@ from goatlib.analysis.schemas.travel_cost_matrix import (
     Weekday,
 )
 from goatlib.analysis.schemas.ui import (
+    SECTION_ROUTING,
     UISection,
     ui_field,
     ui_sections,
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
+from goatlib.tools.catchment_area_v2 import (
+    ACCESS_EGRESS_MODE_ICONS,
+    ACCESS_EGRESS_MODE_LABELS,
+    COST_TYPE_ICONS,
+    COST_TYPE_LABELS,
+    PT_MODE_ICONS,
+    PT_MODE_LABELS,
+    ROUTING_MODE_ICONS,
+    ROUTING_MODE_LABELS,
+)
 from goatlib.tools.schemas import ToolInputBase, ToolOutputBase, get_default_layer_name
 
 logger = logging.getLogger(__name__)
@@ -43,15 +54,16 @@ logger = logging.getLogger(__name__)
 
 SECTION_INPUT = UISection(
     id="input",
-    order=1,
+    order=5,
     icon="layers",
     label="Input",
     label_de="Eingabe",
+    depends_on={"routing_mode": {"$ne": None}},
 )
 
 SECTION_CONFIGURATION = UISection(
     id="configuration",
-    order=2,
+    order=3,
     icon="settings",
     label_key="configuration",
     depends_on={"routing_mode": {"$ne": None}},
@@ -61,78 +73,10 @@ SECTION_RESULT = UISection(
     id="result",
     order=7,
     icon="save",
-    label="Result Layer",
+    label="Result layer",
     label_de="Ergebnisebene",
     depends_on={"routing_mode": {"$ne": None}},
 )
-
-# =========================================================================
-# Label Mappings
-# =========================================================================
-
-ROUTING_MODE_LABELS: dict[str, str] = {
-    "walking": "routing_modes.walk",
-    "bicycle": "routing_modes.bicycle",
-    "pedelec": "routing_modes.pedelec",
-    "car": "routing_modes.car",
-    "pt": "routing_modes.pt",
-}
-
-ROUTING_MODE_ICONS: dict[str, str] = {
-    "walking": "run",
-    "bicycle": "bicycle",
-    "pedelec": "pedelec",
-    "car": "car",
-    "pt": "bus",
-}
-
-PT_MODE_ICONS: dict[str, str] = {
-    "bus": "bus",
-    "tram": "tram",
-    "rail": "rail",
-    "subway": "subway",
-    "ferry": "ferry",
-    "cable_car": "cable-car",
-    "gondola": "gondola",
-    "funicular": "funicular",
-}
-
-PT_MODE_LABELS: dict[str, str] = {
-    "bus": "routing_modes.bus",
-    "tram": "routing_modes.tram",
-    "rail": "routing_modes.rail",
-    "subway": "routing_modes.subway",
-    "ferry": "routing_modes.ferry",
-    "cable_car": "routing_modes.cable_car",
-    "gondola": "routing_modes.gondola",
-    "funicular": "routing_modes.funicular",
-}
-
-ACCESS_EGRESS_MODE_LABELS: dict[str, str] = {
-    "walk": "routing_modes.walk",
-    "bicycle": "routing_modes.bicycle",
-    "pedelec": "routing_modes.pedelec",
-    "car": "routing_modes.car",
-}
-
-ACCESS_EGRESS_MODE_ICONS: dict[str, str] = {
-    "walk": "run",
-    "bicycle": "bicycle",
-    "pedelec": "pedelec",
-    "car": "car",
-}
-
-COST_TYPE_LABELS: dict[str, str] = {
-    "time": "enums.measure_type.time",
-    "distance": "enums.measure_type.distance",
-}
-
-COST_TYPE_ICONS: dict[str, str] = {
-    "time": "clock",
-    "distance": "ruler-horizontal",
-}
-
-SPEED_LABELS: dict[str, str] = {str(i): f"{i} Km/h" for i in range(1, 26)}
 
 
 # =========================================================================
@@ -150,6 +94,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     model_config = {
         "json_schema_extra": ui_sections(
             SECTION_INPUT,
+            SECTION_ROUTING,
             SECTION_CONFIGURATION,
             SECTION_RESULT,
         )
@@ -171,8 +116,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="result",
             field_order=1,
-            label="Destinations",
-            label_de="Zielpunkte",
+            label="Destinations layer name",
+            label_de="Name der Zielpunkte-Ebene",
             widget_options={
                 "default_en": "Destinations",
                 "default_de": "Zielpunkte",
@@ -186,8 +131,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="result",
             field_order=2,
-            label="Travel Cost Matrix",
-            label_de="Reisekostenmatrix",
+            label="Matrix layer name",
+            label_de="Name der Matrixebene",
             widget_options={
                 "default_en": "Travel Cost Matrix",
                 "default_de": "Reisekostenmatrix",
@@ -226,60 +171,191 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     )
 
     # =========================================================================
-    # Configuration Section
+    # Routing Section
     # =========================================================================
 
     routing_mode: RoutingMode = Field(
         default=RoutingMode.walking,
         description="Transport mode for routing.",
         json_schema_extra=ui_field(
-            section="configuration",
+            section="routing",
             field_order=1,
+            label_key="routing_mode",
             enum_icons=ROUTING_MODE_ICONS,
             enum_labels=ROUTING_MODE_LABELS,
         ),
     )
+
+    pt_modes: list[PTMode] | None = Field(
+        default=list(PTMode),
+        description="Public transport modes to include.",
+        json_schema_extra=ui_field(
+            section="routing",
+            field_order=2,
+            label="Modes",
+            label_de="Modi",
+            enum_icons=PT_MODE_ICONS,
+            enum_labels=PT_MODE_LABELS,
+            inline_group="pt_routing",
+            inline_flex="3 0 0",
+            visible_when={"routing_mode": "pt"},
+        ),
+    )
+
+    pt_max_transfers: int = Field(
+        default=5,
+        description="Maximum number of transit transfers.",
+        json_schema_extra=ui_field(
+            section="routing",
+            field_order=3,
+            label="Transfers",
+            label_de="Umstiege",
+            inline_group="pt_routing",
+            inline_flex="1 0 0",
+            visible_when={"routing_mode": "pt"},
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Max transfers must be between 0 and 10",
+                    "max": 10,
+                    "min": 0,
+                },
+            },
+        ),
+    )
+
+    # =========================================================================
+    # Configuration Section
+    # =========================================================================
 
     cost_type: CostType = Field(
         default=CostType.time,
         description="Measure travel cost by time or distance.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=2,
-            label="Travel cost type",
-            label_de="Reisekostentyp",
+            field_order=1,
+            label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
+            inline_group="cost_config",
+            visible_when={
+                "routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}
+            },
         ),
     )
 
-    max_cost: float = Field(
-        default=30.0,
-        gt=0,
-        description="Maximum cost budget. Pairs beyond this get null cost.",
+    # Time budget — active mobility
+    max_cost_time_active: int = Field(
+        default=15,
+        description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=3,
-            label="Travel cost limit",
-            label_de="Reisekostenlimit",
+            field_order=2,
+            label_key="limit",
+            inline_group="cost_config",
+            inline_flex="1 0 0",
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Active mobility travel time must be between 1 and 45 minutes",
+                    "max": 45,
+                    "min": 1,
+                },
+            },
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
+                    {"cost_type": "time"},
+                ]
+            },
+        ),
+    )
+
+    # Time budget — car
+    max_cost_time_car: int = Field(
+        default=30,
+        description="Maximum travel time in minutes.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label_key="limit",
+            inline_group="cost_config",
+            inline_flex="1 0 0",
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Car travel time must be between 1 and 90 minutes",
+                    "max": 90,
+                    "min": 1,
+                },
+            },
+            visible_when={
+                "$and": [
+                    {"routing_mode": "car"},
+                    {"cost_type": "time"},
+                ]
+            },
+        ),
+    )
+
+    # Time budget — PT (always time-based, no cost_type selector)
+    max_cost_time_pt: int = Field(
+        default=30,
+        description="Maximum travel time in minutes.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label="Travel time limit",
+            label_de="Reisezeitlimit",
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "PT travel time must be between 1 and 90 minutes",
+                    "max": 90,
+                    "min": 1,
+                },
+            },
+            visible_when={"routing_mode": "pt"},
+        ),
+    )
+
+    # Distance budget
+    max_cost_distance: int = Field(
+        default=500,
+        description="Maximum distance in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label_key="limit",
+            inline_group="cost_config",
+            inline_flex="1 0 0",
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Distance must be between 50 and 20,000 meters",
+                    "max": 20000,
+                    "min": 50,
+                },
+            },
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"cost_type": "distance"},
+                ]
+            },
         ),
     )
 
     speed: float = Field(
-        default=5.0,
-        ge=1.0,
-        le=50.0,
+        default=5,
         description="Travel speed in km/h.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=4,
+            field_order=3,
             label_key="speed",
-            enum_labels=SPEED_LABELS,
             visible_when={
-                "$and": [
-                    {"cost_type": "time"},
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                ]
+                "routing_mode": {"$in": ["walking", "bicycle", "pedelec"]},
+                "cost_type": "time",
             },
             widget_options={
                 "default_by_field": {
@@ -294,29 +370,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # =========================================================================
-    # PT Configuration
-    # =========================================================================
-
-    pt_modes: list[PTMode] | None = Field(
-        default=list(PTMode),
-        description="Public transport modes to include.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=5,
-            label_key="routing_pt_mode",
-            enum_icons=PT_MODE_ICONS,
-            enum_labels=PT_MODE_LABELS,
-            visible_when={"routing_mode": "pt"},
-        ),
-    )
-
+    # PT time window
     pt_day: Weekday = Field(
         default=Weekday.weekday,
         description="Day type for PT schedule.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=6,
+            field_order=5,
             label="Day",
             label_de="Tag",
             visible_when={"routing_mode": "pt"},
@@ -328,10 +388,12 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="PT window start (seconds from midnight).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=7,
-            label="Departure from",
-            label_de="Abfahrt von",
+            field_order=6,
+            label="Start time",
+            label_de="Startzeit",
             widget="time-picker",
+            inline_group="pt_time_window",
+            inline_flex="1 0 0",
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -341,10 +403,27 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="PT window end (seconds from midnight).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=8,
-            label="Departure to",
-            label_de="Abfahrt bis",
+            field_order=7,
+            label="End time",
+            label_de="Endzeit",
             widget="time-picker",
+            inline_group="pt_time_window",
+            inline_flex="1 0 0",
+            visible_when={"routing_mode": "pt"},
+        ),
+    )
+
+    # =========================================================================
+    # Advanced Options (inline toggle within Configuration)
+    # =========================================================================
+
+    show_advanced: bool = Field(
+        default=False,
+        description="Show advanced configuration options.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=10,
+            label_key="advanced_options",
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -354,12 +433,34 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="Mode to reach transit stops.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=9,
+            field_order=20,
             label="Access mode",
             label_de="Zugangsmodus",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
-            visible_when={"routing_mode": "pt"},
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
+        ),
+    )
+
+    pt_access_speed: float = Field(
+        default=0.0,
+        description="Access leg speed in km/h (0 = use default speed).",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=21,
+            label="Access speed (km/h)",
+            label_de="Zugangsgeschwindigkeit (km/h)",
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
         ),
     )
 
@@ -368,28 +469,46 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="Mode from transit stops to destination.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=10,
+            field_order=22,
             label="Egress mode",
             label_de="Abgangsmodus",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
-            visible_when={"routing_mode": "pt"},
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
         ),
     )
 
-    pt_max_transfers: int = Field(
-        default=5,
-        ge=0,
-        le=10,
-        description="Maximum number of transit transfers.",
+    pt_egress_speed: float = Field(
+        default=0.0,
+        description="Egress leg speed in km/h (0 = use default speed).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=11,
-            label="Max transfers",
-            label_de="Max. Umstiege",
-            visible_when={"routing_mode": "pt"},
+            field_order=23,
+            label="Egress speed (km/h)",
+            label_de="Abgangsgeschwindigkeit (km/h)",
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
         ),
     )
+
+    def resolve_max_cost(self: Self) -> float:
+        """Resolve the effective max_cost from mode-specific UI fields."""
+        if self.cost_type == CostType.distance:
+            return float(self.max_cost_distance)
+        if self.routing_mode == RoutingMode.pt:
+            return float(self.max_cost_time_pt)
+        if self.routing_mode == RoutingMode.car:
+            return float(self.max_cost_time_car)
+        return float(self.max_cost_time_active)
 
 
 # =========================================================================
@@ -448,11 +567,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         dest_layer_parquet: Path,
         output_path: Path,
     ) -> None:
-        """Join min travel cost onto the original destination layer.
-
-        Preserves all original columns + geometry from the destination layer,
-        adds a 'cost' column with the minimum cost from any origin.
-        """
+        """Join min travel cost onto the original destination layer."""
         con = duckdb.connect()
         con.execute("INSTALL spatial; LOAD spatial;")
 
@@ -514,6 +629,8 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                 to_time=params.pt_end_time,
             )
 
+        max_cost = params.resolve_max_cost()
+
         analysis_params = TravelCostMatrixParams(
             origin_latitude=origin_lats,
             origin_longitude=origin_lons,
@@ -521,14 +638,16 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
             destination_longitude=dest_lons,
             routing_mode=params.routing_mode,
             cost_type=params.cost_type,
-            max_cost=params.max_cost,
+            max_cost=max_cost,
             speed=params.speed,
             # PT
-            transit_modes=getattr(params, "pt_modes", None),
+            transit_modes=params.pt_modes,
             time_window=time_window,
-            max_transfers=getattr(params, "pt_max_transfers", 5),
-            access_mode=getattr(params, "pt_access_mode", AccessEgressMode.walk),
-            egress_mode=getattr(params, "pt_egress_mode", AccessEgressMode.walk),
+            max_transfers=params.pt_max_transfers,
+            access_mode=params.pt_access_mode,
+            egress_mode=params.pt_egress_mode,
+            access_speed=params.pt_access_speed,
+            egress_speed=params.pt_egress_speed,
             output_path=str(matrix_output_path),
         )
 

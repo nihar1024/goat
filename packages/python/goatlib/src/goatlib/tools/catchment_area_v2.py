@@ -440,10 +440,10 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [
-                        "max_cost_time_active",
-                        "max_cost_time_car",
-                        "max_cost_time_pt",
-                        "max_cost_distance",
+                        {"field": "max_cost_time_pt", "when": {"routing_mode": "pt"}},
+                        {"field": "max_cost_time_car", "when": {"routing_mode": "car", "cost_type": "time"}},
+                        {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
+                        {"field": "max_cost_time_active"},
                     ],
                     "message": "Number of steps cannot exceed the limit",
                     "max": 9,
@@ -464,10 +464,10 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "compute_from": {
                     "steps_field": "steps",
                     "limit_fields": [
-                        "max_cost_time_active",
-                        "max_cost_time_car",
-                        "max_cost_time_pt",
-                        "max_cost_distance",
+                        {"field": "max_cost_time_pt", "when": {"routing_mode": "pt"}},
+                        {"field": "max_cost_time_car", "when": {"routing_mode": "car", "cost_type": "time"}},
+                        {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
+                        {"field": "max_cost_time_active"},
                     ],
                 },
             },

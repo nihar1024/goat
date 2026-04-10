@@ -258,11 +258,16 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
             | { fields: string[]; max?: number }
             | undefined;
 
-          if (maxValueFrom && maxValueFrom.fields.includes(name)) {
-            const currentVal = newValues[input.name] as number | undefined;
-            const newLimit = Math.min(Number(value) || Infinity, maxValueFrom.max ?? Infinity);
-            if (currentVal !== undefined && currentVal > newLimit) {
-              newValues[input.name] = newLimit;
+          if (maxValueFrom) {
+            const fieldNames = maxValueFrom.fields.map((f: string | { field: string }) =>
+              typeof f === "string" ? f : f.field
+            );
+            if (fieldNames.includes(name)) {
+              const currentVal = newValues[input.name] as number | undefined;
+              const newLimit = Math.min(Number(value) || Infinity, maxValueFrom.max ?? Infinity);
+              if (currentVal !== undefined && currentVal > newLimit) {
+                newValues[input.name] = newLimit;
+              }
             }
           }
         }

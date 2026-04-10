@@ -28,14 +28,25 @@ export default function ChipsInput({ input, value, onChange, disabled, formValue
   const [error, setError] = useState<string | null>(null);
 
   const computeFrom = input.uiMeta?.widget_options?.compute_from as
-    | { steps_field: string; limit_fields: string[] }
+    | { steps_field: string; limit_fields: (string | { field: string; when?: Record<string, string> })[] }
     | undefined;
 
-  // Resolve active limit from the first visible limit field with a value
+  // Resolve active limit from the first matching limit field
   const activeLimit = useMemo(() => {
     if (!computeFrom) return undefined;
-    for (const field of computeFrom.limit_fields) {
-      const val = formValues[field];
+    for (const entry of computeFrom.limit_fields) {
+      const fieldName = typeof entry === "string" ? entry : entry.field;
+      const when = typeof entry === "string" ? undefined : entry.when;
+
+      // Check condition if present
+      if (when) {
+        const match = Object.entries(when).every(
+          ([k, v]) => formValues[k] === v
+        );
+        if (!match) continue;
+      }
+
+      const val = formValues[fieldName];
       if (val !== undefined && val !== null) {
         return Number(val);
       }

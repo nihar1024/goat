@@ -47,14 +47,22 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
 
   // Resolve dynamic max from another field's value
   const maxValueFrom = input.uiMeta?.widget_options?.max_value_from as
-    | { fields: string[]; message: string; max?: number; min?: number }
+    | { fields: (string | { field: string; when?: Record<string, string> })[]; message: string; max?: number; min?: number }
     | undefined;
 
   const dynamicMax = useMemo(() => {
     if (!maxValueFrom) return undefined;
     let resolved: number | undefined;
-    for (const field of maxValueFrom.fields) {
-      const val = formValues[field];
+    for (const entry of maxValueFrom.fields) {
+      const fieldName = typeof entry === "string" ? entry : entry.field;
+      const when = typeof entry === "string" ? undefined : entry.when;
+
+      if (when) {
+        const match = Object.entries(when).every(([k, v]) => formValues[k] === v);
+        if (!match) continue;
+      }
+
+      const val = formValues[fieldName];
       if (val !== undefined && val !== null) {
         resolved = Number(val);
         break;

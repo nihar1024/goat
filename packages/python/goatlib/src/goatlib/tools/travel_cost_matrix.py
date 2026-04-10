@@ -144,7 +144,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     # Input Section
     # =========================================================================
 
-    origin_layer: str = Field(
+    origin_layer_id: str = Field(
         ...,
         description="Layer containing origin points.",
         json_schema_extra=ui_field(
@@ -157,17 +157,29 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    destination_layer: str = Field(
+    origin_layer_filter: dict[str, Any] | None = Field(
+        None,
+        description="CQL2-JSON filter for origin layer.",
+        json_schema_extra=ui_field(section="input", field_order=2, hidden=True),
+    )
+
+    destination_layer_id: str = Field(
         ...,
         description="Layer containing destination points.",
         json_schema_extra=ui_field(
             section="input",
-            field_order=2,
+            field_order=3,
             label="Destinations",
             label_de="Zielpunkte",
             widget="layer-selector",
             widget_options={"geometry_types": ["Point", "MultiPoint"]},
         ),
+    )
+
+    destination_layer_filter: dict[str, Any] | None = Field(
+        None,
+        description="CQL2-JSON filter for destination layer.",
+        json_schema_extra=ui_field(section="input", field_order=4, hidden=True),
     )
 
     # =========================================================================
@@ -548,12 +560,23 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         """Extract lat/lon coordinates from a GeoParquet point layer."""
         con = duckdb.connect()
         con.execute("INSTALL spatial; LOAD spatial;")
+
+        # Detect geometry column from parquet schema
+        cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')").fetchall()
+        geom_col = None
+        for col_name, col_type, *_ in cols:
+            if "GEOMETRY" in col_type.upper() or col_name in ("geom", "geometry"):
+                geom_col = col_name
+                break
+        if not geom_col:
+            raise RuntimeError(f"No geometry column found in {parquet_path}")
+
         result = con.execute(f"""
             SELECT
-                ST_Y(geom) as lat,
-                ST_X(geom) as lon
+                ST_Y("{geom_col}") as lat,
+                ST_X("{geom_col}") as lon
             FROM read_parquet('{parquet_path}')
-            WHERE geom IS NOT NULL
+            WHERE "{geom_col}" IS NOT NULL
         """).fetchall()
         con.close()
 
@@ -604,14 +627,16 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
 
         # Export layers to parquet
         origin_parquet = self.export_layer_to_parquet(
-            layer_id=params.origin_layer,
+            layer_id=params.origin_layer_id,
             user_id=params.user_id,
+            cql_filter=params.origin_layer_filter,
             scenario_id=params.scenario_id,
             project_id=params.project_id,
         )
         dest_parquet = self.export_layer_to_parquet(
-            layer_id=params.destination_layer,
+            layer_id=params.destination_layer_id,
             user_id=params.user_id,
+            cql_filter=params.destination_layer_filter,
             scenario_id=params.scenario_id,
             project_id=params.project_id,
         )

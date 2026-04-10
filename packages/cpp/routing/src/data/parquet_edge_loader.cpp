@@ -192,7 +192,7 @@ namespace routing::data
         std::ostringstream sql;
         sql << "WITH node_coords AS ("
             << "  SELECT "
-            << "    TRY_CAST(node_id AS BIGINT) AS node_id, "
+            << "    TRY_CAST(id AS BIGINT) AS node_id, "
             << "    " << node_x_expr << " AS x_3857, "
             << "    " << node_y_expr << " AS y_3857 "
             << "  FROM " << node_scan << " "

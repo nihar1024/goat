@@ -5,9 +5,11 @@ structure but builds CatchmentAreaV2Params with cost_type/max_cost.
 """
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Self
 
+import duckdb
 from enum import StrEnum
 
 from pydantic import Field, model_validator
@@ -819,13 +821,40 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             params.catchment_area_type == CatchmentType.point_grid
             and params.point_grid_layer_id
         ):
-            grid_points_path = self.export_layer_to_parquet(
+            raw_layer_path = self.export_layer_to_parquet(
                 params.point_grid_layer_id,
                 params.user_id,
                 cql_filter=params.point_grid_layer_filter,
                 scenario_id=params.scenario_id,
                 project_id=params.project_id,
             )
+            # Convert to the format expected by C++: id, x_3857, y_3857
+            grid_parquet = tempfile.NamedTemporaryFile(
+                suffix=".parquet", delete=False
+            ).name
+            con = duckdb.connect()
+            con.execute("INSTALL spatial; LOAD spatial;")
+            cols = con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{raw_layer_path}')"
+            ).fetchall()
+            geom_col = next(
+                (c[0] for c in cols if "GEOMETRY" in c[1].upper() or c[0] in ("geom", "geometry")),
+                "geometry",
+            )
+            # Convert WGS84 lon/lat to Web Mercator (EPSG:3857)
+            R = 6378137.0
+            con.execute(f"""
+                COPY (
+                    SELECT
+                        ROW_NUMBER() OVER () AS id,
+                        ST_X("{geom_col}") * PI() / 180.0 * {R} AS x_3857,
+                        LN(TAN(PI() / 4.0 + ST_Y("{geom_col}") * PI() / 360.0)) * {R} AS y_3857
+                    FROM read_parquet('{raw_layer_path}')
+                    WHERE "{geom_col}" IS NOT NULL
+                ) TO '{grid_parquet}' (FORMAT PARQUET)
+            """)
+            con.close()
+            grid_points_path = grid_parquet
 
         # Map routing mode to V2 enum
         routing_mode_map = {

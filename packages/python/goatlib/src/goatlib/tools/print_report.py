@@ -90,6 +90,7 @@ class PrintReportParams(ToolInputBase):
     )
     total_atlas_pages: int = Field(
         default=1,
+        le=settings.print.atlas_max_pages,
         description="Total number of atlas pages to render. Ignored if atlas_page_indices is provided.",
         json_schema_extra={
             "x-ui": {"section": "output", "field_order": 2, "hidden": True}
@@ -626,12 +627,13 @@ class PrintReportRunner(SimpleToolRunner):
                 await self._refresh_access_token()
 
             # Determine pages to render
+            max_pages = settings.print.atlas_max_pages
             if params.atlas_page_indices is not None:
-                # Specific pages requested
-                page_indices = params.atlas_page_indices
+                # Specific pages requested — enforce limit
+                page_indices = params.atlas_page_indices[:max_pages]
             elif params.total_atlas_pages > 1:
-                # Render all atlas pages
-                page_indices = list(range(params.total_atlas_pages))
+                # Render all atlas pages — enforce limit
+                page_indices = list(range(min(params.total_atlas_pages, max_pages)))
             else:
                 # Single page (no atlas or atlas with 1 page)
                 page_indices = [None]

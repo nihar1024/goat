@@ -4,6 +4,10 @@
 # Playwright
 test-results/
 
+# Superpowers brainstorm sessions
+.superpowers/
+docs/superpowers/
+
 # Logs
 logs
 *.log
@@ -71,8 +75,10 @@ storybook-static
 cache
 
 # Submodules
-.gitmodules
 apps/accounts
+
+# Local nigiri builds (SDK is fetched automatically during cmake build)
+packages/cpp/nigiri/
 
 apps/core/data/*
 python_modules/

@@ -27,6 +27,7 @@ import { setReportCanvasZoom } from "@/lib/store/map/slice";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useAtlasFeatures } from "@/hooks/reports/useAtlasFeatures";
+import { usePrintConfig } from "@/hooks/reports/usePrintConfig";
 
 import { FixedRulerWrapper, RULER_SIZE } from "@/components/reports/canvas/Ruler";
 import { ElementContentRenderer } from "@/components/reports/elements/renderers/ElementRenderers";
@@ -819,6 +820,9 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   const { activeBasemap } = useBasemap(project);
   const basemapUrl = activeBasemap?.url;
 
+  // Print config (atlas limits from backend)
+  const { atlasMaxPages } = usePrintConfig();
+
   // Atlas features
   const {
     atlasResult: _atlasResult, // Available for future use (e.g., overview bounds)
@@ -829,6 +833,7 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
     atlasConfig: reportConfig?.atlas,
     projectLayers,
     currentPageIndex: atlasPageIndex,
+    atlasMaxPages,
   });
 
   // Derive feature attribute names from first atlas page for dynamic text menu

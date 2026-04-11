@@ -130,8 +130,8 @@
       "description": "Erweiterte Konfigurationsoptionen anzeigen"
     },
     "point_grid_layer": {
-      "label": "Punktraster-Ebene",
-      "description": "Wählen Sie eine Punktebene als Raster"
+      "label": "Punktraster-Layer",
+      "description": "Wählen Sie einen Punkt-Layer als Raster"
     },
     "speed": {
       "label": "Reisegeschwindigkeit (km/h)",
@@ -150,7 +150,7 @@
       "description": "Wählen Sie die Form der Einzugsgebietsgeometrie aus."
     },
     "steps_style": {
-      "label": "Schrittdarstellung",
+      "label": "Darstellung der Schritte",
       "description": "Darstellungsart der Schritte in der Ausgabe"
     },
     "choose_pt_mode": {
@@ -498,7 +498,7 @@
       "description": "Durchzuführende statistische Operation"
     },
     "measure_type": {
-      "label": "Berechnen nach (Kostentyp)",
+      "label": "Berechnen nach",
       "description": "Berechnung des Einzugsgebiets nach Zeit oder Entfernung"
     },
     "max_distance": {
@@ -707,6 +707,10 @@
     }
   },
   "enums": {
+    "cost_type": {
+      "time": "Zeit (Min)",
+      "distance": "Entfernung (m)"
+    },
     "steps_style": {
       "separate": "Getrennte Schritte",
       "cumulative": "Kumulative Schritte"
@@ -813,7 +817,7 @@
       "polygon": "Polygon",
       "network": "Netzwerk",
       "hexagonal_grid": "Sechseckiges Gitter",
-      "rectangular_grid": "Rechteckiges Gitter",
+      "rectangular_grid": "Sechseckiges Gitter",
       "point_grid": "Punktraster"
     },
     "aggregation_area_type": {

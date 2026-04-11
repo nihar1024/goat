@@ -443,7 +443,7 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="catchment_area_v2",
         display_name="Catchment Area v2 (Beta)",
-        description="Compute isochrones/catchment areas for various transport modes",
+        description="Catchment areas show how far people can travel within a set travel time or distance from one or more selected points.",
         module_path="goatlib.tools.catchment_area_v2",
         params_class_name="CatchmentAreaV2WindmillParams",
         windmill_path="f/goat/tools/catchment_area_v2",
@@ -464,7 +464,7 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="travel_cost_matrix",
         display_name="Travel Cost Matrix (Beta)",
-        description="Compute many-to-many travel costs between origin and destination points",
+        description="Compute travel times and distances between origin and destination point layers.",
         module_path="goatlib.tools.travel_cost_matrix",
         params_class_name="TravelCostMatrixWindmillParams",
         windmill_path="f/goat/tools/travel_cost_matrix",

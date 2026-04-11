@@ -3,7 +3,7 @@
  *
  * Routes to the appropriate input component based on the inferred input type.
  */
-import { Typography } from "@mui/material";
+import { Divider, Stack, Typography } from "@mui/material";
 
 import type { OGCInputSchema, ProcessedInput } from "@/types/map/ogc-processes";
 
@@ -74,7 +74,9 @@ export default function GenericInput({
     return <OevStationConfigInput input={input} value={value} onChange={onChange} disabled={disabled} />;
   }
 
-  switch (input.inputType) {
+  const groupLabel = input.uiMeta?.group_label;
+
+  const renderInput = () => { switch (input.inputType) {
     case "layer":
       return (
         <LayerInput
@@ -253,5 +255,20 @@ export default function GenericInput({
           Unknown input type: {input.title}
         </Typography>
       );
+  }};
+
+  if (groupLabel) {
+    return (
+      <Stack spacing={1}>
+        <Divider>
+          <Typography variant="caption" fontWeight={600} color="text.secondary">
+            {groupLabel}
+          </Typography>
+        </Divider>
+        {renderInput()}
+      </Stack>
+    );
   }
+
+  return renderInput();
 }

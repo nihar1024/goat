@@ -74,7 +74,7 @@ SECTION_RESULT = UISection(
     order=7,
     icon="save",
     label="Result layer",
-    label_de="Ergebnisebene",
+    label_de="Ergebnis-Layer",
     depends_on={"routing_mode": {"$ne": None}},
 )
 
@@ -85,7 +85,7 @@ SECTION_RESULT = UISection(
 
 
 class TravelCostMatrixWindmillParams(ToolInputBase):
-    """Parameters for travel cost matrix tool via Windmill/GeoAPI.
+    """Compute travel times and distances between origin and destination point layers.
 
     This schema extends ToolInputBase with travel cost matrix specific parameters.
     The frontend renders this dynamically based on x-ui metadata.
@@ -117,7 +117,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="result",
             field_order=1,
             label="Destinations layer name",
-            label_de="Name der Zielpunkte-Ebene",
+            label_de="Name des Zielpunkte-Layers",
             widget_options={
                 "default_en": "Destinations",
                 "default_de": "Zielpunkte",
@@ -132,10 +132,10 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="result",
             field_order=2,
             label="Matrix layer name",
-            label_de="Name der Matrixebene",
+            label_de="Name des Matrix-Layers",
             widget_options={
                 "default_en": "Travel Cost Matrix",
-                "default_de": "Reisekostenmatrix",
+                "default_de": "Reisezeitmatrix",
             },
         ),
     )
@@ -204,12 +204,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="routing",
             field_order=2,
-            label="Modes",
-            label_de="Modi",
-            enum_icons=PT_MODE_ICONS,
+            label_key="choose_pt_mode",
             enum_labels=PT_MODE_LABELS,
-            inline_group="pt_routing",
-            inline_flex="3 0 0",
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -220,10 +216,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="routing",
             field_order=3,
-            label="Transfers",
-            label_de="Umstiege",
-            inline_group="pt_routing",
-            inline_flex="1 0 0",
+            label="Max. transfers",
+            label_de="Max. Umstiege",
             visible_when={"routing_mode": "pt"},
             widget_options={
                 "max_value_from": {
@@ -317,8 +311,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=2,
-            label="Travel time limit",
-            label_de="Reisezeitlimit",
+            label="Travel time limit (min)",
+            label_de="Reisezeitlimit (Min)",
             widget_options={
                 "max_value_from": {
                     "fields": [],
@@ -389,8 +383,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=5,
-            label="Day",
-            label_de="Tag",
+            label_key="weekday",
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -401,8 +394,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=6,
-            label="Start time",
-            label_de="Startzeit",
+            label_key="from_time",
             widget="time-picker",
             inline_group="pt_time_window",
             inline_flex="1 0 0",
@@ -416,8 +408,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=7,
-            label="End time",
-            label_de="Endzeit",
+            label_key="to_time",
             widget="time-picker",
             inline_group="pt_time_window",
             inline_flex="1 0 0",
@@ -446,9 +437,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=20,
-            label="Access mode",
-            label_de="Zugangsmodus",
-            enum_icons=ACCESS_EGRESS_MODE_ICONS,
+            label_key="access_mode",
+            group_label="Access leg",
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
                 "$and": [
@@ -465,8 +455,9 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=21,
-            label="Access speed (km/h)",
-            label_de="Zugangsgeschwindigkeit (km/h)",
+            label="Speed (km/h)",
+            label_de="Geschw. (km/h)",
+            widget_options={"placeholder": "Default"},
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -482,9 +473,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=22,
-            label="Egress mode",
-            label_de="Abgangsmodus",
-            enum_icons=ACCESS_EGRESS_MODE_ICONS,
+            label_key="pt_egress_mode",
+            group_label="Egress leg",
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
                 "$and": [
@@ -501,8 +491,9 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=23,
-            label="Egress speed (km/h)",
-            label_de="Abgangsgeschwindigkeit (km/h)",
+            label="Speed (km/h)",
+            label_de="Geschw. (km/h)",
+            widget_options={"placeholder": "Default"},
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},

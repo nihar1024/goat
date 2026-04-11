@@ -77,7 +77,7 @@ SECTION_RESULT_CATCHMENT = UISection(
     order=7,
     icon="save",
     label="Result layer",
-    label_de="Ergebnisebene",
+    label_de="Ergebnis-Layer",
     depends_on={"routing_mode": {"$ne": None}},
 )
 
@@ -101,8 +101,8 @@ STEPS_STYLE_LABELS: dict[str, str] = {
 }
 
 COST_TYPE_LABELS: dict[str, str] = {
-    "time": "Time (Min)",
-    "distance": "Distance (m)",
+    "time": "enums.cost_type.time",
+    "distance": "enums.cost_type.distance",
 }
 
 COST_TYPE_ICONS: dict[str, str] = {
@@ -163,7 +163,7 @@ CATCHMENT_TYPE_LABELS: dict[str, str] = {
 
 
 class CatchmentAreaV2WindmillParams(ToolInputBase):
-    """Parameters for catchment area tool via Windmill/GeoAPI.
+    """Catchment areas show how far people can travel within a set travel time or distance from one or more selected points.
 
     This schema extends ToolInputBase with catchment area specific parameters.
     The frontend renders this dynamically based on x-ui metadata.
@@ -237,12 +237,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="routing",
             field_order=2,
-            label="Modes",
-            label_de="Modi",
-            enum_icons=PT_MODE_ICONS,
+            label_key="choose_pt_mode",
             enum_labels=PT_MODE_LABELS,
-            inline_group="pt_routing",
-            inline_flex="3 0 0",
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -253,10 +249,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="routing",
             field_order=3,
-            label="Transfers",
-            label_de="Umstiege",
-            inline_group="pt_routing",
-            inline_flex="1 0 0",
+            label="Max. transfers",
+            label_de="Max. Umstiege",
             visible_when={"routing_mode": "pt"},
             widget_options={
                 "max_value_from": {
@@ -365,8 +359,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=2,
-            label="Travel time limit",
-            label_de="Reisezeitlimit",
+            label="Travel time limit (min)",
+            label_de="Reisezeitlimit (Min)",
             widget_options={
                 "max_value_from": {
                     "fields": [],
@@ -435,8 +429,11 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Number of isochrone steps/intervals.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=4,
+            field_order=6,
             label_key="steps",
+            visible_when={
+                "catchment_area_type": {"$in": ["polygon", "network"]}
+            },
             widget_options={
                 "max_value_from": {
                     "fields": [
@@ -457,8 +454,11 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Step size intervals. Auto-computed from steps and limit, editable.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=5,
+            field_order=7,
             label_key="step_sizes",
+            visible_when={
+                "catchment_area_type": {"$in": ["polygon", "network"]}
+            },
             widget="chips",
             widget_options={
                 "compute_from": {
@@ -480,9 +480,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Day type for PT schedule.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=5,
-            label="Day",
-            label_de="Tag",
+            field_order=8,
+            label_key="weekday",
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -491,9 +490,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="PT window start (seconds from midnight).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=6,
-            label="Start time",
-            label_de="Startzeit",
+            field_order=9,
+            label_key="from_time",
             widget="time-picker",
             inline_group="pt_time_window",
             inline_flex="1 0 0",
@@ -505,9 +503,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="PT window end (seconds from midnight).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=7,
-            label="End time",
-            label_de="Endzeit",
+            field_order=10,
+            label_key="to_time",
             widget="time-picker",
             inline_group="pt_time_window",
             inline_flex="1 0 0",
@@ -525,8 +522,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=20,
-            label="Access mode",
-            label_de="Zugangsmodus",
+            label_key="access_mode",
+            group_label="Access leg",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
@@ -544,8 +541,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=21,
-            label="Calculate by",
-            label_de="Berechnen nach",
+            label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
             inline_group="pt_access_cost",
@@ -582,8 +578,9 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=23,
-            label="Access speed (km/h)",
-            label_de="Zugangsgeschwindigkeit (km/h)",
+            label="Speed (km/h)",
+            label_de="Geschw. (km/h)",
+            widget_options={"placeholder": "Default"},
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -600,8 +597,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=24,
-            label="Egress mode",
-            label_de="Abgangsmodus",
+            label_key="pt_egress_mode",
+            group_label="Egress leg",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
@@ -619,8 +616,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=25,
-            label="Calculate by",
-            label_de="Berechnen nach",
+            label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
             inline_group="pt_egress_cost",
@@ -657,8 +653,9 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=27,
-            label="Egress speed (km/h)",
-            label_de="Abgangsgeschwindigkeit (km/h)",
+            label="Speed (km/h)",
+            label_de="Geschw. (km/h)",
+            widget_options={"placeholder": "Default"},
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -678,7 +675,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Show advanced configuration options.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=10,
+            field_order=15,
             label_key="advanced_options",
         ),
     )
@@ -688,10 +685,9 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Output geometry type.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=11,
+            field_order=4,
             label_key="catchment_area_type",
             enum_labels=CATCHMENT_TYPE_LABELS,
-            visible_when={"show_advanced": True},
         ),
     )
 
@@ -700,7 +696,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="How steps are displayed in the output.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=12,
+            field_order=16,
             label_key="steps_style",
             enum_labels=STEPS_STYLE_LABELS,
             visible_when={
@@ -718,16 +714,11 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Point layer to use as grid for point_grid catchment type.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=13,
+            field_order=5,
             label_key="point_grid_layer",
             widget="layer-selector",
             widget_options={"geometry_types": ["Point", "MultiPoint"]},
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"catchment_area_type": "point_grid"},
-                ]
-            },
+            visible_when={"catchment_area_type": "point_grid"},
         ),
     )
 
@@ -736,7 +727,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="CQL2-JSON filter for point grid layer.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=14,
+            field_order=17,
             hidden=True,
         ),
     )
@@ -746,7 +737,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         description="Output file format.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=15,
+            field_order=18,
             hidden=True,
         ),
     )

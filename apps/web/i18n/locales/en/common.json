@@ -1252,7 +1252,7 @@
   "origin": "Origin",
   "origin_destination": "Origin Destination",
   "travel_cost_matrix": "Travel Cost Matrix (Beta)",
-  "travel_cost_matrix_description": "Compute many-to-many travel costs between origin and destination point layers.",
+  "travel_cost_matrix_description": "Compute travel times and distances between origin and destination point layers.",
   "origin_destination_description": "The Origin-Destination analysis is used in various fields such as transport planning and urban planning to study movements or flows between different locations. ",
   "origin_destination_header": "Origin Destination",
   "origin_field": "Origin Field",

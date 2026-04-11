@@ -98,6 +98,7 @@ export interface UIFieldMeta {
   enum_labels?: Record<string, string>;
   inline_group?: string;
   inline_flex?: string;
+  group_label?: string;
 }
 
 /**

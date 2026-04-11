@@ -474,7 +474,7 @@
       "description": "Statistical operation to perform"
     },
     "measure_type": {
-      "label": "Calculate by (cost type)",
+      "label": "Calculate by",
       "description": "Calculate catchment area by time or distance"
     },
     "max_distance": {
@@ -687,6 +687,10 @@
     }
   },
   "enums": {
+    "cost_type": {
+      "time": "Time (min)",
+      "distance": "Distance (m)"
+    },
     "steps_style": {
       "separate": "Separate steps",
       "cumulative": "Cumulative steps"
@@ -793,7 +797,7 @@
       "polygon": "Polygon",
       "network": "Network",
       "hexagonal_grid": "Hexagonal grid",
-      "rectangular_grid": "Rectangular grid",
+      "rectangular_grid": "Hexagonal grid",
       "point_grid": "Point grid"
     },
     "aggregation_area_type": {

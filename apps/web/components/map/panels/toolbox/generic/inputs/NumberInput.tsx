@@ -29,16 +29,20 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
   const effectiveSchema = useMemo(() => getEffectiveSchema(input.schema), [input.schema]);
   const [error, setError] = useState<string | null>(null);
 
+  // When a placeholder is configured and value equals the default, show empty field
+  const customPlaceholder = input.uiMeta?.widget_options?.placeholder as string | undefined;
+  const showAsEmpty = customPlaceholder && value === input.defaultValue;
+
   // Local draft for the text field — only committed on blur/Enter
-  const [draft, setDraft] = useState<string>(value !== undefined ? String(value) : "");
+  const [draft, setDraft] = useState<string>(value !== undefined && !showAsEmpty ? String(value) : "");
   const isFocusedRef = useRef(false);
 
   // Sync draft from prop when value changes externally (not while user is editing)
   useEffect(() => {
     if (!isFocusedRef.current) {
-      setDraft(value !== undefined ? String(value) : "");
+      setDraft(value !== undefined && !showAsEmpty ? String(value) : "");
     }
-  }, [value]);
+  }, [value, showAsEmpty]);
 
   // Extract constraints
   const min = effectiveSchema.minimum;
@@ -114,7 +118,7 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
   };
 
   const commit = () => {
-    const newValue = draft === "" ? undefined : Number(draft);
+    const newValue = draft === "" ? (customPlaceholder ? input.defaultValue as number : undefined) : Number(draft);
     onChange(newValue);
     const err = validate(newValue);
     setError(err);
@@ -179,7 +183,10 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
               }
             : undefined
         }
-        placeholder={input.defaultValue !== undefined ? String(input.defaultValue) : undefined}
+        placeholder={
+          (input.uiMeta?.widget_options?.placeholder as string) ??
+          (input.defaultValue !== undefined ? String(input.defaultValue) : undefined)
+        }
         fullWidth
       />
     </Stack>

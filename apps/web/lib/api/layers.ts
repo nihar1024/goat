@@ -211,6 +211,8 @@ export const createLayer = async (
     // WFS import path
     ...(payload.url && { wfs_url: payload.url }),
     ...(payload.other_properties && { other_properties: payload.other_properties }),
+    ...(payload.has_header !== undefined && { has_header: payload.has_header }),
+    ...(payload.sheet_name && { sheet_name: payload.sheet_name }),
   };
 
   return executeProcessAsync("layer_import", inputs);

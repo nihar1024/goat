@@ -408,6 +408,8 @@ export const createLayerFromDatasetSchema = createLayerBaseSchema.extend({
   project_id: z.string().uuid().optional(),
   data_type: dataType.optional(),
   other_properties: otherPropertiesSchmea.optional(),
+  has_header: z.boolean().optional(),
+  sheet_name: z.string().optional(),
 });
 
 export const createRasterLayerSchema = createLayerBaseSchema.extend({

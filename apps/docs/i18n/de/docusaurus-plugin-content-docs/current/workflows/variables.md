@@ -3,7 +3,7 @@
 **Workflow-Variablen** ermöglichen es Ihnen, wiederverwendbare, parametrisierte [Workflows](../further_reading/glossary.md#workflows) zu erstellen, indem Sie dynamische Werte definieren, die geändert werden können, ohne die Workflow-Struktur zu modifizieren. Diese mächtige Funktion macht Ihre Analyse anpassungsfähig und teilbar.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workflows/variables.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workflows/variables_de.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 ## Übersicht

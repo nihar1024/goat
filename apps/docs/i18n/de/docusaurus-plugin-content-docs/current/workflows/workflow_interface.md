@@ -22,7 +22,7 @@ Die visuelle Leinwand-Benutzeroberfläche macht komplexe räumliche Analyseautom
 Die Workflow-Benutzeroberfläche besteht aus zwei Hauptpanels und der Workflow-Leinwand und bietet einen intuitiven Arbeitsbereich für die visuelle Workflow-Konstruktion.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workflows/workflows_interface.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workflows/workflows_interface_de.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 ### Workflow-Management und Projekt-Ebenen Panel
@@ -47,7 +47,7 @@ Dieses Panel befindet sich links und ist in zwei Bereiche unterteilt:
 Der Leinwand-Arbeitsbereich ist der Ort, wo Sie Knoten per Drag-and-Drop bewegen, zoomen, schwenken und Elemente auswählen können. Er enthält mehrere Steuerungsbereiche:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workflows/workflows_canvas-bars.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workflows/workflows_canvas-bars_de.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 **Leinwand-Ansichtsleiste**: Befindet sich in der unteren linken Ecke der Leinwand:
@@ -74,7 +74,7 @@ Der Leinwand-Arbeitsbereich ist der Ort, wo Sie Knoten per Drag-and-Drop bewegen
 Das rechte Panel ändert sich je nachdem, ob ein Knoten ausgewählt ist oder nicht. Wenn kein Knoten ausgewählt ist, wird das **Werkzeuge und Verlauf Panel** sichtbar. Wenn ein Werkzeug-Knoten ausgewählt ist, erscheint das **Konfigurations-Panel**, und wenn ein Datensatz-Knoten ausgewählt ist, erscheint das **Datensatz-Panel**.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workflows/workflow_right-panel.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workflows/workflow_right-panel_de.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 #### Werkzeuge und Verlauf Panel

@@ -14,7 +14,7 @@ namespace routing::output
 namespace
 {
 static constexpr char kPolygonFeaturesTempTable[] = "routing_polygon_features_tmp";
-static constexpr double kConcaveHullRatio = 0.4;
+static constexpr double kConcaveHullRatio = 0.2;
 
 int64_t count_rows(duckdb::Connection &con, std::string const &table)
 {

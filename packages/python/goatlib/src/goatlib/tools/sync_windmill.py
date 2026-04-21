@@ -239,6 +239,9 @@ def main(
     project_id: str,
     folder_id: str,
     layer_name: str | None = None,
+    export_node_id: str | None = None,
+    properties: dict | None = None,
+    overwrite_previous: bool = False,
 ) -> dict:
     from goatlib.tools.finalize_layer import main as _main
     return _main(
@@ -248,6 +251,9 @@ def main(
         project_id=project_id,
         folder_id=folder_id,
         layer_name=layer_name,
+        export_node_id=export_node_id,
+        properties=properties,
+        overwrite_previous=overwrite_previous,
     )
 '''
         results.append(

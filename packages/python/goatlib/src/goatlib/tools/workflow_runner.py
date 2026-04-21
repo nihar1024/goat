@@ -833,15 +833,18 @@ def main(
             )
 
             try:
+                overwrite_previous = bool(export_data.get("overwritePrevious"))
+
                 finalize_inputs = {
                     "user_id": params.user_id,
                     "workflow_id": params.workflow_id,
                     "node_id": source_node_id,  # Source node's temp dir
-                    "export_node_id": export_node_id,  # For status tracking
+                    "export_node_id": export_node_id,  # Identity key for overwrite + status tracking
                     "project_id": params.project_id,
                     "folder_id": params.folder_id,
                     "layer_name": dataset_name,
                     "delete_temp": False,  # Keep temp files for frontend preview
+                    "overwrite_previous": overwrite_previous,
                 }
 
                 # Pass style properties from the source tool's result

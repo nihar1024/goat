@@ -147,18 +147,32 @@ def _get_cached_pmtiles_reader(
 
     Uses per-file locking so requests for different files can proceed in parallel.
 
+    If the file on disk has been modified since we cached it (e.g. the layer
+    was overwritten by a workflow export or ``layer_update``), the stale
+    reader is evicted and the file is re-opened. This keeps tile output fresh
+    across in-place regenerations without requiring explicit cross-process
+    cache invalidation.
+
     Returns:
         Tuple of (reader, header, is_gzip)
     """
     path_str = str(pmtiles_path)
+    current_mtime = pmtiles_path.stat().st_mtime
 
     # Fast path: check if already cached (minimal lock time)
     with _pmtiles_reader_cache_lock:
         if path_str in _pmtiles_reader_cache:
             reader, header, fh, cached_mtime = _pmtiles_reader_cache[path_str]
-            tile_compression = header.get("tile_compression")
-            is_gzip = bool(tile_compression and tile_compression.value == 2)
-            return reader, header, is_gzip
+            if cached_mtime == current_mtime:
+                tile_compression = header.get("tile_compression")
+                is_gzip = bool(tile_compression and tile_compression.value == 2)
+                return reader, header, is_gzip
+            # File has been rewritten since we cached it — evict and re-open.
+            try:
+                fh.close()
+            except Exception:
+                pass
+            del _pmtiles_reader_cache[path_str]
 
         # Get or create per-file lock
         if path_str not in _pmtiles_file_locks:
@@ -171,12 +185,18 @@ def _get_cached_pmtiles_reader(
         with _pmtiles_reader_cache_lock:
             if path_str in _pmtiles_reader_cache:
                 reader, header, fh, cached_mtime = _pmtiles_reader_cache[path_str]
-                tile_compression = header.get("tile_compression")
-                is_gzip = bool(tile_compression and tile_compression.value == 2)
-                return reader, header, is_gzip
+                if cached_mtime == current_mtime:
+                    tile_compression = header.get("tile_compression")
+                    is_gzip = bool(tile_compression and tile_compression.value == 2)
+                    return reader, header, is_gzip
+                # Stale again — evict and fall through to re-open.
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+                del _pmtiles_reader_cache[path_str]
 
         # Not in cache - open file (outside global lock)
-        current_mtime = pmtiles_path.stat().st_mtime
         fh = open(pmtiles_path, "rb")
         source = MmapSource(fh)
         reader = CachedPMTilesReader(source)

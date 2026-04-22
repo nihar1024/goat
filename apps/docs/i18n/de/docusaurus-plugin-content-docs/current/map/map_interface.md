@@ -27,7 +27,7 @@ sidebar_position: 1
 
 
 #### Rechte Seite
-- <code>Daten und Builder Umschalter</code>: <strong>Wechseln Sie zwischen</strong> den Karten- und Dashboard-Builder-Oberflächen.
+- <code>Projekt-Modus Umschalter</code>: <strong>Wechseln Sie zwischen</strong> den Karten, Workflows, Layouts und Dashboard Oberflächen.
 - <code>Projekt teilen Button</code>: <strong>Verwalten Sie die Freigabeoptionen</strong>.
 - <code>Dokumentation Button</code>: <strong>Zugriff auf die GOAT-Dokumentation</strong>.
 - <code>Job Status</code>: <strong>Zeigen Sie den Status</strong> laufender und abgeschlossener Aufgaben an.

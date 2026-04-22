@@ -19,7 +19,7 @@ import TabItem from '@theme/TabItem';
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Select the layer to filter and click on the <code>Filter</code> <img src={require('/img/icons/filter.png').default} alt="Filter Icon" style={{ maxHeight: "20px", maxWidth: "20px"}}/> icon on the <b>tools bar</b> on the right.</div>
+  <div class="content">Select your layer and navigate to <code>Layer design</code> <img src={require('/img/icons/styling.png').default} alt="Styling Icon" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> and find the <code>Filter section</code>.</div>
 </div>
 
 <div class="step">
@@ -132,4 +132,8 @@ This feature is currently under development. 🧑🏻‍💻
 </div>
 
 **Remove whole filter**: Click <code>Clear Filter</code> at the bottom of the Filter menu to **remove all filters**.
+
+### Save as New Layer
+
+Click <code>Save as New Layer</code> at the bottom of the Filter menu to **save the filtered result as a new dataset** in your workspace. This allows you to work with the filtered data independently.
 

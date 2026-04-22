@@ -2,11 +2,8 @@
 sidebar_position: 3
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 # Quickstart Guide
-Welcome to GOAT! This quickstart guide will help you get up and running with GOAT in no time. Follow these simple steps to explore the workspace, and create your first analysis and interactive map.
+Welcome to GOAT! This quickstart guide will help you get up and running in no time. Follow these steps to explore the workspace, run your first analysis, build a dashboard, and share your work.
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
 <iframe width="674" height="378" src="https://www.youtube.com/embed/_wAEhPTT3jA?si=mJv_duAm_rXz4Jze&amp;start=46" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
@@ -34,122 +31,53 @@ You've landed in the map view of your new project. Now it's time to add some dat
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Click on <code>+ Add Layer</code> on the left panel. </div>
+  <div class="content">Click <code>+ Add Layer</code> on the left panel. You can add data from your <b>personal datasets</b>, <b>upload a file</b>, browse the <b>catalog</b>, or connect an <b>external URL</b> (WMS, WMTS, WFS, XYZ). For full details on each option, see <a href="../map/layers">Layers</a>.</div>
 </div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Select if you like to integrate a dataset from your <b>data explorer</b>, <b>upload</b> a new dataset, browse the <b>catalog explorer</b> or add a dataset via an <b>external link</b>.</div>
-</div>
-
-<Tabs>
-    <TabItem value="Dataset Explorer" label="Dataset Explorer" default className="tabItemBox">
-<div class="step">
-    <div class="step-number">5</div>
-    <div class="content">Select the file you want to import.</div>
-</div>
-<div class="step">
-    <div class="step-number">6</div>
-    <div class="content">Click on <code>+ Add Layer</code>.</div>
-</div>
-    </TabItem>
-
-<TabItem value="Dataset Upload" label="Dataset Upload" className="tabItemBox">
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Select the file you want to import.</div>
-</div>
-<div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Define the name of the dataset, description, and click on <code>Upload</code>.</div>
-</div>
-</TabItem>
-  
-<TabItem value="Catalog Explorer" label="Catalog Explorer" className="tabItemBox">
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Browse GOAT Dataset Catalog.</div>
-</div>
-<div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Select the Dataset you want to import and click on <code>+ Add Layer</code>.</div>
-</div>
-</TabItem>
-
-<TabItem value="Dataset External" label="Dataset External" default className="tabItemBox">
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Insert your external URL and follow the steps <b>depending on the type of dataset</b> you would like to add.</div>
-</div>
-<Tabs>
-<TabItem value="WFS" label="WFS" default className="tabItemBox">
-<div class="step">
-    <div class="content"> <p>When you would like to add a WFS layer you need to have a <b>"GetCapabilities"</b> link. </p>
-    In the next step you can choose which layer you would like to add to your dataset. <i>You can only choose one layer at a time.</i></div>
-</div>
-</TabItem>
-
-<TabItem value="WMS" label="WMS" className="tabItemBox">
-<div class="step">
-    <div class="content"> <p>When you would like to add a WMS layer you need to have a <b>"GetCapabilities"</b> link.</p> Here you have the option to select multiple layers, but when added to GOAT it <i>will be merged onto one layer.</i> </div>
-</div>
-</TabItem>
-
-<TabItem value="WMTS" label="WMTS" className="tabItemBox">
-<div class="step">
-    <div class="content"> <p>You can add a WMTS to your dataset via a <b>direct URL</b> or <b>"GetCapabilities"</b> link. You can only choose <i>one layer</i> at a time if your URL contains more than one layer.</p>
-    The projection needs to be <i>WEB Mercator (EPSG:3857) and GoogleMaps compatible</i>. Because they have different zoom levels, the dataset would not show up in the list of available layers if it doesn't meet both requirements.</div>
-</div>
-</TabItem>
-
-</Tabs>
-</TabItem>
-</Tabs>
 
 ## Explore the analysis tools
-Depending on the layers you have added, you can run different analysis from the toolbox.
+Depending on the layers you have added, you can run different analyses from the toolbox.
 <div class="step">
-  <div class="step-number">7</div>
-  <div class="content"> Locate and click on the <code>Toolbox</code> button, which appears as a tools icon on the right side of the left panel.</div>
+  <div class="step-number">4</div>
+  <div class="content">Locate and click on the <code>Toolbox</code> button, which appears as a tools icon on the right side of the left panel.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">8</div>
-  <div class="content"> Select the analysis tool you want to use. You can choose between our <b> Accessibility indicators</b>, <b>Data management</b>, <b>Geoanalysis</b>, or <b>Geoprocessing</b> tools, and complete the settings.</div>
+  <div class="step-number">5</div>
+  <div class="content">Select the analysis tool you want to use. You can choose between our <b>Accessibility indicators</b>, <b>Data management</b>, <b>Geoanalysis</b>, or <b>Geoprocessing</b> tools, and complete the settings. For more detail, see <a href="/docs/category/toolbox">Toolbox</a>.</div>
 </div>
 
 ## Style your map
 Once you have added the layers to your map and computed the analysis, you can customize their appearance to enhance visualization.
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">6</div>
   <div class="content">Click on any layer from your project, and the editing layer panel will appear on the right with the <code>Style</code> tab selected. Go to the <code>Style</code> section and select the color you want. If you want to style by attribute, click on <code>options <img src={require('/img/icons/styling.png').default} alt="Options Icon" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/></code> and set the field you want in the <code>Color based on</code> menu.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">10</div>
+  <div class="step-number">7</div>
   <div class="content">You can continue setting the <code>Style</code> by choosing the <b>color palette</b>, the <b>Stroke Color</b>, or choosing a <b>Custom Marker</b> if you are working with a point layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">11</div>
-  <div class="content">Then you can turn on the <code>Labels</code> if you want, edit your <code>Popups</code> and <code>Legend</code>.</div>
+  <div class="step-number">8</div>
+  <div class="content">Turn on <code>Labels</code>, edit your <code>Popups</code>, and customize the <code>Legend</code>. For more detail, see <a href="../map/layer_style/style/styling">Layer Styling</a>.</div>
 </div>
 
 ## Ready to share your work
 Now that you have created your first project in GOAT, it's time to share it with others. You can easily share your project by generating a shareable link or inviting collaborators to work on the project with you.
 
 <div class="step">
-  <div class="step-number">12</div>
+  <div class="step-number">9</div>
   <div class="content">Click on <code>Share</code> in the upper-right corner of the map.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">13</div>
+  <div class="step-number">10</div>
   <div class="content">Go to the <code>Public</code> toggle and click on <code>Publish</code> to make your map public.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">14</div>
-  <div class="content">Now you can click on <code>Copy URL</code> and <b> share the direct link </b> so others can open the map in their browser. Or click on <code>Copy iframe Code</code> and <b> embed the map </b> in websites or tools that support HTML and iframes.</div>
+  <div class="step-number">11</div>
+  <div class="content">Click <code>Copy URL</code> to share a direct link, or <code>Copy iframe Code</code> to embed the map in a website. For more detail, see <a href="../workspace/projects">Projects</a>.</div>
 </div>

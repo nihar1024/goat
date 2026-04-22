@@ -22,7 +22,7 @@ sidebar_position: 1
 - <code>Last Saved</code>: <strong>Shows the timestamp</strong> of the last saved change.
 
 #### Right Side
-- <code>Project mode toggle</code>: <strong>Switch between</strong> the Map, Layouts and Dashboard interfaces.
+- <code>Project mode toggle</code>: <strong>Switch between</strong> the Map, Workflows, Layouts and Dashboard interfaces.
 - <code>Share Project</code>: <strong>Manage the sharing options</strong>.
 - <code>Documentation</code>: <strong>Access the GOAT documentation</strong>.
 - <code>Job Status</code>: <strong>View the status</strong> of ongoing and completed tasks.

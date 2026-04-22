@@ -28,7 +28,7 @@ The Layers Panel is your central hub for organizing and controlling all the data
 You can add layers from [different sources](../data/dataset_types) to your map. You can either:
 - Integrate **datasets from your data explorer or the catalog explorer**
 - Upload new **datasets from your local device** (GeoPackage, GeoJSON, Shapefile, KML, CSV, or XLSX). 
-- Add external layers by inserting the **url of the external source** (WMS, WMTS, or MVT).
+- Add external layers by inserting the **url of the external source** (WFS, WMS, WMTS, XYZ Tiles, or COG).
 
 
 
@@ -41,7 +41,7 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Select if you like to integrate a dataset using the: <code>Data Explorer</code>, <code>Dataset Upload</code>, <code>Dataset External</code> or <code>Dataset Catalog</code> to <strong>choose your data source</strong>.</div>
+  <div class="content">Select if you like to integrate a dataset using the: <code>Data Explorer</code>, <code>Dataset Upload</code>, <code>Dataset External</code> or <code>Catalog Explorer</code> to <strong>choose your data source</strong>.</div>
 </div>
 
 <Tabs>

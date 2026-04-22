@@ -23,7 +23,7 @@ import TabItem from '@theme/TabItem';
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Wählen Sie den zu filternden Layer aus und klicken Sie auf das <code>Filter</code> <img src={require('/img/map/filter/filter_icon.png').default} alt="Filter Icon" style={{ maxHeight: "20px", maxWidth: "20px"}}/> Symbol in der <b>Werkzeugleiste</b> rechts.</div>
+  <div class="content">Wählen Sie Ihren Layer aus und navigieren Sie zu <code>Layer-Design</code> <img src={require('/img/icons/styling.png').default} alt="Styling-Symbol" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> und finden Sie den <code>Filter-Bereich</code>.</div>
 </div>
 
 <div class="step">
@@ -135,4 +135,8 @@ Diese Funktion wird derzeit entwickelt. 🧑🏻‍💻
 </div>
 
 <strong>Gesamten Filter entfernen</strong>: Klicken Sie auf <code>Filter löschen</code> am unteren Rand des Filtermenüs, um <strong>alle Filter zu entfernen</strong>.
+
+### Als neuen Layer speichern
+
+Klicken Sie unten im <code>Filter</code>-Menü auf <code>Als neuen Layer speichern</code>, um das **gefilterte Ergebnis als neuen Datensatz** in Ihrem Workspace zu speichern. So können Sie mit den gefilterten Daten unabhängig weiterarbeiten.
 

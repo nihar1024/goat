@@ -75,11 +75,13 @@ export function useJobStatus(onSuccess?: () => void, onFailed?: () => void) {
           }
         } else {
           onFailedRef.current?.();
-          // Show custom error message for finalize_layer
           const isFinalizeJob = job.processID === "finalize_layer";
+          // workflow_runner failures are surfaced by useWorkflowExecution
+          // with a contextual message; don't double-toast here.
+          const isWorkflowJob = job.processID === "workflow_runner";
           if (isFinalizeJob) {
             toast.error(t("layer_save_failed"));
-          } else {
+          } else if (!isWorkflowJob) {
             toast.error(`"${type}" - ${t("job_failed")}`);
           }
         }

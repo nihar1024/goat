@@ -256,7 +256,7 @@ export function MeasurementResults({
               size="small"
               onClick={onClose}
               sx={{
-                color: theme.palette.text.secondary,
+                color: theme.palette.action.active,
               }}>
               <Icon iconName={ICON_NAME.CLOSE} fontSize="small" />
             </IconButton>
@@ -314,7 +314,7 @@ export function MeasurementResults({
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <Icon
                             iconName={getIcon(measurement.type)}
-                            htmlColor={isSelected ? theme.palette.primary.main : theme.palette.text.secondary}
+                            htmlColor={isSelected ? theme.palette.primary.main : theme.palette.action.active}
                             fontSize="small"
                           />
                           <Typography
@@ -334,7 +334,7 @@ export function MeasurementResults({
                             title={t("zoom_to_feature")}
                             aria-label={t("zoom_to_feature")}
                             sx={{
-                              color: theme.palette.text.secondary,
+                              color: theme.palette.action.active,
                               width: 28,
                               height: 28,
                               p: 0.25,
@@ -346,7 +346,7 @@ export function MeasurementResults({
                             size="small"
                             onClick={(event) => openUnitMenu(event, measurement.id)}
                             sx={{
-                              color: theme.palette.text.secondary,
+                              color: theme.palette.action.active,
                               width: 28,
                               height: 28,
                               p: 0.25,
@@ -364,7 +364,7 @@ export function MeasurementResults({
                               onDeleteMeasurement?.(measurement.id);
                             }}
                             sx={{
-                              color: theme.palette.text.secondary,
+                              color: theme.palette.action.active,
                               width: 28,
                               height: 28,
                               p: 0.25,
@@ -391,7 +391,7 @@ export function MeasurementResults({
                           const actionIcon = isHighlighted ? ICON_NAME.CIRCLECHECK : ICON_NAME.COPY;
                           const actionColor = isHighlighted
                             ? theme.palette.primary.main
-                            : theme.palette.text.secondary;
+                            : theme.palette.action.active;
 
                           return (
                             <Stack

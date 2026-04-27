@@ -773,6 +773,7 @@
   "hover": "Hover",
   "hover_for_help": "Hover over an item to see its description",
   "hover_function_for_help": "Hover over a function to see its description",
+  "icon_color": "Icon Color",
   "icon_upload_failed": "Failed to upload icon",
   "icons": "Icons",
   "icons_based_on": "Icons based on: {{field}}",

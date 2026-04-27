@@ -76,7 +76,8 @@ export default function MapPage({ params: { projectId } }) {
   }, [dispatch, project, projectLayers, projectLayerGroups]);
 
   const primaryColor = project?.builder_config?.settings?.primary_color;
-  const brandedTheme = useBrandedTheme(primaryColor);
+  const iconColor = project?.builder_config?.settings?.icon_color;
+  const brandedTheme = useBrandedTheme(primaryColor, iconColor);
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
 

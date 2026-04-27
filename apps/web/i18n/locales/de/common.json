@@ -773,6 +773,7 @@
   "hover": "Hover",
   "hover_for_help": "Mit Maus über Element fahren für Details",
   "hover_function_for_help": "Mit Maus über Funktion fahren für Details",
+  "icon_color": "Symbolfarbe",
   "icon_upload_failed": "Symbol konnte nicht hochgeladen werden",
   "icons": "Symbole",
   "icons_based_on": "Symbole basierend auf: {{field}}",

@@ -99,7 +99,8 @@ export default function MapPage({ params: { projectId } }) {
   }, [_project]);
 
   const primaryColor = project?.builder_config?.settings?.primary_color;
-  const brandedTheme = useBrandedTheme(primaryColor);
+  const iconColor = project?.builder_config?.settings?.icon_color;
+  const brandedTheme = useBrandedTheme(primaryColor, iconColor);
 
   // Order layers using tree-aware DFS traversal so the map rendering order
   // matches the visual tree order (layers inside a group inherit the group's position).

@@ -102,6 +102,7 @@ export const builderConfigSchema = z.object({
     language: dashboardLanguageEnum.default("auto"),
     font_family: z.string().default("Mulish, sans-serif"),
     primary_color: z.string().optional(),
+    icon_color: z.string().optional(),
   }),
   interface: z.preprocess(
     // Convert empty arrays to `undefined` to trigger the default, todo: remove this when dashboard is completed

@@ -29,7 +29,7 @@ export function Zoom(props: ZoomProps) {
                   backgroundColor: theme.palette.background.paper,
                   marginBottom: theme.spacing(1),
                   pointerEvents: "all",
-                  color: theme.palette.text.secondary,
+                  color: theme.palette.action.active,
                   "&:hover": {
                     backgroundColor: theme.palette.background.default,
                   },
@@ -46,7 +46,7 @@ export function Zoom(props: ZoomProps) {
                   backgroundColor: theme.palette.background.paper,
                   marginTop: theme.spacing(1),
                   marginBottom: theme.spacing(1),
-                  color: theme.palette.text.secondary,
+                  color: theme.palette.action.active,
                   "&:hover": {
                     backgroundColor: theme.palette.background.default,
                   },

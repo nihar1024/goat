@@ -334,9 +334,7 @@ export const Container: React.FC<ContainerProps> = ({
                 overflow: isCollapsed ? "hidden" : "hidden auto",
               }),
               gap: isCollapsed ? 0 : `${panel?.config?.position?.spacing}rem`,
-              padding: isCollapsed
-                ? 0
-                : `${Math.max(panel?.config?.position?.padding ?? 0, !viewOnly && visibleWidgets.length > 0 ? 0.25 : 0)}rem`,
+              padding: isCollapsed ? 0 : `${panel?.config?.position?.padding ?? 0}rem`,
               transition: "all 0.3s",
               ...(panel.config?.options?.style === "default" && {
                 justifyContent: panel.config?.position?.alignItems,

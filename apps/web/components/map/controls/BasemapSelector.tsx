@@ -47,7 +47,7 @@ export function BaseMapSelectorList(props: BasemapSelectorListProps) {
         <>
           <Box position="absolute" top={5} right={5}>
             <IconButton onClick={() => props.onClick()}>
-              <Icon iconName={ICON_NAME.CLOSE} htmlColor={theme.palette.text.secondary} fontSize="small" />
+              <Icon iconName={ICON_NAME.CLOSE} htmlColor={theme.palette.action.active} fontSize="small" />
             </IconButton>
           </Box>
 
@@ -81,7 +81,7 @@ export function BasemapSelectorButton({ open, setOpen }: BasemapSelectorButtonPr
         sx={{
           my: 1,
           backgroundColor: theme.palette.background.paper,
-          color: theme.palette.text.secondary,
+          color: theme.palette.action.active,
           ...(open && {
             color: theme.palette.primary.main,
           }),

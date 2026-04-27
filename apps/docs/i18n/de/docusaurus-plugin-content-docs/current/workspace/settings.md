@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Einstellungen
 
-Auf der **Einstellungen**-Seite können Sie Ihre Präferenzen und Einstellungen bezüglich Ihres **Kontos, Teams, Organisation und Abonnements** anzeigen und ändern. 
+Auf der **Einstellungen**-Seite können Sie Ihre Präferenzen und Einstellungen bezüglich Ihres **Kontos, Teams, Organisation und Abrechnung** anzeigen und ändern. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/workspace/settings/settings_de.webp').default} alt="GOAT - Profil-Einstellungen" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
@@ -67,12 +67,12 @@ Wenn Sie zur Gefahrenzone nach unten scrollen, finden Sie auch eine Option zum *
 <p>
 </p>
 
-## Abonnements
+## Abrechnung
 
-Im **Abonnements**-Menü können Sie die **Details Ihres Abonnements** anzeigen und ändern. Dies ermöglicht es Ihnen, über Ihren Abonnement-Status informiert zu bleiben und alle notwendigen Anpassungen vorzunehmen, um Ihren Anforderungen besser zu entsprechen. 
+Im Menü **Abrechnung** können Sie Ihren aktuellen Plan sowie verfügbare Pläne einsehen. So bleiben Sie stets über Ihren Planstatus informiert und können bei Bedarf Anpassungen vornehmen, die Ihren Anforderungen besser entsprechen. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/subscription_settings.png').default} alt="Abonnement-Details" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/subscription_settings_de.webp').default} alt="Abrechnungsdetails" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 <p>
@@ -80,6 +80,6 @@ Im **Abonnements**-Menü können Sie die **Details Ihres Abonnements** anzeigen 
 
 :::info
 
-Bitte zögern Sie nicht, jederzeit den **[Support](https://plan4better.de/en/contact/ "Support kontaktieren")** zu kontaktieren, falls Sie Fragen zu Ihrem Abonnement haben. 
+Bitte zögern Sie nicht, jederzeit den **[Support](https://plan4better.de/en/contact/ "Support kontaktieren")** zu kontaktieren, falls Sie Fragen zu Ihrem Plan haben. 
 
 :::

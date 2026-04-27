@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Settings
 
-On the Settings page, **you can view and modify your preferences and settings** related to your account, teams, organization, and subscriptions. 
+On the Settings page, **you can view and modify your preferences and settings** related to your account, teams, organization, and billing. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/workspace/settings/settings.webp').default} alt="GOAT - Profile Settings" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
@@ -67,12 +67,12 @@ If you scroll down to the Danger zone, you also find an option to **delete your 
 <p>
 </p>
 
-## Subscriptions
+## Billing
 
-In the Subscriptions menu, you can **view and change the details of your subscription**. This allows you to stay informed about your subscription status and make any necessary adjustments to better suit your requirements. 
+In the Billing menu, you can **view your current plan and available plans**. This allows you to stay informed about your plan status and make any necessary adjustments to better suit your requirements. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/subscription_settings.png').default} alt="Subscription Details" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/subscription_settings.webp').default} alt="Billing Details" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 <p>
@@ -80,6 +80,6 @@ In the Subscriptions menu, you can **view and change the details of your subscri
 
 :::info
 
-Please feel free to contact the **[Support](https://plan4better.de/en/contact/ "Contact support")** anytime in case you have questions regarding your subscription. 
+Please feel free to contact the **[Support](https://plan4better.de/en/contact/ "Contact support")** anytime in case you have questions regarding your plan. 
 
 :::

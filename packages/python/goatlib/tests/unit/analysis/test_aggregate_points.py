@@ -274,7 +274,7 @@ class TestAggregatePointsPolygon:
         # Original zipcode_polygon has: plz, note, zipcode columns
         assert "plz" in df.columns
         assert "zipcode" in df.columns
-        assert "geom" in df.columns
+        assert "geometry" in df.columns
 
 
 class TestAggregatePointsH3:
@@ -311,7 +311,7 @@ class TestAggregatePointsH3:
         # Should have H3 index column and sum column
         assert "h3_8" in df.columns
         assert "value_sum" in df.columns
-        assert "geom" in df.columns
+        assert "geometry" in df.columns
         # Should have some H3 cells
         assert len(df) > 0
 

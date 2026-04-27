@@ -603,17 +603,13 @@ def run_tool_node(
     print(f"[{node_id}] Created job: {job_id}")
 
     try:
-        # Poll for job completion
+        # Poll for job completion.
+        # Note: we do NOT call wmill.cancel_running() here — that method cancels
+        # *other* running instances of this script (it's an action, not a check),
+        # which mutually-murders concurrent workflow runs. If the parent workflow
+        # is cancelled by the user, Windmill will SIGTERM this process; the
+        # child tool job runs to completion and its result is simply discarded.
         while True:
-            # Check if our parent job is being cancelled
-            try:
-                wmill.cancel_running()  # Raises if cancelled
-            except Exception:
-                # Parent cancelled - cancel the child job too
-                print(f"[{node_id}] Parent cancelled, cancelling {job_id}")
-                wmill.cancel_job(job_id)
-                raise RuntimeError("Workflow cancelled")
-
             status = wmill.get_job_status(job_id)
 
             if status == "COMPLETED":

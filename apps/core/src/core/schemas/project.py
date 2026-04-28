@@ -371,6 +371,10 @@ class ProjectPublicRead(BaseModel):
     updated_at: datetime = Field(..., description="Updated at")
     project_id: UUID
     config: ProjectPublicConfig
+    custom_domain_id: UUID | None = Field(
+        default=None,
+        description="ID of the custom domain assigned to this published project, if any.",
+    )
 
 
 # --- Schemas for Tree Structure Updates (Drag & Drop) ---

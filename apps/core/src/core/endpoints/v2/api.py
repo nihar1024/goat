@@ -2,9 +2,11 @@ from fastapi import APIRouter
 
 from . import (
     asset,
+    custom_domain_lookup,
     datasets,
     folder,
     layer,
+    organization_domain,
     project,
     report_layout,
     status,
@@ -25,3 +27,12 @@ router.include_router(system.router, prefix="/system", tags=["System Settings"])
 router.include_router(status.router, prefix="/status", tags=["Status"])
 router.include_router(asset.router, prefix="/asset", tags=["Asset"])
 router.include_router(datasets.router, prefix="/datasets", tags=["Datasets"])
+router.include_router(
+    organization_domain.router,
+    prefix="/organizations/{organization_id}/domains",
+    tags=["Organization Domain"],
+)
+router.include_router(
+    custom_domain_lookup.router,
+    tags=["Custom Domain Lookup"],
+)

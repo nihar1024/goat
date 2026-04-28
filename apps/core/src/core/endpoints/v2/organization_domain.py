@@ -1,0 +1,242 @@
+"""User-facing endpoints for managing custom domains in an organization.
+
+Phase 4 of the white-label custom domains feature.
+
+Note: as of v1, GOAT does not have an explicit "is org admin" guard at the
+endpoint layer; ``auth_z`` only confirms the user is authenticated. Org-admin
+gating is enforced at the UI level. This is a v1 limitation; tighten when
+the platform gains a proper org-role check.
+"""
+
+from typing import List
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+from pydantic import UUID4
+from sqlalchemy.exc import IntegrityError
+
+from core.core.config import settings
+from core.crud.crud_organization_domain import organization_domain as crud
+from core.db.models.organization_domain import (
+    CertStatus,
+    DnsStatus,
+    OrganizationDomain,
+)
+from core.db.session import AsyncSession
+from core.deps.auth import auth_z
+from core.deps.provisioner import get_provisioner
+from core.endpoints.deps import get_db, get_user_id
+from core.schemas.organization_domain import (
+    OrganizationDomainCreate,
+    OrganizationDomainRead,
+)
+from core.services.domain_reconciliation import (
+    check_dns,
+    provision_domain,
+    release_domain,
+)
+from core.services.provisioner import CustomDomainProvisioner
+
+router = APIRouter()
+
+
+@router.get(
+    "/",
+    summary="List custom domains for an organization",
+    response_model=List[OrganizationDomainRead],
+    status_code=200,
+    dependencies=[Depends(auth_z)],
+)
+async def list_domains(
+    *,
+    organization_id: UUID4 = Path(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> List[OrganizationDomainRead]:
+    """Return all custom domains owned by the given organization."""
+    rows = await crud.list_with_assignment_by_organization(
+        async_session, organization_id=organization_id
+    )
+    return [
+        OrganizationDomainRead.model_validate(
+            {
+                **domain.model_dump(),
+                "assigned_project_id": project_id,
+                "assigned_project_name": project_name,
+            }
+        )
+        for domain, project_id, project_name in rows
+    ]
+
+
+@router.post(
+    "/",
+    summary="Register a new custom domain for an organization",
+    response_model=OrganizationDomainRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(auth_z)],
+)
+async def create_domain(
+    *,
+    organization_id: UUID4 = Path(...),
+    payload: OrganizationDomainCreate = Body(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+    provisioner: CustomDomainProvisioner = Depends(get_provisioner),
+) -> OrganizationDomain:
+    """Register a new custom domain.
+
+    Performs an immediate DNS check; if the CNAME is already pointing at
+    the canonical target, also notifies the provisioner so the user
+    doesn't need to wait for the next cron tick.
+    """
+    domain = OrganizationDomain(
+        organization_id=organization_id,
+        base_domain=payload.base_domain,
+    )
+    async_session.add(domain)
+    try:
+        await async_session.flush()
+    except IntegrityError as exc:
+        await async_session.rollback()
+        # Distinguish between common integrity-error causes so the caller
+        # gets a useful message rather than a misleading "already registered".
+        err_detail = str(exc.orig).lower() if exc.orig else str(exc).lower()
+        if "unique" in err_detail or "duplicate key" in err_detail:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"domain '{payload.base_domain}' is already registered",
+            )
+        if "foreign key" in err_detail or "violates foreign key" in err_detail:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"organization {organization_id} does not exist "
+                    "(seed it before adding domains)"
+                ),
+            )
+        # Surface the actual database error for any other constraint failure.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc.orig) if exc.orig else str(exc),
+        )
+
+    dns_status, dns_message = await check_dns(
+        domain.base_domain,
+        canonical_target=settings.CUSTOM_DOMAIN_CNAME_TARGET,
+    )
+    domain.dns_status = dns_status
+    domain.dns_status_message = dns_message
+
+    if dns_status == DnsStatus.VERIFIED:
+        await provision_domain(domain, provisioner=provisioner)
+        # Caddy issues lazily on first inbound request, so there's no
+        # "issuing" wait state — flip directly to active.
+        domain.cert_status = CertStatus.ACTIVE
+        domain.cert_status_message = None
+
+    await async_session.commit()
+    await async_session.refresh(domain)
+    return domain
+
+
+@router.get(
+    "/{domain_id}",
+    summary="Get a single custom domain by ID",
+    response_model=OrganizationDomainRead,
+    status_code=200,
+    dependencies=[Depends(auth_z)],
+)
+async def get_domain(
+    *,
+    organization_id: UUID4 = Path(...),
+    domain_id: UUID4 = Path(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> OrganizationDomainRead:
+    """Return a single custom domain. 404 if not owned by the given org."""
+    row = await crud.get_with_assignment(async_session, id=domain_id)
+    if not row or row[0].organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="domain not found"
+        )
+    domain, project_id, project_name = row
+    return OrganizationDomainRead.model_validate(
+        {
+            **domain.model_dump(),
+            "assigned_project_id": project_id,
+            "assigned_project_name": project_name,
+        }
+    )
+
+
+@router.post(
+    "/{domain_id}/recheck",
+    summary="Re-run DNS verification + maybe trigger provisioning",
+    response_model=OrganizationDomainRead,
+    status_code=200,
+    dependencies=[Depends(auth_z)],
+)
+async def recheck_domain(
+    *,
+    organization_id: UUID4 = Path(...),
+    domain_id: UUID4 = Path(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+    provisioner: CustomDomainProvisioner = Depends(get_provisioner),
+) -> OrganizationDomain:
+    """Synchronously re-verify DNS for a domain.
+
+    If DNS now resolves to the canonical target and we haven't kicked off
+    cert issuance yet, we notify the provisioner here as well so the user
+    gets immediate feedback rather than waiting for the cron.
+    """
+    domain = await crud.get(async_session, id=domain_id)
+    if not domain or domain.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="domain not found"
+        )
+
+    dns_status, dns_message = await check_dns(
+        domain.base_domain,
+        canonical_target=settings.CUSTOM_DOMAIN_CNAME_TARGET,
+    )
+    domain.dns_status = dns_status
+    domain.dns_status_message = dns_message
+
+    if dns_status == DnsStatus.VERIFIED and domain.cert_status == CertStatus.PENDING:
+        await provision_domain(domain, provisioner=provisioner)
+        domain.cert_status = CertStatus.ACTIVE
+        domain.cert_status_message = None
+
+    await async_session.commit()
+    await async_session.refresh(domain)
+    return domain
+
+
+@router.delete(
+    "/{domain_id}",
+    summary="Remove a custom domain (and release it from the provisioner)",
+    response_model=None,
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(auth_z)],
+)
+async def delete_domain(
+    *,
+    organization_id: UUID4 = Path(...),
+    domain_id: UUID4 = Path(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+    provisioner: CustomDomainProvisioner = Depends(get_provisioner),
+) -> None:
+    """Delete a custom domain. Releases it from the provisioner if active."""
+    domain = await crud.get(async_session, id=domain_id)
+    if not domain or domain.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="domain not found"
+        )
+
+    if domain.cert_status == CertStatus.ACTIVE:
+        await release_domain(domain, provisioner=provisioner)
+
+    await async_session.delete(domain)
+    await async_session.commit()

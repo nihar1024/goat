@@ -179,6 +179,7 @@ export const projectPublicSchema = z.object({
   updated_at: z.string(),
   project_id: z.string(),
   config: projectPublicSchemaConfig,
+  custom_domain_id: z.string().uuid().nullable().optional(),
 });
 
 export const projectLayerTreeNodeSchema = z.object({

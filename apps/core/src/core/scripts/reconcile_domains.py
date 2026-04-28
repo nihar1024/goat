@@ -1,0 +1,78 @@
+"""Periodic reconciliation for custom domains. Runs every 5 min via k8s CronJob.
+
+For each domain still in ``dns_status=pending`` state: re-check DNS resolution.
+If the customer's CNAME now points at us, flip ``dns_status=verified`` and
+``cert_status=active``. Caddy handles cert lifecycle lazily on the first
+inbound request to that hostname, so there's nothing for ``core`` to wait on.
+
+Domains stuck in pending for >7 days stay in pending — admin can still click
+"Recheck" to re-run the verification on demand. We don't auto-fail them
+since the customer might just be slow setting up DNS.
+"""
+
+import asyncio
+import logging
+import sys
+
+from core.core.config import settings
+from core.crud.crud_organization_domain import organization_domain as crud
+from core.db.models.organization_domain import CertStatus, DnsStatus
+from core.db.session import session_manager
+from core.services.domain_reconciliation import check_dns
+
+logger = logging.getLogger(__name__)
+
+
+async def reconcile() -> tuple[int, int]:
+    """Run one reconciliation pass. Returns (checked, transitioned)."""
+    transitioned = 0
+    session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
+    try:
+        async with session_manager.session() as db:
+            domains = await crud.list_pending_dns(async_session=db)
+            for d in domains:
+                new_dns, msg = await check_dns(
+                    d.base_domain,
+                    canonical_target=settings.CUSTOM_DOMAIN_CNAME_TARGET,
+                )
+                d.dns_status = new_dns
+                d.dns_status_message = msg
+                if (
+                    new_dns == DnsStatus.VERIFIED
+                    and d.cert_status == CertStatus.PENDING
+                ):
+                    # Caddy issues lazily; nothing to wait for. Flip directly to active.
+                    d.cert_status = CertStatus.ACTIVE
+                    d.cert_status_message = None
+                    transitioned += 1
+                    logger.info(
+                        "reconciled %s: dns_status=verified, cert_status=active",
+                        d.base_domain,
+                    )
+                else:
+                    logger.debug(
+                        "reconciled %s: still pending (%s)",
+                        d.base_domain,
+                        msg or "no message",
+                    )
+            await db.commit()
+            return len(domains), transitioned
+    finally:
+        await session_manager.close()
+
+
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+    try:
+        checked, transitioned = asyncio.run(reconcile())
+        logger.info("done: checked=%d transitioned=%d", checked, transitioned)
+        return 0
+    except Exception:
+        logger.exception("reconciliation failed")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

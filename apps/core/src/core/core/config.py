@@ -212,6 +212,13 @@ class Settings(BaseSettings):
     PRINT_TIMEOUT: int = 120  # seconds to wait for page to render
     PRINT_OUTPUT_DIR: Optional[str] = "prints"  # S3 subdirectory for print outputs
 
+    # Custom domains (white label).
+    # Customers CNAME their domains at this hostname. We maintain it as a CNAME
+    # in the plan4better.de zone pointing at the actual Caddy LoadBalancer's
+    # hostname, so the underlying LB can be migrated without breaking customer
+    # DNS records.
+    CUSTOM_DOMAIN_CNAME_TARGET: str = "cname.goat.plan4better.de"
+
     class Config:
         case_sensitive = True
 

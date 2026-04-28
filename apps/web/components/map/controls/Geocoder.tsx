@@ -236,7 +236,7 @@ export default function Geocoder({
                 size="small"
                 sx={{
                   backgroundColor: theme.palette.background.paper,
-                  color: theme.palette.text.secondary,
+                  color: theme.palette.action.active,
                   "&:hover": {
                     backgroundColor: theme.palette.background.default,
                   },
@@ -325,7 +325,7 @@ export default function Geocoder({
                       iconName={ICON_NAME.SEARCH}
                       fontSize="small"
                       sx={{
-                        color: focused ? theme.palette.primary.main : theme.palette.text.secondary,
+                        color: focused ? theme.palette.primary.main : theme.palette.action.active,
                         margin: theme.spacing(2),
                       }}
                     />
@@ -363,7 +363,7 @@ export default function Geocoder({
                           iconName={ICON_NAME.CLOSE}
                           fontSize="small"
                           sx={{
-                            color: focused ? theme.palette.primary.main : theme.palette.text.secondary,
+                            color: focused ? theme.palette.primary.main : theme.palette.action.active,
                             margin: theme.spacing(2),
                           }}
                         />
@@ -382,7 +382,7 @@ export default function Geocoder({
                           iconName={ICON_NAME.CHEVRON_LEFT}
                           fontSize="small"
                           sx={{
-                            color: focused ? theme.palette.primary.main : theme.palette.text.secondary,
+                            color: focused ? theme.palette.primary.main : theme.palette.action.active,
                             margin: theme.spacing(2),
                           }}
                         />

@@ -7,7 +7,7 @@ from goatlib.analysis.schemas.heatmap import (
     HeatmapGravityParams,
     ImpedanceFunction,
     OpportunityGravity,
-    PotentialType
+    PotentialType,
 )
 from goatlib.io.utils import Metadata
 from goatlib.models.io import DatasetMetadata
@@ -65,6 +65,15 @@ class HeatmapGravityTool(HeatmapToolBase):
             params.impedance,
             params.max_sensitivity,
         )
+
+        if params.reference_area_path:
+            meta, reference_table = self.import_input(
+                params.reference_area_path, table_name="reference_area"
+            )
+            reference_table_h3 = self._process_table_to_h3(
+                reference_table, meta, h3_resolution, "reference_area_h3", "dest_id"
+            )
+            gravity_results = self._project_to_reference_area(gravity_results, reference_table_h3)
 
         logger.info("Heatmap gravity analysis completed successfully")
 

@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 } from "uuid";
 
+import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { MAPBOX_TOKEN } from "@/lib/constants";
 import { setSelectedLayers, updateProjectLayer } from "@/lib/store/layer/slice";
 import { useInteractionDispatcher } from "@/hooks/map/useInteractionDispatcher";
@@ -101,12 +102,18 @@ const PublicProjectLayout = ({
     [builderConfig]
   );
 
+  // SWR cache for editor mode (skipped in viewOnly to avoid an unnecessary fetch)
+  const { mutate: mutateProjectLayers } = useFilteredProjectLayers(
+    viewOnly ? "" : (project?.id ?? "")
+  );
+
   const handleVisibilitySync = useCallback(
     (layerId: number, visible: boolean) => {
       const layer = projectLayers.find((l) => l.id === layerId);
       if (!layer) return;
       const currentVisibility = layer.properties?.visibility ?? true;
       if (currentVisibility === visible) return;
+      // Update Redux (used by public view + map renderer)
       dispatch(
         updateProjectLayer({
           id: layerId,
@@ -115,8 +122,20 @@ const PublicProjectLayout = ({
           },
         })
       );
+      // Update SWR cache (used by editor preview's layer tree)
+      if (!viewOnly) {
+        mutateProjectLayers(
+          (current) =>
+            current?.map((l) =>
+              l.id === layerId
+                ? { ...l, properties: { ...l.properties, visibility: visible } }
+                : l
+            ),
+          false
+        );
+      }
     },
-    [projectLayers, dispatch]
+    [projectLayers, dispatch, mutateProjectLayers, viewOnly]
   );
 
   useInteractionDispatcher({

@@ -121,7 +121,7 @@ export function ProjectInfo({ project, viewOnly, onProjectUpdate }: ProjectInfoP
             backgroundColor: theme.palette.background.paper,
             marginBottom: theme.spacing(1),
             pointerEvents: "all",
-            color: theme.palette.text.secondary,
+            color: theme.palette.action.active,
             "&:hover": {
               backgroundColor: theme.palette.background.default,
             },

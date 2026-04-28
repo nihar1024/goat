@@ -6,10 +6,10 @@ from typing import Self
 from goatlib.analysis.accessibility.base import HeatmapToolBase, sanitize_sql_name
 from goatlib.analysis.schemas.heatmap import (
     Heatmap2SFCAParams,
-    Opportunity2SFCA,
     ImpedanceFunction,
-    TwoSFCAType,
+    Opportunity2SFCA,
     PotentialType,
+    TwoSFCAType,
 )
 from goatlib.io.utils import Metadata
 from goatlib.models.io import DatasetMetadata
@@ -81,6 +81,16 @@ class Heatmap2SFCATool(HeatmapToolBase):
             params.two_sfca_type,
             params.impedance,
         )
+
+        if params.reference_area_path:
+            meta, reference_table = self.import_input(
+                params.reference_area_path, table_name="reference_area"
+            )
+            reference_table_h3 = self._process_table_to_h3(
+                reference_table, meta, h3_resolution, "reference_area_h3", "dest_id"
+            )
+            result_table = self._project_to_reference_area(result_table, reference_table_h3)
+
         logger.info("2SFCA result table created: %s", result_table)
 
         # Export results
@@ -161,7 +171,7 @@ class Heatmap2SFCATool(HeatmapToolBase):
                 )
         except Exception:
             pass
-        
+
         capacity_sql = self._get_capacity_sql(opp, transform_to_4326, geom_type)
 
         if "point" in geom_type:
@@ -364,7 +374,7 @@ class Heatmap2SFCATool(HeatmapToolBase):
         except Exception:
             pass
 
-        
+
         if "point" in geom_type:
             query = f"""
             CREATE OR REPLACE TEMP TABLE {output_table} AS
@@ -501,7 +511,7 @@ class Heatmap2SFCATool(HeatmapToolBase):
             WITH demand_sums AS (
                 SELECT o.dest_id, {','.join(demand_sum_cols)}
                 FROM {unified_table} o
-                LEFT JOIN {filtered_matrix} m ON m.dest_id = o.dest_id 
+                LEFT JOIN {filtered_matrix} m ON m.dest_id = o.dest_id
                 LEFT JOIN {demand_table} d ON m.orig_id = d.orig_id
                 WHERE ({max_cost_filters})
                 GROUP BY o.dest_id
@@ -537,7 +547,7 @@ class Heatmap2SFCATool(HeatmapToolBase):
                     EXP(
                         ((((m.cost / {max_cost_col}) * (m.cost / {max_cost_col})) * -1)
                         / ({sens_col} / {max_sens}))
-                    ) 
+                    )
             """
         elif which == ImpedanceFunction.linear:
             return f"(1 - (m.cost / {max_cost_col}))"
@@ -552,11 +562,11 @@ class Heatmap2SFCATool(HeatmapToolBase):
                     POW(
                         (m.cost / {max_cost_col}),
                         (({sens_col} / {max_sens}) * -1)
-                    ) 
+                    )
             """
         else:
             raise ValueError(f"Unknown impedance function: {which}")
-    
+
     def _compute_cumulative_accessibility(
         self: Self,
         filtered_matrix: str,

@@ -32,6 +32,7 @@ const DASHBOARD_FONTS = [
 ];
 
 const GOAT_GREEN = "#2BB381";
+const DEFAULT_ICON_COLOR = "#8A8D93";
 
 interface SettingsTabProps {
   settings: { [key: string]: unknown };
@@ -196,6 +197,29 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
               <WidgetColorPicker
                 color={(settings?.primary_color as string) || GOAT_GREEN}
                 onChange={(color) => onChange("primary_color", color)}
+              />
+            </Box>
+
+            {/* Icon Color */}
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {t("icon_color")}
+                </Typography>
+                {!!settings?.icon_color && (
+                  <Link
+                    component="button"
+                    variant="caption"
+                    underline="always"
+                    onClick={() => onChange("icon_color", undefined)}
+                    sx={{ cursor: "pointer" }}>
+                    {t("reset")}
+                  </Link>
+                )}
+              </Stack>
+              <WidgetColorPicker
+                color={(settings?.icon_color as string) || DEFAULT_ICON_COLOR}
+                onChange={(color) => onChange("icon_color", color)}
               />
             </Box>
 

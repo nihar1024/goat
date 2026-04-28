@@ -296,16 +296,16 @@ const ReportElements: React.FC<ReportElementsProps> = ({
   atlasPage,
   onMapLoaded,
 }) => {
-  // Local mutable copy of elements so atlas fitBounds can write back viewState
-  // for the scalebar to read
+  // Local mutable copy of elements so the atlas effect can write back the
+  // per-page viewState for the scalebar to read. Initialised once from the
+  // saved config; we deliberately do NOT keep it in sync with `config.elements`
+  // afterwards, because in the print context PrintPage re-renders (e.g. when
+  // mapsLoadedCount increments) cause `config.elements` to be re-evaluated and
+  // a sync-effect would race against the atlas writeback — overwriting it on
+  // every page and leaving the scalebar stuck at the persisted snapshot.
   const [elements, setElements] = useState(config.elements || []);
 
-  // Keep in sync if config changes externally
-  useEffect(() => {
-    setElements(config.elements || []);
-  }, [config.elements]);
-
-  // Handle element config updates (e.g. map writing back viewState after atlas fitBounds)
+  // Handle element config updates (e.g. map writing back viewState after atlas page change)
   const handleElementUpdate = useCallback((elementId: string, newConfig: Record<string, unknown>) => {
     setElements((prev) =>
       prev.map((el) => (el.id === elementId ? { ...el, config: newConfig } : el))

@@ -366,6 +366,7 @@ const CustomColorScale = (props: CustomColorScaleProps) => {
         editingItem={editingColorItem}
         anchorEl={anchorEl}
         onInputHexChange={onInputHexChange}
+        onClose={() => setEditingColorItem(null)}
       />
       {editingValues && props.selectedColorScaleMethod === "ordinal" && (
         <LayerValueSelectorPopper

@@ -57,6 +57,15 @@ class HeatmapClosestAverageTool(HeatmapToolBase):
         )
         logger.info("Closest Average table created: %s", result_table)
 
+        if params.reference_area_path:
+            meta, reference_table = self.import_input(
+                params.reference_area_path, table_name="reference_area"
+            )
+            reference_table_h3 = self._process_table_to_h3(
+                reference_table, meta, h3_resolution, "reference_area_h3", "dest_id"
+            )
+            result_table = self._project_to_reference_area(result_table, reference_table_h3)
+
         # Export results
         output_path = Path(params.output_path)
 

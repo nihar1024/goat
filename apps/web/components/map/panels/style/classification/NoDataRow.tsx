@@ -68,6 +68,10 @@ const NoDataRow = ({
       <SingleColorPopper
         editingItem={editingItem}
         anchorEl={anchorRef.current}
+        onClose={() => {
+          setEditingItem(null);
+          setIsClickAwayEnabled?.(true);
+        }}
         onInputHexChange={(item) => {
           setEditingItem(item);
           onNoDataColorChange?.(item.color);

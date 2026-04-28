@@ -127,7 +127,7 @@ const CustomPalette = ({ customPalette, onApply, onCancel }: CustomPaletteProps)
 
   return (
     <>
-      <SingleColorPopper editingItem={editingItem} anchorEl={anchorEl} onInputHexChange={onInputHexChange} />
+      <SingleColorPopper editingItem={editingItem} anchorEl={anchorEl} onInputHexChange={onInputHexChange} onClose={() => setEditingItem(null)} />
 
       <Box sx={{ px: 2 }}>
         <ColorPalette colors={colors.map((color) => color.color)} />

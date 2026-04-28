@@ -7,6 +7,7 @@ from typing import Self
 from goatlib.analysis.core.base import AnalysisTool
 from goatlib.analysis.schemas.base import PTTimeWindow
 from goatlib.io.parquet import write_optimized_parquet
+from goatlib.io.utils import Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -356,6 +357,102 @@ class HeatmapToolBase(AnalysisTool):
         ).fetchall()
         return [row[0] for row in result] if result else []
 
+    def _process_table_to_h3(
+        self: Self,
+        input_table: str,
+        meta: Metadata,
+        h3_resolution: int,
+        output_table: str,
+        h3_column: str = "dest_id",
+    ) -> str:
+        """Convert Polygon/MultiPolygon geometries to H3 cells (experimental)."""
+        geom_type = (meta.geometry_type or "").lower()
+        geom_col = meta.geometry_column or "geom"
+
+        if "polygon" not in geom_type:
+            raise ValueError(
+                f"Unsupported geometry type '{geom_type}'. Only Polygon/MultiPolygon supported."
+            )
+        if not hasattr(meta, "crs") or meta.crs is None:
+            raise ValueError("No CRS information found in input data.")
+
+        transform_to_4326 = geom_col
+        if meta.crs.to_epsg() != 4326:
+            source_crs = meta.crs.to_string()
+            logger.info(f"Transforming geometry from {source_crs} to EPSG:4326")
+            transform_to_4326 = f"ST_Transform({geom_col}, '{source_crs}', 'EPSG:4326')"
+
+        query = f"""
+            CREATE OR REPLACE TEMP TABLE {output_table} AS
+            WITH features AS (
+                SELECT {transform_to_4326} AS geom
+                FROM {input_table}
+                WHERE {geom_col} IS NOT NULL
+            ),
+            polygons AS (
+                SELECT (UNNEST(ST_Dump(ST_Force2D(geom)))).geom AS simple_geom
+                FROM features
+            ),
+            h3_cells_raw AS (
+                SELECT
+                    UNNEST(h3_polygon_wkt_to_cells_experimental(ST_AsText(simple_geom), {h3_resolution}, 'CONTAINMENT_OVERLAPPING')) AS {h3_column}
+                FROM polygons
+            )
+            SELECT DISTINCT {h3_column} FROM h3_cells_raw
+        """
+        self.con.execute(query)
+        count = self.con.execute(f"SELECT COUNT(*) FROM {output_table}").fetchone()[0]
+        logger.info("Produced %d H3 cells from polygon input: %s", count, output_table)
+        return output_table
+
+    def _project_to_reference_area(
+        self: Self,
+        result_table: str,
+        reference_table_h3: str,
+    ) -> str:
+        """Extend result to all H3 cells in the reference area.
+
+        Cells in the reference area that were not reached get NULL values.
+        The output is clipped to the reference area (cells outside are dropped).
+        If there is no overlap between the result and the reference area,
+        the original result_table is returned unchanged.
+        """
+        projected_table = "result_projected_to_reference"
+
+        overlap_count = self.con.execute(f"""
+            SELECT COUNT(*) FROM {result_table} r
+            JOIN {reference_table_h3} ref ON r.h3_index = ref.dest_id
+        """).fetchone()[0]
+
+        if overlap_count == 0:
+            logger.info(
+                "Reference area has no overlap with result — skipping projection"
+            )
+            return result_table
+
+        # Collect value columns (everything except h3_index)
+        schema = self.con.execute(f"DESCRIBE {result_table}").fetchall()
+        value_cols = [col[0] for col in schema if col[0] != "h3_index"]
+        select_cols = ", ".join(f"r.{col}" for col in value_cols)
+
+        query = f"""
+            CREATE OR REPLACE TEMP TABLE {projected_table} AS
+            SELECT
+                ref.dest_id AS h3_index,
+                {select_cols}
+            FROM {reference_table_h3} ref
+            LEFT JOIN {result_table} r ON ref.dest_id = r.h3_index
+        """
+        self.con.execute(query)
+
+        count = self.con.execute(f"SELECT COUNT(*) FROM {projected_table}").fetchone()[0]
+        original_count = self.con.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
+        logger.info(
+            "Projected result to reference area: %d H3 cells (original result had %d)",
+            count,
+            original_count,
+        )
+        return projected_table
 
     def _export_h3_results(
         self: Self,

@@ -119,6 +119,8 @@ namespace routing
     {
         std::vector<Point3857> origins;
         std::vector<Point3857> destinations;
+        std::vector<std::string> origin_ids;      // passthrough IDs (empty → 0-based index)
+        std::vector<std::string> destination_ids;  // passthrough IDs (empty → 0-based index)
         RoutingMode mode;
         CostType cost_type;
         double max_cost;       // budget: minutes (time) or meters (distance)

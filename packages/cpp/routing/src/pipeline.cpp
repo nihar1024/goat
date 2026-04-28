@@ -26,6 +26,20 @@ namespace routing
 
     namespace
     {
+        static std::string sql_escape(std::string const &s)
+        {
+            std::string out;
+            out.reserve(s.size() + 4);
+            for (char c : s)
+            {
+                if (c == '\'')
+                    out += "''";
+                else
+                    out.push_back(c);
+            }
+            return out;
+        }
+
         // Build a RequestConfig from a MatrixConfig for reusing
         // edge loading, cost computation, and snapping infrastructure.
         RequestConfig matrix_to_request_config(
@@ -289,8 +303,11 @@ namespace routing
 
         if (cfg.mode == RoutingMode::PublicTransport)
         {
-            // PT: run the full pipeline per origin. Destinations are snapped
-            // onto the combined network inside the PT pipeline.
+            // Load timetable once for all origins.
+            auto tt = nigiri::timetable::read(
+                std::filesystem::path{cfg.timetable_path});
+
+            // PT: run the pipeline per origin, sharing the timetable.
             for (size_t oi = 0; oi < n_origins; ++oi)
             {
                 auto rcfg = matrix_to_request_config(
@@ -298,7 +315,7 @@ namespace routing
                 input::validate(rcfg);
 
                 auto pt_result = pt::run_pt_pipeline_with_destinations(
-                    rcfg, con, cfg.destinations);
+                    rcfg, con, cfg.destinations, &*tt);
 
                 read_dest_costs(oi, pt_result.field.costs,
                                 pt_result.extra_node_ids);
@@ -347,50 +364,55 @@ namespace routing
             }
         }
 
-        // Write results to parquet via DuckDB.
-        // All O×D pairs are emitted; unreachable pairs have cost = NULL.
+        // Write results to parquet via DuckDB Appender.
         namespace fs = std::filesystem;
         fs::path out_path(cfg.output_path);
         if (!out_path.parent_path().empty())
             fs::create_directories(out_path.parent_path());
 
         {
-            std::ostringstream values;
-            bool first = true;
-            for (size_t oi = 0; oi < n_origins; ++oi)
+            bool const has_origin_ids = cfg.origin_ids.size() == n_origins;
+            bool const has_dest_ids = cfg.destination_ids.size() == n_dests;
+
+            con.Query("DROP TABLE IF EXISTS _matrix_tmp");
+            con.Query("CREATE TEMP TABLE _matrix_tmp "
+                      "(origin VARCHAR, destination VARCHAR, travel_cost INTEGER)");
+
             {
-                for (size_t di = 0; di < n_dests; ++di)
+                duckdb::Appender appender(con, "_matrix_tmp");
+                for (size_t oi = 0; oi < n_origins; ++oi)
                 {
-                    if (!first) values << ",";
-                    first = false;
-                    double c = matrix[oi * n_dests + di];
-                    values << "(" << oi << "," << di << ",";
-                    if (std::isnan(c))
-                        values << "NULL";
-                    else
-                        values << c;
-                    values << ")";
+                    std::string const &o_id = has_origin_ids
+                        ? cfg.origin_ids[oi]
+                        : std::to_string(oi);
+
+                    for (size_t di = 0; di < n_dests; ++di)
+                    {
+                        double c = matrix[oi * n_dests + di];
+                        std::string const &d_id = has_dest_ids
+                            ? cfg.destination_ids[di]
+                            : std::to_string(di);
+
+                        appender.BeginRow();
+                        appender.Append(duckdb::Value(o_id));
+                        appender.Append(duckdb::Value(d_id));
+                        if (std::isnan(c))
+                            appender.Append(duckdb::Value());
+                        else
+                            appender.Append(static_cast<int32_t>(std::round(c)));
+                        appender.EndRow();
+                    }
                 }
             }
 
-            if (first)
-            {
-                // No pairs at all — write empty parquet.
-                values << "(NULL::INTEGER, NULL::INTEGER, NULL::DOUBLE)";
-            }
-
-            std::ostringstream sql;
-            sql << "COPY (SELECT * FROM (VALUES " << values.str()
-                << ") AS t(origin_id, destination_id, cost)";
-            if (first)
-                sql << " WHERE FALSE";
-            sql << ") TO '" << cfg.output_path
-                << "' (FORMAT PARQUET, COMPRESSION ZSTD)";
-
-            auto result = con.Query(sql.str());
+            std::string copy_sql =
+                "COPY _matrix_tmp TO '" + sql_escape(cfg.output_path) +
+                "' (FORMAT PARQUET, COMPRESSION ZSTD)";
+            auto result = con.Query(copy_sql);
             if (result->HasError())
                 throw std::runtime_error(
                     "Travel cost matrix parquet export failed: " + result->GetError());
+            con.Query("DROP TABLE _matrix_tmp");
         }
     }
 

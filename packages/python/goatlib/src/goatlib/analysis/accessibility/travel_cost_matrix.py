@@ -121,6 +121,10 @@ class TravelCostMatrixTool(AnalysisTool):
         cfg = routing.MatrixConfig()
         cfg.origins = origins
         cfg.destinations = destinations
+        if params.origin_id:
+            cfg.origin_ids = [str(i) for i in params.origin_id]
+        if params.destination_id:
+            cfg.destination_ids = [str(i) for i in params.destination_id]
         cfg.mode = mode_map[params.routing_mode]
         cfg.cost_type = (
             routing.CostType.Distance

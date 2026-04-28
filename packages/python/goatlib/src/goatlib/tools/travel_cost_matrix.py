@@ -150,8 +150,9 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="input",
             field_order=1,
-            label="Origins",
-            label_de="Startpunkte",
+            label="Origins layer",
+            label_de="Startpunkte-Layer",
+            group_label="Origins",
             widget="layer-selector",
             widget_options={"geometry_types": ["Point", "MultiPoint"]},
         ),
@@ -168,9 +169,10 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="Layer containing destination points.",
         json_schema_extra=ui_field(
             section="input",
-            field_order=3,
-            label="Destinations",
-            label_de="Zielpunkte",
+            field_order=4,
+            label="Destinations layer",
+            label_de="Zielpunkte-Layer",
+            group_label="Destinations",
             widget="layer-selector",
             widget_options={"geometry_types": ["Point", "MultiPoint"]},
         ),
@@ -180,6 +182,32 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         None,
         description="CQL2-JSON filter for destination layer.",
         json_schema_extra=ui_field(section="input", field_order=4, hidden=True),
+    )
+
+    origin_id_column: str = Field(
+        ...,
+        description="Column used to label origins in the result matrix.",
+        json_schema_extra=ui_field(
+            section="input",
+            field_order=3,
+            label="Origins label",
+            label_de="Herkunft-Bezeichnung",
+            widget="field-selector",
+            widget_options={"source_layer": "origin_layer_id"},
+        ),
+    )
+
+    destination_id_column: str = Field(
+        ...,
+        description="Column used to label destinations in the result matrix.",
+        json_schema_extra=ui_field(
+            section="input",
+            field_order=5,
+            label="Destinations label",
+            label_de="Ziel-Bezeichnung",
+            widget="field-selector",
+            widget_options={"source_layer": "destination_layer_id"},
+        ),
     )
 
     # =========================================================================
@@ -325,7 +353,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # Distance budget
+    # Distance budget — active mobility
     max_cost_distance: int = Field(
         default=500,
         description="Maximum distance in meters.",
@@ -345,7 +373,34 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             },
             visible_when={
                 "$and": [
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
+                    {"cost_type": "distance"},
+                ]
+            },
+        ),
+    )
+
+    # Distance budget — car
+    max_cost_distance_car: int = Field(
+        default=5000,
+        description="Maximum distance in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label_key="limit",
+            inline_group="cost_config",
+            inline_flex="1 0 0",
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Distance must be between 50 and 100,000 meters",
+                    "max": 100000,
+                    "min": 50,
+                },
+            },
+            visible_when={
+                "$and": [
+                    {"routing_mode": "car"},
                     {"cost_type": "distance"},
                 ]
             },
@@ -506,6 +561,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     def resolve_max_cost(self: Self) -> float:
         """Resolve the effective max_cost from mode-specific UI fields."""
         if self.cost_type == CostType.distance:
+            if self.routing_mode == RoutingMode.car:
+                return float(self.max_cost_distance_car)
             return float(self.max_cost_distance)
         if self.routing_mode == RoutingMode.pt:
             return float(self.max_cost_time_pt)
@@ -539,41 +596,45 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         params: dict[str, Any],
     ) -> dict[str, str]:
         return {
-            "origin_id": "INTEGER",
-            "destination_id": "INTEGER",
-            "cost": "DOUBLE",
+            "origin": "VARCHAR",
+            "destination": "VARCHAR",
+            "travel_cost": "INTEGER",
         }
 
     @staticmethod
     def _extract_coordinates_from_parquet(
         parquet_path: Path,
-    ) -> tuple[list[float], list[float]]:
-        """Extract lat/lon coordinates from a GeoParquet point layer."""
+        id_column: str,
+    ) -> tuple[list[float], list[float], list[str]]:
+        """Extract lat/lon coordinates and IDs from a GeoParquet point layer."""
         con = duckdb.connect()
         try:
             con.execute("INSTALL spatial; LOAD spatial;")
 
             # Detect geometry column from parquet schema
             cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')").fetchall()
-            geom_col = None
-            for col_name, col_type, *_ in cols:
-                if "GEOMETRY" in col_type.upper() or col_name in ("geom", "geometry"):
-                    geom_col = col_name
-                    break
+            geom_col = next(
+                (c[0] for c in cols if "GEOMETRY" in c[1].upper() or c[0] in ("geom", "geometry")),
+                None,
+            )
             if not geom_col:
                 raise RuntimeError(f"No geometry column found in {parquet_path}")
+
+            id_select = f'CAST("{id_column}" AS VARCHAR)'
 
             result = con.execute(f"""
                 SELECT
                     ST_Y("{geom_col}") as lat,
-                    ST_X("{geom_col}") as lon
+                    ST_X("{geom_col}") as lon,
+                    {id_select} as id
                 FROM read_parquet('{parquet_path}')
                 WHERE "{geom_col}" IS NOT NULL
             """).fetchall()
 
             latitudes = [r[0] for r in result]
             longitudes = [r[1] for r in result]
-            return latitudes, longitudes
+            ids = [r[2] for r in result]
+            return latitudes, longitudes, ids
         finally:
             con.close()
 
@@ -588,24 +649,34 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         try:
             con.execute("INSTALL spatial; LOAD spatial;")
 
+            # Join by positional index — each destination row gets the average
+            # cost across all origins for that specific point, regardless of
+            # whether label values are unique.
+            n_dests = con.execute(
+                f"SELECT count(*) FROM read_parquet('{dest_layer_parquet}')"
+            ).fetchone()[0]
             con.execute(f"""
                 COPY (
                     SELECT
-                        d.* EXCLUDE (_dest_idx),
-                        m.avg_cost as travel_cost
+                        d.* EXCLUDE (_row_idx),
+                        CAST(ROUND(m.avg_cost) AS INTEGER) as travel_cost
                     FROM (
-                        SELECT *, ROW_NUMBER() OVER () - 1 AS _dest_idx
+                        SELECT *, (ROW_NUMBER() OVER () - 1) AS _row_idx
                         FROM read_parquet('{dest_layer_parquet}')
                     ) d
                     LEFT JOIN (
                         SELECT
-                            destination_id,
-                            AVG(cost) as avg_cost
-                        FROM read_parquet('{matrix_path}')
-                        WHERE cost IS NOT NULL
-                        GROUP BY destination_id
-                    ) m ON d._dest_idx = m.destination_id
-                    ORDER BY d._dest_idx
+                            dest_idx,
+                            AVG(travel_cost) as avg_cost
+                        FROM (
+                            SELECT travel_cost,
+                                   (ROW_NUMBER() OVER () - 1) % {n_dests} AS dest_idx
+                            FROM read_parquet('{matrix_path}')
+                        )
+                        WHERE travel_cost IS NOT NULL
+                        GROUP BY dest_idx
+                    ) m ON d._row_idx = m.dest_idx
+                    ORDER BY d._row_idx
                 ) TO '{output_path}' (FORMAT PARQUET, COMPRESSION ZSTD)
             """)
         finally:
@@ -636,9 +707,11 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
             project_id=params.project_id,
         )
 
-        # Extract coordinates from exported parquets
-        origin_lats, origin_lons = self._extract_coordinates_from_parquet(origin_parquet)
-        dest_lats, dest_lons = self._extract_coordinates_from_parquet(dest_parquet)
+        # Extract coordinates and IDs from exported parquets
+        origin_lats, origin_lons, origin_ids = self._extract_coordinates_from_parquet(
+            origin_parquet, id_column=params.origin_id_column)
+        dest_lats, dest_lons, dest_ids = self._extract_coordinates_from_parquet(
+            dest_parquet, id_column=params.destination_id_column)
 
         # Build PT time window if applicable
         time_window = None
@@ -654,8 +727,10 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         analysis_params = TravelCostMatrixParams(
             origin_latitude=origin_lats,
             origin_longitude=origin_lons,
+            origin_id=origin_ids,
             destination_latitude=dest_lats,
             destination_longitude=dest_lons,
+            destination_id=dest_ids,
             routing_mode=params.routing_mode,
             cost_type=params.cost_type,
             max_cost=max_cost,
@@ -679,7 +754,8 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
 
         # Build destination points with min cost joined from original layer
         self._build_destination_points_parquet(
-            matrix_output_path, dest_parquet, destinations_output_path
+            matrix_output_path, dest_parquet,
+            destinations_output_path
         )
 
         # Store for dual-output handling in run()

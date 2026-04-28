@@ -44,10 +44,12 @@ namespace routing::pt
 
     // Core PT pipeline logic. When extra_points is non-empty, snaps them
     // onto the combined network and returns their node IDs.
+    // When pre_tt is provided, skips timetable loading.
     PtPipelineResult run_pt_pipeline_impl(
         RequestConfig const &cfg,
         duckdb::Connection &con,
-        std::vector<Point3857> const &extra_points)
+        std::vector<Point3857> const &extra_points,
+        nigiri::timetable const *pre_tt = nullptr)
     {
         auto t0 = std::chrono::steady_clock::now();
         auto elapsed = [&]() {
@@ -57,10 +59,20 @@ namespace routing::pt
             return ms;
         };
 
-        // 1. Load timetable
-        auto tt = nigiri::timetable::read(
-            std::filesystem::path{cfg.timetable_path});
-        std::fprintf(stderr, "[PT] 1. Load timetable: %.0f ms\n", elapsed());
+        // 1. Load timetable (or reuse pre-loaded)
+        cista::wrapped<nigiri::timetable> owned_tt;
+        nigiri::timetable const *tt;
+        if (pre_tt)
+        {
+            tt = pre_tt;
+        }
+        else
+        {
+            owned_tt = nigiri::timetable::read(
+                std::filesystem::path{cfg.timetable_path});
+            tt = &*owned_tt;
+            std::fprintf(stderr, "[PT] 1. Load timetable: %.0f ms\n", elapsed());
+        }
 
         // 2. Access leg
         auto access = compute_access(cfg, con, *tt);
@@ -250,9 +262,10 @@ namespace routing::pt
     PtPipelineResult run_pt_pipeline_with_destinations(
         RequestConfig const &cfg,
         duckdb::Connection &con,
-        std::vector<Point3857> const &extra_points)
+        std::vector<Point3857> const &extra_points,
+        nigiri::timetable const *pre_tt)
     {
-        return run_pt_pipeline_impl(cfg, con, extra_points);
+        return run_pt_pipeline_impl(cfg, con, extra_points, pre_tt);
     }
 
 } // namespace routing::pt

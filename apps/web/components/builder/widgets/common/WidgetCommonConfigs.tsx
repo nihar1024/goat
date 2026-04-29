@@ -1291,6 +1291,10 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
     return hasNestedSchemaPath(schema, "options.x_axis_ticks");
   }, [schema]);
 
+  const hasHeaderColorDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.header_color");
+  }, [schema]);
+
   // Check if we're in highlight mode (for showing selected color option)
   const isHighlightMode = (config as any)?.options?.selection_response === "highlight";
   const isCategoriesChart = config.type === widgetTypes.Enum.categories_chart;
@@ -1537,7 +1541,8 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
       hasPieLayoutDef ||
       hasDisplayFieldLabelDef ||
       hasHistogramNumBinsDef ||
-      hasHistogramXAxisTicksDef
+      hasHistogramXAxisTicksDef ||
+      hasHeaderColorDef
     );
   }, [
     hasColorDef,
@@ -1553,6 +1558,7 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
     hasDisplayFieldLabelDef,
     hasHistogramNumBinsDef,
     hasHistogramXAxisTicksDef,
+    hasHeaderColorDef,
     hasCustomStyleHandling,
   ]);
 
@@ -1577,6 +1583,15 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                     label={t("base_color")}
                     color={(config as any)?.options?.color || "#0e58ff"}
                     onChange={(color) => handleOptionChange("color", color)}
+                  />
+                )}
+
+                {/* Header color for tables */}
+                {hasHeaderColorDef && (
+                  <WidgetColorPicker
+                    label={t("header_color")}
+                    color={(config as any)?.options?.header_color || "#ffffff"}
+                    onChange={(color) => handleOptionChange("header_color", color)}
                   />
                 )}
 

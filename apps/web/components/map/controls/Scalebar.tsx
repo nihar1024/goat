@@ -17,6 +17,8 @@ const Container = styled(Box)({
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
+  paddingTop: "18px",
+  boxSizing: "border-box",
 });
 
 const LabelsContainer = styled(Box)({
@@ -25,7 +27,7 @@ const LabelsContainer = styled(Box)({
   justifyContent: "space-between",
   width: "100%",
   position: "absolute",
-  top: "-18px", // Position the labels above the scale bar
+  top: "0",
 });
 
 const Label = styled(Typography)({
@@ -136,7 +138,7 @@ const ScaleControl: React.FC<ScaleControlProps> = ({ maxWidth = 150 }) => {
         </Label>
         <Label
           variant="caption"
-          sx={{ right: "0%", transform: "translateX(50%)" }} // Center align the right label
+          sx={{ right: 0 }}
         >
           {endLabel}
         </Label>

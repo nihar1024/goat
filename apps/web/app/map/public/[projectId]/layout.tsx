@@ -2,7 +2,7 @@ import { API_BASE_URL, APP_URL } from "@/lib/constants";
 import { getLocalizedMetadata } from "@/lib/metadata";
 import type { ProjectPublic } from "@/lib/validations/project";
 
-export async function generateMetadata({ params: { projectId, lng } }) {
+export async function generateMetadata({ params: { projectId } }) {
   const PROJECTS_API_BASE_URL = new URL("api/v2/project", API_BASE_URL).href;
   let publicProject: ProjectPublic | null = null;
   try {
@@ -14,16 +14,16 @@ export async function generateMetadata({ params: { projectId, lng } }) {
       publicProject = await res.json();
     }
   } catch (err) {
-    // Swallow the error to avoid breaking metadata generation
     console.error("Failed to fetch public project:", err);
   }
 
-  if (publicProject?.config?.project?.name && lng) {
-    const title = `${publicProject.config.project.name} | GOAT`;
-    const url = `${APP_URL}/${lng}/map/public/${projectId}`;
+  if (publicProject?.config?.project?.name) {
+    const title = publicProject.config.project.name;
+    const url = `${APP_URL}/map/public/${projectId}`;
+    const faviconUrl = publicProject.config.project.builder_config?.settings?.favicon_url;
 
-    return getLocalizedMetadata(
-      lng,
+    const metadata = getLocalizedMetadata(
+      "en",
       {
         en: { title },
         de: { title },
@@ -33,6 +33,11 @@ export async function generateMetadata({ params: { projectId, lng } }) {
         robotsIndex: true,
       }
     );
+
+    if (faviconUrl) {
+      return { ...metadata, icons: { icon: faviconUrl } };
+    }
+    return metadata;
   }
 
   return {};

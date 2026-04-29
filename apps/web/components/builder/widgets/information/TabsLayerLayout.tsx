@@ -1,4 +1,4 @@
-import { Box, Tab, Tabs, Typography } from "@mui/material";
+import { Box, Tab, Tabs, Typography, useTheme } from "@mui/material";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -40,6 +40,7 @@ const TabsLayerLayout = ({
 }: TabsLayerLayoutProps) => {
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
+  const theme = useTheme();
   const options = config.options;
 
   const topLevelGroups = useMemo(
@@ -86,6 +87,8 @@ const TabsLayerLayout = ({
     );
   }
 
+  const iconOnly = options?.show_group_name === false;
+
   return (
     <Box>
       <Tabs
@@ -104,7 +107,7 @@ const TabsLayerLayout = ({
         {topLevelGroups.map((group) => (
           <Tab
             key={group.id}
-            label={options?.show_group_name !== false ? group.name : undefined}
+            label={!iconOnly ? group.name : undefined}
             icon={
               options?.show_group_icons ? (
                 groupIcons?.[`group_icon_${group.id}`]?.url ? (
@@ -112,15 +115,21 @@ const TabsLayerLayout = ({
                     imageUrl={groupIcons[`group_icon_${group.id}`].url}
                     dimension="16px"
                     applyMask={groupIcons[`group_icon_${group.id}`].source === "library"}
-                    imgColor=""
+                    imgColor={theme.palette.action.active}
                   />
                 ) : (
-                  <Icon iconName={ICON_NAME.LAYERS} style={{ fontSize: 14 }} />
+                  <Icon iconName={ICON_NAME.LAYERS} style={{ fontSize: 14, color: theme.palette.action.active }} />
                 )
               ) : undefined
             }
             iconPosition="start"
-            sx={{ minHeight: 32, textTransform: "none", fontSize: "0.8125rem", py: 0 }}
+            sx={{
+              minHeight: 32,
+              textTransform: "none",
+              fontSize: "0.8125rem",
+              py: 0,
+              ...(iconOnly && { minWidth: 40, px: 0.5 }),
+            }}
           />
         ))}
       </Tabs>

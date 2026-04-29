@@ -88,25 +88,68 @@ export const builderPanelSchema = z.object({
 
 export const dashboardLanguageEnum = z.enum(["auto", "en", "de"]);
 
+export const DEFAULT_FAVICON_URL = "/assets/svg/goat-logo.svg";
+
+export const CORNER_KEYS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+export type CornerKey = (typeof CORNER_KEYS)[number];
+
+export const CONTROL_KEYS = [
+  "location",
+  "measure",
+  "zoom_controls",
+  "basemap",
+  "fullscreen",
+  "find_my_location",
+  "project_info",
+] as const;
+export type ControlKey = (typeof CONTROL_KEYS)[number];
+
+// Strip unknown control keys (e.g. "scalebar" from before it became a boolean toggle)
+// so old stored data doesn't cause a hard parse failure.
+const safeControlArray = z.preprocess(
+  (val) => (Array.isArray(val) ? val.filter((v) => (CONTROL_KEYS as readonly string[]).includes(v)) : []),
+  z.array(z.enum(CONTROL_KEYS)).default([])
+);
+
+const controlPositionsSchema = z
+  .object({
+    "top-left": safeControlArray,
+    "top-right": safeControlArray,
+    "bottom-left": safeControlArray,
+    "bottom-right": safeControlArray,
+  })
+  .default({
+    "top-left": ["location", "measure"],
+    "bottom-right": ["zoom_controls", "basemap", "fullscreen"],
+  });
+
+export type ControlPositions = z.infer<typeof controlPositionsSchema>;
+
+export const DEFAULT_CONTROL_POSITIONS: ControlPositions = {
+  "top-left": ["location", "measure"],
+  "top-right": [],
+  "bottom-left": [],
+  "bottom-right": ["zoom_controls", "basemap", "fullscreen"],
+};
+
 export const builderConfigSchema = z.object({
-  settings: z.object({
-    location: z.boolean().default(true),
-    scalebar: z.boolean().default(true),
-    measure: z.boolean().default(false),
-    find_my_location: z.boolean().default(false),
-    zoom_controls: z.boolean().default(true),
-    basemap: z.boolean().default(true),
-    fullscreen: z.boolean().default(true),
-    toolbar: z.boolean().default(true),
-    project_info: z.boolean().default(false),
-    project_info_content: z.string().default(""),
-    language: dashboardLanguageEnum.default("auto"),
-    font_family: z.string().default("Mulish, sans-serif"),
-    primary_color: z.string().optional(),
-    icon_color: z.string().optional(),
-  }),
+  settings: z
+    .object({
+      control_positions: controlPositionsSchema,
+      allowed_basemaps: z.array(z.string()).nullable().default(null),
+      toolbar: z.boolean().default(true),
+      scalebar: z.boolean().default(true),
+      project_info_content: z.string().default(""),
+      // Branding
+      language: dashboardLanguageEnum.default("auto"),
+      font_family: z.string().default("Mulish, sans-serif"),
+      primary_color: z.string().optional(),
+      icon_color: z.string().optional(),
+      font_color: z.string().optional(),
+      favicon_url: z.string().default(DEFAULT_FAVICON_URL),
+    })
+    .default({}),
   interface: z.preprocess(
-    // Convert empty arrays to `undefined` to trigger the default, todo: remove this when dashboard is completed
     (val) => (Array.isArray(val) && val.length === 0 ? undefined : val),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     z.array(builderPanelSchema).default(basicLayout.interface as any)

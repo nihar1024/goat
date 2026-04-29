@@ -100,7 +100,8 @@ export default function MapPage({ params: { projectId } }) {
 
   const primaryColor = project?.builder_config?.settings?.primary_color;
   const iconColor = project?.builder_config?.settings?.icon_color;
-  const brandedTheme = useBrandedTheme(primaryColor, iconColor);
+  const fontColor = project?.builder_config?.settings?.font_color;
+  const brandedTheme = useBrandedTheme(primaryColor, iconColor, fontColor);
 
   // Order layers using tree-aware DFS traversal so the map rendering order
   // matches the visual tree order (layers inside a group inherit the group's position).
@@ -558,12 +559,14 @@ export default function MapPage({ params: { projectId } }) {
                               pointerEvents: "none",
                             }}>
                             <ThemeProvider theme={brandedTheme}>
-                              <PublicProjectLayout
-                                projectLayers={widgetProjectLayers}
-                                projectLayerGroups={projectLayerGroups}
-                                project={project}
-                                onProjectUpdate={handleProjectUpdate}
-                              />
+                              <Box sx={{ color: "text.primary", height: "100%", width: "100%" }}>
+                                <PublicProjectLayout
+                                  projectLayers={widgetProjectLayers}
+                                  projectLayerGroups={projectLayerGroups}
+                                  project={project}
+                                  onProjectUpdate={handleProjectUpdate}
+                                />
+                              </Box>
                             </ThemeProvider>
                           </Box>
                         )}

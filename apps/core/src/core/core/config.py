@@ -137,21 +137,6 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_REGION: Optional[str] = "eu-central-1"
     AWS_S3_ASSETS_BUCKET: Optional[str] = "plan4better-assets"
-    S3_CLIENT: Optional[Any] = None
-
-    @field_validator("S3_CLIENT", mode="after")
-    @classmethod
-    def assemble_s3_client(
-        cls: type["Settings"], value: Optional[Any], info: ValidationInfo
-    ) -> Any:
-        if value is not None:
-            return value
-        return boto3.client(
-            "s3",
-            aws_access_key_id=info.data.get("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=info.data.get("AWS_SECRET_ACCESS_KEY"),
-            region_name=info.data.get("AWS_REGION"),
-        )
 
     DEFAULT_PROJECT_THUMBNAIL: Optional[str] = (
         "https://assets.plan4better.de/img/goat_new_project_artwork.png"
@@ -206,6 +191,36 @@ class Settings(BaseSettings):
     S3_BUCKET_PATH: Optional[str] = ""  # will be set depending on ENVIRONMENT
     S3_BUCKET_NAME: Optional[str] = "goat"
     MAX_UPLOAD_DATASET_FILE_SIZE: int = 5 * 1024 * 1024 * 1024  # 5GB
+
+    # S3_CLIENT must be defined after all S3_* and AWS_* fields so that
+    # info.data contains them when the validator assembles the boto3 client.
+    S3_CLIENT: Optional[Any] = None
+
+    @field_validator("S3_CLIENT", mode="after")
+    @classmethod
+    def assemble_s3_client(
+        cls: type["Settings"], value: Optional[Any], info: ValidationInfo
+    ) -> Any:
+        if value is not None:
+            return value
+        # Prefer S3_* credentials/endpoint (local dev / MinIO) over AWS_* (production)
+        access_key = info.data.get("S3_ACCESS_KEY_ID") or info.data.get("AWS_ACCESS_KEY_ID")
+        secret_key = info.data.get("S3_SECRET_ACCESS_KEY") or info.data.get("AWS_SECRET_ACCESS_KEY")
+        region = info.data.get("S3_REGION") or info.data.get("AWS_REGION", "eu-central-1")
+        endpoint_url = info.data.get("S3_ENDPOINT_URL")
+        kwargs: dict[str, Any] = {
+            "aws_access_key_id": access_key,
+            "aws_secret_access_key": secret_key,
+            "region_name": region,
+        }
+        if endpoint_url:
+            from botocore.client import Config as BotocoreConfig
+            kwargs["endpoint_url"] = endpoint_url
+            kwargs["config"] = BotocoreConfig(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+            )
+        return boto3.client("s3", **kwargs)
 
     # Print service settings
     PRINT_FRONTEND_URL: Optional[str] = "http://localhost:3000"  # Next.js frontend URL

@@ -8,6 +8,7 @@ via the local C++ routing backend. Produces two outputs:
 
 import asyncio
 import logging
+import math
 import tempfile
 import uuid as uuid_module
 from pathlib import Path
@@ -35,18 +36,26 @@ from goatlib.analysis.schemas.ui import (
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.catchment_area_v2 import (
-    ACCESS_EGRESS_MODE_ICONS,
     ACCESS_EGRESS_MODE_LABELS,
     COST_TYPE_ICONS,
     COST_TYPE_LABELS,
-    PT_MODE_ICONS,
     PT_MODE_LABELS,
-    ROUTING_MODE_ICONS,
-    ROUTING_MODE_LABELS,
+    ROUTING_MODE_ICONS as _CATCHMENT_ROUTING_MODE_ICONS,
+    ROUTING_MODE_LABELS as _CATCHMENT_ROUTING_MODE_LABELS,
 )
-from goatlib.tools.schemas import ToolInputBase, ToolOutputBase, get_default_layer_name
+from goatlib.tools.schemas import ToolInputBase, ToolOutputBase
 
 logger = logging.getLogger(__name__)
+
+# Extend routing mode icons/labels with matrix-only modes
+ROUTING_MODE_ICONS = {
+    **_CATCHMENT_ROUTING_MODE_ICONS,
+    "flight_distance": "plane",
+}
+ROUTING_MODE_LABELS = {
+    **_CATCHMENT_ROUTING_MODE_LABELS,
+    "flight_distance": "routing_modes.flight_distance",
+}
 
 # =========================================================================
 # UI Sections
@@ -66,7 +75,7 @@ SECTION_CONFIGURATION = UISection(
     order=3,
     icon="settings",
     label_key="configuration",
-    depends_on={"routing_mode": {"$ne": None}},
+    depends_on={"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car", "pt"]}},
 )
 
 SECTION_RESULT = UISection(
@@ -215,7 +224,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     # =========================================================================
 
     routing_mode: RoutingMode = Field(
-        default=RoutingMode.walking,
+        ...,
         description="Transport mode for routing.",
         json_schema_extra=ui_field(
             section="routing",
@@ -238,26 +247,6 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    pt_max_transfers: int = Field(
-        default=5,
-        description="Maximum number of transit transfers.",
-        json_schema_extra=ui_field(
-            section="routing",
-            field_order=3,
-            label="Max. transfers",
-            label_de="Max. Umstiege",
-            visible_when={"routing_mode": "pt"},
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "Max transfers must be between 0 and 10",
-                    "max": 10,
-                    "min": 0,
-                },
-            },
-        ),
-    )
-
     # =========================================================================
     # Configuration Section
     # =========================================================================
@@ -268,25 +257,80 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=1,
-            label_key="measure_type",
+            label="Calculate by",
+            label_de="Berechnung nach",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
-            inline_group="cost_config",
             visible_when={
                 "routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}
             },
         ),
     )
 
-    # Time budget — active mobility
+    # PT time window (always visible for PT, not behind advanced)
+    pt_day: Weekday = Field(
+        default=Weekday.weekday,
+        description="Day type for PT schedule.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label_key="weekday",
+            visible_when={"routing_mode": "pt"},
+        ),
+    )
+
+    pt_start_time: int = Field(
+        default=25200,
+        description="PT window start (seconds from midnight).",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=3,
+            label_key="from_time",
+            widget="time-picker",
+            inline_group="pt_time_window",
+            inline_flex="1 0 0",
+            visible_when={"routing_mode": "pt"},
+        ),
+    )
+
+    pt_end_time: int = Field(
+        default=32400,
+        description="PT window end (seconds from midnight).",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=4,
+            label_key="to_time",
+            widget="time-picker",
+            inline_group="pt_time_window",
+            inline_flex="1 0 0",
+            visible_when={"routing_mode": "pt"},
+        ),
+    )
+
+    # =========================================================================
+    # Advanced Options
+    # =========================================================================
+
+    show_advanced: bool = Field(
+        default=False,
+        description="Show advanced configuration options.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=10,
+            label_key="advanced_options",
+        ),
+    )
+
+    # Cost limits (advanced)
     max_cost_time_active: int = Field(
         default=15,
         description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
+            field_order=11,
+            label="Limit - Time (min)",
+            label_de="Limit - Zeit (Min)",
+            inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
@@ -298,6 +342,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             },
             visible_when={
                 "$and": [
+                    {"show_advanced": True},
                     {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
                     {"cost_type": "time"},
                 ]
@@ -305,15 +350,15 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # Time budget — car
     max_cost_time_car: int = Field(
         default=30,
         description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
+            field_order=11,
+            label="Limit - Time (min)",
+            label_de="Limit - Zeit (Min)",
+            inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
@@ -325,6 +370,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             },
             visible_when={
                 "$and": [
+                    {"show_advanced": True},
                     {"routing_mode": "car"},
                     {"cost_type": "time"},
                 ]
@@ -332,13 +378,12 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # Time budget — PT (always time-based, no cost_type selector)
     max_cost_time_pt: int = Field(
         default=30,
         description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=2,
+            field_order=5,
             label="Travel time limit (min)",
             label_de="Reisezeitlimit (Min)",
             widget_options={
@@ -353,15 +398,15 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # Distance budget — active mobility
     max_cost_distance: int = Field(
         default=500,
         description="Maximum distance in meters.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
+            field_order=11,
+            label="Limit - Distance (m)",
+            label_de="Limit - Distanz (m)",
+            inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
@@ -373,6 +418,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             },
             visible_when={
                 "$and": [
+                    {"show_advanced": True},
                     {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
                     {"cost_type": "distance"},
                 ]
@@ -380,15 +426,15 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # Distance budget — car
     max_cost_distance_car: int = Field(
         default=5000,
         description="Maximum distance in meters.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
+            field_order=11,
+            label="Limit - Distance (m)",
+            label_de="Limit - Distanz (m)",
+            inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
@@ -400,6 +446,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             },
             visible_when={
                 "$and": [
+                    {"show_advanced": True},
                     {"routing_mode": "car"},
                     {"cost_type": "distance"},
                 ]
@@ -412,11 +459,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="Travel speed in km/h.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=3,
+            field_order=5,
             label_key="speed",
             visible_when={
-                "routing_mode": {"$in": ["walking", "bicycle", "pedelec"]},
-                "cost_type": "time",
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
+                    {"cost_type": "time"},
+                ]
             },
             widget_options={
                 "default_by_field": {
@@ -431,58 +480,28 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    # PT time window
-    pt_day: Weekday = Field(
-        default=Weekday.weekday,
-        description="Day type for PT schedule.",
+    pt_max_transfers: int = Field(
+        default=5,
+        description="Maximum number of transit transfers.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=5,
-            label_key="weekday",
-            visible_when={"routing_mode": "pt"},
-        ),
-    )
-
-    pt_start_time: int = Field(
-        default=25200,
-        description="PT window start (seconds from midnight).",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=6,
-            label_key="from_time",
-            widget="time-picker",
-            inline_group="pt_time_window",
-            inline_flex="1 0 0",
-            visible_when={"routing_mode": "pt"},
-        ),
-    )
-
-    pt_end_time: int = Field(
-        default=32400,
-        description="PT window end (seconds from midnight).",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=7,
-            label_key="to_time",
-            widget="time-picker",
-            inline_group="pt_time_window",
-            inline_flex="1 0 0",
-            visible_when={"routing_mode": "pt"},
-        ),
-    )
-
-    # =========================================================================
-    # Advanced Options (inline toggle within Configuration)
-    # =========================================================================
-
-    show_advanced: bool = Field(
-        default=False,
-        description="Show advanced configuration options.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=10,
-            label_key="advanced_options",
-            visible_when={"routing_mode": "pt"},
+            field_order=13,
+            label="Max. transfers",
+            label_de="Max. Umstiege",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Max transfers must be between 0 and 10",
+                    "max": 10,
+                    "min": 0,
+                },
+            },
         ),
     )
 
@@ -497,8 +516,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
                 "$and": [
-                    {"routing_mode": "pt"},
                     {"show_advanced": True},
+                    {"routing_mode": "pt"},
                 ]
             },
         ),
@@ -515,8 +534,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             widget_options={"placeholder": "Default"},
             visible_when={
                 "$and": [
-                    {"routing_mode": "pt"},
                     {"show_advanced": True},
+                    {"routing_mode": "pt"},
                 ]
             },
         ),
@@ -533,8 +552,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
                 "$and": [
-                    {"routing_mode": "pt"},
                     {"show_advanced": True},
+                    {"routing_mode": "pt"},
                 ]
             },
         ),
@@ -551,15 +570,43 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             widget_options={"placeholder": "Default"},
             visible_when={
                 "$and": [
-                    {"routing_mode": "pt"},
                     {"show_advanced": True},
+                    {"routing_mode": "pt"},
                 ]
             },
         ),
     )
 
-    def resolve_max_cost(self: Self) -> float:
-        """Resolve the effective max_cost from mode-specific UI fields."""
+    def resolve_max_cost(self: Self, extent_m: float = 0.0) -> float:
+        """Resolve the effective max_cost from mode-specific UI fields.
+
+        When advanced options are not shown, derives the budget from the
+        actual O-D extent and mode speed so the network is just large
+        enough. The user only gets NULL results when they explicitly
+        set a limit via advanced options.
+        """
+        # PT always uses the explicit limit field (always visible)
+        if self.routing_mode == RoutingMode.pt:
+            return float(self.max_cost_time_pt)
+
+        if not self.show_advanced:
+            # Derive from extent: distance / speed → time, with detour margin
+            detour_distance = extent_m * 1.4
+            if self.cost_type == CostType.distance:
+                return detour_distance
+            # Use user-configured speed if set, otherwise mode default
+            default_speeds = {
+                RoutingMode.walking: 5.0,
+                RoutingMode.bicycle: 15.0,
+                RoutingMode.pedelec: 23.0,
+                RoutingMode.car: 50.0,
+            }
+            speed_km_h = (
+                self.speed if self.speed > 0
+                else default_speeds.get(self.routing_mode, 5.0)
+            )
+            return detour_distance / (speed_km_h * 1000.0 / 60.0)
+
         if self.cost_type == CostType.distance:
             if self.routing_mode == RoutingMode.car:
                 return float(self.max_cost_distance_car)
@@ -638,6 +685,43 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         finally:
             con.close()
 
+    @staticmethod
+    def _compute_flight_distance_matrix(
+        origin_lats: list[float], origin_lons: list[float], origin_ids: list[str],
+        dest_lats: list[float], dest_lons: list[float], dest_ids: list[str],
+        output_path: Path,
+    ) -> None:
+        """Compute Haversine distances between all origin-destination pairs."""
+        con = duckdb.connect()
+        try:
+            con.execute("INSTALL spatial; LOAD spatial;")
+
+            # Build origin/destination value lists
+            o_values = ",".join(
+                f"('{o_id}', {lat}, {lon})"
+                for o_id, lat, lon in zip(origin_ids, origin_lats, origin_lons)
+            )
+            d_values = ",".join(
+                f"('{d_id}', {lat}, {lon})"
+                for d_id, lat, lon in zip(dest_ids, dest_lats, dest_lons)
+            )
+
+            con.execute(f"""
+                COPY (
+                    SELECT
+                        o.id AS origin,
+                        d.id AS destination,
+                        CAST(ROUND(ST_Distance_Spheroid(
+                            ST_Point(o.lon, o.lat),
+                            ST_Point(d.lon, d.lat)
+                        )) AS INTEGER) AS travel_cost
+                    FROM (VALUES {o_values}) AS o(id, lat, lon)
+                    CROSS JOIN (VALUES {d_values}) AS d(id, lat, lon)
+                ) TO '{output_path}' (FORMAT PARQUET, COMPRESSION ZSTD)
+            """)
+        finally:
+            con.close()
+
     def _build_destination_points_parquet(
         self: Self,
         matrix_path: Path,
@@ -713,44 +797,89 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         dest_lats, dest_lons, dest_ids = self._extract_coordinates_from_parquet(
             dest_parquet, id_column=params.destination_id_column)
 
-        # Build PT time window if applicable
-        time_window = None
-        if params.routing_mode == RoutingMode.pt:
-            time_window = PTTimeWindow(
-                weekday=params.pt_day,
-                from_time=params.pt_start_time,
-                to_time=params.pt_end_time,
+        # Validate matrix size
+        n_combos = len(origin_lats) * len(dest_lats)
+        if n_combos > 10_000:
+            raise ValueError(
+                f"Matrix size ({len(origin_lats)} origins × {len(dest_lats)} destinations "
+                f"= {n_combos:,} pairs) exceeds the maximum of 10,000. "
+                f"Reduce the number of origins or destinations."
             )
 
-        max_cost = params.resolve_max_cost()
+        # Compute extent between origins and destinations (bounding box diagonal).
+        all_lats = origin_lats + dest_lats
+        all_lons = origin_lons + dest_lons
+        lat_range = math.radians(max(all_lats) - min(all_lats))
+        lon_range = math.radians(max(all_lons) - min(all_lons))
+        avg_lat = math.radians(sum(all_lats) / len(all_lats))
+        dy = lat_range * 6371000.0
+        dx = lon_range * 6371000.0 * math.cos(avg_lat)
+        extent_m = math.sqrt(dx * dx + dy * dy)
 
-        analysis_params = TravelCostMatrixParams(
-            origin_latitude=origin_lats,
-            origin_longitude=origin_lons,
-            origin_id=origin_ids,
-            destination_latitude=dest_lats,
-            destination_longitude=dest_lons,
-            destination_id=dest_ids,
-            routing_mode=params.routing_mode,
-            cost_type=params.cost_type,
-            max_cost=max_cost,
-            speed=params.speed,
-            # PT
-            transit_modes=params.pt_modes,
-            time_window=time_window,
-            max_transfers=params.pt_max_transfers,
-            access_mode=params.pt_access_mode,
-            egress_mode=params.pt_egress_mode,
-            access_speed=params.pt_access_speed,
-            egress_speed=params.pt_egress_speed,
-            output_path=str(matrix_output_path),
-        )
+        # Validate max extent for routed modes.
+        if params.routing_mode != RoutingMode.flight_distance:
+            max_reach_m = {
+                RoutingMode.walking: 50_000,
+                RoutingMode.bicycle: 50_000,
+                RoutingMode.pedelec: 50_000,
+                RoutingMode.car: 300_000,
+                RoutingMode.pt: 300_000,
+            }.get(params.routing_mode, 300_000)
 
-        tool = self.tool_class()
-        try:
-            tool.run(analysis_params)
-        finally:
-            tool.cleanup()
+            if extent_m > max_reach_m:
+                raise ValueError(
+                    f"Origin-destination extent ({extent_m / 1000:.0f} km) exceeds "
+                    f"the maximum reachable distance for {params.routing_mode.value} "
+                    f"({max_reach_m / 1000:.0f} km). "
+                    f"Reduce the area or choose a different mode."
+                )
+
+        if params.routing_mode == RoutingMode.flight_distance:
+            # Geodesic distance — no routing needed.
+            self._compute_flight_distance_matrix(
+                origin_lats, origin_lons, origin_ids,
+                dest_lats, dest_lons, dest_ids,
+                matrix_output_path,
+            )
+        else:
+            max_cost = params.resolve_max_cost(extent_m=extent_m)
+
+            # Build PT time window if applicable
+            time_window = None
+            if params.routing_mode == RoutingMode.pt:
+                time_window = PTTimeWindow(
+                    weekday=params.pt_day,
+                    from_time=params.pt_start_time,
+                    to_time=params.pt_end_time,
+                )
+
+            analysis_params = TravelCostMatrixParams(
+                origin_latitude=origin_lats,
+                origin_longitude=origin_lons,
+                origin_id=origin_ids,
+                destination_latitude=dest_lats,
+                destination_longitude=dest_lons,
+                destination_id=dest_ids,
+                routing_mode=params.routing_mode,
+                cost_type=params.cost_type,
+                max_cost=max_cost,
+                speed=params.speed,
+                # PT
+                transit_modes=params.pt_modes,
+                time_window=time_window,
+                max_transfers=params.pt_max_transfers,
+                access_mode=params.pt_access_mode,
+                egress_mode=params.pt_egress_mode,
+                access_speed=params.pt_access_speed,
+                egress_speed=params.pt_egress_speed,
+                output_path=str(matrix_output_path),
+            )
+
+            tool = self.tool_class()
+            try:
+                tool.run(analysis_params)
+            finally:
+                tool.cleanup()
 
         # Build destination points with min cost joined from original layer
         self._build_destination_points_parquet(

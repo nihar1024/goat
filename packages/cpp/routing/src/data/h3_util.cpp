@@ -94,4 +94,67 @@ namespace routing::data
         return filter;
     }
 
+    H3CellFilter compute_h3_filter_bbox(duckdb::Connection &con,
+                                       double min_x, double min_y,
+                                       double max_x, double max_y,
+                                       double margin_meters)
+    {
+        // Expand bbox by margin
+        min_x -= margin_meters;
+        min_y -= margin_meters;
+        max_x += margin_meters;
+        max_y += margin_meters;
+
+        // Convert corners to WGS84
+        double lon0 = to_longitude(min_x);
+        double lat0 = to_latitude(min_y);
+        double lon1 = to_longitude(max_x);
+        double lat1 = to_latitude(max_y);
+
+        // Build WKT polygon for the bbox
+        std::ostringstream wkt;
+        wkt << std::setprecision(17)
+            << "POLYGON((" << lon0 << " " << lat0 << ","
+            << lon1 << " " << lat0 << ","
+            << lon1 << " " << lat1 << ","
+            << lon0 << " " << lat1 << ","
+            << lon0 << " " << lat0 << "))";
+
+        constexpr uint64_t kMaskH3_3 = 0x000ffff000000000ULL;
+        constexpr uint64_t kMaskH3_6 = 0x000fffffff000000ULL;
+
+        std::ostringstream sql;
+        sql << "WITH cells AS ("
+            << "  SELECT DISTINCT unnest("
+            << "    h3_polygon_wkt_to_cells('" << wkt.str() << "', 6::integer)"
+            << "  ) AS cell"
+            << ") "
+            << "SELECT "
+            << "  ((cell::bigint & " << kMaskH3_3 << ") >> 36)::int AS h3_3, "
+            << "  ((cell::bigint & " << kMaskH3_6 << ") >> 24)::int AS h3_6 "
+            << "FROM cells";
+
+        auto result = con.Query(sql.str());
+        if (result->HasError())
+        {
+            throw std::runtime_error(
+                "H3 bbox cell computation failed: " + result->GetError());
+        }
+
+        H3CellFilter filter;
+        std::set<int32_t> h3_3_set, h3_6_set;
+
+        for (size_t row = 0; row < result->RowCount(); ++row)
+        {
+            auto v3 = result->GetValue(0, row).GetValue<int32_t>();
+            auto v6 = result->GetValue(1, row).GetValue<int32_t>();
+            h3_3_set.insert(v3);
+            h3_6_set.insert(v6);
+        }
+
+        filter.h3_3_cells.assign(h3_3_set.begin(), h3_3_set.end());
+        filter.h3_6_cells.assign(h3_6_set.begin(), h3_6_set.end());
+        return filter;
+    }
+
 } // namespace routing::data

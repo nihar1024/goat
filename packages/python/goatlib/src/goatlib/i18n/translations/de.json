@@ -954,6 +954,7 @@
     "pedelec": "Pedelec",
     "car": "Auto",
     "pt": "ÖPNV",
+    "flight_distance": "Luftlinie",
     "bus": "Bus",
     "tram": "Straßenbahn",
     "rail": "Bahn",

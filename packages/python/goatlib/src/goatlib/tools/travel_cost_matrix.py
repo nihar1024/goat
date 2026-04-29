@@ -862,8 +862,8 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                         o.id AS origin,
                         d.id AS destination,
                         CAST(ROUND(ST_Distance_Spheroid(
-                            ST_Point(o.lon, o.lat),
-                            ST_Point(d.lon, d.lat)
+                            ST_Point(o.lat, o.lon),
+                            ST_Point(d.lat, d.lon)
                         )) AS INTEGER) AS travel_cost
                     FROM (VALUES {o_values}) AS o(id, lat, lon)
                     CROSS JOIN (VALUES {d_values}) AS d(id, lat, lon)

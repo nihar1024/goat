@@ -475,7 +475,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                         {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
                         {"field": "max_cost_time_active"},
                     ],
-                    "message": "Number of steps cannot exceed the limit",
+                    "message": "steps_exceeds_limit",
                     "max": 9,
                 },
             },

@@ -1807,6 +1807,7 @@
   "status": "Status",
   "std_dev": "Std Abw",
   "steps": "Schritte",
+  "steps_exceeds_limit": "Anzahl der Schritte muss zwischen 1 und 9 liegen und darf das Kostenlimit nicht überschreiten",
   "steps_disabled_tooltip": "Die Anzahl der Schritte für benutzerdefinierte Farbskalen kann nicht geändert werden. Verwenden Sie die Option Benutzerdefinierte Palette, um Schritte hinzuzufügen oder zu entfernen.",
   "stop": "Stopp",
   "stop_editing": "Bearbeitung beenden",

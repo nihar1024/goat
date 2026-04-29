@@ -1735,6 +1735,7 @@
   "statistics_text": "Select the method used to join the data",
   "status": "Status",
   "steps": "Steps",
+  "steps_exceeds_limit": "Number of steps must be between 1 and 9, and cannot exceed the cost limit",
   "steps_disabled_tooltip": "Can't change the number of steps for custom color scales. Please use the custom palette option to add or remove steps.",
   "stop": "Stop",
   "stop_workflow": "Stop workflow",

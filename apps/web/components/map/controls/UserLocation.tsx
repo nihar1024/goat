@@ -144,7 +144,7 @@ export function UserLocation(props: UserLocationProps) {
                 backgroundColor: theme.palette.background.paper,
                 marginTop: theme.spacing(1),
                 marginBottom: theme.spacing(1),
-                color: theme.palette.text.secondary,
+                color: theme.palette.action.active,
                 "&:hover": {
                   backgroundColor: theme.palette.background.default,
                 },

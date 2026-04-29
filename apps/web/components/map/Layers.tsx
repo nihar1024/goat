@@ -31,6 +31,13 @@ interface LayersProps {
   selectedScenarioLayer?: ProjectLayer | null;
   highlightFeature?: MapGeoJSONFeature | null;
   scenarioFeatures?: ScenarioFeatures | null;
+  /**
+   * Atlas-driven filter applied client-side to the matching layer's MapLibre
+   * filter. Lets the report renderer restrict the coverage layer to the
+   * current atlas page's feature without changing the tile URL (which would
+   * trigger setTiles() and refetch the entire tile cache on every page).
+   */
+  atlasFilter?: { layerId: number; featureId: string | number };
 }
 
 const Layers = (props: LayersProps) => {
@@ -333,6 +340,29 @@ const Layers = (props: LayersProps) => {
                   return excludeFilter;
                 };
 
+                // Atlas filter: restrict the coverage layer to the current
+                // atlas page's feature. Uses MVT feature ID (rowid+1) to match
+                // the existing convention. Applied client-side so the tile URL
+                // is unchanged across page navigation.
+                const isAtlasCoverageLayer =
+                  props.atlasFilter !== undefined && props.atlasFilter.layerId === layer.id;
+                const mergeAtlasFilter = (
+                  baseFilter: FilterSpecification | undefined,
+                ): FilterSpecification | undefined => {
+                  if (!isAtlasCoverageLayer) return baseFilter;
+                  const featureId = Number(props.atlasFilter!.featureId);
+                  const atlasFilter: FilterSpecification = ["==", ["id"], featureId];
+                  if (baseFilter) {
+                    return ["all", baseFilter, atlasFilter] as FilterSpecification;
+                  }
+                  return atlasFilter;
+                };
+
+                const composeFilters = (
+                  baseFilter: FilterSpecification | undefined,
+                ): FilterSpecification | undefined =>
+                  mergeAtlasFilter(mergeEditExclusion(baseFilter));
+
                 return (
                   <Source
                     key={`${layer.id}-${layer.updated_at || ""}`}
@@ -346,7 +376,7 @@ const Layers = (props: LayersProps) => {
                         maxzoom={layer.properties.max_zoom || 24}
                         id={layer.id.toString()}
                         {...(layerStyleSpec as any)}
-                        {...(mergeEditExclusion(mapLayerFilter) ? { filter: mergeEditExclusion(mapLayerFilter) } : {})}
+                        {...(composeFilters(mapLayerFilter) ? { filter: composeFilters(mapLayerFilter) } : {})}
                         source-layer="default"
                       />
                     )}
@@ -357,7 +387,7 @@ const Layers = (props: LayersProps) => {
                         minzoom={layer.properties.min_zoom || 0}
                         maxzoom={layer.properties.max_zoom || 24}
                         {...(strokeStyleSpec as any)}
-                        {...(mergeEditExclusion(mapStrokeFilter) ? { filter: mergeEditExclusion(mapStrokeFilter) } : {})}
+                        {...(composeFilters(mapStrokeFilter) ? { filter: composeFilters(mapStrokeFilter) } : {})}
                         source-layer="default"
                       />
                     )}
@@ -379,7 +409,7 @@ const Layers = (props: LayersProps) => {
                         maxzoom={layer.properties.max_zoom || 24}
                         {...(labelStyleSpec as any)}
                         {...(layer.properties?.["custom_marker"] || layer.feature_layer_geometry_type === "polygon"
-                          ? (mergeEditExclusion(mapLabelFilter) ? { filter: mergeEditExclusion(mapLabelFilter) } : {})
+                          ? (composeFilters(mapLabelFilter) ? { filter: composeFilters(mapLabelFilter) } : {})
                           : (mapLabelFilter ? { filter: mapLabelFilter } : {})
                         )}
                       />

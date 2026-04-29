@@ -952,12 +952,12 @@ export const ProjectLayerTree = ({
               imageUrl={customIcon.url}
               dimension="16px"
               applyMask={customIcon.source === "library"}
-              imgColor={theme.palette.text.secondary}
+              imgColor={theme.palette.action.active}
             />
           ) : (
             <Icon
               iconName={ICON_NAME.LAYERS}
-              style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+              style={{ fontSize: "1rem", color: theme.palette.action.active }}
             />
           ),
           isVisible: nodeVisibility,
@@ -980,7 +980,7 @@ export const ProjectLayerTree = ({
         iconNode = (
           <Icon
             iconName={ICON_NAME.TABLE}
-            style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+            style={{ fontSize: "1rem", color: theme.palette.action.active }}
           />
         );
       }
@@ -990,7 +990,7 @@ export const ProjectLayerTree = ({
           <Icon
             iconName={ICON_NAME.IMAGE}
             fontSize="small"
-            style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+            style={{ fontSize: "1rem", color: theme.palette.action.active }}
           />
         );
 
@@ -1036,7 +1036,7 @@ export const ProjectLayerTree = ({
             iconNode = (
               <Icon
                 iconName={ICON_NAME.LOCATION_MARKER}
-                style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+                style={{ fontSize: "1rem", color: theme.palette.action.active }}
               />
             );
           } else {

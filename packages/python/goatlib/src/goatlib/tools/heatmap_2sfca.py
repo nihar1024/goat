@@ -14,24 +14,23 @@ from pydantic import ConfigDict, Field
 from goatlib.analysis.accessibility.two_step_catchment_area import Heatmap2SFCATool
 from goatlib.analysis.schemas.heatmap import (
     Heatmap2SFCAParams,
-    Opportunity2SFCA,
 )
 from goatlib.analysis.schemas.ui import (
     SECTION_CONFIGURATION,
     SECTION_DEMAND,
     SECTION_OPPORTUNITIES,
-    SECTION_ROUTING,
     SECTION_RESULT_ROUTING,
+    SECTION_ROUTING,
     UISection,
     ui_field,
-    ui_sections
+    ui_sections,
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.schemas import (
-    get_default_layer_name,
     ScenarioSelectorMixin,
     ToolInputBase,
+    get_default_layer_name,
 )
 from goatlib.tools.style import get_heatmap_style
 
@@ -108,7 +107,29 @@ class Heatmap2SFCAToolParams(ScenarioSelectorMixin, ToolInputBase, Heatmap2SFCAP
         default=None,
         json_schema_extra=ui_field(section="demand", hidden=True),
     )
+
+
     output_path: str | None = None  # type: ignore[assignment]
+    reference_area_path: str | None = None  # type: ignore[assignment]
+
+    # Layer ID for the reference area (replaces reference_area_path for tools)
+    reference_area_layer_id: str | None = Field(
+        None,
+        description="Layer ID for the reference area polygon",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=4,
+            label_key="reference_area_path",
+            widget="layer-selector",
+            widget_options={"geometry_types": ["Polygon", "MultiPolygon"]},
+            advanced=True,
+        ),
+    )
+    reference_area_layer_filter: dict[str, Any] | None = Field(
+        None,
+        description="CQL2-JSON filter to apply to the reference area layer",
+        json_schema_extra=ui_field(section="configuration", field_order=5, hidden=True),
+    )
 
     # Numbered opportunity layer inputs for workflow canvas handles (up to 3)
     # These generate input handles on the workflow node; workflow_runner.py
@@ -241,6 +262,19 @@ class Heatmap2SFCAToolRunner(BaseToolRunner[Heatmap2SFCAToolParams]):
             project_id=params.project_id,
         )
 
+        # Export reference area layer
+        reference_area_path = None
+        if params.reference_area_layer_id is not None:
+            reference_area_path = str(
+                self.export_layer_to_parquet(
+                    layer_id=params.reference_area_layer_id,
+                    user_id=params.user_id,
+                    cql_filter=params.reference_area_layer_filter,
+                    scenario_id=params.scenario_id,
+                    project_id=params.project_id,
+                )
+            )
+
         # Auto-resolve od_matrix_path from routing_mode if not provided
         od_matrix_path = params.od_matrix_path
         if not od_matrix_path:
@@ -268,11 +302,15 @@ class Heatmap2SFCAToolRunner(BaseToolRunner[Heatmap2SFCAToolParams]):
                     "opportunity_layer_2_filter",
                     "opportunity_layer_3_id",
                     "opportunity_layer_3_filter",
+                    "reference_area_path",
+                    "reference_area_layer_id",
+                    "reference_area_layer_filter",
                 }
             ),
             opportunities=resolved_opportunities,
             demand_path=demand_path,
             od_matrix_path=od_matrix_path,
+            reference_area_path=reference_area_path,
             output_path=str(output_path),
         )
 

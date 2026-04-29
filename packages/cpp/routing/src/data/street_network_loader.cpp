@@ -92,17 +92,15 @@ namespace routing::data
         return ss.str();
     }
 
-    std::vector<Edge> load_edges(
+    static std::vector<Edge> load_edges_impl(
         duckdb::Connection &con,
         std::string const &edge_dir,
         std::string const &node_dir,
-        std::vector<Point3857> const &starting_points,
-        double buffer_meters,
+        H3CellFilter const &h3_filter,
         std::vector<std::string> const &valid_classes,
         RoutingMode mode,
         bool load_geometry)
     {
-        auto h3_filter = compute_h3_filter(con, starting_points, buffer_meters);
         auto const &h3_3_cells = h3_filter.h3_3_cells;
         auto const &h3_6_cells = h3_filter.h3_6_cells;
 
@@ -340,5 +338,33 @@ namespace routing::data
         return edges;
     }
 
+
+    std::vector<Edge> load_edges(
+        duckdb::Connection &con,
+        std::string const &edge_dir,
+        std::string const &node_dir,
+        std::vector<Point3857> const &starting_points,
+        double buffer_meters,
+        std::vector<std::string> const &valid_classes,
+        RoutingMode mode,
+        bool load_geometry)
+    {
+        auto h3_filter = compute_h3_filter(con, starting_points, buffer_meters);
+        return load_edges_impl(con, edge_dir, node_dir, h3_filter,
+                               valid_classes, mode, load_geometry);
+    }
+
+    std::vector<Edge> load_edges(
+        duckdb::Connection &con,
+        std::string const &edge_dir,
+        std::string const &node_dir,
+        H3CellFilter const &h3_filter,
+        std::vector<std::string> const &valid_classes,
+        RoutingMode mode,
+        bool load_geometry)
+    {
+        return load_edges_impl(con, edge_dir, node_dir, h3_filter,
+                               valid_classes, mode, load_geometry);
+    }
 
 } // namespace routing::data

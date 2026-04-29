@@ -247,11 +247,16 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         default=5,
         description="Maximum number of transit transfers.",
         json_schema_extra=ui_field(
-            section="routing",
-            field_order=3,
+            section="configuration",
+            field_order=16,
             label="Max. transfers",
             label_de="Max. Umstiege",
-            visible_when={"routing_mode": "pt"},
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
             widget_options={
                 "max_value_from": {
                     "fields": [],

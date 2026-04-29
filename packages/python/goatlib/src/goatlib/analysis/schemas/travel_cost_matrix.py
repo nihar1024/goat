@@ -16,6 +16,7 @@ class RoutingMode(StrEnum):
     pedelec = "pedelec"
     car = "car"
     pt = "pt"
+    flight_distance = "flight_distance"
 
 
 class CostType(StrEnum):

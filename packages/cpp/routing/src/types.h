@@ -92,8 +92,8 @@ namespace routing
         RoutingMode egress_mode = RoutingMode::Walking;
         CostType access_cost_type = CostType::Time;
         CostType egress_cost_type = CostType::Time;
-        double access_max_cost = 0.0;      // 0 → falls back to max_cost
-        double egress_max_cost = 0.0;      // 0 → falls back to max_cost
+        double access_max_cost = 0.0;      // 0 → use default (15 min / 500 m)
+        double egress_max_cost = 0.0;      // 0 → use default (15 min / 500 m)
         double access_speed_km_h = 0.0;    // 0 → falls back to speed_km_h (time cost type only)
         double egress_speed_km_h = 0.0;    // 0 → falls back to speed_km_h (time cost type only)
         double transfer_cost = 2.0;        // minutes added at access→transit and transit→egress transitions
@@ -137,8 +137,13 @@ namespace routing
         std::vector<std::string> transit_modes;
         RoutingMode access_mode = RoutingMode::Walking;
         RoutingMode egress_mode = RoutingMode::Walking;
+        CostType access_cost_type = CostType::Time;
+        CostType egress_cost_type = CostType::Time;
+        double access_max_cost = 0.0;
+        double egress_max_cost = 0.0;
         double access_speed_km_h = 0.0;
         double egress_speed_km_h = 0.0;
+        double transfer_cost = 2.0;
     };
 
     struct MatrixEntry

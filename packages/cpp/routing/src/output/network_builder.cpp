@@ -69,7 +69,7 @@ std::string build_clipped_wkt(
     bool clip_from_start = (source_cost <= target_cost) || !needs_clip;
 
     std::ostringstream wkt;
-    wkt << std::setprecision(2) << "LINESTRING(";
+    wkt << std::setprecision(10) << "LINESTRING(";
     bool first = true;
     double agg = 0.0;
 

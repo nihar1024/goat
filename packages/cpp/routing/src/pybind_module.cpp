@@ -102,8 +102,13 @@ PYBIND11_MODULE(_routing, m)
         .def_readwrite("transit_modes", &routing::MatrixConfig::transit_modes)
         .def_readwrite("access_mode", &routing::MatrixConfig::access_mode)
         .def_readwrite("egress_mode", &routing::MatrixConfig::egress_mode)
+        .def_readwrite("access_cost_type", &routing::MatrixConfig::access_cost_type)
+        .def_readwrite("egress_cost_type", &routing::MatrixConfig::egress_cost_type)
+        .def_readwrite("access_max_cost", &routing::MatrixConfig::access_max_cost)
+        .def_readwrite("egress_max_cost", &routing::MatrixConfig::egress_max_cost)
         .def_readwrite("access_speed_km_h", &routing::MatrixConfig::access_speed_km_h)
-        .def_readwrite("egress_speed_km_h", &routing::MatrixConfig::egress_speed_km_h);
+        .def_readwrite("egress_speed_km_h", &routing::MatrixConfig::egress_speed_km_h)
+        .def_readwrite("transfer_cost", &routing::MatrixConfig::transfer_cost);
 
     m.def("compute_catchment",
           [elapsed_ms](routing::RequestConfig const &config)

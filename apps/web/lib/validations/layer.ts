@@ -43,6 +43,8 @@ export const shareLayerSchema = z.object({
 const HexColor = z.string();
 const ColorMap = z.array(z.tuple([z.union([z.array(z.string()), z.null()]), HexColor]));
 
+export const sizeOrdinalMap = z.array(z.tuple([z.string(), z.number()]));
+
 export const classBreaks = z.enum([
   "quantile",
   "standard_deviation",
@@ -156,7 +158,10 @@ export const strokeWidthSchema = z.object({
   stroke_width: z.number().min(0).max(200).default(2),
   stroke_width_range: z.array(z.number().min(0).max(200)).default([0, 10]),
   stroke_width_field: layerFieldType.optional(),
-  stroke_width_scale: sizeScale.optional().default("linear"),
+  stroke_width_scale: classBreaks.catch("quantile").optional().default("quantile"),
+  stroke_width_num_steps: z.number().min(2).max(10).default(5),
+  stroke_width_scale_breaks: layerClassBreaks.optional(),
+  stroke_width_ordinal_map: sizeOrdinalMap.optional(),
 });
 
 export const radiusSchema = z.object({
@@ -164,7 +169,10 @@ export const radiusSchema = z.object({
   radius_range: z.array(z.number().min(0).max(500)).default([0, 10]),
   fixed_radius: z.boolean().default(false),
   radius_field: layerFieldType.optional(),
-  radius_scale: sizeScale.optional().default("linear"),
+  radius_scale: classBreaks.catch("quantile").optional().default("quantile"),
+  radius_num_steps: z.number().min(2).max(10).default(5),
+  radius_scale_breaks: layerClassBreaks.optional(),
+  radius_ordinal_map: sizeOrdinalMap.optional(),
 });
 
 export const marker = z.object({
@@ -187,6 +195,10 @@ export const markerSchema = z.object({
   marker_size: z.number().min(0).max(100).default(10),
   marker_size_range: z.array(z.number().min(0).max(500)).default([0, 10]),
   marker_size_field: layerFieldType.optional(),
+  marker_size_scale: classBreaks.catch("quantile").optional().default("quantile"),
+  marker_size_num_steps: z.number().min(2).max(10).default(5),
+  marker_size_scale_breaks: layerClassBreaks.optional(),
+  marker_size_ordinal_map: sizeOrdinalMap.optional(),
   marker_background_type: markerBackgroundType.optional().default("marker"),
   marker_allow_overlap: z.boolean().optional().default(false),
   marker_anchor: SymbolPlacementAnchor.optional().default("center"),
@@ -559,6 +571,7 @@ export type TextLabelSchemaData = z.infer<typeof TextLabelSchema>;
 export type LayerInteractionContentType = z.infer<typeof layerInteractionContentType>;
 export type LayerInteractionContent = z.infer<typeof layerInteractionContent>;
 export type LayerInteractionFieldListContent = z.infer<typeof interactionFieldListContent>;
+export type SizeOrdinalMap = z.infer<typeof sizeOrdinalMap>;
 
 // Raster styling types
 export type RasterStyleType = z.infer<typeof rasterStyleType>;

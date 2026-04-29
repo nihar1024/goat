@@ -7,6 +7,7 @@ import { getLayerClassBreaks, getLayerUniqueValues } from "@/lib/api/layers";
 import { updateProjectLayer } from "@/lib/api/projects";
 import { COLOR_RANGES } from "@/lib/constants/color";
 import {
+  type ClassBreaks,
   type ColorMap,
   type FeatureLayerProperties,
   type LayerUniqueValues,
@@ -127,6 +128,75 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
       }
     },
     [activeLayer, createColorMapFromClassBreaks, layerProperties]
+  );
+
+  const updateSizeClassificationBreaks = useCallback(
+    async (
+      updateType: "radius" | "stroke_width" | "marker_size",
+      newStyle: FeatureLayerProperties,
+    ) => {
+      if (!activeLayer) return;
+      const fieldName = newStyle[`${updateType}_field`]?.name;
+      if (!fieldName) {
+        newStyle[`${updateType}_scale_breaks`] = undefined;
+        newStyle[`${updateType}_ordinal_map`] = undefined;
+        return;
+      }
+      const numSteps = (newStyle[`${updateType}_num_steps`] as number) ?? 5;
+      const scale = (newStyle[`${updateType}_scale`] as ClassBreaks) ?? classBreaks.Enum.quantile;
+      const oldFieldName = layerProperties[`${updateType}_field`]?.name;
+
+      // Custom breaks: user edits break values directly — never auto-fetch
+      if (scale === classBreaks.Enum.custom_breaks) {
+        if (!newStyle[`${updateType}_scale_breaks`]) {
+          // Initialize from existing breaks or fetch once with equal_interval
+          const existing = layerProperties[`${updateType}_scale_breaks`];
+          if (existing) {
+            newStyle[`${updateType}_scale_breaks`] = existing;
+          } else {
+            try {
+              const breaks = await getLayerClassBreaks(activeLayer.layer_id, classBreaks.Enum.equal_interval, fieldName, numSteps - 1);
+              if (breaks) newStyle[`${updateType}_scale_breaks`] = breaks;
+            } catch (e) {
+              console.warn(`Failed to initialize custom size breaks:`, e);
+            }
+          }
+        }
+        return;
+      }
+
+      // Ordinal: categorical → fixed size per unique value
+      if (scale === classBreaks.Enum.ordinal) {
+        const hasMap = !!newStyle[`${updateType}_ordinal_map`];
+        // If the map is already set and the field hasn't changed, keep user edits untouched
+        if (hasMap && fieldName === oldFieldName) return;
+        // Otherwise (re)initialize: first-time, field changed, or scale just switched to ordinal
+        try {
+          const uniqueValues = await getLayerUniqueValues(activeLayer.layer_id, fieldName, 20);
+          const defaultSize = (newStyle[`${updateType}_range`] as number[] | undefined)?.[0] ?? 5;
+          newStyle[`${updateType}_ordinal_map`] = uniqueValues.items.map(
+            ({ value }: { value: string }) => [value, defaultSize] as [string, number]
+          );
+        } catch (e) {
+          console.warn(`Failed to fetch unique values for ordinal size:`, e);
+        }
+        return;
+      }
+
+      // Standard classification (quantile / equal_interval / std_dev / heads_and_tails)
+      // Clear stale ordinal map so re-selecting ordinal later fetches fresh values
+      newStyle[`${updateType}_ordinal_map`] = undefined;
+      const oldScale = layerProperties[`${updateType}_scale`];
+      const oldNumSteps = layerProperties[`${updateType}_num_steps`];
+      if (fieldName === oldFieldName && scale === oldScale && numSteps === oldNumSteps && newStyle[`${updateType}_scale_breaks`]) return;
+      try {
+        const breaks = await getLayerClassBreaks(activeLayer.layer_id, scale, fieldName, numSteps - 1);
+        if (breaks) newStyle[`${updateType}_scale_breaks`] = breaks;
+      } catch (e) {
+        console.warn(`Failed to fetch size breaks for field "${fieldName}":`, e);
+      }
+    },
+    [activeLayer, layerProperties],
   );
 
   const updateOrdinalValues = useCallback(
@@ -390,7 +460,6 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                               label={t("stroke_width")}
                               collapsed={collapseStrokeWidthOptions}
                               setCollapsed={setCollapseStrokeWidthOptions}
-                              disableAdvanceOptions={true}
                             />
 
                             <Settings
@@ -398,7 +467,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                               layerStyle={layerProperties}
                               active={!!layerProperties.stroked}
                               collapsed={collapseStrokeWidthOptions}
-                              onStyleChange={(newStyle: FeatureLayerProperties) => {
+                              onStyleChange={async (newStyle: FeatureLayerProperties) => {
+                                await updateSizeClassificationBreaks("stroke_width", newStyle);
                                 updateLayerStyle(newStyle);
                               }}
                               layerFields={layerFields}
@@ -451,15 +521,15 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                                   label={t("marker_settings")}
                                   collapsed={collapseRadiusOptions}
                                   setCollapsed={setCollapseRadiusOptions}
-                                  disableAdvanceOptions={true}
                                 />
                                 <Settings
                                   type="marker_size"
                                   layerStyle={layerProperties}
                                   active={markerExists}
                                   collapsed={collapseRadiusOptions}
-                                  onStyleChange={(newStyle: FeatureLayerProperties) => {
+                                  onStyleChange={async (newStyle: FeatureLayerProperties) => {
                                     if (!map) return;
+                                    await updateSizeClassificationBreaks("marker_size", newStyle);
                                     updateLayerStyle(newStyle);
                                   }}
                                   layerFields={layerFields}
@@ -475,9 +545,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                                   active={true}
                                   alwaysActive={true}
                                   label={t("point_settings")}
-                                  collapsed={collapseStrokeWidthOptions}
-                                  setCollapsed={setCollapseStrokeWidthOptions}
-                                  disableAdvanceOptions={true}
+                                  collapsed={collapseRadiusOptions}
+                                  setCollapsed={setCollapseRadiusOptions}
                                 />
 
                                 <Settings
@@ -485,7 +554,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                                   layerStyle={layerProperties}
                                   active={true}
                                   collapsed={collapseRadiusOptions}
-                                  onStyleChange={(newStyle: FeatureLayerProperties) => {
+                                  onStyleChange={async (newStyle: FeatureLayerProperties) => {
+                                    await updateSizeClassificationBreaks("radius", newStyle);
                                     updateLayerStyle(newStyle);
                                   }}
                                   layerFields={layerFields}

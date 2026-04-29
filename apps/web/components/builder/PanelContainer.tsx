@@ -258,6 +258,7 @@ export const Container: React.FC<ContainerProps> = ({
             transition: "all 0.3s",
             // Apply default styles when collapsed, regardless of the original style
             ...(isCollapsed && {
+              position: "relative",
               width: "100%",
               height: "100%",
               backgroundColor: alpha(panelBgColor, 0.7),
@@ -476,6 +477,46 @@ export const Container: React.FC<ContainerProps> = ({
                 />
               )}
           </Box>
+          {isCollapsed && panel.config?.options?.collapsed_label && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                // Vertical panels: label at top so it doesn't overlap the centered button.
+                // Horizontal panels: label at left for the same reason.
+                alignItems: panel.orientation === "vertical" ? "flex-start" : "center",
+                justifyContent: panel.orientation === "horizontal" ? "flex-start" : "center",
+                padding:
+                  panel.orientation === "vertical"
+                    ? "16px 8px 0 8px"
+                    : "0 0 0 12px",
+                pointerEvents: "none",
+                overflow: "hidden",
+                zIndex: 1,
+              }}>
+              <Typography
+                variant="body2"
+                fontWeight="bold"
+                sx={{
+                  ...(panel.orientation === "vertical" && {
+                    transform: panel.position === "left" ? "rotate(-90deg)" : "rotate(90deg)",
+                  }),
+                  whiteSpace: "nowrap",
+                  // For horizontal panels constrain width; for vertical, overflow
+                  // clipping is handled by the container since rotate() swaps
+                  // CSS width↔visual height — maxWidth here would clip the visual height.
+                  ...(panel.orientation === "horizontal" && {
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: "80%",
+                  }),
+                  userSelect: "none",
+                }}>
+                {panel.config.options.collapsed_label}
+              </Typography>
+            </Box>
+          )}
         </Stack>
       </Box>
     </Box>

@@ -2,16 +2,21 @@ import { Box, Button, FormControl, Link, MenuItem, Select, Stack, Switch, Typogr
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { BASEMAPS } from "@/lib/constants/basemaps";
+
 import WidgetColorPicker from "@/components/builder/widgets/common/WidgetColorPicker";
 
 import { languages } from "@/i18n/settings";
 
 import type { InteractionRule } from "@/lib/validations/interaction";
-import type { BuilderPanelSchema, Project, ProjectLayer, ProjectLayerGroup } from "@/lib/validations/project";
-import { builderConfigSchema } from "@/lib/validations/project";
+import type { BuilderPanelSchema, ControlKey, ControlPositions, Project, ProjectLayer, ProjectLayerGroup } from "@/lib/validations/project";
+import { DEFAULT_CONTROL_POSITIONS, DEFAULT_FAVICON_URL, builderConfigSchema } from "@/lib/validations/project";
 
 import InteractionsModal, { InteractionsEntryButton } from "@/components/builder/InteractionsModal";
+import MapControlsLayout from "@/components/builder/MapControlsLayout";
 import SettingsGroupHeader from "@/components/builder/widgets/common/SettingsGroupHeader";
+import Selector from "@/components/map/panels/common/Selector";
+import MarkerIconPicker from "@/components/map/panels/style/marker/MarkerIconPicker";
 
 /** Google Fonts available for dashboard display */
 const DASHBOARD_FONTS = [
@@ -33,6 +38,7 @@ const DASHBOARD_FONTS = [
 
 const GOAT_GREEN = "#2BB381";
 const DEFAULT_ICON_COLOR = "#8A8D93";
+const DEFAULT_FONT_COLOR = "#3A3541";
 
 interface SettingsTabProps {
   settings: { [key: string]: unknown };
@@ -43,12 +49,6 @@ interface SettingsTabProps {
   projectLayerGroups?: ProjectLayerGroup[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onProjectUpdate?: (key: string, value: any, refresh?: boolean) => void;
-}
-
-interface SettingGroup {
-  group: string;
-  label: string;
-  options: { name: string; label: string }[];
 }
 
 const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -97,63 +97,75 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     onProjectUpdate?.("builder_config", updatedConfig);
   };
 
-  const settingsGroups: SettingGroup[] = [
-    {
-      group: "map_tools",
-      label: t("map_tools"),
-      options: [
-        { name: "location", label: t("location_search") },
-        { name: "find_my_location", label: t("find_my_location") },
-        { name: "scalebar", label: t("scalebar") },
-        { name: "measure", label: t("measure") },
-      ],
-    },
-    {
-      group: "map_controls",
-      label: t("controls"),
-      options: [
-        { name: "zoom_controls", label: t("zoom_controls") },
-        { name: "basemap", label: t("basemap") },
-      ],
-    },
-    {
-      group: "map_view",
-      label: t("view"),
-      options: [
-        { name: "fullscreen", label: t("fullscreen") },
-        { name: "toolbar", label: t("toolbar") },
-        { name: "project_info", label: t("project_info") },
-      ],
-    },
-  ];
-
   return (
     <Stack direction="column" spacing={2} justifyContent="space-between" sx={{ p: 3 }}>
       <Stack direction="column">
-        {settingsGroups.map((group) => (
-          <Box key={group.group} sx={{ mb: 6 }}>
-            <SettingsGroupHeader label={t(group.label)} />
-            <Stack spacing={1}>
-              {group.options.map(
-                (option) =>
-                  settings?.hasOwnProperty(option.name) && (
-                    <Stack direction="row" alignItems="center" key={option.name}>
-                      <Switch
-                        name={option.name}
-                        checked={settings[option.name] as boolean}
-                        onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                          onChange(option.name, event.target.checked)
-                        }
-                      />
-                      <Typography variant="body2" fontWeight="bold" color="textSecondary">
-                        {option.label}
-                      </Typography>
-                    </Stack>
-                  )
-              )}
+        {/* ── Map ── */}
+        <Box sx={{ mb: 6 }}>
+          <SettingsGroupHeader label={t("map")} />
+          <Stack spacing={2}>
+            {/* Toolbar / Scalebar toggles */}
+            <Stack direction="row" alignItems="center">
+              <Switch
+                size="small"
+                name="toolbar"
+                checked={(settings?.toolbar as boolean) ?? true}
+                onChange={(e) => onChange("toolbar", e.target.checked)}
+              />
+              <Typography variant="body2" color="textSecondary">
+                {t("toolbar")}
+              </Typography>
             </Stack>
-          </Box>
-        ))}
+            <Stack direction="row" alignItems="center">
+              <Switch
+                size="small"
+                name="scalebar"
+                checked={(settings?.scalebar as boolean) ?? true}
+                onChange={(e) => onChange("scalebar", e.target.checked)}
+              />
+              <Typography variant="body2" color="textSecondary">
+                {t("scalebar")}
+              </Typography>
+            </Stack>
+
+            {/* Control layout picker */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+                {t("control_layout")}
+              </Typography>
+              <MapControlsLayout
+                controlPositions={(settings?.control_positions as ControlPositions) ?? DEFAULT_CONTROL_POSITIONS}
+                onChange={(positions) => onChange("control_positions", positions)}
+              />
+            </Box>
+
+            {/* Basemap allowlist — only shown when basemap control is placed in any corner */}
+            {Object.values((settings?.control_positions as ControlPositions) ?? {}).some((arr) => (arr as ControlKey[]).includes("basemap")) && (
+              <Box>
+                <Selector
+                  multiple
+                  label={t("allowed_basemaps")}
+                  placeholder={t("basemaps")}
+                  items={BASEMAPS.map((b) => ({ value: b.value, label: b.title }))}
+                  selectedItems={
+                    (settings?.allowed_basemaps as string[] | null) === null
+                      ? BASEMAPS.map((b) => ({ value: b.value, label: b.title }))
+                      : BASEMAPS.filter((b) =>
+                          (settings?.allowed_basemaps as string[]).includes(b.value)
+                        ).map((b) => ({ value: b.value, label: b.title }))
+                  }
+                  setSelectedItems={(items) => {
+                    const selected = (items as { value: string; label: string }[] ?? []).map((i) => i.value);
+                    onChange(
+                      "allowed_basemaps",
+                      selected.length === BASEMAPS.length ? null : selected
+                    );
+                  }}
+                />
+              </Box>
+            )}
+          </Stack>
+        </Box>
         <Box sx={{ mb: 6 }}>
           <SettingsGroupHeader label={t("branding")} />
           <Stack spacing={2}>
@@ -223,7 +235,53 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
               />
             </Box>
 
-            {/* Language */}
+            {/* Font Color */}
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {t("font_color")}
+                </Typography>
+                {!!settings?.font_color && (
+                  <Link
+                    component="button"
+                    variant="caption"
+                    underline="always"
+                    onClick={() => onChange("font_color", undefined)}
+                    sx={{ cursor: "pointer" }}>
+                    {t("reset")}
+                  </Link>
+                )}
+              </Stack>
+              <WidgetColorPicker
+                color={(settings?.font_color as string) || DEFAULT_FONT_COLOR}
+                onChange={(color) => onChange("font_color", color)}
+              />
+            </Box>
+
+            {/* Favicon */}
+            <MarkerIconPicker
+              label={t("favicon")}
+              selectedMarker={
+                settings?.favicon_url
+                  ? {
+                      name: (settings.favicon_url as string) === DEFAULT_FAVICON_URL ? "GOAT" : t("favicon"),
+                      url: settings.favicon_url as string,
+                      category: "",
+                      source: "custom",
+                    }
+                  : undefined
+              }
+              onSelectMarker={(marker) => {
+                onChange("favicon_url", marker.url || DEFAULT_FAVICON_URL);
+              }}
+            />
+
+          </Stack>
+        </Box>
+        {/* ── General ── */}
+        <Box sx={{ mb: 6 }}>
+          <SettingsGroupHeader label={t("general")} />
+          <Stack spacing={2}>
             <FormControl size="small" fullWidth>
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
                 {t("language")}

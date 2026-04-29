@@ -219,6 +219,13 @@ const MobileProjectLayout = ({
     }
   }, [drawerView, activeLayer, activeRightPanel, dispatch]);
 
+  // --- Visibility Helper ---
+  const hasControl = (key: string): boolean => {
+    const positions = project?.builder_config?.settings?.control_positions;
+    if (!positions) return false;
+    return Object.values(positions).some((arr) => (arr as string[]).includes(key));
+  };
+
   // --- Handlers ---
   const toggleDrawer = (newOpen: boolean) => () => {
     setOpen(newOpen);
@@ -307,7 +314,7 @@ const MobileProjectLayout = ({
             justifyContent: "space-between",
             pointerEvents: "none",
           }}>
-          {project?.builder_config?.settings.location && (
+          {hasControl("location") && (
             <Box
               sx={{
                 position: "absolute",
@@ -340,16 +347,16 @@ const MobileProjectLayout = ({
               flexDirection: "column",
               gap: 1,
             }}>
-            {project && project?.builder_config?.settings?.project_info && (
+            {project && hasControl("project_info") && (
               <ProjectInfo project={project} viewOnly={viewOnly} onProjectUpdate={onProjectUpdate} />
             )}
-            {project?.builder_config?.settings.zoom_controls && (
+            {hasControl("zoom_controls") && (
               <Zoom tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />
             )}
-            {project?.builder_config?.settings.find_my_location && (
+            {hasControl("find_my_location") && (
               <UserLocation tooltip={t("find_location")} />
             )}
-            {project?.builder_config?.settings.basemap && (
+            {hasControl("basemap") && (
               <BasemapSelectorButton
                 // Use `open` state derived from drawerView for visual indication (optional)
                 open={drawerView === "basemapSelector"}
@@ -368,7 +375,7 @@ const MobileProjectLayout = ({
               bottom: 0,
               pointerEvents: "all",
             }}>
-            {project?.builder_config?.settings.scalebar && (
+            {project?.builder_config?.settings?.scalebar !== false && (
               <Box sx={{ m: 2 }}>
                 <Scalebar />
               </Box>

@@ -9,6 +9,7 @@ import FormLabelHelper from "@/components/common/FormLabelHelper";
 import LayerFieldSelector from "@/components/map/common/LayerFieldSelector";
 import SectionOptions from "@/components/map/panels/common/SectionOptions";
 import SliderInput from "@/components/map/panels/common/SliderInput";
+import SizeScaleSelector from "@/components/map/panels/style/classification/SizeScaleSelector";
 import MarkerSettings from "@/components/map/panels/style/marker/MarkerSettings";
 
 const Settings = ({
@@ -25,7 +26,7 @@ const Settings = ({
   layerStyle?: FeatureLayerProperties;
   active: boolean;
   collapsed?: boolean;
-  onStyleChange?: (newStyle: FeatureLayerProperties) => void;
+  onStyleChange?: (newStyle: FeatureLayerProperties) => void | Promise<void>;
   selectedField?: LayerFieldType;
   layerFields: LayerFieldType[];
   activeLayer?: ProjectLayer | Layer;
@@ -49,17 +50,17 @@ const Settings = ({
   const isRange = useMemo(() => (layerStyle?.[`${type}_field`] ? true : false), [layerStyle, type]);
 
   const _onStyleChange = useCallback(
-    (value, type) => {
+    (value: unknown, propType: string) => {
       const newStyle = JSON.parse(JSON.stringify(layerStyle)) || {};
-      // if (isRange) {
-      //   newStyle[`${type}_range`] = value;
-      // } else {
-      //   newStyle[`${type}`] = value;
-      // }
-      newStyle[`${type}`] = value;
+      // Only apply range mode when the prop being changed is the primary size prop
+      if (isRange && propType === type) {
+        newStyle[`${propType}_range`] = value;
+      } else {
+        newStyle[`${propType}`] = value;
+      }
       onStyleChange && onStyleChange(newStyle);
     },
-    [layerStyle, onStyleChange]
+    [isRange, layerStyle, onStyleChange, type]
   );
 
   return (
@@ -127,6 +128,15 @@ const Settings = ({
               label={t(`${type}_based_on`)}
               tooltip={t(`${type}_based_on_desc`)}
             />
+            {isRange && layerStyle && (
+              <SizeScaleSelector
+                type={type}
+                layerStyle={layerStyle}
+                classBreaksValues={layerStyle[`${type}_scale_breaks`] as Parameters<typeof SizeScaleSelector>[0]["classBreaksValues"]}
+                label={t("size_scale")}
+                onStyleChange={(newStyle) => onStyleChange && onStyleChange(newStyle)}
+              />
+            )}
           </>
         }
       />

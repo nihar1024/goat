@@ -218,9 +218,6 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
             .scalars()
             .first()
         )
-        if project_public:
-            await async_session.delete(project_public)
-
         project_layers = await crud_layer_project.get_layers(
             async_session=async_session, project_id=project_id
         )
@@ -257,11 +254,22 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
             layer_groups=project_layer_groups,
             project=new_project_public_project_config,
         )
+        new_config = json.loads(new_project_public_config.model_dump_json())
+
+        # Update in place when a public row already exists so we preserve
+        # custom_domain_id, password, subdomain, tracking_enabled across
+        # re-publish. The previous delete+recreate flow silently dropped
+        # the custom-domain assignment every time the user clicked "Update".
+        if project_public:
+            project_public.config = new_config
+            await async_session.commit()
+            await async_session.refresh(project_public)
+            return project_public
+
         new_project_public = ProjectPublic(
             project_id=project_id,
-            config=json.loads(new_project_public_config.model_dump_json()),
+            config=new_config,
         )
-
         async_session.add(new_project_public)
         await async_session.commit()
         return new_project_public

@@ -2,37 +2,73 @@ import { useMemo } from "react";
 
 import { createTheme, useTheme } from "@mui/material/styles";
 
+/** Converts a hex color like `#3A3541` to the `"R, G, B"` string used by the palette. */
+function hexToRgb(hex: string): string | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return null;
+  return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
+}
+
 /**
- * Returns a MUI theme with primary and/or icon color overridden when set.
- * - `primaryColor` overrides `palette.primary` (cascades to buttons, accents, links,
- *   tab indicators). Active tab text is pinned to neutral so only the indicator
- *   reflects the brand color.
- * - `iconColor` overrides `palette.action.active` (cascades to MUI default
- *   IconButton color, three-dot menus, chevrons, and any component that
- *   explicitly references `theme.palette.action.active`). It deliberately does
- *   NOT override `palette.text.secondary` — that token is used for real text
- *   (captions, descriptions, helper text) and must stay readable.
+ * Returns a MUI theme with brand overrides applied when set.
  *
- * Falls back to the base theme when neither is provided.
+ * - `primaryColor` overrides `palette.primary`. Active tab text is pinned to
+ *   neutral so only the underline indicator picks up the brand color.
+ * - `iconColor` overrides `palette.action.active` — icon buttons only.
+ *   Does NOT touch `text.secondary` to keep captions/labels readable.
+ * - `fontColor` replaces the base text RGB used to derive the full text and
+ *   action palette: `text.{primary,secondary,disabled}`, all `action.*` tokens,
+ *   and `divider`. If `iconColor` is also set it takes precedence over
+ *   `action.active` regardless of `fontColor`.
+ *
+ * Falls back to the base theme when none are provided.
  */
-export function useBrandedTheme(primaryColor: string | undefined, iconColor: string | undefined) {
+export function useBrandedTheme(
+  primaryColor: string | undefined,
+  iconColor: string | undefined,
+  fontColor: string | undefined,
+) {
   const baseTheme = useTheme();
   return useMemo(() => {
-    if (!primaryColor && !iconColor) return baseTheme;
+    if (!primaryColor && !iconColor && !fontColor) return baseTheme;
 
     const palette: Record<string, unknown> = {};
+
     if (primaryColor) {
       palette.primary = baseTheme.palette.augmentColor({ color: { main: primaryColor } });
     }
+
+    if (fontColor) {
+      const rgb = hexToRgb(fontColor);
+      if (rgb) {
+        palette.text = {
+          primary: `rgba(${rgb}, 0.87)`,
+          secondary: `rgba(${rgb}, 0.68)`,
+          disabled: `rgba(${rgb}, 0.38)`,
+        };
+        palette.divider = `rgba(${rgb}, 0.12)`;
+        // Build full action palette from font color; iconColor overrides active below.
+        palette.action = {
+          active: `rgba(${rgb}, 0.70)`,
+          hover: `rgba(${rgb}, 0.04)`,
+          selected: `rgba(${rgb}, 0.08)`,
+          disabled: `rgba(${rgb}, 0.30)`,
+          disabledBackground: `rgba(${rgb}, 0.18)`,
+          focus: `rgba(${rgb}, 0.12)`,
+        };
+      }
+    }
+
+    // iconColor always wins over the font-color-derived action.active
     if (iconColor) {
-      palette.action = { ...baseTheme.palette.action, active: iconColor };
+      palette.action = {
+        ...(palette.action as Record<string, unknown> ?? baseTheme.palette.action),
+        active: iconColor,
+      };
     }
 
     const components: Record<string, unknown> = {};
     if (primaryColor) {
-      // MUI Tabs default to textColor="primary"; the selected text would otherwise
-      // pick up the brand color. Pin it to neutral so only the underline indicator
-      // reflects the brand. Specificity must match `.MuiTab-textColorPrimary.Mui-selected`.
       components.MuiTab = {
         styleOverrides: {
           textColorPrimary: {
@@ -45,5 +81,5 @@ export function useBrandedTheme(primaryColor: string | undefined, iconColor: str
     }
 
     return createTheme(baseTheme, { palette, components });
-  }, [baseTheme, primaryColor, iconColor]);
+  }, [baseTheme, primaryColor, iconColor, fontColor]);
 }

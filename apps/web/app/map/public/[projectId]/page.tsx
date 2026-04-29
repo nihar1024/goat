@@ -77,7 +77,8 @@ export default function MapPage({ params: { projectId } }) {
 
   const primaryColor = project?.builder_config?.settings?.primary_color;
   const iconColor = project?.builder_config?.settings?.icon_color;
-  const brandedTheme = useBrandedTheme(primaryColor, iconColor);
+  const fontColor = project?.builder_config?.settings?.font_color;
+  const brandedTheme = useBrandedTheme(primaryColor, iconColor, fontColor);
 
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("md"));
 
@@ -112,23 +113,25 @@ export default function MapPage({ params: { projectId } }) {
                     height: "100%",
                   }}>
                   <ThemeProvider theme={brandedTheme}>
-                    {isMobile ? (
-                      <MobileProjectLayout
-                        project={project}
-                        projectLayers={_allProjectLayers}
-                        projectLayerGroups={projectLayerGroups}
-                        viewOnly
-                        onProjectUpdate={onProjectUpdate}
-                      />
-                    ) : (
-                      <PublicProjectLayout
-                        project={project}
-                        projectLayers={_allProjectLayers}
-                        projectLayerGroups={projectLayerGroups}
-                        viewOnly
-                        onProjectUpdate={onProjectUpdate}
-                      />
-                    )}
+                    <Box sx={{ color: "text.primary", height: "100%", width: "100%" }}>
+                      {isMobile ? (
+                        <MobileProjectLayout
+                          project={project}
+                          projectLayers={_allProjectLayers}
+                          projectLayerGroups={projectLayerGroups}
+                          viewOnly
+                          onProjectUpdate={onProjectUpdate}
+                        />
+                      ) : (
+                        <PublicProjectLayout
+                          project={project}
+                          projectLayers={_allProjectLayers}
+                          projectLayerGroups={projectLayerGroups}
+                          viewOnly
+                          onProjectUpdate={onProjectUpdate}
+                        />
+                      )}
+                    </Box>
                   </ThemeProvider>
                 </Box>
                 <MapViewer

@@ -1,12 +1,16 @@
 """Anonymous endpoint that resolves an incoming Host header to a project ID.
 
-Called by the Next.js middleware on every request to a non-canonical host.
+Two callers, two query-param names:
+- Next.js middleware passes ``?host=<header>`` — its native vocabulary.
+- Caddy's on_demand_tls ``ask`` callback hardcodes ``?domain=<sni>`` and
+  cannot be reconfigured. Both are accepted here and treated identically.
+
 Must NOT require authentication and must be cheap to call (single indexed
 JOIN). Returns 404 when the host is unknown, inactive, or not assigned to
 a published project.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -27,15 +31,22 @@ router = APIRouter()
     summary="Resolve a custom domain hostname to a published project ID",
 )
 async def custom_domain_lookup(
-    host: str = Query(..., max_length=253),
+    host: Optional[str] = Query(None, max_length=253),
+    domain: Optional[str] = Query(None, max_length=253),
     async_session: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Anonymous: returns ``{project_id}`` for an active assigned host, else 404.
 
-    Used by the Next.js middleware on every request that arrives with a
-    non-canonical Host header.
+    Accepts either ``?host=`` (Next.js) or ``?domain=`` (Caddy). Caddy treats
+    any 2xx as "issue the cert"; the response body is irrelevant to it.
     """
-    host = host.strip().lower()
+    raw = host if host is not None else domain
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="missing 'host' or 'domain' query parameter",
+        )
+    host = raw.strip().lower()
 
     result = await async_session.execute(
         select(ProjectPublic.project_id)

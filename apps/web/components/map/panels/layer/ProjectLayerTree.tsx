@@ -354,6 +354,8 @@ interface ProjectLayerTreeProps {
   groupIcons?: Record<string, { url: string; source?: string }>;
   /** Whether to dim layers that are outside the current zoom range (default: true for backward compat) */
   dimOutOfZoom?: boolean;
+  /** Content rendered inside the scroll container, above the tree (e.g. a "show all" toggle row) */
+  headerContent?: React.ReactNode;
 }
 
 export const ProjectLayerTree = ({
@@ -377,6 +379,7 @@ export const ProjectLayerTree = ({
   hideLegendHeading,
   groupIcons,
   dimOutOfZoom = true,
+  headerContent,
 }: ProjectLayerTreeProps) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -1222,6 +1225,7 @@ export const ProjectLayerTree = ({
 
       {/* 3. Tree */}
       <Box sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", px: 1, pt: 1 }}>
+        {headerContent}
         <DraggableTreeView
           items={itemsWithIcons}
           onItemsChange={(newItems) => {

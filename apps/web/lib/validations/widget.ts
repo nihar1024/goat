@@ -99,6 +99,7 @@ export const informationLayersConfigSchema = informationConfigSchema.extend({
       toggle_style: layersToggleStyleTypes.optional().default("eye"),
       toggle_position: layersTogglePositionTypes.optional().default("right"),
       more_options_style: layersMoreOptionsStyleTypes.optional().default("compact"),
+      show_all_toggle: z.boolean().optional().default(true),
       show_group_name: z.boolean().optional().default(true),
       show_group_icons: z.boolean().optional().default(false),
       hide_legend_heading: z.boolean().optional().default(false),

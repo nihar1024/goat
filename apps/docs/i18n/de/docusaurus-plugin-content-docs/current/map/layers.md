@@ -26,6 +26,7 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 - **Datensätze aus Ihrem Datensatz-Explorer oder dem Katalog-Explorer integrieren**
 - Neue **Datensätze von Ihrem lokalen Gerät hochladen** (GeoPackage, GeoJSON, Shapefile, KML, CSV oder XLSX)
 - Externe Layer durch Eingabe der **URL der externen Quelle** hinzufügen (WFS, WMS, WMTS, XYZ Tiles oder COG)
+- Einen **neuen leeren Layer** direkt in Ihrem Projekt erstellen
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/map/layers/add_layer_de.webp').default} alt="Layer in GOAT hinzufügen" style={{ maxHeight: "flex", maxWidth: "flex", objectFit: "cover"}}/>
@@ -44,7 +45,7 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Externer Datensatz</code> oder <code>Katalog-Explorer</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
+  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Externer Datensatz</code>, <code>Katalog-Explorer</code> oder <code>Layer erstellen</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
 </div>
 
 <Tabs>
@@ -102,6 +103,14 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 
  </TabItem>
+  <TabItem value="Create Layer" label="Layer erstellen" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Geben Sie einen <strong>Namen</strong> für Ihren neuen Layer ein und klicken Sie auf <code>Erstellen</code>, um <strong>einen neuen leeren Layer</strong> in Ihrem Projekt zu erstellen. Anschließend können Sie mit dem <a href="./layers#features-bearbeiten">Features bearbeiten</a>-Werkzeug Objekte hinzufügen.</div>
+</div>
+
+  </TabItem>
   <TabItem value="Dataset External" label="Externer Datensatz" default className="tabItemBox">
   
 <div class="step">
@@ -213,6 +222,9 @@ Durch Klicken auf das <code>weitere Optionen</code> <img src={require('/img/icon
 
 <p></p>
 
+#### Features bearbeiten
+
+Die Option **Features bearbeiten** *(Beta)* ermöglicht es Ihnen, **Features direkt auf der Karte hinzuzufügen, zu bearbeiten oder zu löschen**. Klicken Sie auf <code>Features bearbeiten</code> im Layer-Optionen-Menü, um das Bearbeitungspanel am unteren Bildschirmrand zu öffnen, in dem Sie mit der Attributtabelle des Layers interagieren und Geometrien auf der Karte bearbeiten können.
 
 :::tip Tipp
 

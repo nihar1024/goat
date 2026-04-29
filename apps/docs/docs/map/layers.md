@@ -29,6 +29,7 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 - Integrate **datasets from your data explorer or the catalog explorer**
 - Upload new **datasets from your local device** (GeoPackage, GeoJSON, Shapefile, KML, CSV, or XLSX). 
 - Add external layers by inserting the **url of the external source** (WFS, WMS, WMTS, XYZ Tiles, or COG).
+- **Create a new empty layer** directly in your project.
 
 
 
@@ -41,7 +42,7 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Select if you like to integrate a dataset using the: <code>Data Explorer</code>, <code>Dataset Upload</code>, <code>Dataset External</code> or <code>Catalog Explorer</code> to <strong>choose your data source</strong>.</div>
+  <div class="content">Select if you like to integrate a dataset using the: <code>Dataset Explorer</code>, <code>Dataset Upload</code>, <code>Dataset External</code>, <code>Catalog Explorer</code>, or <code>Create Layer</code> to <strong>choose your data source</strong>.</div>
 </div>
 
 <Tabs>
@@ -99,6 +100,14 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 
 
  </TabItem>
+  <TabItem value="Create Layer" label="Create Layer" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Enter a <strong>name</strong> for your new layer and click <code>Create</code> to <strong>create a new empty layer</strong> in your project. You can then add features to it using the <a href="./layers#edit-features">Edit features</a> tool.</div>
+</div>
+
+  </TabItem>
   <TabItem value="Dataset External" label="Dataset External" default className="tabItemBox">
   
 <div class="step">
@@ -187,6 +196,10 @@ By clicking on <img src={require('/img/icons/3dots.png').default} alt="Options" 
 </div>
 
 <p></p>
+
+### Edit Features
+
+The **Edit features** *(Beta)* option allows you to **add, modify, or delete features** directly on the map. Click on <code>Edit features</code> from the layer options menu to open the editing panel at the bottom of the screen, where you can interact with the layer's attribute table and edit geometries on the map.
 
 :::tip tip
 

@@ -67,7 +67,14 @@ const SettingsLayout = (props: SettingsLayoutProps) => {
         link: "/settings/organization",
         icon: ICON_NAME.ORGANIZATION,
         label: t("organization"),
-        current: pathname?.includes("/organization"),
+        current: pathname?.includes("/organization") && !pathname?.includes("/white-label"),
+        auth: isOrgAdmin,
+      },
+      {
+        link: "/settings/organization/white-label/domains",
+        icon: ICON_NAME.GLOBE,
+        label: t("white_label"),
+        current: pathname?.includes("/white-label"),
         auth: isOrgAdmin,
       },
       {

@@ -13,13 +13,16 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 from fastapi_pagination import Page
 from fastapi_pagination import Params as PaginationParams
-from pydantic import UUID4
+from pydantic import UUID4, BaseModel
 from sqlalchemy import select
 from sqlmodel import update
 
 from core.crud.crud_layer_project import layer_project as crud_layer_project
 from core.crud.crud_layer_project_group import (
     layer_project_group as crud_layer_project_group,
+)
+from core.crud.crud_organization_domain import (
+    organization_domain as crud_organization_domain,
 )
 from core.crud.crud_project import project as crud_project
 from core.crud.crud_project_copy import copy_project as copy_project_fn
@@ -30,7 +33,8 @@ from core.db.models._link_model import (
     LayerProjectLink,
     UserProjectLink,
 )
-from core.db.models.project import Project
+from core.db.models.organization_domain import CertStatus
+from core.db.models.project import Project, ProjectPublic
 from core.db.models.scenario import Scenario
 from core.db.session import AsyncSession
 from core.deps.auth import auth_z
@@ -920,6 +924,83 @@ async def unpublish_project(
     await crud_project.unpublish_project(
         async_session=async_session, project_id=project_id
     )
+
+
+##############################################
+### Custom domain assignment endpoints
+##############################################
+
+
+class AssignCustomDomainPayload(BaseModel):
+    """Body of POST /project/{project_id}/public/custom-domain."""
+
+    domain_id: UUID4
+
+
+@router.post(
+    "/{project_id}/public/custom-domain",
+    summary="Assign a custom domain to a published project",
+    dependencies=[Depends(auth_z)],
+)
+async def assign_custom_domain(
+    project_id: str,
+    payload: AssignCustomDomainPayload,
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> ProjectPublicRead:
+    """Bind an active custom domain to a published project."""
+    result = await async_session.execute(
+        select(ProjectPublic).where(ProjectPublic.project_id == UUID(project_id))
+    )
+    project_public = result.scalar_one_or_none()
+    if project_public is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project is not published",
+        )
+
+    domain = await crud_organization_domain.get(async_session, id=payload.domain_id)
+    if not domain:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="domain not found",
+        )
+    if domain.cert_status != CertStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="domain must be active before assignment",
+        )
+
+    project_public.custom_domain_id = payload.domain_id
+    await async_session.commit()
+    await async_session.refresh(project_public)
+    return ProjectPublicRead(**project_public.model_dump())
+
+
+@router.delete(
+    "/{project_id}/public/custom-domain",
+    summary="Unassign the custom domain from a published project",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(auth_z)],
+)
+async def unassign_custom_domain(
+    project_id: str,
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> None:
+    """Clear the custom-domain assignment from a published project."""
+    result = await async_session.execute(
+        select(ProjectPublic).where(ProjectPublic.project_id == UUID(project_id))
+    )
+    project_public = result.scalar_one_or_none()
+    if project_public is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project is not published",
+        )
+
+    project_public.custom_domain_id = None
+    await async_session.commit()
 
 
 ##############################################

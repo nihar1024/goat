@@ -523,12 +523,86 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
+    pt_access_cost_type: CostType = Field(
+        default=CostType.time,
+        description="Access leg cost type.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=21,
+            label_key="measure_type",
+            enum_labels=COST_TYPE_LABELS,
+            enum_icons=COST_TYPE_ICONS,
+            inline_group="pt_access_cost",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                ]
+            },
+        ),
+    )
+
+    pt_access_max_cost_time: int = Field(
+        default=15,
+        description="Access leg budget in minutes.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=22,
+            label_key="limit",
+            inline_group="pt_access_cost",
+            inline_flex="1 0 0",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                    {"pt_access_cost_type": "time"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [
+                        {"field": "max_cost_time_pt"},
+                    ],
+                    "message": "access_budget_exceeds_limit",
+                    "min": 1,
+                },
+            },
+        ),
+    )
+
+    pt_access_max_cost_distance: int = Field(
+        default=500,
+        description="Access leg budget in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=22,
+            label_key="limit",
+            inline_group="pt_access_cost",
+            inline_flex="1 0 0",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                    {"pt_access_cost_type": "distance"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "access_budget_exceeds_limit",
+                    "min": 50,
+                    "max": 20000,
+                },
+            },
+        ),
+    )
+
     pt_access_speed: float = Field(
         default=0.0,
         description="Access leg speed in km/h (0 = use default speed).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=21,
+            field_order=23,
             label="Speed (km/h)",
             label_de="Geschw. (km/h)",
             widget_options={"placeholder": "Default"},
@@ -536,6 +610,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
                 "$and": [
                     {"show_advanced": True},
                     {"routing_mode": "pt"},
+                    {"pt_access_cost_type": "time"},
                 ]
             },
         ),
@@ -546,7 +621,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         description="Mode from transit stops to destination.",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=22,
+            field_order=24,
             label_key="pt_egress_mode",
             group_label="Egress leg",
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
@@ -559,12 +634,86 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
+    pt_egress_cost_type: CostType = Field(
+        default=CostType.time,
+        description="Egress leg cost type.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=25,
+            label_key="measure_type",
+            enum_labels=COST_TYPE_LABELS,
+            enum_icons=COST_TYPE_ICONS,
+            inline_group="pt_egress_cost",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                ]
+            },
+        ),
+    )
+
+    pt_egress_max_cost_time: int = Field(
+        default=15,
+        description="Egress leg budget in minutes.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=26,
+            label_key="limit",
+            inline_group="pt_egress_cost",
+            inline_flex="1 0 0",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                    {"pt_egress_cost_type": "time"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [
+                        {"field": "max_cost_time_pt"},
+                    ],
+                    "message": "egress_budget_exceeds_limit",
+                    "min": 1,
+                },
+            },
+        ),
+    )
+
+    pt_egress_max_cost_distance: int = Field(
+        default=500,
+        description="Egress leg budget in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=26,
+            label_key="limit",
+            inline_group="pt_egress_cost",
+            inline_flex="1 0 0",
+            visible_when={
+                "$and": [
+                    {"show_advanced": True},
+                    {"routing_mode": "pt"},
+                    {"pt_egress_cost_type": "distance"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "egress_budget_exceeds_limit",
+                    "min": 50,
+                    "max": 20000,
+                },
+            },
+        ),
+    )
+
     pt_egress_speed: float = Field(
         default=0.0,
         description="Egress leg speed in km/h (0 = use default speed).",
         json_schema_extra=ui_field(
             section="configuration",
-            field_order=23,
+            field_order=27,
             label="Speed (km/h)",
             label_de="Geschw. (km/h)",
             widget_options={"placeholder": "Default"},
@@ -572,6 +721,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
                 "$and": [
                     {"show_advanced": True},
                     {"routing_mode": "pt"},
+                    {"pt_egress_cost_type": "time"},
                 ]
             },
         ),
@@ -806,14 +956,22 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                 f"Reduce the number of origins or destinations."
             )
 
-        # Compute extent between origins and destinations (bounding box diagonal).
-        all_lats = origin_lats + dest_lats
-        all_lons = origin_lons + dest_lons
-        lat_range = math.radians(max(all_lats) - min(all_lats))
-        lon_range = math.radians(max(all_lons) - min(all_lons))
-        avg_lat = math.radians(sum(all_lats) / len(all_lats))
-        dy = lat_range * 6371000.0
-        dx = lon_range * 6371000.0 * math.cos(avg_lat)
+        # Compute max possible O-D distance using bbox corners.
+        # The farthest O-D pair is bounded by the distance between the
+        # farthest corners of the origin and destination bounding boxes.
+        R = 6371000.0
+        o_min_lat, o_max_lat = min(origin_lats), max(origin_lats)
+        o_min_lon, o_max_lon = min(origin_lons), max(origin_lons)
+        d_min_lat, d_max_lat = min(dest_lats), max(dest_lats)
+        d_min_lon, d_max_lon = min(dest_lons), max(dest_lons)
+
+        # Max lat/lon span between the two bbox extremes
+        lat_span = max(abs(o_max_lat - d_min_lat), abs(d_max_lat - o_min_lat))
+        lon_span = max(abs(o_max_lon - d_min_lon), abs(d_max_lon - o_min_lon))
+        avg_lat = math.radians(
+            (o_min_lat + o_max_lat + d_min_lat + d_max_lat) / 4.0)
+        dy = math.radians(lat_span) * R
+        dx = math.radians(lon_span) * R * math.cos(avg_lat)
         extent_m = math.sqrt(dx * dx + dy * dy)
 
         # Validate max extent for routed modes.
@@ -870,6 +1028,18 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                 max_transfers=params.pt_max_transfers,
                 access_mode=params.pt_access_mode,
                 egress_mode=params.pt_egress_mode,
+                access_cost_type=params.pt_access_cost_type,
+                egress_cost_type=params.pt_egress_cost_type,
+                access_max_cost=(
+                    params.pt_access_max_cost_distance
+                    if params.pt_access_cost_type == CostType.distance
+                    else params.pt_access_max_cost_time
+                ),
+                egress_max_cost=(
+                    params.pt_egress_max_cost_distance
+                    if params.pt_egress_cost_type == CostType.distance
+                    else params.pt_egress_max_cost_time
+                ),
                 access_speed=params.pt_access_speed,
                 egress_speed=params.pt_egress_speed,
                 output_path=str(matrix_output_path),

@@ -63,8 +63,13 @@ namespace routing
             rcfg.transit_modes = cfg.transit_modes;
             rcfg.access_mode = cfg.access_mode;
             rcfg.egress_mode = cfg.egress_mode;
+            rcfg.access_cost_type = cfg.access_cost_type;
+            rcfg.egress_cost_type = cfg.egress_cost_type;
+            rcfg.access_max_cost = cfg.access_max_cost;
+            rcfg.egress_max_cost = cfg.egress_max_cost;
             rcfg.access_speed_km_h = cfg.access_speed_km_h;
             rcfg.egress_speed_km_h = cfg.egress_speed_km_h;
+            rcfg.transfer_cost = cfg.transfer_cost;
             return rcfg;
         }
 

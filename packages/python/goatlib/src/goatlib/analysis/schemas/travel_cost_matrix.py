@@ -93,8 +93,12 @@ class TravelCostMatrixParams(BaseModel):
     max_transfers: int = Field(default=5, ge=0, le=10)
     access_mode: AccessEgressMode = AccessEgressMode.walk
     egress_mode: AccessEgressMode = AccessEgressMode.walk
-    access_speed: float = Field(default=0.0, ge=0.0, description="Access speed km/h (0 = use speed)")
-    egress_speed: float = Field(default=0.0, ge=0.0, description="Egress speed km/h (0 = use speed)")
+    access_cost_type: CostType = CostType.time
+    egress_cost_type: CostType = CostType.time
+    access_max_cost: float = Field(default=15.0, ge=0.0, description="Access leg budget: minutes (time) or meters (distance). 0 = default.")
+    egress_max_cost: float = Field(default=15.0, ge=0.0, description="Egress leg budget: minutes (time) or meters (distance). 0 = default.")
+    access_speed: float = Field(default=0.0, ge=0.0, description="Access speed km/h (0 = use default)")
+    egress_speed: float = Field(default=0.0, ge=0.0, description="Egress speed km/h (0 = use default)")
 
     # Output
     output_path: str = Field(

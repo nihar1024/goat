@@ -143,6 +143,18 @@ class TravelCostMatrixTool(AnalysisTool):
             cfg.max_transfers = params.max_transfers
             cfg.access_mode = access_mode_map[params.access_mode]
             cfg.egress_mode = access_mode_map[params.egress_mode]
+            cfg.access_cost_type = (
+                routing.CostType.Distance
+                if params.access_cost_type == CostType.distance
+                else routing.CostType.Time
+            )
+            cfg.egress_cost_type = (
+                routing.CostType.Distance
+                if params.egress_cost_type == CostType.distance
+                else routing.CostType.Time
+            )
+            cfg.access_max_cost = params.access_max_cost
+            cfg.egress_max_cost = params.egress_max_cost
             if params.access_speed > 0:
                 cfg.access_speed_km_h = params.access_speed
             if params.egress_speed > 0:

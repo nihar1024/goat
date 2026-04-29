@@ -905,6 +905,19 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             project_id=params.project_id,
         )
 
+        # Validate starting point count
+        n_points = len(latitudes)
+        if params.routing_mode == CatchmentAreaRoutingMode.pt:
+            if n_points > 100:
+                raise ValueError(
+                    f"Public transport supports a maximum of 100 starting points. "
+                    f"Got {n_points}."
+                )
+        elif n_points > 1000:
+            raise ValueError(
+                f"Maximum 1,000 starting points allowed. Got {n_points}."
+            )
+
         # Build PT time window
         time_window = None
         if params.routing_mode == CatchmentAreaRoutingMode.pt:

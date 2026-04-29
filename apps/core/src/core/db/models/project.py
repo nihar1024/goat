@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from uuid import UUID
 
 from pydantic import HttpUrl, field_validator
-from sqlalchemy import Text
+from sqlalchemy import Boolean, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlalchemy.sql import text
@@ -189,6 +189,30 @@ class ProjectPublic(DateTimeBase, table=True, extend_existing=True):
             ForeignKey(f"{settings.CUSTOMER_SCHEMA}.project.id", ondelete="CASCADE"),
             nullable=False,
         ),
+    )
+    custom_domain_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(
+                f"{settings.CUSTOMER_SCHEMA}.organization_domain.id",
+                ondelete="SET NULL",
+            ),
+            unique=True,
+            index=True,
+            nullable=True,
+        ),
+        description="Custom domain assigned to this public project (v1: one project per domain).",
+    )
+    subdomain: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description="Always NULL for v1; reserved for v2 wildcard domains.",
+    )
+    tracking_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+        description="Whether visitor analytics tracking is enabled for this published project.",
     )
 
     project: Project = Relationship(back_populates="project_public")

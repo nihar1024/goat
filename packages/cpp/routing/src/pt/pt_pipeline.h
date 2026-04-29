@@ -2,6 +2,8 @@
 
 #include "../types.h"
 
+#include <nigiri/timetable.h>
+
 #include <duckdb.hpp>
 
 namespace routing::pt
@@ -14,6 +16,7 @@ namespace routing::pt
 
     // Same as above, but also snaps extra_points onto the combined network
     // and returns their node IDs. Used by the matrix to read destination costs.
+    // When pre_tt is provided, skips timetable loading (for multi-origin matrix).
     struct PtPipelineResult
     {
         ReachabilityField field;
@@ -23,6 +26,7 @@ namespace routing::pt
     PtPipelineResult run_pt_pipeline_with_destinations(
         RequestConfig const &cfg,
         duckdb::Connection &con,
-        std::vector<Point3857> const &extra_points);
+        std::vector<Point3857> const &extra_points,
+        nigiri::timetable const *pre_tt = nullptr);
 
 } // namespace routing::pt

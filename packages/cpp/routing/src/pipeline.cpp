@@ -1,10 +1,10 @@
 #include "pipeline.h"
 
-#include "data/parquet_edge_loader.h"
+#include "data/street_network_loader.h"
 #include "input/request_config.h"
 #include "input/validation.h"
 #include "kernel/dijkstra.h"
-#include "kernel/edge_loader.h"
+#include "kernel/graph_builder.h"
 #include "kernel/mode_selector.h"
 #include "kernel/reachability_field.h"
 #include "kernel/snap.h"
@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <duckdb.hpp>
 #include <filesystem>
 #include <limits>
@@ -25,6 +26,20 @@ namespace routing
 
     namespace
     {
+        static std::string sql_escape(std::string const &s)
+        {
+            std::string out;
+            out.reserve(s.size() + 4);
+            for (char c : s)
+            {
+                if (c == '\'')
+                    out += "''";
+                else
+                    out.push_back(c);
+            }
+            return out;
+        }
+
         // Build a RequestConfig from a MatrixConfig for reusing
         // edge loading, cost computation, and snapping infrastructure.
         RequestConfig matrix_to_request_config(
@@ -37,6 +52,7 @@ namespace routing
             rcfg.max_cost = cfg.max_cost;
             rcfg.speed_km_h = cfg.speed_km_h;
             rcfg.edge_dir = cfg.edge_dir;
+            rcfg.node_dir = cfg.node_dir;
             rcfg.starting_points = starting_points;
             rcfg.steps = 1; // unused by matrix, but required by validation
             // PT fields
@@ -57,14 +73,6 @@ namespace routing
             SubNetwork net;
             std::vector<int32_t> valid_starts;
         };
-
-        double elapsed_ms(std::chrono::steady_clock::time_point const start,
-                          std::chrono::steady_clock::time_point const end)
-        {
-            return std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
-                       end - start)
-                .count();
-        }
 
         void ensure_required_extensions_loaded(duckdb::Connection &con)
         {
@@ -95,7 +103,7 @@ namespace routing
             }
         }
 
-        void validate_request(RequestConfig const &cfg)
+        void validate_request(RequestConfig &cfg)
         {
             input::validate(cfg);
         }
@@ -107,11 +115,12 @@ namespace routing
 
         std::vector<Edge> load_filtered_edges(RequestConfig const &cfg,
                                               duckdb::Connection &con,
-                                              std::vector<std::string> const &classes)
+                                              std::vector<std::string> const &classes,
+                                              bool load_geometry = false)
         {
             double buffer_m = input::buffer_distance(cfg);
             auto edges = data::load_edges(con, cfg.edge_dir, cfg.node_dir, cfg.starting_points,
-                                          buffer_m, classes, cfg.mode);
+                                          buffer_m, classes, cfg.mode, load_geometry);
             if (edges.empty())
             {
                 throw std::runtime_error(
@@ -178,147 +187,81 @@ namespace routing
         }
 
         ReachabilityField build_reachability_field(
-            RequestConfig const &cfg,
+            RequestConfig &cfg,
             duckdb::Connection &con)
         {
             validate_request(cfg);
 
-            if (cfg.mode == RoutingMode::PublicTransport)
-                return pt::run_pt_pipeline(cfg, con);
+            // Load geometry into C++ when output needs edge polylines:
+            // - Jsolines polygon (non-car) for grid surface interpolation
+            // - Network output for edge clipping + WKT construction
+            // Car polygon (concave hull), hexagon, and point grid use node coords only.
+            bool load_geom = (cfg.catchment_type == CatchmentType::Network) ||
+                             (cfg.catchment_type == CatchmentType::Polygon &&
+                              cfg.mode != RoutingMode::Car);
 
-            auto classes = select_valid_classes(cfg);
-            auto edges = load_filtered_edges(cfg, con, classes);
-            compute_edge_costs(edges, cfg);
-            auto prepared = build_network_and_starts(std::move(edges), cfg);
-            auto costs = run_reachability_dijkstra(prepared.net,
-                                                   prepared.valid_starts,
-                                                   cfg);
-            return kernel::make_reachability_field(std::move(costs),
-                                                   std::move(prepared.net));
+            ReachabilityField field;
+
+            if (cfg.mode == RoutingMode::PublicTransport)
+            {
+                field = pt::run_pt_pipeline(cfg, con);
+            }
+            else
+            {
+                auto classes = select_valid_classes(cfg);
+                auto edges = load_filtered_edges(cfg, con, classes, load_geom);
+                compute_edge_costs(edges, cfg);
+                auto prepared = build_network_and_starts(std::move(edges), cfg);
+                auto costs = run_reachability_dijkstra(prepared.net,
+                                                       prepared.valid_starts,
+                                                       cfg);
+                field = kernel::make_reachability_field(std::move(costs),
+                                                        std::move(prepared.net));
+            }
+
+
+            return field;
         }
     } // namespace
 
-    std::string compute_catchment(RequestConfig const &cfg)
+    std::string compute_catchment(RequestConfig const &cfg_in)
     {
+        auto cfg = cfg_in; // mutable copy for validation defaults
+
+        auto t0 = std::chrono::steady_clock::now();
+        auto elapsed = [&]() {
+            auto now = std::chrono::steady_clock::now();
+            double ms = std::chrono::duration<double, std::milli>(now - t0).count();
+            t0 = now;
+            return ms;
+        };
+
         duckdb::DuckDB db(nullptr);
         duckdb::Connection con(db);
         ensure_required_extensions_loaded(con);
+        std::fprintf(stderr, "[Pipeline] DuckDB init: %.0f ms\n", elapsed());
+
         auto field = build_reachability_field(cfg, con);
+        std::fprintf(stderr, "[Pipeline] Reachability field (%d nodes, %zu edges): %.0f ms\n",
+                     field.node_count,
+                     field.network ? field.network->source.size() : 0,
+                     elapsed());
 
         if (cfg.output_format == OutputFormat::GeoJSON)
         {
-            return dispatch_geojson_output(field, cfg, con);
+            auto result = dispatch_geojson_output(field, cfg, con);
+            std::fprintf(stderr, "[Pipeline] GeoJSON output: %.0f ms\n", elapsed());
+            return result;
         }
 
         if (cfg.output_format == OutputFormat::Parquet)
         {
-            return dispatch_parquet_output(field, cfg, con);
+            auto result = dispatch_parquet_output(field, cfg, con);
+            std::fprintf(stderr, "[Pipeline] Parquet output: %.0f ms\n", elapsed());
+            return result;
         }
 
         return "";
-    }
-
-    CatchmentStepBenchmark benchmark_catchment_steps(RequestConfig const &cfg)
-    {
-        auto t_total_start = std::chrono::steady_clock::now();
-
-        auto t_validate_start = std::chrono::steady_clock::now();
-        input::validate(cfg);
-        auto t_validate_end = std::chrono::steady_clock::now();
-
-        auto t_class_selection_start = t_validate_end;
-        auto classes = input::valid_classes(cfg.mode);
-        auto t_class_selection_end = std::chrono::steady_clock::now();
-
-        auto t_buffer_distance_start = t_class_selection_end;
-        double buffer_m = input::buffer_distance(cfg);
-        auto t_buffer_distance_end = std::chrono::steady_clock::now();
-
-        auto t_read_start = t_buffer_distance_end;
-        data::EdgeLoadBenchmark load_bm;
-        duckdb::DuckDB db(nullptr);
-        duckdb::Connection con(db);
-        ensure_required_extensions_loaded(con);
-        auto edges = data::load_edges_with_benchmark(
-            con,
-            cfg.edge_dir,
-            cfg.node_dir,
-            cfg.starting_points,
-            buffer_m,
-            classes,
-            cfg.mode,
-            load_bm);
-        auto t_read_end = std::chrono::steady_clock::now();
-
-        if (edges.empty())
-            throw std::runtime_error(
-                "No edges loaded. Check edge_dir and H3 cell coverage.");
-
-        size_t edge_count = edges.size();
-
-        auto t_prep_start = t_read_end;
-        auto t_compute_costs_start = t_prep_start;
-        kernel::compute_costs(edges, cfg);
-        auto t_compute_costs_end = std::chrono::steady_clock::now();
-
-        auto t_build_network_start = t_compute_costs_end;
-        auto net = kernel::build_sub_network(edges);
-        auto t_build_network_end = std::chrono::steady_clock::now();
-
-        auto t_snap_start = t_build_network_end;
-        auto start_nodes = kernel::snap_origins(net, cfg.starting_points, cfg);
-
-        std::vector<int32_t> valid_starts;
-        valid_starts.reserve(start_nodes.size());
-        for (auto s : start_nodes)
-        {
-            if (s >= 0)
-                valid_starts.push_back(s);
-        }
-        if (valid_starts.empty())
-            throw std::runtime_error(
-                "Starting point(s) are disconnected from the street network.");
-        auto t_snap_end = std::chrono::steady_clock::now();
-        auto t_prep_end = t_snap_end;
-
-        auto t_routing_start = t_prep_end;
-        bool use_distance = (cfg.cost_type == CostType::Distance);
-        auto t_adjacency_start = t_routing_start;
-        auto adj = kernel::build_adjacency_list(net);
-        auto t_adjacency_end = std::chrono::steady_clock::now();
-        auto t_dijkstra_start = std::chrono::steady_clock::now();
-        auto costs = kernel::dijkstra(adj, valid_starts, cfg.cost_budget(),
-                                      use_distance);
-        auto t_dijkstra_end = std::chrono::steady_clock::now();
-        auto t_routing_end = std::chrono::steady_clock::now();
-
-        auto t_conversion_start = t_routing_end;
-        auto field = kernel::make_reachability_field(std::move(costs), std::move(net));
-        auto payload = output::build_geojson_output(field, cfg, con);
-        auto t_conversion_end = std::chrono::steady_clock::now();
-
-        CatchmentStepBenchmark bm;
-        bm.validation_ms = elapsed_ms(t_validate_start, t_validate_end);
-        bm.class_selection_ms = elapsed_ms(t_class_selection_start, t_class_selection_end);
-        bm.buffer_distance_ms = elapsed_ms(t_buffer_distance_start, t_buffer_distance_end);
-        bm.duckdb_read_ms = load_bm.duckdb_read_ms;
-        bm.transfer_to_cpp_ms = load_bm.transfer_to_cpp_ms;
-        // Keep this as wall time around load_edges to remain backward comparable.
-        bm.network_read_ms = elapsed_ms(t_read_start, t_read_end);
-        bm.compute_costs_ms = elapsed_ms(t_compute_costs_start, t_compute_costs_end);
-        bm.build_network_ms = elapsed_ms(t_build_network_start, t_build_network_end);
-        bm.snap_ms = elapsed_ms(t_snap_start, t_snap_end);
-        bm.adjacency_ms = elapsed_ms(t_adjacency_start, t_adjacency_end);
-        bm.prep_ms = elapsed_ms(t_prep_start, t_prep_end);
-        bm.dijkstra_ms = elapsed_ms(t_dijkstra_start, t_dijkstra_end);
-        bm.routing_ms = elapsed_ms(t_routing_start, t_routing_end);
-        bm.conversion_ms = elapsed_ms(t_conversion_start, t_conversion_end);
-        bm.result_ms = elapsed_ms(t_total_start, t_conversion_end);
-        bm.edge_count = edge_count;
-        bm.node_count = field.node_count;
-        bm.start_count = static_cast<int32_t>(valid_starts.size());
-        bm.payload_bytes = payload.size();
-        return bm;
     }
 
     void compute_travel_cost_matrix(MatrixConfig const &cfg)
@@ -360,8 +303,11 @@ namespace routing
 
         if (cfg.mode == RoutingMode::PublicTransport)
         {
-            // PT: run the full pipeline per origin. Destinations are snapped
-            // onto the combined network inside the PT pipeline.
+            // Load timetable once for all origins.
+            auto tt = nigiri::timetable::read(
+                std::filesystem::path{cfg.timetable_path});
+
+            // PT: run the pipeline per origin, sharing the timetable.
             for (size_t oi = 0; oi < n_origins; ++oi)
             {
                 auto rcfg = matrix_to_request_config(
@@ -369,7 +315,7 @@ namespace routing
                 input::validate(rcfg);
 
                 auto pt_result = pt::run_pt_pipeline_with_destinations(
-                    rcfg, con, cfg.destinations);
+                    rcfg, con, cfg.destinations, &*tt);
 
                 read_dest_costs(oi, pt_result.field.costs,
                                 pt_result.extra_node_ids);
@@ -377,7 +323,7 @@ namespace routing
         }
         else
         {
-            // Street network: single network, Dijkstra per origin.
+            // Street network: single network covering all origins + destinations.
             std::vector<Point3857> all_points;
             all_points.reserve(n_origins + n_dests);
             all_points.insert(all_points.end(),
@@ -386,11 +332,89 @@ namespace routing
                               cfg.destinations.begin(), cfg.destinations.end());
 
             auto rcfg = matrix_to_request_config(cfg, all_points);
-
-            auto classes = input::valid_classes(cfg.mode);
             double buffer_m = input::buffer_distance(rcfg);
-            auto edges = data::load_edges(con, cfg.edge_dir, cfg.node_dir, all_points,
-                                           buffer_m, classes, cfg.mode);
+
+            // Compute bbox of all points
+            double bmin_x = all_points[0].x, bmax_x = bmin_x;
+            double bmin_y = all_points[0].y, bmax_y = bmin_y;
+            for (auto const &p : all_points)
+            {
+                bmin_x = std::min(bmin_x, p.x);
+                bmax_x = std::max(bmax_x, p.x);
+                bmin_y = std::min(bmin_y, p.y);
+                bmax_y = std::max(bmax_y, p.y);
+            }
+            double dx = bmax_x - bmin_x;
+            double dy = bmax_y - bmin_y;
+            double extent = std::sqrt(dx * dx + dy * dy);
+
+            std::vector<Edge> edges;
+            static constexpr double kBboxMarginM = 10000.0;
+            static constexpr double kDetailBufferM = 5000.0;
+
+            if (extent > 10000.0)
+            {
+                // Large extent: tiered loading.
+                // Skeleton (classified roads) via bbox corridor,
+                // detail (local roads) via per-point circles.
+                std::vector<std::string> skeleton_classes;
+                std::vector<std::string> detail_classes;
+
+                if (cfg.mode == RoutingMode::Car)
+                {
+                    skeleton_classes = {
+                        "motorway", "trunk", "primary", "secondary",
+                        "tertiary"};
+                    detail_classes = {
+                        "residential", "living_street", "unclassified",
+                        "service", "track"};
+                }
+                else
+                {
+                    skeleton_classes = {
+                        "primary", "secondary", "tertiary", "trunk"};
+                    detail_classes = {
+                        "residential", "living_street", "unclassified",
+                        "service", "pedestrian", "footway", "steps",
+                        "path", "track", "cycleway", "bridleway",
+                        "unknown"};
+                }
+
+                auto bbox_filter = data::compute_h3_filter_bbox(
+                    con, bmin_x, bmin_y, bmax_x, bmax_y, kBboxMarginM);
+                auto skeleton = data::load_edges(
+                    con, cfg.edge_dir, cfg.node_dir,
+                    bbox_filter, skeleton_classes, cfg.mode);
+
+                auto detail = data::load_edges(
+                    con, cfg.edge_dir, cfg.node_dir,
+                    all_points, kDetailBufferM, detail_classes, cfg.mode);
+
+                // Merge and deduplicate by edge ID
+                std::unordered_set<int64_t> seen;
+                seen.reserve(skeleton.size() + detail.size());
+                edges.reserve(skeleton.size() + detail.size());
+                for (auto &e : skeleton)
+                {
+                    seen.insert(e.id);
+                    edges.push_back(std::move(e));
+                }
+                for (auto &e : detail)
+                {
+                    if (seen.find(e.id) == seen.end())
+                        edges.push_back(std::move(e));
+                }
+            }
+            else
+            {
+                // Small extent: all classes via bbox corridor.
+                auto classes = input::valid_classes(cfg.mode);
+                auto bbox_filter = data::compute_h3_filter_bbox(
+                    con, bmin_x, bmin_y, bmax_x, bmax_y, kBboxMarginM);
+                edges = data::load_edges(con, cfg.edge_dir, cfg.node_dir,
+                                         bbox_filter, classes, cfg.mode);
+            }
+
             if (edges.empty())
                 throw std::runtime_error(
                     "No edges loaded. Check edge_dir and coverage.");
@@ -418,50 +442,55 @@ namespace routing
             }
         }
 
-        // Write results to parquet via DuckDB.
-        // All O×D pairs are emitted; unreachable pairs have cost = NULL.
+        // Write results to parquet via DuckDB Appender.
         namespace fs = std::filesystem;
         fs::path out_path(cfg.output_path);
         if (!out_path.parent_path().empty())
             fs::create_directories(out_path.parent_path());
 
         {
-            std::ostringstream values;
-            bool first = true;
-            for (size_t oi = 0; oi < n_origins; ++oi)
+            bool const has_origin_ids = cfg.origin_ids.size() == n_origins;
+            bool const has_dest_ids = cfg.destination_ids.size() == n_dests;
+
+            con.Query("DROP TABLE IF EXISTS _matrix_tmp");
+            con.Query("CREATE TEMP TABLE _matrix_tmp "
+                      "(origin VARCHAR, destination VARCHAR, travel_cost INTEGER)");
+
             {
-                for (size_t di = 0; di < n_dests; ++di)
+                duckdb::Appender appender(con, "_matrix_tmp");
+                for (size_t oi = 0; oi < n_origins; ++oi)
                 {
-                    if (!first) values << ",";
-                    first = false;
-                    double c = matrix[oi * n_dests + di];
-                    values << "(" << oi << "," << di << ",";
-                    if (std::isnan(c))
-                        values << "NULL";
-                    else
-                        values << c;
-                    values << ")";
+                    std::string const &o_id = has_origin_ids
+                        ? cfg.origin_ids[oi]
+                        : std::to_string(oi);
+
+                    for (size_t di = 0; di < n_dests; ++di)
+                    {
+                        double c = matrix[oi * n_dests + di];
+                        std::string const &d_id = has_dest_ids
+                            ? cfg.destination_ids[di]
+                            : std::to_string(di);
+
+                        appender.BeginRow();
+                        appender.Append(duckdb::Value(o_id));
+                        appender.Append(duckdb::Value(d_id));
+                        if (std::isnan(c))
+                            appender.Append(duckdb::Value());
+                        else
+                            appender.Append(static_cast<int32_t>(std::round(c)));
+                        appender.EndRow();
+                    }
                 }
             }
 
-            if (first)
-            {
-                // No pairs at all — write empty parquet.
-                values << "(NULL::INTEGER, NULL::INTEGER, NULL::DOUBLE)";
-            }
-
-            std::ostringstream sql;
-            sql << "COPY (SELECT * FROM (VALUES " << values.str()
-                << ") AS t(origin_id, destination_id, cost)";
-            if (first)
-                sql << " WHERE FALSE";
-            sql << ") TO '" << cfg.output_path
-                << "' (FORMAT PARQUET, COMPRESSION ZSTD)";
-
-            auto result = con.Query(sql.str());
+            std::string copy_sql =
+                "COPY _matrix_tmp TO '" + sql_escape(cfg.output_path) +
+                "' (FORMAT PARQUET, COMPRESSION ZSTD)";
+            auto result = con.Query(copy_sql);
             if (result->HasError())
                 throw std::runtime_error(
                     "Travel cost matrix parquet export failed: " + result->GetError());
+            con.Query("DROP TABLE _matrix_tmp");
         }
     }
 

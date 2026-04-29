@@ -9,7 +9,8 @@
  *
  * Supports both single and multi-select modes via widget_options.multi.
  */
-import { Box, Typography } from "@mui/material";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import { Box, Stack, Tooltip, Typography } from "@mui/material";
 import { useParams } from "next/navigation";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -284,43 +285,50 @@ export default function FieldInput({
     );
   }
 
-  // Show message if no fields available (prevents MUI empty state loop)
-  if (filteredFields.length === 0) {
-    return (
-      <Box>
-        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
-          {label}: {t("no_fields_found")}
-        </Typography>
-      </Box>
-    );
-  }
+  const noFields = filteredFields.length === 0;
+
+  const errorIcon = noFields ? (
+    <Tooltip title={t("no_fields_found")} arrow>
+      <ErrorOutlineIcon color="error" fontSize="small" sx={{ ml: 1, mb: "8px" }} />
+    </Tooltip>
+  ) : null;
 
   // Render multi-select or single-select based on config
   if (isMultiSelect) {
     return (
-      <LayerFieldSelector
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        selectedField={selectedFields as any}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setSelectedField={handleMultiChange as any}
-        fields={filteredFields}
-        label={input.title || input.name}
-        tooltip={input.description}
-        disabled={disabled}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        multiple={true as any}
-      />
+      <Stack direction="row" alignItems="flex-end">
+        <Box sx={{ flex: 1 }}>
+          <LayerFieldSelector
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            selectedField={selectedFields as any}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setSelectedField={handleMultiChange as any}
+            fields={filteredFields}
+            label={input.title || input.name}
+            tooltip={input.description}
+            disabled={disabled || noFields}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            multiple={true as any}
+          />
+        </Box>
+        {errorIcon}
+      </Stack>
     );
   }
 
   return (
-    <LayerFieldSelector
-      selectedField={selectedField}
-      setSelectedField={handleChange}
-      fields={filteredFields}
-      label={input.title || input.name}
-      tooltip={input.description}
-      disabled={disabled}
-    />
+    <Stack direction="row" alignItems="flex-end">
+      <Box sx={{ flex: 1 }}>
+        <LayerFieldSelector
+          selectedField={selectedField}
+          setSelectedField={handleChange}
+          fields={filteredFields}
+          label={input.title || input.name}
+          tooltip={input.description}
+          disabled={disabled || noFields}
+        />
+      </Box>
+      {errorIcon}
+    </Stack>
   );
 }

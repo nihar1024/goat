@@ -9,6 +9,8 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
@@ -17,21 +19,30 @@ import {
   Menu,
   MenuItem,
   MenuList,
+  Select,
   Stack,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material";
 import { formatDistance } from "date-fns";
 import { useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import { Loading } from "@p4b/ui/components/Loading";
 
 import { useDateFnsLocale } from "@/i18n/utils";
 
+import {
+  assignDomainToProject,
+  unassignDomainFromProject,
+  useOrganizationDomains,
+} from "@/lib/api/customDomains";
 import { LAYERS_API_BASE_URL } from "@/lib/api/layers";
 import {
   PROJECTS_API_BASE_URL,
@@ -165,12 +176,71 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
 const ShareWithPublicTab: React.FC<ShareWithPublicTabProps> = ({ project }) => {
   const { t } = useTranslation("common");
   const { sharedProject, isLoading, mutate } = usePublicProject(project.id);
+  const { organization } = useOrganization();
+  const { domains: orgDomains, mutate: mutateOrgDomains } = useOrganizationDomains(
+    organization?.id
+  );
   const [isPublishing, setIsPublishing] = useState(false);
   const [isUnpublishing, setIsUnpublishing] = useState(false);
+  const [isCustomUrlBusy, setIsCustomUrlBusy] = useState(false);
   const dateLocale = useDateFnsLocale();
   const baseUrl = window.location.origin;
   const publicUrl = `${baseUrl}/map/public/${project.id}`;
   const embedCode = `<iframe src="${publicUrl}" width="100%" height="600" frameborder="0" style="max-width: 100%; border: 1px solid #EAEAEA; border-radius: 4px;"></iframe>`;
+
+  const assignedDomainId = sharedProject?.custom_domain_id ?? null;
+  // Domains the user can pick:
+  //   - cert is active (so it can actually serve traffic), AND
+  //   - not already taken by a different project (the backend rejects
+  //     double-assignment, so let's not surface options that error out).
+  // The currently-assigned domain is always included so we can render its
+  // option even if its cert later regresses (otherwise MUI warns about an
+  // out-of-range value).
+  const selectableDomains = useMemo(() => {
+    const all = orgDomains ?? [];
+    return all.filter((d) => {
+      if (d.id === assignedDomainId) return true;
+      if (d.cert_status !== "active") return false;
+      const takenByOther =
+        d.assigned_project_id != null && d.assigned_project_id !== project.id;
+      return !takenByOther;
+    });
+  }, [orgDomains, assignedDomainId, project.id]);
+  const showCustomUrl =
+    Boolean(sharedProject) &&
+    (selectableDomains.some((d) => d.id !== assignedDomainId) ||
+      assignedDomainId !== null);
+
+  const handleCustomUrlChange = async (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
+    setIsCustomUrlBusy(true);
+    try {
+      if (value === "" || value === "__none__") {
+        await unassignDomainFromProject(project.id);
+        toast.success(
+          t("share_custom_url_unassign_success", "Custom URL removed")
+        );
+      } else {
+        await assignDomainToProject(project.id, value);
+        const picked = selectableDomains.find((d) => d.id === value);
+        toast.success(
+          t("share_custom_url_assign_success", "Custom URL set to {{domain}}", {
+            domain: picked?.base_domain ?? "",
+          })
+        );
+      }
+      await mutate();
+      await mutateOrgDomains();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("error_updating_share_access");
+      toast.error(message);
+    } finally {
+      setIsCustomUrlBusy(false);
+    }
+  };
 
   const handlePublish = async () => {
     try {
@@ -286,6 +356,75 @@ const ShareWithPublicTab: React.FC<ShareWithPublicTabProps> = ({ project }) => {
                 <Typography variant="body1">{t("embed_code")}</Typography>
                 <CopyField value={embedCode} copyText="Copy Code" copiedText="Copied Code" />
               </Stack>
+
+              {/* Custom URL (white-label custom domains).
+                  Only renders when the org has at least one active domain;
+                  the section is intentionally hidden otherwise to avoid
+                  surfacing an empty dropdown for orgs that don't use the
+                  feature. */}
+              {showCustomUrl && (
+                <Stack spacing={1}>
+                  <Typography variant="body1">
+                    {t("share_custom_url_label", "Custom URL")}
+                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <FormControl fullWidth size="small">
+                      <Select
+                        value={assignedDomainId ?? ""}
+                        displayEmpty
+                        disabled={isCustomUrlBusy}
+                        onChange={handleCustomUrlChange}
+                        renderValue={(selected) => {
+                          if (!selected) {
+                            return (
+                              <Typography variant="body2" color="text.secondary">
+                                {t(
+                                  "share_custom_url_placeholder",
+                                  "Choose a domain…"
+                                )}
+                              </Typography>
+                            );
+                          }
+                          const picked = selectableDomains.find(
+                            (d) => d.id === selected
+                          );
+                          return picked?.base_domain ?? "";
+                        }}>
+                        {selectableDomains.map((domain) => (
+                          <MenuItem key={domain.id} value={domain.id}>
+                            {domain.base_domain}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    {assignedDomainId && (
+                      <Tooltip
+                        title={t("share_custom_url_none", "Remove custom URL")}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled={isCustomUrlBusy}
+                            onClick={() =>
+                              handleCustomUrlChange({
+                                target: { value: "__none__" },
+                              } as SelectChangeEvent<string>)
+                            }
+                            aria-label={t(
+                              "share_custom_url_none",
+                              "Remove custom URL"
+                            )}>
+                            <Icon
+                              iconName={ICON_NAME.XCLOSE}
+                              htmlColor="inherit"
+                              style={{ fontSize: 16 }}
+                            />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                  </Stack>
+                </Stack>
+              )}
             </>
           )}
         </Stack>

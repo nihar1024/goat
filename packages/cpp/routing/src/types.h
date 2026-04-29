@@ -96,6 +96,7 @@ namespace routing
         double egress_max_cost = 0.0;      // 0 → falls back to max_cost
         double access_speed_km_h = 0.0;    // 0 → falls back to speed_km_h (time cost type only)
         double egress_speed_km_h = 0.0;    // 0 → falls back to speed_km_h (time cost type only)
+        double transfer_cost = 2.0;        // minutes added at access→transit and transit→egress transitions
 
         // PT transit mode filter (empty → all modes allowed)
         std::vector<std::string> transit_modes;
@@ -118,6 +119,8 @@ namespace routing
     {
         std::vector<Point3857> origins;
         std::vector<Point3857> destinations;
+        std::vector<std::string> origin_ids;      // passthrough IDs (empty → 0-based index)
+        std::vector<std::string> destination_ids;  // passthrough IDs (empty → 0-based index)
         RoutingMode mode;
         CostType cost_type;
         double max_cost;       // budget: minutes (time) or meters (distance)
@@ -157,21 +160,22 @@ namespace routing
         double cost;
     };
 
-    struct GeomStore
+    // Lightweight per-edge info retained after compaction for output phase.
+    struct EdgeInfo
     {
-        std::vector<int32_t> address;
-        std::vector<Point3857> coords;
+        int64_t id;
+        int32_t h3_3;
+        std::vector<Point3857> geometry; // populated for jsolines only
     };
 
     struct SubNetwork
     {
-        std::vector<Edge> edges;
+        std::vector<EdgeInfo> edges;
         std::vector<int32_t> source;
         std::vector<int32_t> target;
         std::vector<double> cost;
         std::vector<double> reverse_cost;
         std::vector<double> length_3857;
-        GeomStore geom;
         std::vector<Point3857> node_coords;
         int32_t node_count;
     };

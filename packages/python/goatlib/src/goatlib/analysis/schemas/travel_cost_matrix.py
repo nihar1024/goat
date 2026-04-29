@@ -16,6 +16,7 @@ class RoutingMode(StrEnum):
     pedelec = "pedelec"
     car = "car"
     pt = "pt"
+    flight_distance = "flight_distance"
 
 
 class CostType(StrEnum):
@@ -68,8 +69,10 @@ class TravelCostMatrixParams(BaseModel):
     # Origin/destination coordinates in WGS84
     origin_latitude: list[float]
     origin_longitude: list[float]
+    origin_id: list[str] | None = None
     destination_latitude: list[float]
     destination_longitude: list[float]
+    destination_id: list[str] | None = None
 
     # Routing
     routing_mode: RoutingMode = RoutingMode.walking

@@ -26,4 +26,10 @@ namespace routing::data
                                    std::vector<Point3857> const &points,
                                    double buffer_meters);
 
+    // Compute H3 cells covering a bounding box (EPSG:3857) with margin.
+    H3CellFilter compute_h3_filter_bbox(duckdb::Connection &con,
+                                        double min_x, double min_y,
+                                        double max_x, double max_y,
+                                        double margin_meters);
+
 } // namespace routing::data

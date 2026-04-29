@@ -247,11 +247,16 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         default=5,
         description="Maximum number of transit transfers.",
         json_schema_extra=ui_field(
-            section="routing",
-            field_order=3,
+            section="configuration",
+            field_order=16,
             label="Max. transfers",
             label_de="Max. Umstiege",
-            visible_when={"routing_mode": "pt"},
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
             widget_options={
                 "max_value_from": {
                     "fields": [],
@@ -373,7 +378,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    # Distance budget
+    # Distance budget — active mobility
     max_cost_distance: int = Field(
         default=500,
         description="Maximum distance in meters.",
@@ -393,7 +398,34 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             },
             visible_when={
                 "$and": [
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
+                    {"cost_type": "distance"},
+                ]
+            },
+        ),
+    )
+
+    # Distance budget — car
+    max_cost_distance_car: int = Field(
+        default=5000,
+        description="Maximum distance in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=2,
+            label_key="limit",
+            inline_group="cost_config",
+            inline_flex="1 0 0",
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "Distance must be between 50 and 100,000 meters",
+                    "max": 100000,
+                    "min": 50,
+                },
+            },
+            visible_when={
+                "$and": [
+                    {"routing_mode": "car"},
                     {"cost_type": "distance"},
                 ]
             },
@@ -439,6 +471,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                     "fields": [
                         {"field": "max_cost_time_pt", "when": {"routing_mode": "pt"}},
                         {"field": "max_cost_time_car", "when": {"routing_mode": "car", "cost_type": "time"}},
+                        {"field": "max_cost_distance_car", "when": {"routing_mode": "car", "cost_type": "distance"}},
                         {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
                         {"field": "max_cost_time_active"},
                     ],
@@ -466,6 +499,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                     "limit_fields": [
                         {"field": "max_cost_time_pt", "when": {"routing_mode": "pt"}},
                         {"field": "max_cost_time_car", "when": {"routing_mode": "car", "cost_type": "time"}},
+                        {"field": "max_cost_distance_car", "when": {"routing_mode": "car", "cost_type": "distance"}},
                         {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
                         {"field": "max_cost_time_active"},
                     ],
@@ -554,9 +588,9 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_access_max_cost: int = Field(
-        default=30,
-        description="Access leg budget: minutes (time) or meters (distance).",
+    pt_access_max_cost_time: int = Field(
+        default=15,
+        description="Access leg budget in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=22,
@@ -567,7 +601,44 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
+                    {"pt_access_cost_type": "time"},
                 ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [
+                        {"field": "max_cost_time_pt"},
+                    ],
+                    "message": "access_budget_exceeds_limit",
+                    "min": 1,
+                },
+            },
+        ),
+    )
+
+    pt_access_max_cost_distance: int = Field(
+        default=500,
+        description="Access leg budget in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=22,
+            label_key="limit",
+            inline_group="pt_access_cost",
+            inline_flex="1 0 0",
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                    {"pt_access_cost_type": "distance"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "access_budget_exceeds_limit",
+                    "min": 50,
+                    "max": 20000,
+                },
             },
         ),
     )
@@ -629,9 +700,9 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_egress_max_cost: int = Field(
-        default=30,
-        description="Egress leg budget: minutes (time) or meters (distance).",
+    pt_egress_max_cost_time: int = Field(
+        default=15,
+        description="Egress leg budget in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=26,
@@ -642,7 +713,44 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
+                    {"pt_egress_cost_type": "time"},
                 ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [
+                        {"field": "max_cost_time_pt"},
+                    ],
+                    "message": "egress_budget_exceeds_limit",
+                    "min": 1,
+                },
+            },
+        ),
+    )
+
+    pt_egress_max_cost_distance: int = Field(
+        default=500,
+        description="Egress leg budget in meters.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=26,
+            label_key="limit",
+            inline_group="pt_egress_cost",
+            inline_flex="1 0 0",
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                    {"pt_egress_cost_type": "distance"},
+                ]
+            },
+            widget_options={
+                "max_value_from": {
+                    "fields": [],
+                    "message": "egress_budget_exceeds_limit",
+                    "min": 50,
+                    "max": 20000,
+                },
             },
         ),
     )
@@ -751,7 +859,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         if self.cost_type != CostType.distance:
             return self
         if self.routing_mode == CatchmentAreaRoutingMode.car:
-            if self.max_cost_distance > 100000:
+            if self.max_cost_distance_car > 100000:
                 raise ValueError("Car distance must be ≤ 100000 meters.")
         elif self.max_cost_distance > 20000:
             raise ValueError("Active mobility distance must be ≤ 20000 meters.")
@@ -760,6 +868,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
     def resolve_max_cost(self: Self) -> float:
         """Resolve the effective max_cost from mode-specific UI fields."""
         if self.cost_type == CostType.distance:
+            if self.routing_mode == CatchmentAreaRoutingMode.car:
+                return float(self.max_cost_distance_car)
             return float(self.max_cost_distance)
         if self.routing_mode == CatchmentAreaRoutingMode.pt:
             return float(self.max_cost_time_pt)
@@ -880,8 +990,16 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             egress_mode=params.pt_egress_mode,
             access_cost_type=params.pt_access_cost_type,
             egress_cost_type=params.pt_egress_cost_type,
-            access_max_cost=params.pt_access_max_cost,
-            egress_max_cost=params.pt_egress_max_cost,
+            access_max_cost=(
+                params.pt_access_max_cost_distance
+                if params.pt_access_cost_type == CostType.distance
+                else params.pt_access_max_cost_time
+            ),
+            egress_max_cost=(
+                params.pt_egress_max_cost_distance
+                if params.pt_egress_cost_type == CostType.distance
+                else params.pt_egress_max_cost_time
+            ),
             access_speed=params.pt_access_speed,
             egress_speed=params.pt_egress_speed,
             # Output

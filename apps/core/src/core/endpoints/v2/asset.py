@@ -135,7 +135,7 @@ async def upload_asset(
 
     s3_service.upload_file(
         file_content=io.BytesIO(file_content),
-        bucket_name=settings.S3_BUCKET_NAME,
+        bucket_name=settings.AWS_S3_ASSETS_BUCKET,
         s3_key=s3_key,
         content_type=actual_mime_type,
     )
@@ -250,7 +250,7 @@ async def delete_asset(
         )
 
     # Delete from S3
-    s3_service.delete_file(bucket_name=settings.S3_BUCKET_NAME, s3_key=asset.s3_key)
+    s3_service.delete_file(bucket_name=settings.AWS_S3_ASSETS_BUCKET, s3_key=asset.s3_key)
 
     # Delete from DB
     await async_session.delete(asset)

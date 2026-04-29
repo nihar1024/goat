@@ -142,8 +142,20 @@ int64_t materialize_polygon_features_table(ReachabilityField const &field,
                                  create_nodes->GetError());
 
     // Downsample interior nodes for concave hull performance.
+    // Only applied for large networks; small catchments keep all nodes.
     // Boundary nodes (cost near a step threshold) are always kept.
+    static constexpr int32_t kDownsampleThreshold = 50000;
     static constexpr int32_t kDownsampleFactor = 10;
+
+    // First pass: count reachable nodes to decide whether to downsample.
+    int64_t total_reachable = 0;
+    for (int32_t nid = 0; nid < field.node_count; ++nid)
+    {
+        double const cost = field.costs[static_cast<std::size_t>(nid)];
+        if (std::isfinite(cost) && cost >= 0.0 && cost <= cfg.cost_budget())
+            ++total_reachable;
+    }
+    bool const downsample = total_reachable > kDownsampleThreshold;
 
     int64_t reached_node_count = 0;
     int32_t sample_counter = 0;
@@ -159,18 +171,21 @@ int64_t materialize_polygon_features_table(ReachabilityField const &field,
                 static_cast<std::size_t>(nid) >= field.network->node_coords.size())
                 continue;
 
-            bool is_boundary = false;
-            for (double sc : step_thresholds)
+            if (downsample)
             {
-                if (std::abs(cost - sc) < sc * 0.05)
+                bool is_boundary = false;
+                for (double sc : step_thresholds)
                 {
-                    is_boundary = true;
-                    break;
+                    if (std::abs(cost - sc) < sc * 0.1)
+                    {
+                        is_boundary = true;
+                        break;
+                    }
                 }
-            }
 
-            if (!is_boundary && (sample_counter++ % kDownsampleFactor) != 0)
-                continue;
+                if (!is_boundary && (sample_counter++ % kDownsampleFactor) != 0)
+                    continue;
+            }
 
             auto const &coord = field.network->node_coords[static_cast<std::size_t>(nid)];
             nodes_appender.BeginRow();
@@ -244,7 +259,11 @@ int64_t materialize_polygon_features_table(ReachabilityField const &field,
     // One concave hull per (step_cost, component_id).
     // component_id is step-local: two origins share a component only if they are
     // graph-connected within *that step's* travel budget.
-    std::string const hull_ratio = std::to_string(kConcaveHullRatio);
+    // Adaptive ratio: smoother for small catchments, tighter for large ones.
+    double ratio = (total_reachable < 10000) ? 0.5
+                 : (total_reachable < 50000) ? 0.3
+                 : kConcaveHullRatio;
+    std::string const hull_ratio = std::to_string(ratio);
     std::string const hulls_per_component_cte =
         "hulls_per_component AS ("
         "  SELECT c.step_cost, c.component_id,"

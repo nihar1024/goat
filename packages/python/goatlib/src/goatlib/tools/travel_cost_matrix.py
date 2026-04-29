@@ -841,7 +841,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         dest_lats: list[float], dest_lons: list[float], dest_ids: list[str],
         output_path: Path,
     ) -> None:
-        """Compute Haversine distances between all origin-destination pairs."""
+        """Compute geodesic distances (WGS84 ellipsoid) between all O-D pairs."""
         con = duckdb.connect()
         try:
             con.execute("INSTALL spatial; LOAD spatial;")

@@ -220,7 +220,7 @@ const RichTextPreview = ({ html }: { html: string }) => {
             boxSizing: "border-box",
           },
         }}
-        dangerouslySetInnerHTML={{ __html: html || "<p></p>" }}
+        dangerouslySetInnerHTML={{ __html: html || "<p><br></p>" }}
       />
       {viewPopover && (
         <InfoChipViewPopover

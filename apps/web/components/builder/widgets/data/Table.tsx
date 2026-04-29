@@ -59,6 +59,7 @@ export const TableDataWidget = ({
   const mode = config?.setup?.mode ?? tableModeTypes.Values.records;
   const isGroupedMode = mode === tableModeTypes.Values.grouped;
   const stickyHeaderEnabled = (config?.options?.sticky_header ?? true) === true;
+  const headerColor = config?.options?.header_color;
 
   const secondaryGroupByColumn = config?.setup?.group_by_secondary_column_name;
   const hasSecondaryGroup = isGroupedMode && !!secondaryGroupByColumn;
@@ -1634,6 +1635,7 @@ export const TableDataWidget = ({
               displayData={displayRecordsData}
               fields={visibleFields}
               stickyHeaderEnabled={stickyHeaderEnabled}
+              headerColor={headerColor}
               headerLabelMap={recordColumnLabelMap}
               getColumnWidth={recordsColWidth}
               formatCellValueForColumn={formatRecordCell}
@@ -1668,6 +1670,7 @@ export const TableDataWidget = ({
               areFieldsLoading={false}
               fields={[]}
               stickyHeaderEnabled={stickyHeaderEnabled}
+              headerColor={headerColor}
               tableColumns={groupedTableColumns}
               tableRows={groupedTableRows}
               totalsRow={groupedTotalsRow}
@@ -1728,6 +1731,7 @@ export const TableDataWidget = ({
               areFieldsLoading={false}
               fields={[]}
               stickyHeaderEnabled={stickyHeaderEnabled}
+              headerColor={headerColor}
               tableColumns={isSqlCollapsibleMode ? sqlCollapsibleColumns : sqlTableColumns}
               tableRows={isSqlCollapsibleMode ? sqlCollapsibleRows : sqlRows}
               formatCellValueForColumn={isSqlCollapsibleMode ? formatSqlCellCollapsible : formatSqlCell}

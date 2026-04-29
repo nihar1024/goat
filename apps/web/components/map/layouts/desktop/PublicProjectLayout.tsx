@@ -18,6 +18,8 @@ import {
 import type { BuilderWidgetSchema } from "@/lib/validations/project";
 import {
   type BuilderPanelSchema,
+  type ControlKey,
+  type CornerKey,
   type Project,
   type ProjectLayer,
   type ProjectLayerGroup,
@@ -506,6 +508,79 @@ const PublicProjectLayout = ({
     };
   }, [getOccupiedSpace]);
 
+  const controlsByCorner = useMemo(() => {
+    const positions = builderConfig?.settings?.control_positions as Record<CornerKey, ControlKey[]> | undefined;
+    return positions ?? {
+      "top-left": ["location", "measure"] as ControlKey[],
+      "top-right": [] as ControlKey[],
+      "bottom-left": [] as ControlKey[],
+      "bottom-right": ["zoom_controls", "basemap", "fullscreen"] as ControlKey[],
+    };
+  }, [builderConfig]);
+
+  const allowedStyles = useMemo(() => {
+    const allowed = builderConfig?.settings.allowed_basemaps;
+    if (!allowed) return translatedBaseMaps;
+    return translatedBaseMaps.filter((b) => allowed.includes(b.value));
+  }, [builderConfig, translatedBaseMaps]);
+
+  const renderControl = useCallback(
+    (key: ControlKey): React.ReactNode => {
+      switch (key) {
+        case "location":
+          return (
+            <Geocoder
+              key="location"
+              accessToken={MAPBOX_TOKEN}
+              placeholder={t("enter_an_address")}
+              tooltip={t("search")}
+              onSelect={(result) => {
+                dispatch(setGeocoderResult(result));
+              }}
+            />
+          );
+        case "measure":
+          return <MeasureButton key="measure" {...measureTool} />;
+        case "zoom_controls":
+          return <Zoom key="zoom_controls" tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />;
+        case "basemap":
+          return allowedStyles.length > 0 ? (
+            <BasemapSelector
+              key="basemap"
+              styles={allowedStyles}
+              active={activeBasemap.value}
+              basemapChange={async (basemap) => {
+                await onProjectUpdate?.("basemap", basemap);
+              }}
+            />
+          ) : null;
+        case "fullscreen":
+          return <Fullscren key="fullscreen" tooltipOpen={t("fullscreen")} tooltipExit={t("exit_fullscreen")} />;
+        case "find_my_location":
+          return <UserLocation key="find_my_location" tooltip={t("find_location")} />;
+        case "project_info":
+          return project ? (
+            <ProjectInfo
+              key="project_info"
+              project={project}
+              viewOnly={viewOnly}
+              onProjectUpdate={onProjectUpdate}
+            />
+          ) : null;
+        default:
+          return null;
+      }
+    },
+    [t, measureTool, allowedStyles, activeBasemap, dispatch, onProjectUpdate, project, viewOnly]
+  );
+
+  const cornerSxMap: Record<CornerKey, object> = {
+    "top-left": { ...controlPositions.topLeft },
+    "top-right": { ...controlPositions.topRight },
+    "bottom-left": { ...controlPositions.bottomLeft },
+    "bottom-right": { ...controlPositions.bottomRight },
+  };
+
   return (
     <Box sx={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", fontFamily: dashboardFont }}>
       {project && builderConfig?.settings?.toolbar && (
@@ -574,42 +649,8 @@ const PublicProjectLayout = ({
             </Box>
           )}
 
-          {/* Top-Left Controls */}
-          {builderConfig?.settings.location && (
-            <Box
-              sx={{
-                position: "absolute",
-                ...controlPositions.topLeft,
-                m: 2,
-                zIndex: 2,
-                transition: "all 0.3s",
-              }}>
-              <Geocoder
-                accessToken={MAPBOX_TOKEN}
-                placeholder={t("enter_an_address")}
-                tooltip={t("search")}
-                onSelect={(result) => {
-                  dispatch(setGeocoderResult(result));
-                }}
-              />
-              {builderConfig?.settings.measure && <MeasureButton {...measureTool} />}
-            </Box>
-          )}
-          {/* Top-Right Controls  */}
-          <Box
-            sx={{
-              position: "absolute",
-              ...controlPositions.topRight,
-              m: 2,
-              zIndex: 2,
-              transition: "all 0.3s",
-            }}>
-            {project && builderConfig?.settings?.project_info && (
-              <ProjectInfo project={project} viewOnly={viewOnly} onProjectUpdate={onProjectUpdate} />
-            )}
-          </Box>
           {/* Right Floating Panel - Measure Results and Layer Settings */}
-          {(builderConfig?.settings.measure || activeRightComponent) && (
+          {Object.values(builderConfig?.settings?.control_positions ?? {}).some((arr) => (arr as ControlKey[]).includes("measure")) || activeRightComponent ? (
             <Box
               sx={{
                 position: "absolute",
@@ -625,7 +666,9 @@ const PublicProjectLayout = ({
                 gap: 2,
               }}>
               {/* Measurement Results Panel */}
-              {builderConfig?.settings.measure && <MeasureResultsPanel {...measureTool} />}
+              {Object.values(builderConfig?.settings?.control_positions ?? {}).some((arr) => (arr as ControlKey[]).includes("measure")) && (
+                <MeasureResultsPanel {...measureTool} />
+              )}
               {/* Layer Settings Panel */}
               {activeRightComponent && (
                 <FloatingPanel
@@ -649,49 +692,56 @@ const PublicProjectLayout = ({
                 </FloatingPanel>
               )}
             </Box>
-          )}
+          ) : null}
 
-          {/* Bottom-Right Controls */}
+          {/* Bottom-right always renders because it permanently contains AttributionControl */}
           <Box
             sx={{
               position: "absolute",
-              ...controlPositions.bottomRight,
+              ...cornerSxMap["bottom-right"],
               m: 2,
               zIndex: 2,
               transition: "all 0.3s",
             }}>
-            {builderConfig?.settings.zoom_controls && (
-              <Zoom tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />
-            )}
-            {builderConfig?.settings.fullscreen && (
-              <Fullscren tooltipOpen={t("fullscreen")} tooltipExit={t("exit_fullscreen")} />
-            )}
-            {builderConfig?.settings.find_my_location && <UserLocation tooltip={t("find_location")} />}
-            {builderConfig?.settings.basemap && (
-              <BasemapSelector
-                styles={translatedBaseMaps}
-                active={activeBasemap.value}
-                basemapChange={async (basemap) => {
-                  await onProjectUpdate?.("basemap", basemap);
-                }}
-              />
-            )}
+            {controlsByCorner["bottom-right"].map(renderControl)}
             <AttributionControl />
           </Box>
-          {/* Bottom-Left Controls */}
-          {builderConfig?.settings.scalebar && (
+
+          {/* Scalebar — bottom-left is reserved exclusively for the scalebar */}
+          {builderConfig?.settings?.scalebar !== false && (
             <Box
               sx={{
                 position: "absolute",
-                ...controlPositions.bottomLeft,
-                zIndex: 2,
+                bottom: getOccupiedSpace.bottom,
+                left: getOccupiedSpace.left,
                 m: 2,
+                zIndex: 2,
                 pointerEvents: "none",
                 transition: "all 0.3s",
               }}>
               <Scalebar />
             </Box>
           )}
+
+          {/* Other corners only render when at least one control is assigned.
+              bottom-left is reserved for the scalebar. */}
+          {(["top-left", "top-right"] as CornerKey[]).map((corner) => {
+            const controls = controlsByCorner[corner];
+            if (controls.length === 0) return null;
+            return (
+              <Box
+                key={corner}
+                sx={{
+                  position: "absolute",
+                  ...cornerSxMap[corner],
+                  m: 2,
+                  zIndex: 2,
+                  transition: "all 0.3s",
+                }}>
+                {controls.map(renderControl)}
+              </Box>
+            );
+          })}
         </Box>
       </Box>
     </Box>

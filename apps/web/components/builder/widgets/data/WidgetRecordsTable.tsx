@@ -140,6 +140,7 @@ interface WidgetRecordsTableProps {
   displayData?: DatasetCollectionItems;
   fields: Array<{ name: string; type: string }>;
   stickyHeaderEnabled?: boolean;
+  headerColor?: string;
   headerLabelMap?: Record<string, string>;
   getColumnWidth?: (columnName: string) => number | undefined;
   renderHeaderLabel?: (columnName: string, label: string, align?: "left" | "right") => React.ReactNode;
@@ -159,6 +160,7 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
   displayData,
   fields,
   stickyHeaderEnabled = true,
+  headerColor,
   headerLabelMap,
   getColumnWidth,
   renderHeaderLabel,
@@ -190,13 +192,14 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
           position: "sticky",
           top: 0,
           zIndex: 3,
-          backgroundColor: "background.paper",
+          backgroundColor: headerColor ?? "background.paper",
           boxShadow: "inset 0 -1px 0 rgba(0, 0, 0, 0.12)",
         },
       }
     : {
         "& .MuiTableCell-head": {
           position: "relative",
+          ...(headerColor ? { backgroundColor: headerColor } : {}),
         },
       };
 

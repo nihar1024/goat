@@ -16,12 +16,12 @@ export async function generateMetadata({ params: { projectId, lng } }) {
       publicProject = await res.json();
     }
   } catch (err) {
-    // Swallow the error to avoid breaking metadata generation
     console.error("Failed to fetch public project:", err);
   }
 
   if (publicProject?.config?.project?.name && lng) {
     const title = `${publicProject.config.project.name} | GOAT`;
+    const faviconUrl = publicProject.config.project.builder_config?.settings?.favicon_url;
 
     // Use the request's Host header so OG previews on a custom domain
     // show that domain, not the canonical app URL.
@@ -52,7 +52,7 @@ export async function generateMetadata({ params: { projectId, lng } }) {
         ? `${baseUrl}/`
         : `${baseUrl}/${lng}/map/public/${projectId}`;
 
-    return getLocalizedMetadata(
+    const metadata = getLocalizedMetadata(
       lng,
       {
         en: { title },
@@ -63,6 +63,11 @@ export async function generateMetadata({ params: { projectId, lng } }) {
         robotsIndex: true,
       }
     );
+
+    if (faviconUrl) {
+      return { ...metadata, icons: { icon: faviconUrl } };
+    }
+    return metadata;
   }
 
   return {};

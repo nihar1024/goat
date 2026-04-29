@@ -1,4 +1,4 @@
-import { Button, Checkbox, FormControlLabel, Stack, Typography } from "@mui/material";
+import { Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -87,6 +87,7 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
   const [padding, setPadding] = useState(panel.config?.position?.padding ?? 0);
   const [collapsible, setCollapsible] = useState(panel.config?.options?.collapsible ?? false);
   const [collapsedDefault, setCollapsedDefault] = useState(panel.config?.options?.collapsed_default ?? false);
+  const [collapsedLabel, setCollapsedLabel] = useState(panel.config?.options?.collapsed_label ?? "");
   const [panelWidth, setPanelWidth] = useState(panel.config?.size?.width ?? 300);
   const [panelHeight, setPanelHeight] = useState(panel.config?.size?.height ?? 300);
 
@@ -98,6 +99,7 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
     setPadding(panel.config?.position?.padding ?? 0);
     setCollapsible(panel.config?.options?.collapsible ?? false);
     setCollapsedDefault(panel.config?.options?.collapsed_default ?? false);
+    setCollapsedLabel(panel.config?.options?.collapsed_label ?? "");
     setPanelWidth(panel.config?.size?.width ?? 300);
     setPanelHeight(panel.config?.size?.height ?? 300);
   }, [panel]);
@@ -258,6 +260,19 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
               collapsedDefault,
               "options.collapsed_default",
               false
+            )}
+            {collapsible && (
+              <TextField
+                size="small"
+                label={t("collapsed_label")}
+                placeholder={t("collapsed_label_placeholder")}
+                value={collapsedLabel}
+                onChange={(e) => setCollapsedLabel(e.target.value)}
+                onBlur={(e) => updateConfig("options.collapsed_label", e.target.value)}
+                inputProps={{ maxLength: 40 }}
+                sx={{ mt: 1 }}
+                fullWidth
+              />
             )}
           </Stack>
         </ConfigSection>

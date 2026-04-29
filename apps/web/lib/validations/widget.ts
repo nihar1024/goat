@@ -227,6 +227,7 @@ export const tableDataConfigSchema = dataConfigSchema.extend({
       format: formatNumberTypes.optional().default("none"),
       column_formats: z.record(formatNumberTypes).optional(),
       description: z.string().optional(),
+      header_color: z.string().optional(),
     })
     .default({}),
 });

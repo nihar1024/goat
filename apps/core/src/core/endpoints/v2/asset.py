@@ -133,13 +133,11 @@ async def upload_asset(
 
     s3_key = f"goat/{settings.ENVIRONMENT}/users/{user_id}/{asset_type.value}/{uuid.uuid4().hex}{file_extension}"
 
-    settings.S3_CLIENT.upload_fileobj(
-        Fileobj=io.BytesIO(file_content),
-        Bucket=settings.AWS_S3_ASSETS_BUCKET,
-        Key=s3_key,
-        ExtraArgs={"ContentType": actual_mime_type},
-        Callback=None,
-        Config=None,
+    s3_service.upload_file(
+        file_content=io.BytesIO(file_content),
+        bucket_name=settings.S3_BUCKET_NAME,
+        s3_key=s3_key,
+        content_type=actual_mime_type,
     )
 
     # 5. Save metadata into DB
@@ -252,17 +250,7 @@ async def delete_asset(
         )
 
     # Delete from S3
-    try:
-        settings.S3_CLIENT.delete_object(
-            Bucket=settings.AWS_S3_ASSETS_BUCKET,
-            Key=asset.s3_key,
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete asset from storage: {e}",
-        )
+    s3_service.delete_file(bucket_name=settings.S3_BUCKET_NAME, s3_key=asset.s3_key)
 
     # Delete from DB
     await async_session.delete(asset)

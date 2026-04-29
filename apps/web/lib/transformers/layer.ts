@@ -5,6 +5,7 @@ import type {
   FeatureLayerLineProperties,
   FeatureLayerPointProperties,
   Layer,
+  LayerClassBreaks,
   TextLabelSchemaData,
 } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
@@ -175,6 +176,50 @@ export function getMapboxStyleMarker(data: ProjectLayer | Layer) {
   return marker;
 }
 
+export function getMapboxStyleSize(
+  data: ProjectLayer | Layer,
+  type: "radius" | "stroke_width" | "marker_size",
+): number | unknown[] {
+  const properties = data.properties;
+  const fieldName = properties[`${type}_field`]?.name as string | undefined;
+  const range = properties[`${type}_range`] as number[] | undefined;
+  const scale = properties[`${type}_scale`] as string | undefined;
+  const staticValue = properties[type] as number | undefined;
+
+  const isMarker = type === "marker_size";
+  const fallback = isMarker
+    ? (staticValue ?? 100) / 200
+    : staticValue ?? (type === "radius" ? 5 : 1);
+
+  if (!fieldName) return fallback;
+
+  // Ordinal: categorical field → fixed size per unique value
+  if (scale === "ordinal") {
+    const ordinalMap = properties[`${type}_ordinal_map`] as [string, number][] | undefined;
+    if (!ordinalMap?.length) return fallback;
+    const matchArgs = ordinalMap.flatMap(([val, sz]) => [val, isMarker ? sz / 200 : sz]);
+    return ["match", ["to-string", ["get", fieldName]], ...matchArgs, fallback];
+  }
+
+  const breaks = properties[`${type}_scale_breaks`] as LayerClassBreaks | undefined;
+  if (!range || range.length < 2 || !breaks?.breaks?.length) return fallback;
+
+  const N = breaks.breaks.length + 1; // N classes = (N-1) break points + 1
+  const sizeMin = isMarker ? range[0] / 200 : range[0];
+  const sizeMax = isMarker ? range[1] / 200 : range[1];
+
+  // Distribute N sizes evenly between sizeMin and sizeMax
+  const sizes = Array.from({ length: N }, (_, i) =>
+    N === 1 ? sizeMin : sizeMin + (sizeMax - sizeMin) * (i / (N - 1))
+  );
+
+  // Build step expression: default (first class size), then [breakpoint, size] pairs
+  const stepArgs: unknown[] = [sizes[0]];
+  breaks.breaks.forEach((breakVal, i) => stepArgs.push(breakVal, sizes[i + 1]));
+
+  return ["step", ["get", fieldName], ...stepArgs];
+}
+
 export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
   const type = data.feature_layer_geometry_type;
   if (type === "point") {
@@ -187,9 +232,9 @@ export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
       paint: {
         "circle-color": getMapboxStyleColor(data, "color"),
         "circle-opacity": pointProperties.filled ? pointProperties.opacity : 0,
-        "circle-radius": pointProperties.radius || 5,
+        "circle-radius": getMapboxStyleSize(data, "radius"),
         "circle-stroke-color": getMapboxStyleColor(data, "stroke_color"),
-        "circle-stroke-width": pointProperties.stroked ? pointProperties.stroke_width || 1 : 0,
+        "circle-stroke-width": pointProperties.stroked ? getMapboxStyleSize(data, "stroke_width") : 0,
       },
     };
   } else if (type === "polygon") {
@@ -217,7 +262,7 @@ export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
       paint: {
         "line-color": getMapboxStyleColor(data, "stroke_color"),
         "line-opacity": lineProperties.opacity,
-        "line-width": lineProperties.stroke_width || 1,
+        "line-width": getMapboxStyleSize(data, "stroke_width"),
       },
     };
   } else {
@@ -232,9 +277,8 @@ export function getSymbolStyleSpec(data: TextLabelSchemaData | undefined, layer:
   const textPaint = {};
   if (layer.properties["custom_marker"]) {
     const pointProperties = layer.properties as FeatureLayerPointProperties;
-    const markerSize = pointProperties.marker_size ?? 100;
     iconLayout["icon-image"] = getMapboxStyleMarker(layer);
-    iconLayout["icon-size"] = markerSize / 200;
+    iconLayout["icon-size"] = getMapboxStyleSize(layer, "marker_size");
     iconLayout["icon-allow-overlap"] = pointProperties.marker_allow_overlap || false;
     iconLayout["icon-anchor"] = pointProperties.marker_anchor || "center";
     iconLayout["icon-offset"] = pointProperties.marker_offset || [0, 0];
@@ -284,10 +328,9 @@ export function getHightlightStyleSpec(highlightFeature: MapGeoJSONFeature) {
       if (highlightFeature.layer.type === "symbol") {
         radius = 5;
       } else {
-        radius =
-          ((highlightFeature.layer.paint?.["circle-radius"] as number) < 8
-            ? 8
-            : highlightFeature.layer.paint?.["circle-radius"]) + strokeWidth;
+        const rawRadius = highlightFeature.layer.paint?.["circle-radius"];
+        const numRadius = typeof rawRadius === "number" ? rawRadius : 8;
+        radius = (numRadius < 8 ? 8 : numRadius) + (typeof strokeWidth === "number" ? strokeWidth : 0);
       }
 
       paint = {

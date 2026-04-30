@@ -1,7 +1,6 @@
 """Join tool for Windmill.
 
 Performs spatial and attribute-based joins between datasets using DuckDB Spatial.
-Matches ArcGIS Join Features tool functionality.
 """
 
 import logging
@@ -210,7 +209,6 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
     )
 
     # ===== Attribute Relationship Settings =====
-    # Support for multiple attribute field pairs (like ArcGIS)
     attribute_relationships: Optional[List[AttributeRelationship]] = Field(
         None,
         description="Attribute relationships. Target field and join field must contain matching values.",
@@ -255,6 +253,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_options",
             field_order=1,
             enum_labels=JOIN_TYPE_LABELS,
+            visible_when={"spatial_relationship": {"$ne": "disjoint"}},
         ),
     )
     join_operation: JoinOperationType = Field(
@@ -264,7 +263,57 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_options",
             field_order=2,
             enum_labels=JOIN_OPERATION_LABELS,
+            visible_when={"spatial_relationship": {"$ne": "disjoint"}},
         ),
+    )
+
+    # ===== Join Field Selection =====
+
+    add_join_fields: bool = Field(
+        False,
+        description="Add fields from the join layer to the output. If off, no join fields are added (filter-only mode). Auto-enabled when join type is set to LEFT.",
+        json_schema_extra=ui_field(
+            section="join_options",
+            field_order=3,
+            widget="switch",
+            widget_options={
+                "default_by_field": {
+                    "field": "join_type",
+                    "values": {"left": True},
+                }
+            },
+            visible_when={
+                "$and": [
+                    {"calculate_statistics": False},
+                    {"spatial_relationship": {"$ne": "disjoint"}},
+                    {"join_type": {"$ne": "left"}}, 
+                ]
+            },
+        ),
+    )
+    join_fields: List[str] = Field(
+        default_factory=list,
+        description="Pick which fields from the join layer to include in the output.",
+        json_schema_extra={
+            **ui_field(
+                section="join_options",
+                field_order=4,
+                widget="field-selector",
+                widget_options={
+                    "source_layer": "join_layer_id",
+                    "multi": True,
+                    "default_all": True,
+                },
+                visible_when={
+                    "$and": [
+                        {"add_join_fields": True},
+                        {"spatial_relationship": {"$ne": "disjoint"}},
+                    ]
+                },
+                optional=True,
+            ),
+            "default": [],
+        },
     )
 
     # ===== Statistics Configuration (for one-to-one joins) =====
@@ -273,9 +322,14 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
         description="Calculate statistics for numeric fields when multiple records match",
         json_schema_extra=ui_field(
             section="join_options",
-            field_order=3,
+            field_order=5,
             widget="switch",
-            visible_when={"join_operation": "one_to_one"},
+            visible_when={
+                "$and": [
+                    {"join_operation": "one_to_one"},
+                    {"spatial_relationship": {"$ne": "disjoint"}},
+                ]
+            },
         ),
     )
     field_statistics: Optional[List[FieldStatistic]] = Field(
@@ -285,13 +339,14 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
         description="Field statistics to calculate. Supported statistics: sum, min, max, mean, standard deviation.",
         json_schema_extra=ui_field(
             section="join_options",
-            field_order=4,
+            field_order=6,
             widget="field-statistics-selector",
             widget_options={"source_layer": "join_layer_id"},
             visible_when={
                 "$and": [
                     {"join_operation": "one_to_one"},
                     {"calculate_statistics": True},
+                    {"spatial_relationship": {"$ne": "disjoint"}},
                 ]
             },
         ),
@@ -477,6 +532,7 @@ class JoinToolRunner(BaseToolRunner[JoinToolParams]):
             field_statistics=params.field_statistics
             if params.calculate_statistics
             else None,
+            join_fields=params.join_fields if params.add_join_fields else [],
         )
 
         tool = self.tool_class()

@@ -186,8 +186,9 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
             : undefined
         }
         placeholder={
-          (input.uiMeta?.widget_options?.placeholder as string) ??
-          (input.defaultValue !== undefined ? String(input.defaultValue) : undefined)
+          customPlaceholder !== undefined
+            ? t(customPlaceholder)
+            : (input.defaultValue !== undefined ? String(input.defaultValue) : undefined)
         }
         fullWidth
       />

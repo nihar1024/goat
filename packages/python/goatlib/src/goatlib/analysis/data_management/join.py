@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import List, Self, Tuple
+from typing import List, Optional, Self, Tuple
 
 from goatlib.analysis.core.base import AnalysisTool
 from goatlib.analysis.schemas.data_management import (
@@ -89,14 +89,32 @@ class JoinTool(AnalysisTool):
     ) -> None:
         """Execute the join operation in DuckDB."""
 
+        # Disjoint is an anti-semi-join: it doesn't fit the JOIN ON shape (which
+        # would duplicate target rows once per non-matching join row). Dispatch
+        # before building the regular join machinery, and ignore join_type /
+        # join_operation / join_fields / statistics — none apply.
+        is_disjoint = (
+            params.use_spatial_relationship
+            and params.spatial_relationship == SpatialRelationshipType.disjoint
+        )
+
         # Build join condition
         join_conditions = []
 
         # Add spatial conditions
         if params.use_spatial_relationship:
-            spatial_condition = self._build_spatial_condition(
-                params, target_meta.geometry_column, join_meta.geometry_column
-            )
+            if is_disjoint:
+                # Inside NOT EXISTS we test for the *match*, so use intersects.
+                spatial_condition = (
+                    f"ST_Intersects("
+                    f"target.{target_meta.geometry_column}, "
+                    f"join_data.{join_meta.geometry_column}"
+                    f")"
+                )
+            else:
+                spatial_condition = self._build_spatial_condition(
+                    params, target_meta.geometry_column, join_meta.geometry_column
+                )
             join_conditions.append(spatial_condition)
 
         # Add attribute conditions
@@ -109,6 +127,12 @@ class JoinTool(AnalysisTool):
 
         # Combine all conditions with AND
         full_join_condition = " AND ".join(join_conditions)
+
+        if is_disjoint:
+            self._execute_disjoint_filter(
+                target_table, join_table, full_join_condition, output_path
+            )
+            return
 
         # Determine join type (INNER vs LEFT)
         join_type_sql = (
@@ -134,6 +158,39 @@ class JoinTool(AnalysisTool):
                 join_type_sql,
                 output_path,
             )
+
+    def _execute_disjoint_filter(
+        self: Self,
+        target_table: str,
+        join_table: str,
+        match_condition: str,
+        output_path: Path,
+    ) -> None:
+        """Anti-semi-join: keep target rows that have no matching join row.
+
+        ``match_condition`` is the would-be join predicate (spatial and/or
+        attribute). The result has only target columns — by definition, no
+        join row matches so there's nothing to add from the join layer.
+        """
+        target_fields = self._get_table_fields(target_table, "target")
+        select_fields = ", ".join(target_fields)
+
+        query = f"""
+            SELECT {select_fields}
+            FROM {target_table} target
+            WHERE NOT EXISTS (
+                SELECT 1 FROM {join_table} join_data
+                WHERE {match_condition}
+            )
+        """
+
+        logger.info("Executing disjoint filter (anti-semi-join)")
+        write_optimized_parquet(
+            self.con,
+            query,
+            output_path,
+            geometry_column="geometry",
+        )
 
     # Distance unit conversion factors to meters
     DISTANCE_UNIT_FACTORS = {
@@ -179,6 +236,14 @@ class JoinTool(AnalysisTool):
             return f"ST_Contains({target_geom_ref}, {join_geom_ref})"
         elif params.spatial_relationship == SpatialRelationshipType.completely_within:
             return f"ST_Within({target_geom_ref}, {join_geom_ref})"
+        elif params.spatial_relationship == SpatialRelationshipType.touches:
+            return f"ST_Touches({target_geom_ref}, {join_geom_ref})"
+        elif params.spatial_relationship == SpatialRelationshipType.overlaps:
+            return f"ST_Overlaps({target_geom_ref}, {join_geom_ref})"
+        elif params.spatial_relationship == SpatialRelationshipType.covers:
+            return f"ST_Covers({target_geom_ref}, {join_geom_ref})"
+        elif params.spatial_relationship == SpatialRelationshipType.covered_by:
+            return f"ST_CoveredBy({target_geom_ref}, {join_geom_ref})"
         else:
             raise ValueError(
                 f"Unsupported spatial relationship: {params.spatial_relationship}"
@@ -198,8 +263,13 @@ class JoinTool(AnalysisTool):
 
         # Build select clause with prefixed join fields to avoid conflicts
         target_fields = self._get_table_fields(target_table, "target")
-        join_fields = self._get_table_fields(join_table, "join_data", prefix="join_")
+        join_cols = self._filter_join_columns(
+            self._get_raw_field_names(join_table),
+            params.join_fields,
+        )
+        join_fields = [f"join_data.{c} as join_{c}" for c in join_cols]
 
+        # When all join fields are filtered out, the SELECT must still be valid
         select_fields = ", ".join(target_fields + join_fields)
 
         query = f"""
@@ -298,10 +368,13 @@ class JoinTool(AnalysisTool):
         )
 
         target_fields = self._get_table_fields(target_table, "target")
-        join_fields = self._get_table_fields(join_table, "join_data", prefix="join_")
-
-        # Filter out the internal __join_row_order field from output
-        join_fields = [f for f in join_fields if "__join_row_order" not in f]
+        # Strip internal row-order column from user-visible columns; ORDER BY
+        # references it directly via join_data.__join_row_order regardless.
+        join_cols_all = [
+            c for c in self._get_raw_field_names(join_table) if c != "__join_row_order"
+        ]
+        join_cols = self._filter_join_columns(join_cols_all, params.join_fields)
+        join_fields = [f"join_data.{c} as join_{c}" for c in join_cols]
 
         all_select_fields = ", ".join(target_fields + join_fields)
 
@@ -371,14 +444,18 @@ class JoinTool(AnalysisTool):
 
         agg_clause = ", ".join(agg_expressions)
 
+        target_select = ", ".join(
+            [f"target.{f}" for f in self._get_raw_field_names(target_table)]
+        )
+
         query = f"""
         CREATE OR REPLACE TEMP TABLE aggregated_joins AS
-        SELECT {', '.join([f'target.{f}' for f in self._get_raw_field_names(target_table)])},
+        SELECT {target_select},
                {agg_clause}
         FROM {target_table} target
         {join_type_sql} {join_table} join_data
         ON {join_condition}
-        GROUP BY {', '.join([f'target.{f}' for f in self._get_raw_field_names(target_table)])}
+        GROUP BY {target_select}
         """
 
         con.execute(query)
@@ -410,19 +487,21 @@ class JoinTool(AnalysisTool):
                     break
 
         # Use a specific join column for counting.
-        # COUNT(join_col) returns 0 for unmatched LEFT JOIN rows,
-        # unlike COUNT(*) which returns 1 for the phantom target row.
         join_fields = self._get_raw_field_names(join_table)
         join_count_col = f"join_data.{join_fields[0]}"
 
+        target_select = ", ".join(
+            [f"target.{f}" for f in self._get_raw_field_names(target_table)]
+        )
+
         query = f"""
         CREATE OR REPLACE TEMP TABLE count_joins AS
-        SELECT {', '.join([f'target.{f}' for f in self._get_raw_field_names(target_table)])},
+        SELECT {target_select},
                COUNT({join_count_col}) as {count_col}
         FROM {target_table} target
         {join_type_sql} {join_table} join_data
         ON {join_condition}
-        GROUP BY {', '.join([f'target.{f}' for f in self._get_raw_field_names(target_table)])}
+        GROUP BY {target_select}
         """
 
         con.execute(query)
@@ -432,6 +511,23 @@ class JoinTool(AnalysisTool):
             output_path,
             geometry_column="geometry",
         )
+
+    def _filter_join_columns(
+        self: Self,
+        columns: List[str],
+        join_fields: Optional[List[str]],
+    ) -> List[str]:
+        """Filter join columns by user-selected join_fields.
+
+        ``None`` means "not specified" → keep every column (real join).
+        ``[]`` is an explicit "keep none" → filter-only / semi-join.
+        """
+        if join_fields is None:
+            return list(columns)
+        if not join_fields:
+            return []
+        keep = set(join_fields)
+        return [c for c in columns if c in keep]
 
     def _get_table_fields(
         self: Self, table_name: str, alias: str, prefix: str = ""

@@ -98,6 +98,9 @@
     },
     "result": {
       "label": "Results"
+    },
+    "result_layer_section": {
+      "label": "Result layer"
     }
   },
   "fields": {
@@ -665,6 +668,14 @@
       "label": "Result layer name",
       "description": "Custom name for the result layer"
     },
+    "add_join_fields": {
+      "label": "Add Join Fields",
+      "description": "Add fields from the join layer to the output. If off, no join fields are added."
+    },
+    "join_fields": {
+      "label": "Join Fields",
+      "description": "Pick which fields from the join layer to include in the output."
+    },
     "summary_layer_name": {
       "label": "Summary Layer Name",
       "description": "Custom name for the cluster summary layer"
@@ -684,6 +695,54 @@
     "stations_layer_name": {
       "label": "Stations Layer Name",
       "description": "Custom name for the stations layer"
+    },
+    "destinations_layer_name": {
+      "label": "Destinations layer name",
+      "description": "Name for the destination points result layer"
+    },
+    "matrix_layer_name": {
+      "label": "Matrix layer name",
+      "description": "Name for the cost matrix table layer"
+    },
+    "origins_layer": {
+      "label": "Origins layer",
+      "description": "Layer containing origin points"
+    },
+    "destinations_layer": {
+      "label": "Destinations layer",
+      "description": "Layer containing destination points"
+    },
+    "origins_label": {
+      "label": "Origins label",
+      "description": "Column used to label origins in the result matrix"
+    },
+    "destinations_label": {
+      "label": "Destinations label",
+      "description": "Column used to label destinations in the result matrix"
+    },
+    "calculate_by": {
+      "label": "Calculate by",
+      "description": "Measure travel cost by time or distance"
+    },
+    "limit_time_min": {
+      "label": "Limit - Time (min)",
+      "description": "Maximum travel time in minutes"
+    },
+    "travel_time_limit_min": {
+      "label": "Travel time limit (min)",
+      "description": "Maximum travel time in minutes"
+    },
+    "limit_distance_m": {
+      "label": "Limit - Distance (m)",
+      "description": "Maximum distance in meters"
+    },
+    "max_transfers": {
+      "label": "Max. transfers",
+      "description": "Maximum number of transit transfers"
+    },
+    "speed_kmh": {
+      "label": "Speed (km/h)",
+      "description": "Travel speed in km/h"
     }
   },
   "enums": {
@@ -742,7 +801,12 @@
       "within_distance": "Within Distance",
       "identical_to": "Identical To",
       "completely_contains": "Completely Contains",
-      "completely_within": "Completely Within"
+      "completely_within": "Completely Within",
+      "touches": "Touches",
+      "overlaps": "Overlaps",
+      "covers": "Covers",
+      "covered_by": "Covered By",
+      "disjoint": "Disjoint"
     },
     "join_operation_type": {
       "one_to_one": "One to One",
@@ -925,7 +989,21 @@
     "dissolve": {
       "title": "Dissolve",
       "description": "Aggregates features that have the same values for specified attributes. Optionally computes statistics for numeric fields."
+    },
+    "catchment_area_v2": {
+      "title": "Catchment Area v2 (Beta)",
+      "description": "Catchment areas show how far people can travel within a set travel time or distance from one or more selected points."
+    },
+    "travel_cost_matrix": {
+      "title": "Travel Cost Matrix (Beta)",
+      "description": "Compute travel times and distances between origin and destination point layers."
     }
+  },
+  "groups": {
+    "origins": "Origins",
+    "destinations": "Destinations",
+    "access_leg": "Access leg",
+    "egress_leg": "Egress leg"
   },
   "routing_modes": {
     "walk": "Walk",
@@ -970,7 +1048,9 @@
     "join": "Join Features",
     "geocoding": "Geocoding",
     "clustered_features": "Cluster Assignment",
-    "cluster_summary": "Cluster Summary"
+    "cluster_summary": "Cluster Summary",
+    "travel_cost_matrix": "Travel Cost Matrix",
+    "travel_cost_matrix_destinations": "Destinations"
   },
   "two_sfca_type": {
     "twosfca": "2SFCA",

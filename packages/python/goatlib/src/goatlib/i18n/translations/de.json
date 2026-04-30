@@ -98,6 +98,9 @@
     },
     "result": {
       "label": "Ergebnisse"
+    },
+    "result_layer_section": {
+      "label": "Ergebnis-Layer"
     }
   },
   "fields": {
@@ -704,6 +707,54 @@
     "stations_layer_name": {
       "label": "Name des Stationen-Layer",
       "description": "Benutzerdefinierter Name für die Stationen-Layer"
+    },
+    "destinations_layer_name": {
+      "label": "Name des Zielpunkte-Layers",
+      "description": "Name für den Ergebnis-Layer der Zielpunkte"
+    },
+    "matrix_layer_name": {
+      "label": "Name des Matrix-Layers",
+      "description": "Name für die Kostenmatrix-Tabelle"
+    },
+    "origins_layer": {
+      "label": "Startpunkte-Layer",
+      "description": "Layer mit den Startpunkten"
+    },
+    "destinations_layer": {
+      "label": "Zielpunkte-Layer",
+      "description": "Layer mit den Zielpunkten"
+    },
+    "origins_label": {
+      "label": "Herkunft-Bezeichnung",
+      "description": "Spalte zur Beschriftung der Startpunkte in der Ergebnismatrix"
+    },
+    "destinations_label": {
+      "label": "Ziel-Bezeichnung",
+      "description": "Spalte zur Beschriftung der Zielpunkte in der Ergebnismatrix"
+    },
+    "calculate_by": {
+      "label": "Berechnung nach",
+      "description": "Reisekosten nach Zeit oder Entfernung berechnen"
+    },
+    "limit_time_min": {
+      "label": "Limit - Zeit (Min)",
+      "description": "Maximale Reisezeit in Minuten"
+    },
+    "travel_time_limit_min": {
+      "label": "Reisezeitlimit (Min)",
+      "description": "Maximale Reisezeit in Minuten"
+    },
+    "limit_distance_m": {
+      "label": "Limit - Distanz (m)",
+      "description": "Maximale Entfernung in Metern"
+    },
+    "max_transfers": {
+      "label": "Max. Umstiege",
+      "description": "Maximale Anzahl der Umstiege"
+    },
+    "speed_kmh": {
+      "label": "Geschw. (km/h)",
+      "description": "Reisegeschwindigkeit in km/h"
     }
   },
   "enums": {
@@ -945,7 +996,21 @@
     "dissolve": {
       "title": "Zusammenführen",
       "description": "Fasst Objekte mit gleichen Attributwerten zusammen. Optional können Statistiken für numerische Felder berechnet werden."
+    },
+    "catchment_area_v2": {
+      "title": "Einzugsgebiet v2 (Beta)",
+      "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können."
+    },
+    "travel_cost_matrix": {
+      "title": "Reisezeitmatrix (Beta)",
+      "description": "Berechnet Reisezeiten und Entfernungen zwischen Start- und Zielpunkt-Layern."
     }
+  },
+  "groups": {
+    "origins": "Startpunkte",
+    "destinations": "Zielpunkte",
+    "access_leg": "Zugang",
+    "egress_leg": "Abgang"
   },
   "routing_modes": {
     "walk": "Zu Fuß",
@@ -990,7 +1055,9 @@
     "join": "Objekte verbinden",
     "geocoding": "Geokodierung",
     "clustered_features": "Clusterzuordnung",
-    "cluster_summary": "Cluster-Zusammenfassung"
+    "cluster_summary": "Cluster-Zusammenfassung",
+    "travel_cost_matrix": "Reisezeitmatrix",
+    "travel_cost_matrix_destinations": "Zielpunkte"
   },
   "two_sfca_type": {
     "twosfca": "2SFCA",

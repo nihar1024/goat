@@ -84,6 +84,14 @@ class Weekday(StrEnum):
     sunday = "sunday"
 
 
+# Weekday labels for i18n (maps enum values to translation keys)
+WEEKDAY_LABELS: dict[str, str] = {
+    "weekday": "enums.weekday.weekday",
+    "saturday": "enums.weekday.saturday",
+    "sunday": "enums.weekday.sunday",
+}
+
+
 # Icon mapping for routing modes (matches @p4b/ui ICON_NAME values)
 ROUTING_MODE_ICONS: dict[str, str] = {
     "walking": "run",

@@ -19,6 +19,7 @@ from goatlib.analysis.schemas.catchment_area import (
     CATCHMENT_AREA_TYPE_LABELS,
     ROUTING_MODE_ICONS,
     ROUTING_MODE_LABELS,
+    WEEKDAY_LABELS,
     CatchmentAreaRoutingMode,
     StartingPoints,
 )
@@ -76,8 +77,7 @@ SECTION_RESULT_CATCHMENT = UISection(
     id="result",
     order=7,
     icon="save",
-    label="Result layer",
-    label_de="Ergebnis-Layer",
+    label_key="result_layer_section",
     depends_on={"routing_mode": {"$ne": None}},
 )
 
@@ -249,8 +249,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=16,
-            label="Max. transfers",
-            label_de="Max. Umstiege",
+            label_key="max_transfers",
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -260,7 +259,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Max transfers must be between 0 and 10",
+                    "message": "max_transfers_limit_message",
                     "max": 10,
                     "min": 0,
                 },
@@ -316,7 +315,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Active mobility travel time must be between 1 and 45 minutes",
+                    "message": "active_mobility_time_limit_message",
                     "max": 45,
                     "min": 1,
                 },
@@ -343,7 +342,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Car travel time must be between 1 and 90 minutes",
+                    "message": "car_time_limit_message",
                     "max": 90,
                     "min": 1,
                 },
@@ -364,12 +363,11 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=2,
-            label="Travel time limit (min)",
-            label_de="Reisezeitlimit (Min)",
+            label_key="travel_time_limit_min",
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "PT travel time must be between 1 and 90 minutes",
+                    "message": "pt_time_limit_message",
                     "max": 90,
                     "min": 1,
                 },
@@ -391,7 +389,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Distance must be between 50 and 20,000 meters",
+                    "message": "active_mobility_distance_limit_message",
                     "max": 20000,
                     "min": 50,
                 },
@@ -418,7 +416,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Distance must be between 50 and 100,000 meters",
+                    "message": "car_distance_limit_message",
                     "max": 100000,
                     "min": 50,
                 },
@@ -516,6 +514,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=8,
             label_key="weekday",
+            enum_labels=WEEKDAY_LABELS,
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -557,7 +556,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=20,
             label_key="access_mode",
-            group_label="Access leg",
+            group_label="groups.access_leg",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
@@ -649,9 +648,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=23,
-            label="Speed (km/h)",
-            label_de="Geschw. (km/h)",
-            widget_options={"placeholder": "Default"},
+            label_key="speed_kmh",
+            widget_options={"placeholder": "default_value_placeholder"},
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -669,7 +667,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=24,
             label_key="pt_egress_mode",
-            group_label="Egress leg",
+            group_label="groups.egress_leg",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
@@ -761,9 +759,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=27,
-            label="Speed (km/h)",
-            label_de="Geschw. (km/h)",
-            widget_options={"placeholder": "Default"},
+            label_key="speed_kmh",
+            widget_options={"placeholder": "default_value_placeholder"},
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -785,6 +782,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=15,
             label_key="advanced_options",
+            widget="advanced-toggle",
         ),
     )
 

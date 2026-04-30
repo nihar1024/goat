@@ -35,6 +35,7 @@ from goatlib.analysis.schemas.ui import (
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
+from goatlib.analysis.schemas.catchment_area import WEEKDAY_LABELS
 from goatlib.tools.catchment_area_v2 import (
     ACCESS_EGRESS_MODE_LABELS,
     COST_TYPE_ICONS,
@@ -43,7 +44,7 @@ from goatlib.tools.catchment_area_v2 import (
     ROUTING_MODE_ICONS as _CATCHMENT_ROUTING_MODE_ICONS,
     ROUTING_MODE_LABELS as _CATCHMENT_ROUTING_MODE_LABELS,
 )
-from goatlib.tools.schemas import ToolInputBase, ToolOutputBase
+from goatlib.tools.schemas import ToolInputBase, ToolOutputBase, get_default_layer_name
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,7 @@ SECTION_INPUT = UISection(
     id="input",
     order=5,
     icon="layers",
-    label="Input",
-    label_de="Eingabe",
+    label_key="input",
     depends_on={"routing_mode": {"$ne": None}},
 )
 
@@ -82,8 +82,7 @@ SECTION_RESULT = UISection(
     id="result",
     order=7,
     icon="save",
-    label="Result layer",
-    label_de="Ergebnis-Layer",
+    label_key="result_layer_section",
     depends_on={"routing_mode": {"$ne": None}},
 )
 
@@ -120,31 +119,29 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     # =========================================================================
 
     destinations_layer_name: str | None = Field(
-        default="Destinations",
+        default=get_default_layer_name("travel_cost_matrix_destinations", "en"),
         description="Name for the destination points result layer.",
         json_schema_extra=ui_field(
             section="result",
             field_order=1,
-            label="Destinations layer name",
-            label_de="Name des Zielpunkte-Layers",
+            label_key="destinations_layer_name",
             widget_options={
-                "default_en": "Destinations",
-                "default_de": "Zielpunkte",
+                "default_en": get_default_layer_name("travel_cost_matrix_destinations", "en"),
+                "default_de": get_default_layer_name("travel_cost_matrix_destinations", "de"),
             },
         ),
     )
 
     matrix_layer_name: str | None = Field(
-        default="Travel Cost Matrix",
+        default=get_default_layer_name("travel_cost_matrix", "en"),
         description="Name for the cost matrix table layer.",
         json_schema_extra=ui_field(
             section="result",
             field_order=2,
-            label="Matrix layer name",
-            label_de="Name des Matrix-Layers",
+            label_key="matrix_layer_name",
             widget_options={
-                "default_en": "Travel Cost Matrix",
-                "default_de": "Reisezeitmatrix",
+                "default_en": get_default_layer_name("travel_cost_matrix", "en"),
+                "default_de": get_default_layer_name("travel_cost_matrix", "de"),
             },
         ),
     )
@@ -159,9 +156,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="input",
             field_order=1,
-            label="Origins layer",
-            label_de="Startpunkte-Layer",
-            group_label="Origins",
+            label_key="origins_layer",
+            group_label="groups.origins",
             widget="layer-selector",
             widget_options={"geometry_types": ["Point", "MultiPoint"]},
         ),
@@ -179,9 +175,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="input",
             field_order=4,
-            label="Destinations layer",
-            label_de="Zielpunkte-Layer",
-            group_label="Destinations",
+            label_key="destinations_layer",
+            group_label="groups.destinations",
             widget="layer-selector",
             widget_options={"geometry_types": ["Point", "MultiPoint"]},
         ),
@@ -199,8 +194,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="input",
             field_order=3,
-            label="Origins label",
-            label_de="Herkunft-Bezeichnung",
+            label_key="origins_label",
             widget="field-selector",
             widget_options={"source_layer": "origin_layer_id"},
         ),
@@ -212,8 +206,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="input",
             field_order=5,
-            label="Destinations label",
-            label_de="Ziel-Bezeichnung",
+            label_key="destinations_label",
             widget="field-selector",
             widget_options={"source_layer": "destination_layer_id"},
         ),
@@ -257,8 +250,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=1,
-            label="Calculate by",
-            label_de="Berechnung nach",
+            label_key="calculate_by",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
             visible_when={
@@ -275,6 +267,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="configuration",
             field_order=2,
             label_key="weekday",
+            enum_labels=WEEKDAY_LABELS,
             visible_when={"routing_mode": "pt"},
         ),
     )
@@ -318,6 +311,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="configuration",
             field_order=10,
             label_key="advanced_options",
+            widget="advanced-toggle",
         ),
     )
 
@@ -328,14 +322,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=11,
-            label="Limit - Time (min)",
-            label_de="Limit - Zeit (Min)",
+            label_key="limit_time_min",
             inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Active mobility travel time must be between 1 and 45 minutes",
+                    "message": "active_mobility_time_limit_message",
                     "max": 45,
                     "min": 1,
                 },
@@ -356,14 +349,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=11,
-            label="Limit - Time (min)",
-            label_de="Limit - Zeit (Min)",
+            label_key="limit_time_min",
             inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Car travel time must be between 1 and 90 minutes",
+                    "message": "car_time_limit_message",
                     "max": 90,
                     "min": 1,
                 },
@@ -384,12 +376,11 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=5,
-            label="Travel time limit (min)",
-            label_de="Reisezeitlimit (Min)",
+            label_key="travel_time_limit_min",
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "PT travel time must be between 1 and 90 minutes",
+                    "message": "pt_time_limit_message",
                     "max": 90,
                     "min": 1,
                 },
@@ -404,14 +395,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=11,
-            label="Limit - Distance (m)",
-            label_de="Limit - Distanz (m)",
+            label_key="limit_distance_m",
             inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Distance must be between 50 and 20,000 meters",
+                    "message": "active_mobility_distance_limit_message",
                     "max": 20000,
                     "min": 50,
                 },
@@ -432,14 +422,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=11,
-            label="Limit - Distance (m)",
-            label_de="Limit - Distanz (m)",
+            label_key="limit_distance_m",
             inline_group="cost_limit",
             inline_flex="1 0 0",
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Distance must be between 50 and 100,000 meters",
+                    "message": "car_distance_limit_message",
                     "max": 100000,
                     "min": 50,
                 },
@@ -486,8 +475,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=13,
-            label="Max. transfers",
-            label_de="Max. Umstiege",
+            label_key="max_transfers",
             visible_when={
                 "$and": [
                     {"show_advanced": True},
@@ -497,7 +485,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [],
-                    "message": "Max transfers must be between 0 and 10",
+                    "message": "max_transfers_limit_message",
                     "max": 10,
                     "min": 0,
                 },
@@ -512,7 +500,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="configuration",
             field_order=20,
             label_key="access_mode",
-            group_label="Access leg",
+            group_label="groups.access_leg",
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
                 "$and": [
@@ -603,9 +591,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=23,
-            label="Speed (km/h)",
-            label_de="Geschw. (km/h)",
-            widget_options={"placeholder": "Default"},
+            label_key="speed_kmh",
+            widget_options={"placeholder": "default_value_placeholder"},
             visible_when={
                 "$and": [
                     {"show_advanced": True},
@@ -623,7 +610,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="configuration",
             field_order=24,
             label_key="pt_egress_mode",
-            group_label="Egress leg",
+            group_label="groups.egress_leg",
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
             visible_when={
                 "$and": [
@@ -714,9 +701,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         json_schema_extra=ui_field(
             section="configuration",
             field_order=27,
-            label="Speed (km/h)",
-            label_de="Geschw. (km/h)",
-            widget_options={"placeholder": "Default"},
+            label_key="speed_kmh",
+            widget_options={"placeholder": "default_value_placeholder"},
             visible_when={
                 "$and": [
                     {"show_advanced": True},
@@ -783,8 +769,8 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
 
     tool_class = TravelCostMatrixTool
     output_geometry_type = "Point"
-    default_output_name = "Travel Cost Matrix"
-    default_destinations_name = "Destinations"
+    default_output_name = get_default_layer_name("travel_cost_matrix", "en")
+    default_destinations_name = get_default_layer_name("travel_cost_matrix_destinations", "en")
 
     @classmethod
     def predict_output_schema(

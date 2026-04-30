@@ -52,6 +52,11 @@ SPATIAL_RELATIONSHIP_LABELS: dict[str, str] = {
     "identical_to": "enums.spatial_relationship_type.identical_to",
     "completely_contains": "enums.spatial_relationship_type.completely_contains",
     "completely_within": "enums.spatial_relationship_type.completely_within",
+    "touches": "enums.spatial_relationship_type.touches",
+    "overlaps": "enums.spatial_relationship_type.overlaps",
+    "covers": "enums.spatial_relationship_type.covers",
+    "covered_by": "enums.spatial_relationship_type.covered_by",
+    "disjoint": "enums.spatial_relationship_type.disjoint",
 }
 
 DISTANCE_UNITS_LABELS: dict[str, str] = {
@@ -286,7 +291,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
                 "$and": [
                     {"calculate_statistics": False},
                     {"spatial_relationship": {"$ne": "disjoint"}},
-                    {"join_type": {"$ne": "left"}}, 
+                    {"join_type": {"$ne": "left"}},
                 ]
             },
         ),

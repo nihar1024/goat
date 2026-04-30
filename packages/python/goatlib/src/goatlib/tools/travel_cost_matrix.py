@@ -318,6 +318,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             section="configuration",
             field_order=10,
             label_key="advanced_options",
+            widget="advanced-toggle",
         ),
     )
 

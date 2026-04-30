@@ -785,6 +785,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=15,
             label_key="advanced_options",
+            widget="advanced-toggle",
         ),
     )
 

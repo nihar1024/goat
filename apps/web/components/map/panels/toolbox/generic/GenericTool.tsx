@@ -641,8 +641,33 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
           {sections.map((section) => {
             // Merge defaults with user values and computed layer geometry for visibility checks
             const effectiveValues = { ...defaultValues, ...values, ...layerGeometryValues };
-            const visibleInputs = getVisibleInputs(section.inputs, effectiveValues);
+            let visibleInputs = getVisibleInputs(section.inputs, effectiveValues);
             const sectionEnabled = isSectionEnabled(section, effectiveValues);
+
+            // Auto-hide "advanced-toggle" widgets that have no dependent fields
+            // currently visible. A toggle field controls others via visible_when
+            // referencing its name; if toggling on reveals nothing extra, hide it.
+            const toggleField = visibleInputs.find(
+              (i) => i.uiMeta?.widget === "advanced-toggle"
+            );
+            if (toggleField) {
+              const otherInputs = section.inputs.filter(
+                (i) => i.name !== toggleField.name
+              );
+              const visibleWhenOn = getVisibleInputs(otherInputs, {
+                ...effectiveValues,
+                [toggleField.name]: true,
+              });
+              const visibleWhenOff = getVisibleInputs(otherInputs, {
+                ...effectiveValues,
+                [toggleField.name]: false,
+              });
+              if (visibleWhenOn.length <= visibleWhenOff.length) {
+                visibleInputs = visibleInputs.filter(
+                  (i) => i.name !== toggleField.name
+                );
+              }
+            }
 
             // Skip empty sections
             if (visibleInputs.length === 0) {

@@ -22,6 +22,20 @@ TEST_DATA_DIR = Path(__file__).parent.parent.parent / "data" / "vector"
 RESULT_DIR = Path(__file__).parent.parent.parent / "result"
 
 
+def _all_join_fields(join_path: str) -> list[str]:
+    """Return every column name in the given parquet.
+
+    ``JoinParams.join_fields`` is tri-state: ``None`` keeps every column (real
+    join), ``[]`` keeps none (filter-only / semi-join), and a non-empty list
+    keeps only the listed columns. This helper is used by tests that want to
+    pin the explicit column list rather than rely on the ``None`` default.
+    """
+    con = duckdb.connect()
+    con.execute("INSTALL spatial; LOAD spatial;")
+    rows = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{join_path}')").fetchall()
+    return [r[0] for r in rows]
+
+
 @pytest.fixture(autouse=True)
 def ensure_result_dir() -> None:
     """Ensure the result directory exists."""
@@ -53,6 +67,7 @@ class TestAttributeJoin:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.left,
             sort_configuration=None,  # Should use default row order
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -108,6 +123,7 @@ class TestAttributeJoin:
                 field="min_salary",
                 sort_order=SortOrder.descending,
             ),
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -148,6 +164,7 @@ class TestAttributeJoin:
             ],
             join_operation=JoinOperationType.one_to_many,
             join_type=JoinType.left,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -195,6 +212,7 @@ class TestAttributeJoin:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.inner,  # Only keep matching
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -344,6 +362,7 @@ class TestSpatialJoin:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.left,
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -383,6 +402,7 @@ class TestSpatialJoin:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.left,
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -422,6 +442,7 @@ class TestSpatialJoin:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.left,
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -438,6 +459,64 @@ class TestSpatialJoin:
             f"SELECT COUNT(*) FROM read_parquet('{result_path}')"
         ).fetchone()[0]
         assert row_count > 0
+
+        con.close()
+        tool.cleanup()
+
+    def test_spatial_join_disjoint(self) -> None:
+        """Disjoint relationship: keep only target features that intersect no
+        feature in the join layer. Output has no join_* columns."""
+        target_path = str(TEST_DATA_DIR / "poi_points.parquet")
+        join_path = str(TEST_DATA_DIR / "districts.parquet")
+        output_path = str(RESULT_DIR / "join_spatial_disjoint.parquet")
+
+        params = JoinParams(
+            target_path=target_path,
+            join_path=join_path,
+            output_path=output_path,
+            use_spatial_relationship=True,
+            use_attribute_relationship=False,
+            spatial_relationship=SpatialRelationshipType.disjoint,
+        )
+
+        tool = JoinTool()
+        results = tool.run(params)
+
+        assert len(results) == 1
+        result_path, _ = results[0]
+        assert Path(result_path).exists()
+
+        con = duckdb.connect()
+        con.execute("INSTALL spatial; LOAD spatial;")
+
+        # Result must not exceed target row count and must contain no join_* cols.
+        target_count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{target_path}')"
+        ).fetchone()[0]
+        result_count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{result_path}')"
+        ).fetchone()[0]
+        assert result_count <= target_count
+
+        cols = [
+            r[0]
+            for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{result_path}')"
+            ).fetchall()
+        ]
+        assert not any(
+            c.startswith("join_") for c in cols
+        ), f"disjoint output unexpectedly contains join_* columns: {cols}"
+
+        # Every retained POI must be disjoint from every district.
+        intersecting = con.execute(f"""
+            SELECT COUNT(*) FROM read_parquet('{result_path}') r
+            WHERE EXISTS (
+                SELECT 1 FROM read_parquet('{join_path}') j
+                WHERE ST_Intersects(r.geometry, j.geometry)
+            )
+        """).fetchone()[0]
+        assert intersecting == 0
 
         con.close()
         tool.cleanup()
@@ -466,6 +545,7 @@ class TestCombinedJoin:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.left,
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -600,6 +680,7 @@ class TestEdgeCases:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.left,
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -644,6 +725,7 @@ class TestEdgeCases:
             multiple_matching_records=MultipleMatchingRecordsType.first_record,
             join_type=JoinType.inner,
             sort_configuration=None,
+            join_fields=_all_join_fields(join_path),
         )
 
         tool = JoinTool()
@@ -710,3 +792,92 @@ class TestEdgeCases:
 
         con.close()
         tool.cleanup()
+
+
+class TestJoinFieldsTriState:
+    """``JoinParams.join_fields`` is tri-state: ``None`` keeps all (real join),
+    ``[]`` keeps none (filter-only), and a list keeps only listed columns."""
+
+    def _base_params(
+        self, join_fields: list[str] | None, output_name: str
+    ) -> JoinParams:
+        target_path = str(TEST_DATA_DIR / "employees.parquet")
+        join_path = str(TEST_DATA_DIR / "salary_bands.parquet")
+        return JoinParams(
+            target_path=target_path,
+            join_path=join_path,
+            output_path=str(RESULT_DIR / output_name),
+            use_spatial_relationship=False,
+            use_attribute_relationship=True,
+            attribute_relationships=[
+                AttributeRelationship(
+                    target_field="department", join_field="department"
+                ),
+                AttributeRelationship(target_field="level", join_field="level"),
+            ],
+            join_operation=JoinOperationType.one_to_one,
+            multiple_matching_records=MultipleMatchingRecordsType.first_record,
+            join_type=JoinType.left,
+            sort_configuration=None,
+            join_fields=join_fields,
+        )
+
+    def test_none_keeps_all_join_columns(self) -> None:
+        """``join_fields=None`` (default) preserves the pre-PR real-join behavior."""
+        join_path = str(TEST_DATA_DIR / "salary_bands.parquet")
+        params = self._base_params(None, "join_fields_none.parquet")
+
+        results = JoinTool().run(params)
+        result_path, _ = results[0]
+
+        con = duckdb.connect()
+        con.execute("INSTALL spatial; LOAD spatial;")
+        cols = [
+            r[0]
+            for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{result_path}')"
+            ).fetchall()
+        ]
+
+        # Every join column should appear, prefixed with ``join_``.
+        for c in _all_join_fields(join_path):
+            assert f"join_{c}" in cols, f"expected join_{c} in {cols}"
+
+    def test_empty_list_keeps_no_join_columns(self) -> None:
+        """``join_fields=[]`` is filter-only / semi-join: no join_* columns."""
+        params = self._base_params([], "join_fields_empty.parquet")
+
+        results = JoinTool().run(params)
+        result_path, _ = results[0]
+
+        con = duckdb.connect()
+        con.execute("INSTALL spatial; LOAD spatial;")
+        cols = [
+            r[0]
+            for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{result_path}')"
+            ).fetchall()
+        ]
+
+        assert not any(
+            c.startswith("join_") for c in cols
+        ), f"unexpected join_* columns in filter-only output: {cols}"
+
+    def test_subset_keeps_only_listed_join_columns(self) -> None:
+        """A non-empty list keeps only the listed columns (prefixed)."""
+        params = self._base_params(["min_salary"], "join_fields_subset.parquet")
+
+        results = JoinTool().run(params)
+        result_path, _ = results[0]
+
+        con = duckdb.connect()
+        con.execute("INSTALL spatial; LOAD spatial;")
+        cols = [
+            r[0]
+            for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{result_path}')"
+            ).fetchall()
+        ]
+
+        join_cols = [c for c in cols if c.startswith("join_")]
+        assert join_cols == ["join_min_salary"], join_cols

@@ -4,7 +4,8 @@ import { API_BASE_URL, APP_URL } from "@/lib/constants";
 import { getLocalizedMetadata } from "@/lib/metadata";
 import type { ProjectPublic } from "@/lib/validations/project";
 
-export async function generateMetadata({ params: { projectId, lng } }) {
+export async function generateMetadata({ params: { projectId } }) {
+  const lng = "en";
   const PROJECTS_API_BASE_URL = new URL("api/v2/project", API_BASE_URL).href;
   let publicProject: ProjectPublic | null = null;
   try {
@@ -19,8 +20,8 @@ export async function generateMetadata({ params: { projectId, lng } }) {
     console.error("Failed to fetch public project:", err);
   }
 
-  if (publicProject?.config?.project?.name && lng) {
-    const title = `${publicProject.config.project.name} | GOAT`;
+  if (publicProject?.config?.project?.name) {
+    const title = publicProject.config.project.name;
     const faviconUrl = publicProject.config.project.builder_config?.settings?.favicon_url;
 
     // Use the request's Host header so OG previews on a custom domain
@@ -50,7 +51,7 @@ export async function generateMetadata({ params: { projectId, lng } }) {
     const url =
       reqHost && reqHost !== canonicalHost
         ? `${baseUrl}/`
-        : `${baseUrl}/${lng}/map/public/${projectId}`;
+        : `${baseUrl}/map/public/${projectId}`;
 
     const metadata = getLocalizedMetadata(
       lng,

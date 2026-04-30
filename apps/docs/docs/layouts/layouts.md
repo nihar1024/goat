@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Layouts Interface
 
-The **Layouts** in GOAT allows you to create professional map reports and export them as PDF or PNG files. You can design custom layouts with maps, text, and other elements, and generate both single-page and multi-page reports.
+The **Layouts** in GOAT allows you to create professional map reports and export them as PDF, PNG, or JPEG files. You can design custom layouts with maps, text, and other elements, and generate both single-page and multi-page reports.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/layouts/layouts_interface.webp').default} alt="Layouts Interface Overview in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
@@ -27,7 +27,7 @@ The Settings Panel allows you to create a new layout, customize the overall layo
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Configure the Layout Settings by selecting your preferred <code>page size</code> (A4, A3, Letter), <code>orientation</code> (Portrait or Landscape), <code>resolution</code>, and <code>export format</code> (PDF or PNG).</div>
+  <div class="content">Configure the Layout Settings by selecting your preferred <code>page size</code> (A4, A3, Letter), <code>orientation</code> (Portrait or Landscape), <code>resolution</code>, and <code>export format</code> (PDF, PNG, or JPEG).</div>
 </div>
 
 <div class="step">
@@ -37,7 +37,7 @@ The Settings Panel allows you to create a new layout, customize the overall layo
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Now you are ready to start working on your Layout. Once is finished click <code>Print Layout</code> at the bottom to <b>export your layout</b> as PDF or PNG.</div>
+  <div class="content">Now you are ready to start working on your Layout. Once is finished click <code>Print Layout</code> at the bottom to <b>export your layout</b> as PDF, PNG, or JPEG.</div>
 </div>
 
 ## Layout Preview

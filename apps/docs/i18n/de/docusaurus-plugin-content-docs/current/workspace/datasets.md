@@ -11,7 +11,7 @@ Die **Datensätze**-Seite ist Ihr Datenmanagement-Hub, wo Sie alle Ihre räumlic
 - **Datensätze verwalten** durch Teilen, Verschieben, Löschen und andere Funktionen.
   
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/datasets/datasets_general.png').default} alt="Datensätze-Seite im Workspace von GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/datasets/datasets_general_de.webp').default} alt="Datensätze-Seite im Workspace von GOAT" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 ## Datensätze hinzufügen
@@ -20,7 +20,7 @@ Sie können **Datensätze** auf zwei Arten zu GOAT hinzufügen: durch **Hochlade
 
 ### Daten hochladen
 
-GOAT unterstützt mehrere Dateiformate zum **Hochladen**: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV** und **XLSX**-Dateien.
+GOAT unterstützt mehrere Dateiformate zum **Hochladen**: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, **Parquet** und **COG**-Dateien.
 
 <div class="step">
   <div class="step-number">1</div>
@@ -56,7 +56,7 @@ GOAT unterstützt mehrere Dateiformate zum **Hochladen**: **GeoPackage**, **GeoJ
 
 ### Externe Datenquellen
 
-Verbinden Sie sich mit externen Datendiensten einschließlich **Web Feature Service (WFS)**, **Web Map Service (WMS)**, **Web Map Tile Service (WMTS)** und **XYZ-Kacheln**.
+Verbinden Sie sich mit externen Datendiensten einschließlich **Web Feature Service (WFS)**, **Web Map Service (WMS)**, **Web Map Tile Service (WMTS)**, **XYZ-Kacheln** und **Cloud Optimized GeoTIFF (COG)**.
 
 <div class="step">
   <div class="step-number">1</div>

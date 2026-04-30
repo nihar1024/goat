@@ -10,10 +10,10 @@ On GOAT, you can work with datasets from Plan4Better’s catalog or upload your 
 
 ### 1.1 Spatial Features
 
-Feature datasets store **spatial features like points, lines, or polygons**. On GOAT you can upload data from **Shapefiles**, **Geopackages**, **GeoJSON**, or **KML** files, or add a **WFS** link from an external URL. You can visualize, style, and analyze these datasets using the different tools from the toolbox.
+Feature datasets store **spatial features like points, lines, or polygons**. On GOAT you can upload data from **Shapefiles**, **Geopackages**, **GeoJSON**, **KML**, **ZIP**, or **Parquet** files, or add a **WFS** external URL. For raster external sources (WMS, WMTS, XYZ Tiles, COG), see [Raster Datasets](#rasters-datasets) below. You can visualize, style, and analyze these datasets using the different tools from the toolbox.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/data/spatial.png').default} alt="Spatial features in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
+  <img src={require('/img/data/spatial.webp').default} alt="Spatial features in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
   <p style={{ textAlign: 'center', fontStyle: 'italic', marginTop: '8px', color: '#666' }}> Example of spatial features displayed in GOAT</p>
 </div>
 
@@ -36,14 +36,14 @@ GOAT recognizes two types of feature datasets based on their source:
 
 ## Rasters Datasets
 
-Raster datasets can come from external sources like **WMS** (Web Map Service) or **WMTS** (Web Map Tile Service). They provide georeferenced map images, such as topographic maps, but on GOAT they’re static, so they don’t support analysis or editing.
+Raster datasets can be uploaded directly as **COG (Cloud Optimized GeoTIFF)** files, or connected from external sources via **WMS** (Web Map Service), **WMTS** (Web Map Tile Service), **XYZ Tiles**, or a direct **COG URL** (.tif/.tiff link). They provide georeferenced map images, such as topographic maps, but on GOAT they’re static, so they don’t support analysis or editing.
 
 :::tip Note
 Raster styling depends on the external service (e.g., GeoServer). You can’t change the color scheme or feature representation in GOAT.
 :::
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/data/raster.png').default} alt="Raster datasets in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
+  <img src={require('/img/data/raster.webp').default} alt="Raster datasets in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
   <p style={{ textAlign: 'center', fontStyle: 'italic', marginTop: '8px', color: '#666' }}> Example of a raster layer displayed in GOAT</p>
 
 </div>

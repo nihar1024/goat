@@ -25,10 +25,10 @@ Das Layer Panel ist Ihre zentrale Anlaufstelle für die Organisation und Steueru
 Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Karte hinzufügen. Sie können entweder:
 - **Datensätze aus Ihrem Datensatz-Explorer oder dem Katalog-Explorer integrieren**
 - Neue **Datensätze von Ihrem lokalen Gerät hochladen** (GeoPackage, GeoJSON, Shapefile, KML, CSV oder XLSX)
-- Externe Layer durch Eingabe der **URL der externen Quelle** hinzufügen (WMS, WMTS oder MVT)
+- Externe Layer durch Eingabe der **URL der externen Quelle** hinzufügen (WFS, WMS, WMTS, XYZ Tiles oder COG)
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/map/layers/add_layer.webp').default} alt="Layer in GOAT hinzufügen" style={{ maxHeight: "flex", maxWidth: "flex", objectFit: "cover"}}/>
+  <img src={require('/img/map/layers/add_layer_de.webp').default} alt="Layer in GOAT hinzufügen" style={{ maxHeight: "flex", maxWidth: "flex", objectFit: "cover"}}/>
 </div>
 
 <p></p>
@@ -44,7 +44,7 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Externer Datensatz</code> oder <code>Datensatz-Katalog</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
+  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Externer Datensatz</code> oder <code>Katalog-Explorer</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
 </div>
 
 <Tabs>
@@ -208,7 +208,7 @@ Layer-Gruppen ermöglichen es Ihnen:
 Durch Klicken auf das <code>weitere Optionen</code> <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> Symbol haben Sie weitere Optionen zur <strong>Verwaltung und Organisation</strong> des ausgewählten Layers.
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
-<img src={require('/img/map/layers/layer_options.webp').default} alt="Layer-Optionen" style={{ maxHeight: "250px", maxWidth: "250px", objectFit: "cover", alignItems: 'center'}}/>
+<img src={require('/img/map/layers/layer_options_de.webp').default} alt="Layer-Optionen" style={{ maxHeight: "250px", maxWidth: "250px", objectFit: "cover", alignItems: 'center'}}/>
 </div>
 
 <p></p>

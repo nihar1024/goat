@@ -8,7 +8,7 @@ sidebar_position: 1
 **Das Öffnen eines Projekts führt Sie zur Karten-Oberfläche**. Hier können Sie Layer erstellen, organisieren und gestalten, räumliche Daten visualisieren und alle mächtigen räumlichen Analysefähigkeiten von GOAT nutzen.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/map/interface/map_interface.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/map/interface/map_interface_de.webp').default} alt="Kartenoberfläche Übersicht" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 
@@ -16,7 +16,7 @@ sidebar_position: 1
 ### Obere Leiste
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/map/interface/upper_bar.webp').default} alt="Obere Leiste Oberflächenelemente" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/map/interface/upper_bar_de.webp').default} alt="Obere Leiste Oberflächenelemente" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 
@@ -27,7 +27,7 @@ sidebar_position: 1
 
 
 #### Rechte Seite
-- <code>Daten und Builder Umschalter</code>: <strong>Wechseln Sie zwischen</strong> den Karten- und Dashboard-Builder-Oberflächen.
+- <code>Projekt-Modus Umschalter</code>: <strong>Wechseln Sie zwischen</strong> den Karten, Workflows, Layouts und Dashboard Oberflächen.
 - <code>Projekt teilen Button</code>: <strong>Verwalten Sie die Freigabeoptionen</strong>.
 - <code>Dokumentation Button</code>: <strong>Zugriff auf die GOAT-Dokumentation</strong>.
 - <code>Job Status</code>: <strong>Zeigen Sie den Status</strong> laufender und abgeschlossener Aufgaben an.
@@ -52,7 +52,7 @@ Die räumlichen Operationen Werkzeugleiste auf der rechten Seite der Kartenoberf
 - <img src={require('/img/icons/compass.png').default} alt="Szenarien" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Szenarien</code>: Lesen Sie mehr in [Szenarien](../Scenarios).
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/map/interface/right-left_panels.webp').default} alt="aktuelle Datensätze" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/map/interface/right-left_panels_de.webp').default} alt="aktuelle Datensätze" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 
@@ -70,6 +70,6 @@ Die räumlichen Operationen Werkzeugleiste auf der rechten Seite der Kartenoberf
 - <img src={require('/img/icons/map.png').default} alt="Grundkarte" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Grundkarte</code>: <strong>Wählen Sie zwischen</strong> den verfügbaren Grundkartenoptionen.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/map/interface/map_navigation.webp').default} alt="aktuelle Datensätze" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/map/interface/map_navigation_de.webp').default} alt="aktuelle Datensätze" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 

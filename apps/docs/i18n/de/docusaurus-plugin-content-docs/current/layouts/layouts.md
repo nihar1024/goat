@@ -4,10 +4,10 @@ sidebar_position: 1
 
 # Layouts-Oberfläche
 
-Die **Layouts** in GOAT ermöglichen es Ihnen, professionelle Kartenberichte zu erstellen und diese als PDF- oder PNG-Dateien zu exportieren. Sie können benutzerdefinierte Layouts mit Karten, Texten und anderen Elementen entwerfen und sowohl einseitige als auch mehrseitige Berichte erstellen.
+Die **Layouts** in GOAT ermöglichen es Ihnen, professionelle Kartenberichte zu erstellen und diese als PDF-, PNG- oder JPEG-Dateien zu exportieren. Sie können benutzerdefinierte Layouts mit Karten, Texten und anderen Elementen entwerfen und sowohl einseitige als auch mehrseitige Berichte erstellen.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/layouts/layouts_interface.webp').default} alt="Layouts-Oberfläche Übersicht in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/layouts/layouts_interface_de.webp').default} alt="Layouts-Oberfläche Übersicht in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div>
 
 ## Einstellungsbereich
@@ -27,7 +27,7 @@ Der Einstellungsbereich ermöglicht es Ihnen, ein neues Layout zu erstellen, die
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Konfigurieren Sie die Layout-Einstellungen, indem Sie Ihre bevorzugte <code>Seitengröße</code> (A4, A3, Letter), <code>Ausrichtung</code> (Hochformat oder Querformat), <code>Auflösung</code> und <code>Exportformat</code> (PDF oder PNG) auswählen.</div>
+  <div class="content">Konfigurieren Sie die Layout-Einstellungen, indem Sie Ihre bevorzugte <code>Seitengröße</code> (A4, A3, Letter), <code>Ausrichtung</code> (Hochformat oder Querformat), <code>Auflösung</code> und <code>Exportformat</code> (PDF, PNG oder JPEG) auswählen.</div>
 </div>
 
 <div class="step">
@@ -37,7 +37,7 @@ Der Einstellungsbereich ermöglicht es Ihnen, ein neues Layout zu erstellen, die
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Jetzt sind Sie bereit, an Ihrem Layout zu arbeiten. Wenn es fertig ist, klicken Sie unten auf <code>Layout drucken</code>, um Ihr <b>Layout als PDF oder PNG zu exportieren</b>.</div>
+  <div class="content">Jetzt sind Sie bereit, an Ihrem Layout zu arbeiten. Wenn es fertig ist, klicken Sie unten auf <code>Layout drucken</code>, um Ihr <b>Layout als PDF, PNG oder JPEG zu exportieren</b>.</div>
 </div>
 
 ## Layout-Vorschau

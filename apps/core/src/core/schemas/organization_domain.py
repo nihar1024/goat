@@ -39,11 +39,8 @@ class OrganizationDomainCreate(BaseModel):
         if not HOSTNAME_REGEX.match(v):
             raise ValueError("Invalid hostname format")
         labels = v.split(".")
-        if len(labels) < 3:
-            # Reject apex (e.g. 'ministry.de'). v1 supports only subdomains
-            # like 'klima.ministry.de' — apex needs ALIAS/ANAME records and is
-            # planned for a later milestone.
-            raise ValueError("Apex domains are not supported in v1; use a subdomain")
+        if len(labels) < 2:
+            raise ValueError("Hostname must have at least two labels")
         if labels[0] == "www":
             raise ValueError("Subdomain cannot be 'www'")
         for suffix in RESERVED_HOSTNAME_SUFFIXES:

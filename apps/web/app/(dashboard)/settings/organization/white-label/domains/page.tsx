@@ -22,11 +22,11 @@ import {
   unassignDomainFromProject,
   useOrganizationDomains,
 } from "@/lib/api/customDomains";
+import { useCustomDomainConfig } from "@/lib/api/customDomainConfig";
 import { useOrganization } from "@/lib/api/users";
 import type { CustomDomain } from "@/lib/validations/customDomain";
 
 import { AddDomainDialog } from "@/components/settings/whiteLabel/AddDomainDialog";
-import { CNAME_TARGET } from "@/components/settings/whiteLabel/AddDomain/DnsRecordCard";
 import { DeleteDomainDialog } from "@/components/settings/whiteLabel/DeleteDomainDialog";
 import { DomainDetailDrawer } from "@/components/settings/whiteLabel/DomainDetailDrawer";
 import { DomainList } from "@/components/settings/whiteLabel/DomainList";
@@ -37,6 +37,7 @@ export default function WhiteLabelDomainsPage() {
   const { organization, isLoading: isOrgLoading } = useOrganization();
   const orgId = organization?.id;
   const { domains, isLoading, mutate } = useOrganizationDomains(orgId);
+  const customDomainConfig = useCustomDomainConfig();
 
   const [addOpen, setAddOpen] = useState(false);
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
@@ -124,9 +125,16 @@ export default function WhiteLabelDomainsPage() {
 
         <Alert severity="info" icon={<Icon iconName={ICON_NAME.INFO} fontSize="small" />}>
           <Trans
-            i18nKey="white_label_custom_domains_cname_banner"
-            defaults="Point your custom domain at <code>{{target}}</code> via a CNAME record."
-            values={{ target: CNAME_TARGET }}
+            i18nKey="white_label_custom_domains_dns_banner_subdomain"
+            defaults="Subdomain (e.g. <code>maps.example.com</code>): create a CNAME record pointing at <code>{{target}}</code>."
+            values={{ target: customDomainConfig?.cname_target ?? "" }}
+            components={{ code: <code style={{ fontFamily: "monospace" }} /> }}
+          />
+          <br />
+          <Trans
+            i18nKey="white_label_custom_domains_dns_banner_apex"
+            defaults="Apex (e.g. <code>example.com</code>): create an A record pointing at <code>{{ip}}</code>."
+            values={{ ip: customDomainConfig?.apex_ipv4 ?? "" }}
             components={{ code: <code style={{ fontFamily: "monospace" }} /> }}
           />
         </Alert>

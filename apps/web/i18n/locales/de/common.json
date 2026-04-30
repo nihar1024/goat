@@ -2001,6 +2001,8 @@
   "white_label_add_domain_title": "Eigene Domain hinzufügen",
   "white_label_custom_domains_add_first": "Erste Domain hinzufügen",
   "white_label_custom_domains_cname_banner": "Verweisen Sie Ihre eigene Domain per CNAME-Eintrag auf <code>{{target}}</code>.",
+  "white_label_custom_domains_dns_banner_apex": "Apex (z. B. <code>example.com</code>): Erstellen Sie einen A-Eintrag, der auf <code>{{ip}}</code> verweist.",
+  "white_label_custom_domains_dns_banner_subdomain": "Subdomain (z. B. <code>maps.example.com</code>): Erstellen Sie einen CNAME-Eintrag, der auf <code>{{target}}</code> verweist.",
   "white_label_custom_domains_delete_error": "Löschen fehlgeschlagen",
   "white_label_custom_domains_delete_success": "Domain gelöscht",
   "white_label_custom_domains_description": "Veröffentlichen Sie Ihre Dashboards unter Ihrer eigenen Domain. Jede Domain bedient ein veröffentlichtes Projekt.",

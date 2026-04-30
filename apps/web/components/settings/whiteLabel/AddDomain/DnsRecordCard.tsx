@@ -17,14 +17,8 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-// TODO: source from a backend config endpoint instead of hardcoding here.
-// (See spec section 15 — "Hetzner LB stable target" open question.)
-//
-// `cname.goat.plan4better.de` is a CNAME we maintain in the
-// plan4better.de zone, pointing at the Caddy LB's actual hostname.
-// This indirection means the underlying LB can change without
-// breaking customer DNS records.
-export const CNAME_TARGET = "cname.goat.plan4better.de";
+import { useCustomDomainConfig } from "@/lib/api/customDomainConfig";
+import { isApexDomain } from "@/lib/validations/customDomain";
 
 interface DnsRecordCardProps {
   /** The hostname the user is configuring (e.g. "dashboards.example.com"). */
@@ -70,9 +64,22 @@ function CopyableCell({ value }: CopyableCellProps) {
 
 export function DnsRecordCard({ domain }: DnsRecordCardProps) {
   const { t } = useTranslation("common");
-  // The CNAME host is the leftmost label of the FQDN — DNS providers want
-  // the relative name, not the absolute one.
-  const host = domain.split(".")[0] || domain;
+  const config = useCustomDomainConfig();
+  const apex = isApexDomain(domain);
+  // For subdomains, DNS providers want the relative name (just the leftmost
+  // label). For apex domains, the host is "@" — a convention shared by
+  // every major registrar including Namecheap.
+  const host = apex ? "@" : domain.split(".")[0] || domain;
+
+  // Apex → single A record (skip AAAA: every browser falls back to v4 fine,
+  // and one record is one less thing for the customer to maintain).
+  // Subdomain → single CNAME pointing at the canonical target.
+  // Both forms are accepted by the reconciliation check on the backend.
+  const cnameTarget = config?.cname_target ?? "";
+  const apexIpv4 = config?.apex_ipv4 ?? "";
+  const rows = apex
+    ? [{ type: "A", host, target: apexIpv4 }]
+    : [{ type: "CNAME", host, target: cnameTarget }];
 
   return (
     <Box
@@ -100,24 +107,26 @@ export function DnsRecordCard({ domain }: DnsRecordCardProps) {
           </TableRow>
         </TableHead>
         <TableBody>
-          <TableRow>
-            <TableCell>
-              <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                CNAME
-              </Typography>
-            </TableCell>
-            <TableCell>
-              <CopyableCell value={host} />
-            </TableCell>
-            <TableCell>
-              <CopyableCell value={CNAME_TARGET} />
-            </TableCell>
-            <TableCell>
-              <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                3600
-              </Typography>
-            </TableCell>
-          </TableRow>
+          {rows.map((row) => (
+            <TableRow key={row.type}>
+              <TableCell>
+                <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                  {row.type}
+                </Typography>
+              </TableCell>
+              <TableCell>
+                <CopyableCell value={row.host} />
+              </TableCell>
+              <TableCell>
+                <CopyableCell value={row.target} />
+              </TableCell>
+              <TableCell>
+                <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                  3600
+                </Typography>
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </Box>

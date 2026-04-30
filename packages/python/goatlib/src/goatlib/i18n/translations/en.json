@@ -754,7 +754,8 @@
       "touches": "Touches",
       "overlaps": "Overlaps",
       "covers": "Covers",
-      "covered_by": "Covered By"
+      "covered_by": "Covered By",
+      "disjoint": "Disjoint"
     },
     "join_operation_type": {
       "one_to_one": "One to One",
@@ -852,10 +853,6 @@
     "difference": {
       "title": "Erase",
       "description": "Creates a feature class by overlaying input features with erase features. Only portions of input features falling outside the erase geometry are kept."
-    },
-    "disjoint": {
-      "title": "Disjoint",
-      "description": "Filters input features to those that have no spatial intersection with any feature in the overlay layer."
     },
     "origin_destination": {
       "title": "Origin-Destination",
@@ -964,7 +961,6 @@
     "clip": "Clip",
     "centroid": "Centroid",
     "difference": "Difference",
-    "disjoint": "Disjoint",
     "dissolve": "Dissolve",
     "intersection": "Intersection",
     "union": "Union",

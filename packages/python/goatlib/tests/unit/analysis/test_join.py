@@ -32,9 +32,7 @@ def _all_join_fields(join_path: str) -> list[str]:
     """
     con = duckdb.connect()
     con.execute("INSTALL spatial; LOAD spatial;")
-    rows = con.execute(
-        f"DESCRIBE SELECT * FROM read_parquet('{join_path}')"
-    ).fetchall()
+    rows = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{join_path}')").fetchall()
     return [r[0] for r in rows]
 
 
@@ -465,6 +463,64 @@ class TestSpatialJoin:
         con.close()
         tool.cleanup()
 
+    def test_spatial_join_disjoint(self) -> None:
+        """Disjoint relationship: keep only target features that intersect no
+        feature in the join layer. Output has no join_* columns."""
+        target_path = str(TEST_DATA_DIR / "poi_points.parquet")
+        join_path = str(TEST_DATA_DIR / "districts.parquet")
+        output_path = str(RESULT_DIR / "join_spatial_disjoint.parquet")
+
+        params = JoinParams(
+            target_path=target_path,
+            join_path=join_path,
+            output_path=output_path,
+            use_spatial_relationship=True,
+            use_attribute_relationship=False,
+            spatial_relationship=SpatialRelationshipType.disjoint,
+        )
+
+        tool = JoinTool()
+        results = tool.run(params)
+
+        assert len(results) == 1
+        result_path, _ = results[0]
+        assert Path(result_path).exists()
+
+        con = duckdb.connect()
+        con.execute("INSTALL spatial; LOAD spatial;")
+
+        # Result must not exceed target row count and must contain no join_* cols.
+        target_count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{target_path}')"
+        ).fetchone()[0]
+        result_count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{result_path}')"
+        ).fetchone()[0]
+        assert result_count <= target_count
+
+        cols = [
+            r[0]
+            for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{result_path}')"
+            ).fetchall()
+        ]
+        assert not any(
+            c.startswith("join_") for c in cols
+        ), f"disjoint output unexpectedly contains join_* columns: {cols}"
+
+        # Every retained POI must be disjoint from every district.
+        intersecting = con.execute(f"""
+            SELECT COUNT(*) FROM read_parquet('{result_path}') r
+            WHERE EXISTS (
+                SELECT 1 FROM read_parquet('{join_path}') j
+                WHERE ST_Intersects(r.geometry, j.geometry)
+            )
+        """).fetchone()[0]
+        assert intersecting == 0
+
+        con.close()
+        tool.cleanup()
+
 
 class TestCombinedJoin:
     """Tests for combined spatial and attribute joins."""
@@ -803,9 +859,9 @@ class TestJoinFieldsTriState:
             ).fetchall()
         ]
 
-        assert not any(c.startswith("join_") for c in cols), (
-            f"unexpected join_* columns in filter-only output: {cols}"
-        )
+        assert not any(
+            c.startswith("join_") for c in cols
+        ), f"unexpected join_* columns in filter-only output: {cols}"
 
     def test_subset_keeps_only_listed_join_columns(self) -> None:
         """A non-empty list keeps only the listed columns (prefixed)."""

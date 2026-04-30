@@ -774,7 +774,8 @@
       "touches": "Berührt",
       "overlaps": "Überlappt",
       "covers": "Bedeckend",
-      "covered_by": "Bedeckt"
+      "covered_by": "Bedeckt",
+      "disjoint": "Disjunkt"
     },
     "join_operation_type": {
       "one_to_one": "Eins zu Eins",
@@ -872,10 +873,6 @@
     "difference": {
       "title": "Radieren",
       "description": "Entfernt Bereiche des Eingabe-Layers, die sich mit dem Überlagerungs-Layer überschneiden. Nur die Teile außerhalb der Überlagerung werden beibehalten."
-    },
-    "disjoint": {
-      "title": "Disjunkt",
-      "description": "Filtert die Eingabe-Objekte auf jene, die sich räumlich nicht mit Objekten des Überlagerungs-Layers schneiden."
     },
     "origin_destination": {
       "title": "Quell-Ziel-Beziehungen",
@@ -984,7 +981,6 @@
     "clip": "Ausschneiden",
     "centroid": "Mittelpunkt",
     "difference": "Radieren",
-    "disjoint": "Disjunkt",
     "dissolve": "Zusammenführen",
     "intersection": "Überschneiden",
     "union": "Vereinigen",

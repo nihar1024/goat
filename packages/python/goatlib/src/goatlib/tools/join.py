@@ -253,6 +253,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_options",
             field_order=1,
             enum_labels=JOIN_TYPE_LABELS,
+            visible_when={"spatial_relationship": {"$ne": "disjoint"}},
         ),
     )
     join_operation: JoinOperationType = Field(
@@ -262,6 +263,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_options",
             field_order=2,
             enum_labels=JOIN_OPERATION_LABELS,
+            visible_when={"spatial_relationship": {"$ne": "disjoint"}},
         ),
     )
 
@@ -280,7 +282,13 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
                     "values": {"left": True},
                 }
             },
-            visible_when={"calculate_statistics": False},
+            visible_when={
+                "$and": [
+                    {"calculate_statistics": False},
+                    {"spatial_relationship": {"$ne": "disjoint"}},
+                    {"join_type": {"$ne": "left"}}, 
+                ]
+            },
         ),
     )
     join_fields: List[str] = Field(
@@ -296,7 +304,12 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
                     "multi": True,
                     "default_all": True,
                 },
-                visible_when={"add_join_fields": True},
+                visible_when={
+                    "$and": [
+                        {"add_join_fields": True},
+                        {"spatial_relationship": {"$ne": "disjoint"}},
+                    ]
+                },
                 optional=True,
             ),
             "default": [],
@@ -311,7 +324,12 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             section="join_options",
             field_order=5,
             widget="switch",
-            visible_when={"join_operation": "one_to_one"},
+            visible_when={
+                "$and": [
+                    {"join_operation": "one_to_one"},
+                    {"spatial_relationship": {"$ne": "disjoint"}},
+                ]
+            },
         ),
     )
     field_statistics: Optional[List[FieldStatistic]] = Field(
@@ -328,6 +346,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
                 "$and": [
                     {"join_operation": "one_to_one"},
                     {"calculate_statistics": True},
+                    {"spatial_relationship": {"$ne": "disjoint"}},
                 ]
             },
         ),

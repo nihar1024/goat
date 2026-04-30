@@ -89,14 +89,32 @@ class JoinTool(AnalysisTool):
     ) -> None:
         """Execute the join operation in DuckDB."""
 
+        # Disjoint is an anti-semi-join: it doesn't fit the JOIN ON shape (which
+        # would duplicate target rows once per non-matching join row). Dispatch
+        # before building the regular join machinery, and ignore join_type /
+        # join_operation / join_fields / statistics — none apply.
+        is_disjoint = (
+            params.use_spatial_relationship
+            and params.spatial_relationship == SpatialRelationshipType.disjoint
+        )
+
         # Build join condition
         join_conditions = []
 
         # Add spatial conditions
         if params.use_spatial_relationship:
-            spatial_condition = self._build_spatial_condition(
-                params, target_meta.geometry_column, join_meta.geometry_column
-            )
+            if is_disjoint:
+                # Inside NOT EXISTS we test for the *match*, so use intersects.
+                spatial_condition = (
+                    f"ST_Intersects("
+                    f"target.{target_meta.geometry_column}, "
+                    f"join_data.{join_meta.geometry_column}"
+                    f")"
+                )
+            else:
+                spatial_condition = self._build_spatial_condition(
+                    params, target_meta.geometry_column, join_meta.geometry_column
+                )
             join_conditions.append(spatial_condition)
 
         # Add attribute conditions
@@ -109,6 +127,12 @@ class JoinTool(AnalysisTool):
 
         # Combine all conditions with AND
         full_join_condition = " AND ".join(join_conditions)
+
+        if is_disjoint:
+            self._execute_disjoint_filter(
+                target_table, join_table, full_join_condition, output_path
+            )
+            return
 
         # Determine join type (INNER vs LEFT)
         join_type_sql = (
@@ -134,6 +158,39 @@ class JoinTool(AnalysisTool):
                 join_type_sql,
                 output_path,
             )
+
+    def _execute_disjoint_filter(
+        self: Self,
+        target_table: str,
+        join_table: str,
+        match_condition: str,
+        output_path: Path,
+    ) -> None:
+        """Anti-semi-join: keep target rows that have no matching join row.
+
+        ``match_condition`` is the would-be join predicate (spatial and/or
+        attribute). The result has only target columns — by definition, no
+        join row matches so there's nothing to add from the join layer.
+        """
+        target_fields = self._get_table_fields(target_table, "target")
+        select_fields = ", ".join(target_fields)
+
+        query = f"""
+            SELECT {select_fields}
+            FROM {target_table} target
+            WHERE NOT EXISTS (
+                SELECT 1 FROM {join_table} join_data
+                WHERE {match_condition}
+            )
+        """
+
+        logger.info("Executing disjoint filter (anti-semi-join)")
+        write_optimized_parquet(
+            self.con,
+            query,
+            output_path,
+            geometry_column="geometry",
+        )
 
     # Distance unit conversion factors to meters
     DISTANCE_UNIT_FACTORS = {

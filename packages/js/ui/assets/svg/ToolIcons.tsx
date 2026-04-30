@@ -107,15 +107,6 @@ export const EraseDifferenceIcon = (props: SvgIconProps) => (
   </SvgIcon>
 );
 
-export const DisjointIcon = (props: SvgIconProps) => (
-  <SvgIcon viewBox="0 0 44 44" {...props}>
-    {/* Input feature: filled circle on the left */}
-    <circle cx="15" cy="22" r="9" fill="var(--icon-color-1, #666666)"/>
-    {/* Overlay region: dashed-outline circle on the right, clearly separate */}
-    <circle cx="33" cy="22" r="9" fill="none" stroke="var(--icon-color-3, #BDBDBD)" strokeWidth="1.6" strokeDasharray="2.2 1.6"/>
-  </SvgIcon>
-);
-
 export const GeocodingIcon = (props: SvgIconProps) => (
   <SvgIcon viewBox="0 0 44 44" {...props}>
     <path d="M21.5 4C14.5893 4 9 9.634 9 16.6C9 24.0519 16.773 34.3022 20.0599 38.3035C20.816 39.2239 22.184 39.2239 22.9401 38.3035C26.227 34.3022 34 24.0519 34 16.6C34 9.634 28.4107 4 21.5 4ZM21.5 21.1C19.0357 21.1 17.0357 19.084 17.0357 16.6C17.0357 14.116 19.0357 12.1 21.5 12.1C23.9643 12.1 25.9643 14.116 25.9643 16.6C25.9643 19.084 23.9643 21.1 21.5 21.1Z" fill="var(--icon-color-1, #666666)"/>
@@ -360,7 +351,6 @@ export enum TOOL_ICON_NAME {
   CUSTOM_SQL = "custom_sql",
   DISSOLVE = "dissolve",
   DIFFERENCE = "difference",
-  DISJOINT = "disjoint",
   EXPORT_DATASET = "export_dataset",
   GEOCODING = "geocoding",
   GEOLOCATION = "geolocation",
@@ -394,7 +384,6 @@ export const toolIconMap: Record<TOOL_ICON_NAME, React.FC<SvgIconProps>> = {
   [TOOL_ICON_NAME.CUSTOM_SQL]: CustomSqlIcon,
   [TOOL_ICON_NAME.DISSOLVE]: DissolveIcon,
   [TOOL_ICON_NAME.DIFFERENCE]: EraseDifferenceIcon,
-  [TOOL_ICON_NAME.DISJOINT]: DisjointIcon,
   [TOOL_ICON_NAME.EXPORT_DATASET]: ExportDatasetIcon,
   [TOOL_ICON_NAME.GEOCODING]: GeocodingIcon,
   [TOOL_ICON_NAME.GEOLOCATION]: GeolocationIcon,

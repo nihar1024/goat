@@ -24,6 +24,7 @@ class SpatialRelationshipType(StrEnum):
     overlaps = "overlaps"
     covers = "covers"
     covered_by = "covered_by"
+    disjoint = "disjoint"
 
 
 class JoinOperationType(StrEnum):

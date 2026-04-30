@@ -397,8 +397,8 @@ const PublicProjectLayout = ({
     }
 
     const builderConfig = {
+      ...project?.builder_config,
       interface: newPanels,
-      settings: { ...project?.builder_config?.settings },
     };
 
     onProjectUpdate?.("builder_config", builderConfig);
@@ -418,8 +418,8 @@ const PublicProjectLayout = ({
       return panel;
     });
     const builderConfig = {
+      ...project?.builder_config,
       interface: updatedPanels,
-      settings: { ...project?.builder_config?.settings },
     };
     onProjectUpdate?.("builder_config", builderConfig);
     dispatch(setSelectedBuilderItem(undefined));
@@ -445,8 +445,8 @@ const PublicProjectLayout = ({
       return panel;
     });
     const builderConfig = {
+      ...project?.builder_config,
       interface: updatedPanels,
-      settings: { ...project?.builder_config?.settings },
     };
     onProjectUpdate?.("builder_config", builderConfig);
     dispatch(setSelectedBuilderItem(updatedWidget));
@@ -467,8 +467,8 @@ const PublicProjectLayout = ({
         const newPanel = _newPanel.data;
         const updatedPanels = [...panels, newPanel];
         const builderConfig = {
+          ...project?.builder_config,
           interface: updatedPanels,
-          settings: { ...project?.builder_config?.settings },
         };
         await onProjectUpdate?.("builder_config", builderConfig);
       } else {

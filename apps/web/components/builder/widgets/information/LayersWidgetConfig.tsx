@@ -291,6 +291,11 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
                     label={<Typography variant="body2">{t("show_group_icons")}</Typography>}
                     sx={{ ml: 0 }}
                   />
+                  <FormControlLabel
+                    control={<Checkbox checked={options.show_all_toggle ?? true} onChange={(e) => handleOptionChange("show_all_toggle", e.target.checked)} size="small" />}
+                    label={<Typography variant="body2">{t("show_all_toggle")}</Typography>}
+                    sx={{ ml: 0 }}
+                  />
                 </>
               )}
               <FormControlLabel

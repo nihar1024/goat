@@ -1919,6 +1919,8 @@
   "white_label_add_domain_title": "Add custom domain",
   "white_label_custom_domains_add_first": "Add your first domain",
   "white_label_custom_domains_cname_banner": "Point your custom domain at <code>{{target}}</code> via a CNAME record.",
+  "white_label_custom_domains_dns_banner_apex": "Apex (e.g. <code>example.com</code>): create an A record pointing at <code>{{ip}}</code>.",
+  "white_label_custom_domains_dns_banner_subdomain": "Subdomain (e.g. <code>maps.example.com</code>): create a CNAME record pointing at <code>{{target}}</code>.",
   "white_label_custom_domains_delete_error": "Delete failed",
   "white_label_custom_domains_delete_success": "Domain deleted",
   "white_label_custom_domains_description": "Publish your dashboards on your own domain. Each domain serves one published project.",

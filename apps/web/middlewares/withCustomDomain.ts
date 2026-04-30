@@ -37,6 +37,21 @@ export const withCustomDomain: MiddlewareFactory = (next) => {
       return next(request, _next);
     }
 
+    // Static assets and API routes must not be rewritten — they're
+    // served verbatim by Next.js / the routing layer. Only the page
+    // route(s) get redirected to /map/public/<projectId>.
+    const path = request.nextUrl.pathname;
+    if (
+      path.startsWith("/_next/") ||
+      path.startsWith("/api/") ||
+      path === "/favicon.ico" ||
+      // any path with a file extension is almost certainly a static
+      // asset (woff2, png, css, js, json, ico, svg, ...).
+      /\.[a-z0-9]{2,5}$/i.test(path)
+    ) {
+      return next(request, _next);
+    }
+
     const projectId = await lookupCustomDomain(host);
     if (!projectId) {
       // Unknown custom host: let the rest of the stack handle it.

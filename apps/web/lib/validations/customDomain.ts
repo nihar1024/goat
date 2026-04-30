@@ -26,8 +26,10 @@ export type CertStatus = z.infer<typeof certStatusSchema>;
 export type DomainKind = z.infer<typeof domainKindSchema>;
 
 /**
- * Hostname per RFC 1035, lowercased, ≥3 labels (apex rejected for v1),
- * leftmost label cannot be 'www', max length 253.
+ * Hostname per RFC 1035, lowercased, ≥2 labels, leftmost label cannot be
+ * 'www', max length 253. Apex hostnames (e.g. ministry.de) are accepted —
+ * they require A/AAAA records instead of CNAME, handled separately in the
+ * DNS instructions UI.
  *
  * Mirrors the backend validator in
  * apps/core/src/core/schemas/organization_domain.py.
@@ -42,9 +44,14 @@ export const customDomainCreateSchema = z.object({
     .max(253)
     .transform((v) => v.trim().toLowerCase())
     .refine((v) => HOSTNAME_REGEX.test(v), "Invalid hostname format")
-    .refine((v) => v.split(".").length >= 3, "Apex domains are not supported; use a subdomain")
+    .refine((v) => v.split(".").length >= 2, "Hostname must have at least two labels")
     .refine((v) => !v.startsWith("www."), "Subdomain cannot be 'www'"),
 });
+
+/** True for apex domains (e.g. ministry.de). False for subdomains. */
+export function isApexDomain(hostname: string): boolean {
+  return hostname.split(".").length === 2;
+}
 
 export type CustomDomainCreate = z.infer<typeof customDomainCreateSchema>;
 

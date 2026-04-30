@@ -18,7 +18,7 @@ from goatlib.analysis.accessibility import (
     OevGueteklasseTool,
     PTTimeWindow,
 )
-from goatlib.analysis.schemas.catchment_area import Weekday
+from goatlib.analysis.schemas.catchment_area import WEEKDAY_LABELS, Weekday
 from goatlib.analysis.schemas.ui import (
     UISection,
     ui_field,
@@ -92,6 +92,7 @@ class OevGueteklassenToolParams(ScenarioSelectorMixin, ToolInputBase):
             section="calculation_time",
             field_order=1,
             label_key="weekday",
+            enum_labels=WEEKDAY_LABELS,
         ),
     )
     from_time: int = Field(

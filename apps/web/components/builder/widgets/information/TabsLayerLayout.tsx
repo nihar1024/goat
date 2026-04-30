@@ -158,7 +158,13 @@ const TabsLayerLayout = ({
           return (
             <Tab
               key={group.id}
-              label={!iconOnly ? group.name : undefined}
+              label={
+                iconOnly ? undefined : (
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center" }}>
+                    {group.name}
+                  </Box>
+                )
+              }
               icon={
                 options?.show_group_icons ? (
                   groupIcons?.[`group_icon_${group.id}`]?.url ? (

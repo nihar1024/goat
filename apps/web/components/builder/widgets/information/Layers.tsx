@@ -257,6 +257,7 @@ export const LayerInformationWidget = ({
           hideLegendHeading={!!opts?.hide_legend_heading}
           groupIcons={opts as Record<string, { url: string; source?: string }> | undefined}
           dimOutOfZoom={outOfZoomBehavior === "dim"}
+          groupInfo={config.setup?.group_info}
         />
       )}
     </Box>

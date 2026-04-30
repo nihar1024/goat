@@ -69,7 +69,15 @@ export default function MapPage({ params: { projectId } }) {
   useEffect(() => {
     if (projectLayers && project) {
       dispatch(setProjectLayers(projectLayers as ProjectLayer[]));
-      dispatch(setProjectLayerGroups((projectLayerGroups || []) as ProjectLayerGroup[]));
+      // In the public dashboard, groups are represented as tabs and their visibility
+      // is controlled through layer toggles — not the map panel's group toggle.
+      // Reset all group visibilities to true so the saved map state doesn't gate
+      // what layers the dashboard can show.
+      const groupsWithVisibilityReset = (projectLayerGroups || []).map((g: ProjectLayerGroup) => ({
+        ...g,
+        properties: { ...(g.properties ?? {}), visibility: true },
+      }));
+      dispatch(setProjectLayerGroups(groupsWithVisibilityReset as ProjectLayerGroup[]));
       dispatch(setProject(project));
       dispatch(setMapMode("public"));
     }

@@ -89,7 +89,11 @@ export const layersMoreOptionsStyleTypes = z.enum(["compact", "direct_actions"])
 export const layersOutOfZoomBehaviorTypes = z.enum(["hide", "dim"]);
 export const informationLayersConfigSchema = informationConfigSchema.extend({
   type: z.literal("layers"),
-  setup: informationConfigSetupBaseSchema.extend({}).default({}),
+  setup: informationConfigSetupBaseSchema
+    .extend({
+      group_info: z.record(z.string(), z.string()).optional(),
+    })
+    .default({}),
   options: informationConfigOptionsBaseSchema
     .extend({
       show_search: z.boolean().optional().default(false),
@@ -462,9 +466,13 @@ export const tabsContainerConfigSchema = z.object({
 
 export const linksSeparatorTypes = z.enum(["vertical_line", "dot", "dash"]);
 
+export const linksLinkTypes = z.enum(["url", "popup"]);
+
 export const linksItemSchema = z.object({
   label: z.string(),
-  url: z.string(),
+  url: z.string().optional(),
+  link_type: linksLinkTypes.optional().default("url"),
+  popup_content: z.string().optional(),
 });
 
 export const linksElementConfigSchema = z.object({

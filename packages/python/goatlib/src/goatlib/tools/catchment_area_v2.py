@@ -475,7 +475,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                         {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
                         {"field": "max_cost_time_active"},
                     ],
-                    "message": "Number of steps cannot exceed the limit",
+                    "message": "steps_exceeds_limit",
                     "max": 9,
                 },
             },
@@ -904,6 +904,19 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             scenario_id=params.scenario_id,
             project_id=params.project_id,
         )
+
+        # Validate starting point count
+        n_points = len(latitudes)
+        if params.routing_mode == CatchmentAreaRoutingMode.pt:
+            if n_points > 100:
+                raise ValueError(
+                    f"Public transport supports a maximum of 100 starting points. "
+                    f"Got {n_points}."
+                )
+        elif n_points > 1000:
+            raise ValueError(
+                f"Maximum 1,000 starting points allowed. Got {n_points}."
+            )
 
         # Build PT time window
         time_window = None

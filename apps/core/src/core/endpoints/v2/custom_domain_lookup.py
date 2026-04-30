@@ -47,7 +47,15 @@ async def custom_domain_config() -> Dict[str, Any]:
     target = settings.CUSTOM_DOMAIN_CNAME_TARGET
     apex_ipv4: Optional[str] = None
     try:
-        resolver = dns.asyncresolver.Resolver()
+        # Use public resolvers for the same reason check_dns does — we
+        # want to show customers what THEY see in DNS, not what the pod
+        # sees through any split-DNS chain.
+        resolver = dns.asyncresolver.Resolver(configure=False)
+        resolver.nameservers = [
+            ip.strip()
+            for ip in settings.CUSTOM_DOMAIN_DNS_RESOLVERS.split(",")
+            if ip.strip()
+        ]
         resolver.lifetime = 5
         answer = await resolver.resolve(target, "A")
         apex_ipv4 = next((str(rdata).strip() for rdata in answer), None)

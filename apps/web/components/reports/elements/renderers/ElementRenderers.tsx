@@ -1,4 +1,5 @@
 import { Box, Typography } from "@mui/material";
+import type { StyleSpecification } from "maplibre-gl";
 import React from "react";
 
 import { Icon } from "@p4b/ui/components/Icon";
@@ -47,7 +48,7 @@ interface ElementContentRendererProps {
   width: number;
   height: number;
   zoom?: number;
-  basemapUrl?: string;
+  basemapUrl?: string | StyleSpecification;
   projectLayers?: ProjectLayer[];
   allElements?: ReportElement[];
   atlasPage?: AtlasPage | null;

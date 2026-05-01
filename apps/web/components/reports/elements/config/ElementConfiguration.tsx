@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Stack } from "@mui/material";
+import type { StyleSpecification } from "maplibre-gl";
 import React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -22,7 +23,7 @@ interface ElementConfigurationProps {
   element: ReportElement;
   allElements?: ReportElement[];
   projectLayers?: ProjectLayer[];
-  basemapUrl?: string;
+  basemapUrl?: string | StyleSpecification;
   onChange: (updates: Partial<ReportElement>) => void;
   onDelete: () => void;
   onBack: () => void;

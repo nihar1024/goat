@@ -179,7 +179,7 @@ export default function MapPage({ params: { projectId } }) {
     return allProjectLayersIncludingTables || [];
   }, [allProjectLayersIncludingTables]);
 
-  const { activeBasemap } = useBasemap(project);
+  const { activeBasemap, mapStyle } = useBasemap(project);
 
   const { isProjectEditor, isLoading: isAuthZLoading } = useAuthZ();
 
@@ -246,7 +246,7 @@ export default function MapPage({ params: { projectId } }) {
     // Couldn't find an event that catches the basemap change
     const debouncedHandleMapLoad = debounce(handleMapLoad, 200);
     debouncedHandleMapLoad();
-  }, [activeBasemap.url, handleMapLoad, mapMode]);
+  }, [activeBasemap, handleMapLoad, mapMode]);
 
   useJobStatus(() => {
     mutateProjectLayers();
@@ -260,12 +260,28 @@ export default function MapPage({ params: { projectId } }) {
   const selectedBuilderItem = useAppSelector((state) => state.map.selectedBuilderItem);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleProjectUpdate = async (key: string, value: any, refresh = false) => {
+  // Accepts either (key, value, refresh?) or (partial, refresh?). The latter
+  // form patches multiple project fields atomically (used for the basemap
+  // create+select flow so the new entry is in the array AND selected in one
+  // SWR mutation, avoiding a stale-snapshot race between two awaited calls).
+  const handleProjectUpdate = async (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    keyOrPartial: string | Record<string, any>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    valueOrRefresh?: any,
+    refresh = false
+  ) => {
+    const partial =
+      typeof keyOrPartial === "string"
+        ? { [keyOrPartial]: valueOrRefresh }
+        : keyOrPartial;
+    const refreshFlag =
+      typeof keyOrPartial === "string" ? refresh : valueOrRefresh ?? false;
     try {
       const projectToUpdate = JSON.parse(JSON.stringify(project));
-      projectToUpdate[key] = value;
-      mutateProject(projectToUpdate, refresh);
-      await updateProject(projectId, { [key]: value });
+      Object.assign(projectToUpdate, partial);
+      mutateProject(projectToUpdate, refreshFlag);
+      await updateProject(projectId, partial);
     } catch (error) {
       toast.error(t("error_updating_project"));
       mutateProject();
@@ -499,7 +515,10 @@ export default function MapPage({ params: { projectId } }) {
                     onDragEnd={handleDragEnd}
                     autoScroll>
                     {mapMode === "data" && (
-                      <DataProjectLayout project={project} onProjectUpdate={handleProjectUpdate} />
+                      <DataProjectLayout
+                        project={project}
+                        onProjectUpdate={handleProjectUpdate}
+                      />
                     )}
                     {mapMode === "reports" && (
                       <ReportsLayout
@@ -544,7 +563,7 @@ export default function MapPage({ params: { projectId } }) {
                                 maxZoom: initialView?.max_zoom ?? 24,
                               },
                             }}
-                            mapStyle={activeBasemap?.url}
+                            mapStyle={mapStyle}
                             {...(isProjectEditor ? { onMoveEnd: updateViewState } : {})}
                             isEditor={isProjectEditor}
                           />

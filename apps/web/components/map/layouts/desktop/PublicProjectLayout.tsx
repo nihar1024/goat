@@ -1,10 +1,11 @@
 import { Box } from "@mui/material";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 } from "uuid";
 
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { MAPBOX_TOKEN } from "@/lib/constants";
+import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setSelectedLayers, updateProjectLayer } from "@/lib/store/layer/slice";
 import { useInteractionDispatcher } from "@/hooks/map/useInteractionDispatcher";
 import type { InteractionRule } from "@/lib/validations/interaction";
@@ -15,7 +16,7 @@ import {
   setGeocoderResult,
   setSelectedBuilderItem,
 } from "@/lib/store/map/slice";
-import type { BuilderWidgetSchema } from "@/lib/validations/project";
+import type { BuilderWidgetSchema, CustomBasemap } from "@/lib/validations/project";
 import {
   type BuilderPanelSchema,
   type ControlKey,
@@ -31,6 +32,7 @@ import { MapSidebarItemID } from "@/types/map/common";
 import { useDashboardFont } from "@/hooks/dashboard/useDashboardFont";
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
+import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
 import { useMeasureTool } from "@/hooks/map/useMeasureTool";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -42,6 +44,7 @@ import { FloatingPanel } from "@/components/common/FloatingPanel";
 import Header from "@/components/header/Header";
 import AttributionControl from "@/components/map/controls/Attribution";
 import { BasemapSelector } from "@/components/map/controls/BasemapSelector";
+import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDialog";
 import { Fullscren } from "@/components/map/controls/Fullscreen";
 import Geocoder from "@/components/map/controls/Geocoder";
 import Scalebar from "@/components/map/controls/Scalebar";
@@ -56,8 +59,9 @@ export interface PublicProjectLayoutProps {
   project?: Project;
   projectLayers?: ProjectLayer[];
   projectLayerGroups?: ProjectLayerGroup[];
+  // Accepts (key, value, refresh?) or (partial, refresh?) — see handleProjectUpdate in app/map/[projectId]/page.tsx.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onProjectUpdate?: (key: string, value: any, refresh?: boolean) => void;
+  onProjectUpdate?: (keyOrPartial: any, valueOrRefresh?: any, refresh?: boolean) => void;
   // add property isEditing to the interface
   viewOnly?: boolean;
 }
@@ -92,6 +96,12 @@ const PublicProjectLayout = ({
   const measureTool = useMeasureTool();
 
   const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
+  const editable = mapMode !== "public";
+  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
+    useCustomBasemapMutations(project, onProjectUpdate);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomBasemap | null>(null);
   const temporaryFilters = useAppSelector((state) => state.map.temporaryFilters);
   const selectedPanel = useAppSelector((state) => state.map.selectedBuilderItem) as BuilderPanelSchema;
   const collapsedPanels = useAppSelector((state) => state.map.collapsedPanels);
@@ -549,8 +559,21 @@ const PublicProjectLayout = ({
               key="basemap"
               styles={allowedStyles}
               active={activeBasemap.value}
+              editable={editable}
               basemapChange={async (basemap) => {
                 await onProjectUpdate?.("basemap", basemap);
+              }}
+              onAdd={() => {
+                setEditing(null);
+                setDialogOpen(true);
+              }}
+              onEdit={(id) => {
+                const target =
+                  (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
+                    (c) => c.id === id
+                  ) ?? null;
+                setEditing(target);
+                setDialogOpen(true);
               }}
             />
           ) : null;
@@ -571,7 +594,17 @@ const PublicProjectLayout = ({
           return null;
       }
     },
-    [t, measureTool, allowedStyles, activeBasemap, dispatch, onProjectUpdate, project, viewOnly]
+    [
+      t,
+      measureTool,
+      allowedStyles,
+      activeBasemap,
+      dispatch,
+      onProjectUpdate,
+      project,
+      viewOnly,
+      editable,
+    ]
   );
 
   const cornerSxMap: Record<CornerKey, object> = {
@@ -744,6 +777,29 @@ const PublicProjectLayout = ({
           })}
         </Box>
       </Box>
+      <CustomBasemapDialog
+        open={dialogOpen}
+        initial={editing}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={async (payload) => {
+          if (editing) {
+            await editCustomBasemap(editing.id, payload);
+          } else {
+            await addCustomBasemap(payload, /* selectAfterAdd */ true);
+          }
+        }}
+        onDelete={
+          editing
+            ? async () => {
+                const id = editing.id;
+                await deleteCustomBasemap(id);
+                if (project?.basemap === id) {
+                  await onProjectUpdate?.("basemap", DEFAULT_BASEMAP);
+                }
+              }
+            : undefined
+        }
+      />
     </Box>
   );
 };

@@ -120,6 +120,9 @@ async def copy_project(
         tags=copy.deepcopy(source_project.tags) if source_project.tags else None,
         layer_order=None,  # will be updated after links are created
         basemap=source_project.basemap,
+        custom_basemaps=copy.deepcopy(source_project.custom_basemaps)
+        if source_project.custom_basemaps
+        else [],
         thumbnail_url=source_project.thumbnail_url,
         max_extent=copy.deepcopy(source_project.max_extent)
         if source_project.max_extent

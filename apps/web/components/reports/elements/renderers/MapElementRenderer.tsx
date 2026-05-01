@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Chip, CircularProgress, useTheme } from "@mui/material";
+import type { StyleSpecification } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map, MapProvider, type MapRef, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 
@@ -29,7 +30,7 @@ const DEFAULT_VIEW_STATE = {
 
 interface MapElementRendererProps {
   element: ReportElement;
-  basemapUrl?: string; // Live from project (synced)
+  basemapUrl?: string | StyleSpecification; // Live from project (synced) — string URL for vector basemaps, synthesized StyleSpecification for raster/solid customs
   layers?: ProjectLayer[]; // Live from project (synced)
   zoom?: number; // Page zoom level for scaling
   atlasPage?: AtlasPage | null; // Current atlas page (if atlas enabled)
@@ -81,10 +82,11 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
   const lockStyles = element.config?.lock_styles === true;
   const lockedLayerIds = element.config?.locked_layer_ids as number[] | undefined;
   const lockedLayerStyles = element.config?.locked_layer_styles as Record<string, Record<string, unknown>> | undefined;
-  const lockedBasemapUrl = element.config?.locked_basemap_url as string | undefined;
+  const lockedBasemapUrl = element.config?.locked_basemap_url as string | StyleSpecification | undefined;
 
   // Use locked basemap when layers are locked, otherwise live from props
-  const mapStyleUrl = (lockLayers && lockedBasemapUrl) ? lockedBasemapUrl : (basemapUrl || DEFAULT_BASEMAP_URL);
+  const mapStyleUrl: string | StyleSpecification =
+    (lockLayers && lockedBasemapUrl) ? lockedBasemapUrl : (basemapUrl || DEFAULT_BASEMAP_URL);
 
   // Check if this map element is controlled by atlas
   const isAtlasControlled = element.config?.atlas?.enabled === true;

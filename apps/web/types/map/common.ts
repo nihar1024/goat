@@ -1,12 +1,20 @@
 import type { ICON_NAME } from "@p4b/ui/components/Icon";
 
-export interface Basemap {
+import type { CustomBasemap } from "@/lib/validations/project";
+
+export type BuiltInBasemap = {
+  source: "builtin";
+  type: "vector";
   value: string;
   url: string;
   title: string;
   subtitle: string;
   thumbnail: string;
-}
+};
+
+export type Basemap =
+  | BuiltInBasemap
+  | (CustomBasemap & { source: "custom"; value: string });
 
 export interface IMarker {
   id: string;

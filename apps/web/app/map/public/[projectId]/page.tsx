@@ -32,7 +32,7 @@ export default function MapPage({ params: { projectId } }) {
   const { sharedProject, isLoading, isError: projectError } = usePublicProject(projectId);
   const theme = useTheme();
   const dispatch = useAppDispatch();
-  const { activeBasemap, setActiveBasemap } = useBasemap(sharedProject?.config?.["project"] as Project);
+  const { mapStyle, setActiveBasemap } = useBasemap(sharedProject?.config?.["project"] as Project);
   const projectLayers = useMemo(() => {
     return sharedProject?.config?.["layers"] ?? ([] as ProjectLayer[]);
   }, [sharedProject]);
@@ -158,7 +158,7 @@ export default function MapPage({ params: { projectId } }) {
                       maxZoom: initialView?.max_zoom ?? 24,
                     },
                   }}
-                  mapStyle={activeBasemap?.url}
+                  mapStyle={mapStyle}
                   isEditor={false}
                 />
               </Box>

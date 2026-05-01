@@ -86,6 +86,15 @@ class Project(ContentBaseAttributes, DateTimeBase, table=True):
         description="Project thumbnail URL",
         default=settings.DEFAULT_PROJECT_THUMBNAIL,
     )
+    custom_basemaps: list[dict] = Field(
+        default_factory=list,
+        sa_column=Column(
+            JSONB,
+            nullable=False,
+            server_default=text("'[]'::jsonb"),
+        ),
+        description="Per-project custom basemap library",
+    )
     max_extent: list[float] | None = Field(
         sa_column=Column(
             ARRAY(Float),

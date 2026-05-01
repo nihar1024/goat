@@ -244,6 +244,7 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
             thumbnail_url=project.thumbnail_url,
             initial_view_state=user_project.initial_view_state,
             basemap=project.basemap,
+            custom_basemaps=project.custom_basemaps,
             layer_order=project.layer_order,
             max_extent=project.max_extent,
             folder_id=project.folder_id,

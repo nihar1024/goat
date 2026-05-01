@@ -7,6 +7,10 @@ import TabItem from '@theme/TabItem';
 
 # Catchment Area
 
+:::info A newer version of this tool is available
+See **[Catchment Area V2](./catchments_v2)** for additional features including custom step sizes, point grid output, and extended public transport options.
+:::
+
 Catchment Areas show **how far people can travel within a certain travel time or distance, using one or more transport modes.**
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>

@@ -11,7 +11,7 @@ The Datasets page is your **data management hub where you can upload, organize, 
 - **Manage datasets** by sharing, moving, deleting, among others functions.
   
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/datasets/datasets_general.png').default} alt="Datasets Page in Workspace of GOAT" style={{ maxHeight: "auto", maxWidth: "80%", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/datasets/datasets_general.webp').default} alt="Datasets Page in Workspace of GOAT" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 ## Adding datasets
@@ -22,7 +22,7 @@ You can add datasets to GOAT by:
 
 ### Upload data
 
-GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, and **XLSX** files.
+GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, and **Parquet** files.
 
 <div class="step">
   <div class="step-number">1</div>
@@ -58,7 +58,7 @@ GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **S
 
 ### External data sources
 
-Connect to external data services including **Web Feature Service (WFS)**, **Web Map Service (WMS)**, **Web Map Tile Service (WMTS)**, and **XYZ Tiles**.
+Connect to external data services including **Web Feature Service (WFS)**, **Web Map Service (WMS)**, **Web Map Tile Service (WMTS)**, **XYZ Tiles**, and **Cloud Optimized GeoTIFF (COG)**.
 
 <div class="step">
   <div class="step-number">1</div>

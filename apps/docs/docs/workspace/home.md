@@ -10,7 +10,7 @@ When you log in to GOAT, you'll arrive at the Home page - **your central dashboa
 - Access to the [Explore](#explore) section featuring blog posts and other valuable resources.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/home/home.png').default} alt="Home Interface Overview in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/home/home.webp').default} alt="Home Interface Overview in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div>
 
 ## Recent Projects
@@ -21,7 +21,7 @@ This section **displays your most recently accessed projects** along with their 
 - **Accessing all your projects** by clicking <code>See All</code> to visit the [Projects](../workspace/projects) page
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/home/recent_projects.png').default} alt="Recent Projects" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/home/recent_projects.webp').default} alt="Recent Projects" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div>
 
 ## Recent Datasets
@@ -32,7 +32,7 @@ This section shows your most recently accessed datasets with their last update i
 - **Viewing all your datasets** by clicking <code> See All </code> to visit the [Datasets](../workspace/datasets) page
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/home/recent_datasets.png').default} alt="Recent Datasets" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/home/recent_datasets.webp').default} alt="Recent Datasets" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div>
 
 ## Explore
@@ -40,5 +40,5 @@ This section shows your most recently accessed datasets with their last update i
 The Explore section **keeps you informed with the latest blog posts and valuable resources from the GOAT community**. Stay updated by clicking <code>Visit Blog</code> to access all [blog posts](https://plan4better.de/en/blog/) and discover new features, tutorials, and insights.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/home/explore.png').default} alt="Explore" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/home/explore.webp').default} alt="Explore" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div>

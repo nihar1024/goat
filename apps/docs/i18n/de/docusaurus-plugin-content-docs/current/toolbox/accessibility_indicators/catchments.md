@@ -9,6 +9,10 @@ import TabItem from '@theme/TabItem';
 
 # Einzugsgebiet
 
+:::info Eine neuere Version dieses Tools ist verfügbar
+Siehe **[Einzugsgebiet V2](./catchments_v2)** für zusätzliche Funktionen wie benutzerdefinierte Schrittweiten, Punktraster-Ausgabe und erweiterte ÖPNV-Optionen.
+:::
+
 Einzugsgebiete zeigen **wie weit Menschen innerhalb einer bestimmten Reisezeit oder Entfernung, mit einem oder mehreren Verkehrsmitteln reisen können.**
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>

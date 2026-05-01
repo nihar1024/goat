@@ -20,6 +20,11 @@ class SpatialRelationshipType(StrEnum):
     identical_to = "identical_to"
     completely_contains = "completely_contains"
     completely_within = "completely_within"
+    touches = "touches"
+    overlaps = "overlaps"
+    covers = "covers"
+    covered_by = "covered_by"
+    disjoint = "disjoint"
 
 
 class JoinOperationType(StrEnum):
@@ -166,6 +171,16 @@ class JoinParams(BaseModel):
     join_type: JoinType = Field(
         JoinType.inner,
         description="Whether to include only matching features (inner) or all target features (left)",
+    )
+
+    # Field selection
+    join_fields: Optional[List[str]] = Field(
+        None,
+        description="List of field names from the join layer to add to the output. "
+        "``None`` (default, not specified) keeps every join column — i.e. a "
+        "regular join. An explicit empty list ``[]`` keeps no join columns "
+        "(filter-only / semi-join behavior). A non-empty list keeps only the "
+        "listed columns.",
     )
 
     # Output configuration

@@ -4,10 +4,10 @@ sidebar_position: 6
 
 # Einstellungen
 
-Auf der **Einstellungen**-Seite können Sie Ihre Präferenzen und Einstellungen bezüglich Ihres **Kontos, Teams, Organisation und Abonnements** anzeigen und ändern. 
+Auf der **Einstellungen**-Seite können Sie Ihre Präferenzen und Einstellungen bezüglich Ihres **Kontos, Teams, Organisation und Abrechnung** anzeigen und ändern. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/settings.png').default} alt="GOAT - Profil-Einstellungen" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/settings_de.webp').default} alt="GOAT - Profil-Einstellungen" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 
@@ -23,7 +23,7 @@ Unter den **Konto-Einstellungen** können Sie Ihr Profil und Ihre Präferenzen a
 Wenn Sie Ihr **Konto löschen** möchten, können Sie dies auch in diesem Bereich tun. Bitte klicken Sie nur auf diese Schaltfläche, wenn Sie sich über diesen Schritt sicher sind, da dies nicht rückgängig gemacht werden kann. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/delete_account.png').default} alt="Konto löschen" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/delete_account_de.webp').default} alt="Konto löschen" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 :::
 
@@ -44,7 +44,7 @@ Durch einfaches Klicken auf ein Team öffnen sich die **Team-Einstellungen**. Hi
 Wenn Sie im Profil-Tab nach unten zur Gefahrenzone scrollen, finden Sie auch eine Option zum **Löschen Ihres Teams**. Bitte klicken Sie nur auf diese Schaltfläche, wenn Sie sich über diesen Schritt sicher sind, da dies nicht rückgängig gemacht werden kann. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/delete_team.png').default} alt="Team löschen" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/delete_team_de.webp').default} alt="Team löschen" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 :::
 
@@ -60,19 +60,19 @@ Unter den **Organisations-Einstellungen** können Sie das Profil Ihrer Organisat
 Wenn Sie zur Gefahrenzone nach unten scrollen, finden Sie auch eine Option zum **Löschen Ihrer Organisation**. Bitte klicken Sie nur auf diese Schaltfläche, wenn Sie sich über diesen Schritt sicher sind, da dies nicht rückgängig gemacht werden kann. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/delete_organization.png').default} alt="Organisation löschen" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/delete_organization_de.webp').default} alt="Organisation löschen" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 :::
 
 <p>
 </p>
 
-## Abonnements
+## Abrechnung
 
-Im **Abonnements**-Menü können Sie die **Details Ihres Abonnements** anzeigen und ändern. Dies ermöglicht es Ihnen, über Ihren Abonnement-Status informiert zu bleiben und alle notwendigen Anpassungen vorzunehmen, um Ihren Anforderungen besser zu entsprechen. 
+Im Menü **Abrechnung** können Sie Ihren aktuellen Plan sowie verfügbare Pläne einsehen. So bleiben Sie stets über Ihren Planstatus informiert und können bei Bedarf Anpassungen vornehmen, die Ihren Anforderungen besser entsprechen. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/settings/subscription_settings.png').default} alt="Abonnement-Details" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/settings/subscription_settings_de.webp').default} alt="Abrechnungsdetails" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 <p>
@@ -80,6 +80,6 @@ Im **Abonnements**-Menü können Sie die **Details Ihres Abonnements** anzeigen 
 
 :::info
 
-Bitte zögern Sie nicht, jederzeit den **[Support](https://plan4better.de/en/contact/ "Support kontaktieren")** zu kontaktieren, falls Sie Fragen zu Ihrem Abonnement haben. 
+Bitte zögern Sie nicht, jederzeit den **[Support](https://plan4better.de/en/contact/ "Support kontaktieren")** zu kontaktieren, falls Sie Fragen zu Ihrem Plan haben. 
 
 :::

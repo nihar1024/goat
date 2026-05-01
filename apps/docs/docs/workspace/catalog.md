@@ -10,7 +10,7 @@ The Data Catalog is your gateway to exploring Plan4Better's comprehensive collec
 - **Search and filter through it** by keyword, spatial extent, and dataset attributes
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/catalog/catalog_general.png').default} alt="Data Catalog" style={{ maxHeight: "700px", maxWidth: "800px"}}/>
+  <img src={require('/img/workspace/catalog/catalog_general.webp').default} alt="Data Catalog" style={{ maxHeight: "auto", maxWidth: "100%"}}/>
 </div>
 
 ## Exploring the Catalog

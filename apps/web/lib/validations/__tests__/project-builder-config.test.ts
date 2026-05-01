@@ -1,0 +1,149 @@
+import { describe, expect, it } from "vitest";
+
+import { builderConfigSchema, builderWidgetSchema } from "@/lib/validations/project";
+import { informationLayersConfigSchema } from "@/lib/validations/widget";
+
+describe("builderConfigSchema — control_positions", () => {
+  it("applies default control_positions when parsing empty input", () => {
+    const result = builderConfigSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.control_positions).toEqual({
+      "top-left": ["location", "measure"],
+      "top-right": [],
+      "bottom-left": [],
+      "bottom-right": ["zoom_controls", "basemap", "fullscreen"],
+    });
+  });
+
+  it("sets allowed_basemaps to null by default", () => {
+    const result = builderConfigSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.allowed_basemaps).toBeNull();
+  });
+
+  it("preserves order of controls within each corner", () => {
+    const result = builderConfigSchema.safeParse({
+      settings: {
+        control_positions: {
+          "top-left": ["measure", "location"],
+          "top-right": [],
+          "bottom-left": [],
+          "bottom-right": ["fullscreen", "zoom_controls"],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.control_positions["top-left"]).toEqual(["measure", "location"]);
+    expect(result.data.settings.control_positions["bottom-right"]).toEqual(["fullscreen", "zoom_controls"]);
+  });
+
+  it("accepts a basemap allowlist", () => {
+    const result = builderConfigSchema.safeParse({
+      settings: { allowed_basemaps: ["streets", "light"] },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.allowed_basemaps).toEqual(["streets", "light"]);
+  });
+
+  it("accepts null allowed_basemaps explicitly", () => {
+    const result = builderConfigSchema.safeParse({
+      settings: { allowed_basemaps: null },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.allowed_basemaps).toBeNull();
+  });
+
+  it("strips unknown control keys (e.g. legacy 'scalebar') rather than failing", () => {
+    const result = builderConfigSchema.safeParse({
+      settings: {
+        control_positions: {
+          "top-left": ["location", "scalebar"],
+          "bottom-left": ["scalebar"],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.control_positions["top-left"]).toEqual(["location"]);
+    expect(result.data.settings.control_positions["bottom-left"]).toEqual([]);
+  });
+
+  it("preserves group_info through informationLayersConfigSchema parse", () => {
+    const result = informationLayersConfigSchema.safeParse({
+      type: "layers",
+      setup: { title: "My Layers", group_info: { "42": "Some **markdown** text" } },
+      options: { layout_style: "tabs" },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.setup.group_info).toEqual({ "42": "Some **markdown** text" });
+  });
+
+  it("preserves group_info through builderWidgetSchema parse", () => {
+    const result = builderWidgetSchema.safeParse({
+      id: "widget-1",
+      type: "widget",
+      config: {
+        type: "layers",
+        setup: { title: "My Layers", group_info: { "42": "Hello" } },
+        options: { layout_style: "tabs" },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const config = result.data.config as { setup?: { group_info?: Record<string, string> } };
+    expect(config.setup?.group_info).toEqual({ "42": "Hello" });
+  });
+
+  it("preserves group_info through full builderConfigSchema parse", () => {
+    const result = builderConfigSchema.safeParse({
+      settings: {},
+      interface: [
+        {
+          id: "panel-1",
+          type: "panel",
+          position: "left",
+          widgets: [
+            {
+              id: "widget-1",
+              type: "widget",
+              config: {
+                type: "layers",
+                setup: { title: "My Layers", group_info: { "42": "Info text" } },
+                options: { layout_style: "tabs" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const panel = result.data.interface[0];
+    expect(panel.type).toBe("panel");
+    if (panel.type !== "panel") return;
+    const widget = panel.widgets[0];
+    const config = widget.config as { setup?: { group_info?: Record<string, string> } };
+    expect(config.setup?.group_info).toEqual({ "42": "Info text" });
+  });
+
+  it("applies default control_positions when settings object exists but control_positions key is missing", () => {
+    const result = builderConfigSchema.safeParse({
+      settings: { toolbar: false },
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.settings.control_positions).toEqual({
+      "top-left": ["location", "measure"],
+      "top-right": [],
+      "bottom-left": [],
+      "bottom-right": ["zoom_controls", "basemap", "fullscreen"],
+    });
+    expect(result.data.settings.toolbar).toBe(false);
+  });
+});

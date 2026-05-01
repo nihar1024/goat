@@ -668,6 +668,14 @@
       "label": "Result layer name",
       "description": "Custom name for the result layer"
     },
+    "add_join_fields": {
+      "label": "Add Join Fields",
+      "description": "Add fields from the join layer to the output. If off, no join fields are added."
+    },
+    "join_fields": {
+      "label": "Join Fields",
+      "description": "Pick which fields from the join layer to include in the output."
+    },
     "summary_layer_name": {
       "label": "Summary Layer Name",
       "description": "Custom name for the cluster summary layer"
@@ -793,7 +801,12 @@
       "within_distance": "Within Distance",
       "identical_to": "Identical To",
       "completely_contains": "Completely Contains",
-      "completely_within": "Completely Within"
+      "completely_within": "Completely Within",
+      "touches": "Touches",
+      "overlaps": "Overlaps",
+      "covers": "Covers",
+      "covered_by": "Covered By",
+      "disjoint": "Disjoint"
     },
     "join_operation_type": {
       "one_to_one": "One to One",

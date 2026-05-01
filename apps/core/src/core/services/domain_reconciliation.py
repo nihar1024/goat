@@ -11,6 +11,7 @@ from typing import Optional
 import dns.asyncresolver
 import dns.exception
 import dns.resolver
+from core.core.config import settings
 from core.db.models.organization_domain import (
     DnsStatus,
     OrganizationDomain,
@@ -18,8 +19,26 @@ from core.db.models.organization_domain import (
 from core.services.provisioner import CustomDomainProvisioner
 
 
+def _public_resolver() -> dns.asyncresolver.Resolver:
+    """Resolver pinned to public upstreams instead of the pod's /etc/resolv.conf.
+
+    Reconciliation must see DNS the way customers do — bypassing any
+    split-DNS overrides the pod's resolver might have (e.g. pfSense in
+    dev returning the LB's private IP for the canonical target while
+    public DNS returns the WAN IP).
+    """
+    resolver = dns.asyncresolver.Resolver(configure=False)
+    resolver.nameservers = [
+        ip.strip()
+        for ip in settings.CUSTOM_DOMAIN_DNS_RESOLVERS.split(",")
+        if ip.strip()
+    ]
+    resolver.lifetime = 5  # seconds total budget for the lookup
+    return resolver
+
+
 async def _resolve(domain: str, rdtype: str) -> list[str]:
-    """Resolve records of ``rdtype`` for ``domain``.
+    """Resolve records of ``rdtype`` for ``domain`` against public DNS.
 
     Returns string-form values (CNAME targets lowercased with trailing dot
     preserved; A/AAAA addresses normalized to canonical form). An empty
@@ -28,8 +47,7 @@ async def _resolve(domain: str, rdtype: str) -> list[str]:
     FAILED.
     """
     try:
-        resolver = dns.asyncresolver.Resolver()
-        resolver.lifetime = 5  # seconds total budget for the lookup
+        resolver = _public_resolver()
         answer = await resolver.resolve(domain, rdtype)
         if rdtype == "CNAME":
             return [str(rdata.target).lower() for rdata in answer]

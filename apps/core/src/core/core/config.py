@@ -219,6 +219,13 @@ class Settings(BaseSettings):
     # DNS records.
     CUSTOM_DOMAIN_CNAME_TARGET: str = "cname.goat.plan4better.de"
 
+    # Public resolvers used by white-label DNS reconciliation. We query
+    # these directly instead of the pod's resolver so we see DNS the way
+    # customers do — bypassing split-DNS setups (e.g. pfSense in dev,
+    # where the cluster sees an internal IP for the canonical target
+    # while the public sees the WAN IP). Comma-separated list of IPs.
+    CUSTOM_DOMAIN_DNS_RESOLVERS: str = "1.1.1.1,8.8.8.8"
+
     class Config:
         case_sensitive = True
 

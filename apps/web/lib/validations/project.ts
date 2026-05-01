@@ -157,6 +157,42 @@ export const builderConfigSchema = z.object({
   interactions: z.array(interactionRuleSchema).default([]),
 });
 
+const baseCustomBasemapSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(255),
+  description: z.string().max(1000).nullable().optional(),
+  thumbnail_url: z.string().url().max(2048).nullable().optional(),
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true }),
+});
+
+export const customBasemapSchema = z.discriminatedUnion("type", [
+  baseCustomBasemapSchema.extend({
+    type: z.literal("vector"),
+    url: z.string().url(),
+  }),
+  baseCustomBasemapSchema.extend({
+    type: z.literal("raster"),
+    url: z
+      .string()
+      .max(2048)
+      .refine((s) => s.startsWith("http://") || s.startsWith("https://"), {
+        message: "URL must start with http:// or https://",
+      })
+      .refine(
+        (s) => s.includes("{z}") && s.includes("{x}") && s.includes("{y}"),
+        { message: "URL must contain {z}, {x}, and {y} placeholders" }
+      ),
+    attribution: z.string().max(500).nullable().optional(),
+  }),
+  baseCustomBasemapSchema.extend({
+    type: z.literal("solid"),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/),
+  }),
+]);
+
+export type CustomBasemap = z.infer<typeof customBasemapSchema>;
+
 export const projectSchema = contentMetadataSchema.extend({
   folder_id: z.string(),
   id: z.string(),
@@ -168,6 +204,7 @@ export const projectSchema = contentMetadataSchema.extend({
   }),
   active_scenario_id: z.string().nullable().optional(),
   basemap: z.string().nullable().default("streets"),
+  custom_basemaps: z.array(customBasemapSchema).default([]),
   updated_at: z.string().optional(),
   created_at: z.string().optional(),
   shared_with: shareProjectSchema.optional(),

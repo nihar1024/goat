@@ -12,13 +12,16 @@ import { v4 } from "uuid";
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import { MAPBOX_TOKEN } from "@/lib/constants";
+import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setActiveRightPanel, setGeocoderResult } from "@/lib/store/map/slice";
+import type { CustomBasemap } from "@/lib/validations/project";
 import { projectSchema } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
+import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import WidgetWrapper from "@/components/builder/widgets/WidgetWrapper";
@@ -26,6 +29,7 @@ import { ProjectInfo } from "@/components/builder/widgets/information/ProjectInf
 import Header from "@/components/header/Header";
 import AttributionControl from "@/components/map/controls/Attribution";
 import { BaseMapSelectorList, BasemapSelectorButton } from "@/components/map/controls/BasemapSelector";
+import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDialog";
 import Geocoder from "@/components/map/controls/Geocoder";
 import type { DetailsViewType } from "@/components/map/controls/LayerInfo";
 import { LayerInfo } from "@/components/map/controls/LayerInfo";
@@ -164,6 +168,12 @@ const MobileProjectLayout = ({
 
   // --- Hooks ---
   const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
+  const editable = mapMode !== "public";
+  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
+    useCustomBasemapMutations(project, onProjectUpdate);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomBasemap | null>(null);
   const scrollableContentRef = useRef<HTMLDivElement | null>(null);
 
   // --- Effects ---
@@ -458,11 +468,24 @@ const MobileProjectLayout = ({
               <BaseMapSelectorList
                 styles={translatedBaseMaps}
                 active={activeBasemap.value}
+                editable={editable}
                 basemapChange={async (basemap) => {
                   await onProjectUpdate?.("basemap", basemap);
                   // Optionally close drawer or switch back to default view after selection
                   // setOpen(false);
                   // setDrawerView('default');
+                }}
+                onAdd={() => {
+                  setEditing(null);
+                  setDialogOpen(true);
+                }}
+                onEdit={(id) => {
+                  const target =
+                    (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
+                      (c) => c.id === id
+                    ) ?? null;
+                  setEditing(target);
+                  setDialogOpen(true);
                 }}
                 // Close drawer on item click for immediate map feedback
                 onClick={() => setOpen(false)}
@@ -540,6 +563,29 @@ const MobileProjectLayout = ({
           </Box>
         </SwipeableDrawer>
       </Box>
+      <CustomBasemapDialog
+        open={dialogOpen}
+        initial={editing}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={async (payload) => {
+          if (editing) {
+            await editCustomBasemap(editing.id, payload);
+          } else {
+            await addCustomBasemap(payload, /* selectAfterAdd */ true);
+          }
+        }}
+        onDelete={
+          editing
+            ? async () => {
+                const id = editing.id;
+                await deleteCustomBasemap(id);
+                if (project?.basemap === id) {
+                  await onProjectUpdate?.("basemap", DEFAULT_BASEMAP);
+                }
+              }
+            : undefined
+        }
+      />
     </>
   );
 };

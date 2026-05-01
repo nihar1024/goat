@@ -1,5 +1,5 @@
 import { Box, Stack } from "@mui/material";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
@@ -15,16 +15,18 @@ import {
   useProjectLayers,
 } from "@/lib/api/projects";
 import { MAPBOX_TOKEN, SYSTEM_LAYERS_IDS } from "@/lib/constants";
+import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setGeocoderResult } from "@/lib/store/map/slice";
 import { DATA_PANEL_HEIGHT_VAR } from "@/components/map/panels/DataPanel";
 import { FeatureName } from "@/lib/validations/organization";
-import type { Project, ProjectLayerTreeUpdate } from "@/lib/validations/project";
+import type { CustomBasemap, Project, ProjectLayerTreeUpdate } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
 import { useBasemap } from "@/hooks/map/MapHooks";
+import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
 import { useMeasureTool } from "@/hooks/map/useMeasureTool";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -32,6 +34,7 @@ import { FloatingPanel } from "@/components/common/FloatingPanel";
 import FeatureEditPanel from "@/components/map/panels/FeatureEditPanel";
 import AttributionControl from "@/components/map/controls/Attribution";
 import { BasemapSelector } from "@/components/map/controls/BasemapSelector";
+import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDialog";
 import { Fullscren } from "@/components/map/controls/Fullscreen";
 import Geocoder from "@/components/map/controls/Geocoder";
 import Scalebar from "@/components/map/controls/Scalebar";
@@ -51,8 +54,9 @@ const GAP_SIZE = 16;
 interface DataProjectLayoutProps {
   project: Project;
   isPublic?: boolean;
+  // Accepts (key, value, refresh?) or (partial, refresh?) — see handleProjectUpdate in app/map/[projectId]/page.tsx.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onProjectUpdate?: (key: string, value: any, refresh?: boolean) => void;
+  onProjectUpdate?: (keyOrPartial: any, valueOrRefresh?: any, refresh?: boolean) => void;
 }
 
 const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps) => {
@@ -74,6 +78,13 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   }, [allProjectLayers]);
 
   const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+
+  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
+    useCustomBasemapMutations(project, onProjectUpdate);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomBasemap | null>(null);
+
   const activeRight = useAppSelector((state) => state.map.activeRightPanel);
   const featureEditorActive = useAppSelector((state) => state.featureEditor.activeLayerId);
   const featureEditorMode = useAppSelector((state) => state.featureEditor.mode);
@@ -360,8 +371,21 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
             <BasemapSelector
               styles={translatedBaseMaps}
               active={activeBasemap.value}
+              editable
               basemapChange={async (basemap) => {
                 await onProjectUpdate?.("basemap", basemap);
+              }}
+              onAdd={() => {
+                setEditing(null);
+                setDialogOpen(true);
+              }}
+              onEdit={(id) => {
+                const target =
+                  (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
+                    (c) => c.id === id
+                  ) ?? null;
+                setEditing(target);
+                setDialogOpen(true);
               }}
             />
           </Stack>
@@ -394,6 +418,29 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
           </Stack>
         </Box>
       )}
+      <CustomBasemapDialog
+        open={dialogOpen}
+        initial={editing}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={async (payload) => {
+          if (editing) {
+            await editCustomBasemap(editing.id, payload);
+          } else {
+            await addCustomBasemap(payload, /* selectAfterAdd */ true);
+          }
+        }}
+        onDelete={
+          editing
+            ? async () => {
+                const id = editing.id;
+                await deleteCustomBasemap(id);
+                if (project?.basemap === id) {
+                  await onProjectUpdate?.("basemap", DEFAULT_BASEMAP);
+                }
+              }
+            : undefined
+        }
+      />
     </>
   );
 };

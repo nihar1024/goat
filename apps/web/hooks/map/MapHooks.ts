@@ -1,11 +1,94 @@
+import type { StyleSpecification } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
 import { useCallback, useMemo } from "react";
-
-import type { Basemap } from "@/types/map/common";
+import { useTranslation } from "react-i18next";
 
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
-import { useTranslation } from 'react-i18next'
+import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setActiveBasemap as setActiveBasemapAction } from "@/lib/store/map/slice";
+import type { Basemap, BuiltInBasemap } from "@/types/map/common";
+import type { CustomBasemap } from "@/lib/validations/project";
+
+/** Adapts a custom basemap to the Basemap shape used by the selector. */
+function customToBasemap(c: CustomBasemap): Basemap {
+  return { ...c, source: "custom", value: c.id };
+}
+
+/**
+ * Resolves the project's saved basemap value to a Basemap entry.
+ * Order: built-in match → custom match → legacy URL fallback → DEFAULT_BASEMAP.
+ */
+export function resolveActiveBasemap(
+  value: string | null | undefined,
+  builtIns: BuiltInBasemap[],
+  customs: CustomBasemap[]
+): Basemap {
+  if (!value) {
+    return builtIns.find((b) => b.value === DEFAULT_BASEMAP) ?? builtIns[0];
+  }
+
+  const builtIn = builtIns.find((b) => b.value === value);
+  if (builtIn) return builtIn;
+
+  const custom = customs.find((c) => c.id === value);
+  if (custom) return customToBasemap(custom);
+
+  if (value.startsWith("http")) {
+    return {
+      source: "builtin",
+      type: "vector",
+      value: "custom",
+      url: value,
+      title: "Custom",
+      subtitle: "User defined basemap",
+      thumbnail: builtIns[0].thumbnail,
+    };
+  }
+
+  return builtIns.find((b) => b.value === DEFAULT_BASEMAP) ?? builtIns[0];
+}
+
+/**
+ * Builds the MapLibre style spec MapViewer feeds to react-map-gl.
+ * - vector → URL string (existing path, unchanged)
+ * - raster → synthesized raster source/layer style
+ * - solid  → synthesized background-only style
+ */
+export function synthesizeMapStyle(
+  basemap: Basemap
+): string | StyleSpecification {
+  if (basemap.type === "vector") {
+    return basemap.url;
+  }
+  if (basemap.type === "raster") {
+    return {
+      version: 8,
+      sources: {
+        "raster-source": {
+          type: "raster",
+          tiles: [basemap.url],
+          tileSize: 256,
+          attribution: basemap.attribution ?? undefined,
+        },
+      },
+      layers: [
+        { id: "raster-layer", type: "raster", source: "raster-source" },
+      ],
+    } as StyleSpecification;
+  }
+  // solid
+  return {
+    version: 8,
+    sources: {},
+    layers: [
+      {
+        id: "background",
+        type: "background",
+        paint: { "background-color": basemap.color },
+      },
+    ],
+  } as StyleSpecification;
+}
 
 /**
  * Apply label language to a MapLibre map instance by rewriting text-field
@@ -22,11 +105,9 @@ export function applyMapLanguage(map: maplibregl.Map, locale: string) {
     const textField = map.getLayoutProperty(layer.id, "text-field");
     if (!textField) continue;
 
-    // Only rewrite layers that reference a "name" field (OpenMapTiles convention)
     const textStr = JSON.stringify(textField);
     if (!textStr.includes("name")) continue;
 
-    // Build a coalesce expression: prefer name:{locale}, fall back to name:en, then name
     map.setLayoutProperty(layer.id, "text-field", [
       "coalesce",
       ["get", `name:${locale}`],
@@ -36,72 +117,67 @@ export function applyMapLanguage(map: maplibregl.Map, locale: string) {
   }
 }
 
-export const useBasemap = (project) => {
+export const useBasemap = (project: { custom_basemaps?: CustomBasemap[] | null; basemap?: string | null } | undefined) => {
   const { t, i18n } = useTranslation("common");
 
-  const basemaps = useAppSelector((state) => state.map.basemaps);
+  const builtIns = useAppSelector((state) => state.map.basemaps) as BuiltInBasemap[];
   const localBasemap = useAppSelector((state) => state.map.activeBasemap);
   const dispatch = useAppDispatch();
 
-  const activeBasemap: Basemap = useMemo(() => {
-    if (!project) {
-      return basemaps[0];
-    }
-    if (localBasemap) {
-      return localBasemap;
-    }
-    if (project.basemap?.startsWith("http")) {
-      const obj = {
-        url: project.basemap,
-        value: "custom",
-        title: "Custom",
-        subtitle: "User defined basemap",
-        thumbnail: basemaps[0].thumbnail,
-      };
+  const customs: CustomBasemap[] = useMemo(
+    () => (project?.custom_basemaps as CustomBasemap[] | undefined) ?? [],
+    [project]
+  );
 
-      return obj;
-    } else {
-      const found = basemaps.find((b) => b.value === project.basemap);
-      if (found) {
-        return found;
+  /** Built-ins first, then customs adapted to the Basemap shape. */
+  const basemaps: Basemap[] = useMemo(
+    () => [...builtIns, ...customs.map(customToBasemap)],
+    [builtIns, customs]
+  );
+
+  /** Translated copy used for selector display. */
+  const translatedBaseMaps: Basemap[] = useMemo(() => {
+    return basemaps.map((b) => {
+      if (b.source !== "builtin") {
+        // Customs use their own name/description; no i18n keys.
+        return b;
       }
-    }
-    return basemaps[0];
-  }, [basemaps, localBasemap, project]);
-
-
-  const translatedBaseMaps = useMemo(() => {
-    return basemaps.map((basemap) => ({
-      ...basemap,
-      title: i18n.exists(`common:basemap_types.${basemap.value}.title`)
-        ? t(`basemap_types.${basemap.value}.title`)
-        : t(basemap.title),
-      subtitle: i18n.exists(`common:basemap_types.${basemap.value}.subtitle`)
-        ? t(`basemap_types.${basemap.value}.subtitle`)
-        : t(basemap.subtitle),
-    }));
+      return {
+        ...b,
+        title: i18n.exists(`common:basemap_types.${b.value}.title`)
+          ? t(`basemap_types.${b.value}.title`)
+          : t(b.title),
+        subtitle: i18n.exists(`common:basemap_types.${b.value}.subtitle`)
+          ? t(`basemap_types.${b.value}.subtitle`)
+          : t(b.subtitle),
+      };
+    });
   }, [basemaps, i18n, t]);
 
-  const setActiveBasemap = useCallback((value: string) => {
-    const found = basemaps.find((b) => b.value === value);
-    if (found) {
-      dispatch(setActiveBasemapAction(found));
-    } else if (value.startsWith("http")) {
-      const customBasemap = {
-        url: value,
-        value: "custom",
-        title: "Custom",
-        subtitle: "User defined basemap",
-        thumbnail: basemaps[0].thumbnail,
-      }
-      dispatch(setActiveBasemapAction(customBasemap));
-    }
-  }, [basemaps, dispatch]);
+  const activeBasemap: Basemap = useMemo(() => {
+    if (!project) return builtIns[0];
+    if (localBasemap) return localBasemap as Basemap;
+    return resolveActiveBasemap(project.basemap, builtIns, customs);
+  }, [builtIns, customs, localBasemap, project]);
+
+  const mapStyle: string | StyleSpecification = useMemo(
+    () => synthesizeMapStyle(activeBasemap),
+    [activeBasemap]
+  );
+
+  const setActiveBasemap = useCallback(
+    (value: string) => {
+      const resolved = resolveActiveBasemap(value, builtIns, customs);
+      dispatch(setActiveBasemapAction(resolved));
+    },
+    [builtIns, customs, dispatch]
+  );
 
   return {
     basemaps,
     translatedBaseMaps,
     activeBasemap,
+    mapStyle,
     setActiveBasemap,
   };
 };

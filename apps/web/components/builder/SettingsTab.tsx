@@ -140,30 +140,40 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </Box>
 
             {/* Basemap allowlist — only shown when basemap control is placed in any corner */}
-            {Object.values((settings?.control_positions as ControlPositions) ?? {}).some((arr) => (arr as ControlKey[]).includes("basemap")) && (
-              <Box>
-                <Selector
-                  multiple
-                  label={t("allowed_basemaps")}
-                  placeholder={t("basemaps")}
-                  items={BASEMAPS.map((b) => ({ value: b.value, label: b.title }))}
-                  selectedItems={
-                    (settings?.allowed_basemaps as string[] | null) === null
-                      ? BASEMAPS.map((b) => ({ value: b.value, label: b.title }))
-                      : BASEMAPS.filter((b) =>
-                          (settings?.allowed_basemaps as string[]).includes(b.value)
-                        ).map((b) => ({ value: b.value, label: b.title }))
-                  }
-                  setSelectedItems={(items) => {
-                    const selected = (items as { value: string; label: string }[] ?? []).map((i) => i.value);
-                    onChange(
-                      "allowed_basemaps",
-                      selected.length === BASEMAPS.length ? null : selected
-                    );
-                  }}
-                />
-              </Box>
-            )}
+            {Object.values((settings?.control_positions as ControlPositions) ?? {}).some((arr) => (arr as ControlKey[]).includes("basemap")) && (() => {
+              const customBasemapItems = (project?.custom_basemaps ?? []).map((cb) => ({
+                value: cb.id,
+                label: cb.name,
+              }));
+              const allBasemapItems = [
+                ...BASEMAPS.map((b) => ({ value: b.value, label: b.title })),
+                ...customBasemapItems,
+              ];
+              return (
+                <Box>
+                  <Selector
+                    multiple
+                    label={t("allowed_basemaps")}
+                    placeholder={t("basemaps")}
+                    items={allBasemapItems}
+                    selectedItems={
+                      (settings?.allowed_basemaps as string[] | null) === null
+                        ? allBasemapItems
+                        : allBasemapItems.filter((b) =>
+                            (settings?.allowed_basemaps as string[]).includes(b.value)
+                          )
+                    }
+                    setSelectedItems={(items) => {
+                      const selected = (items as { value: string; label: string }[] ?? []).map((i) => i.value);
+                      onChange(
+                        "allowed_basemaps",
+                        selected.length === allBasemapItems.length ? null : selected
+                      );
+                    }}
+                  />
+                </Box>
+              );
+            })()}
           </Stack>
         </Box>
         <Box sx={{ mb: 6 }}>

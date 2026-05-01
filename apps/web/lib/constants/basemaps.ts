@@ -1,15 +1,12 @@
 import { MAPTILER_KEY } from "@/lib/constants";
+import type { BuiltInBasemap } from "@/types/map/common";
 
-export interface Basemap {
-  value: string;
-  url: string;
-  title: string;
-  subtitle: string;
-  thumbnail: string;
-}
+export type Basemap = BuiltInBasemap;
 
-export const BASEMAPS: Basemap[] = [
+export const BASEMAPS: BuiltInBasemap[] = [
   {
+    source: "builtin",
+    type: "vector",
     value: "streets",
     url: `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`,
     title: "High Fidelity",
@@ -17,6 +14,8 @@ export const BASEMAPS: Basemap[] = [
     thumbnail: `https://cloud.maptiler.com/static/img/maps/streets-v2.png`,
   },
   {
+    source: "builtin",
+    type: "vector",
     value: "satellite",
     url: `https://api.maptiler.com/maps/hybrid/style.json?key=${MAPTILER_KEY}`,
     title: "Satellite",
@@ -24,6 +23,8 @@ export const BASEMAPS: Basemap[] = [
     thumbnail: "https://cloud.maptiler.com/static/img/maps/satellite.png",
   },
   {
+    source: "builtin",
+    type: "vector",
     value: "light",
     url: `https://api.maptiler.com/maps/dataviz-light/style.json?key=${MAPTILER_KEY}`,
     title: "Light",
@@ -31,6 +32,8 @@ export const BASEMAPS: Basemap[] = [
     thumbnail: "https://media.maptiler.com/old/img/cloud/slider/streets-v2-light.png",
   },
   {
+    source: "builtin",
+    type: "vector",
     value: "dark",
     url: `https://api.maptiler.com/maps/dataviz-dark/style.json?key=${MAPTILER_KEY}`,
     title: "Dark",
@@ -38,6 +41,8 @@ export const BASEMAPS: Basemap[] = [
     thumbnail: "https://media.maptiler.com/old/img/cloud/slider/streets-v2-dark.png",
   },
   {
+    source: "builtin",
+    type: "vector",
     value: "basemap_wld_col",
     url: `https://sgx.geodatenzentrum.de/gdz_basemapworld_vektor/styles/bm_web_wld_col.json`,
     title: "BKG Basemap",
@@ -45,6 +50,8 @@ export const BASEMAPS: Basemap[] = [
     thumbnail: "https://basemap.de/viewer/assets/basemap_colour.png",
   },
   {
+    source: "builtin",
+    type: "vector",
     value: "basemap_de_gry",
     url: `https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_gry.json`,
     title: "BKG Basemap",
@@ -52,6 +59,8 @@ export const BASEMAPS: Basemap[] = [
     thumbnail: "https://basemap.de/viewer/assets/basemap_greyscale.png",
   },
   {
+    source: "builtin",
+    type: "vector",
     value: "basemap_de_top",
     url: `https://sgx.geodatenzentrum.de/gdz_basemapde_vektor/styles/bm_web_top.json`,
     title: "BKG Basemap",
@@ -60,14 +69,11 @@ export const BASEMAPS: Basemap[] = [
   },
 ];
 
-// Default basemap value
 export const DEFAULT_BASEMAP = "light";
 
-/**
- * Get basemap URL from basemap value
- */
 export function getBasemapUrl(basemap: string | null | undefined): string {
   const key = basemap || DEFAULT_BASEMAP;
   const found = BASEMAPS.find((b) => b.value === key);
   return found?.url || BASEMAPS.find((b) => b.value === DEFAULT_BASEMAP)!.url;
 }
+

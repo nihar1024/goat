@@ -2,7 +2,7 @@
 
 import { cogProtocol } from "@geomatico/maplibre-cog-protocol";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import maplibregl from "maplibre-gl";
+import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import { useParams, useSearchParams } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -61,7 +61,7 @@ export default function PrintPage() {
     []
   );
   const { layerGroups: projectLayerGroups } = useProjectLayerGroups(projectId);
-  const { activeBasemap } = useBasemap(project);
+  const { mapStyle } = useBasemap(project);
 
   // Filter out layers that belong to invisible groups (same logic as editor)
   const projectLayers = useMemo(() => {
@@ -252,7 +252,7 @@ export default function PrintPage() {
         <ThemeProvider settings={LIGHT_THEME_SETTINGS}>
           <ReportElements
             config={reportLayout.config}
-            basemapUrl={activeBasemap?.url}
+            basemapUrl={mapStyle}
             projectLayers={projectLayers}
             atlasPage={currentAtlasPage}
             onMapLoaded={handleMapLoaded}
@@ -283,7 +283,7 @@ export default function PrintPage() {
  */
 interface ReportElementsProps {
   config: ReportLayoutConfig;
-  basemapUrl?: string;
+  basemapUrl?: string | StyleSpecification;
   projectLayers?: ProjectLayer[];
   atlasPage?: AtlasPage | null;
   onMapLoaded?: () => void;

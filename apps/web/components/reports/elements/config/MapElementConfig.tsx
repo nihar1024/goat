@@ -2,6 +2,7 @@
 
 import SyncIcon from "@mui/icons-material/Sync";
 import { Button, Checkbox, FormControlLabel, Stack, TextField, Typography, useTheme } from "@mui/material";
+import type { StyleSpecification } from "maplibre-gl";
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -77,7 +78,7 @@ const PREDEFINED_SCALES = [
 interface MapElementConfigProps {
   element: ReportElement;
   projectLayers?: ProjectLayer[];
-  basemapUrl?: string;
+  basemapUrl?: string | StyleSpecification;
   onChange: (updates: Partial<ReportElement>) => void;
   onSyncLayers?: () => void;
 }

@@ -352,8 +352,8 @@ const ReportsElementsPanel: React.FC<ReportsElementsPanelProps> = ({
   onElementDelete,
 }) => {
   const { t } = useTranslation("common");
-  const { activeBasemap } = useBasemap(project);
-  const basemapUrl = activeBasemap?.url;
+  // Get basemap style from project (synced live). Vector → URL string, raster/solid → synthesized StyleSpecification.
+  const { mapStyle: basemapUrl } = useBasemap(project);
   const [activeTab, setActiveTab] = useState(0);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {

@@ -55,7 +55,7 @@ interface MapProps {
     };
   };
   maxExtent?: [number, number, number, number];
-  mapStyle: string;
+  mapStyle: string | maplibregl.StyleSpecification;
   layers: ProjectLayer[] | Layer[];
   scenarioFeatures?: ScenarioFeatures;
   onMove?: ((e: ViewStateChangeEvent) => void | undefined) | undefined;

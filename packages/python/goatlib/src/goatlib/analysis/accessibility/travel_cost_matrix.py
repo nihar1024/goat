@@ -79,9 +79,9 @@ class TravelCostMatrixTool(AnalysisTool):
             from_seconds = params.time_window.from_time
 
         weekday_dates = {
-            "weekday": date(2026, 3, 10),
-            "saturday": date(2026, 3, 14),
-            "sunday": date(2026, 3, 15),
+            "weekday": date(2026, 6, 16),
+            "saturday": date(2026, 6, 20),
+            "sunday": date(2026, 6, 21),
         }
         anchor_date = weekday_dates.get(weekday_value, weekday_dates["weekday"])
         departure_dt = datetime.combine(

@@ -22,16 +22,17 @@ const STUB_USER: User = {
   lastname: "User",
   newsletter_subscribe: false,
   roles: ["organization-owner"],
-  organization_id: "f1ea3991-2b72-497d-a49f-8842d3d2ac8a",
+  organization_id: "00000000-0000-0000-0000-000000000001",
   created_at: nowIso,
   updated_at: nowIso,
   enabled: true,
   topt: false,
 };
 
+// IDs match dev DB seeded by scripts/setup_accounts_dev.sql
 const STUB_ORGANIZATION: Organization = {
-  id: "f1ea3991-2b72-497d-a49f-8842d3d2ac8a",
-  name: "Local Organization",
+  id: "00000000-0000-0000-0000-000000000001",
+  name: "Plan4Better Dev",
   type: "OSS",
   size: "1",
   industry: "OSS",

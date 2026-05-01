@@ -1665,8 +1665,6 @@
   "sensitivity": "Sensitivity",
   "sensitivity_placeholder": "Enter sensitivity",
   "sensitivity_tooltip": "Sensitivity Tooltip",
-  "secondary_text": "Secondary text",
-  "secondary_text_placeholder": "e.g. © 2026 Company",
   "separator": "Separator",
   "separator_dash": "Dash",
   "separator_dot": "Dot",
@@ -2144,5 +2142,10 @@
   "interaction_enabled": "Enabled",
   "when": "When",
   "mapping": "Mapping",
-  "tab": "Tab"
+  "tab": "Tab",
+  "folder_label": "Folder",
+  "read_access": "Read",
+  "write_access": "Write",
+  "shared": "Shared",
+  "folder_share_conflict_warning": "Assigning access here will remove the current grant on the other tab."
 }

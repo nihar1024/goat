@@ -440,10 +440,6 @@ class CRUDLayer(CRUDLayerBase):
                 )
                 and value is not None
             ):
-                # Avoid adding folder_id in case team_id or organization_id is provided
-                if key == "folder_id" and (team_id or organization_id):
-                    continue
-
                 # Convert value to list if not list
                 if not isinstance(value, list):
                     value = [value]

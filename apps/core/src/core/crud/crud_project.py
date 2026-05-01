@@ -6,7 +6,7 @@ from fastapi_pagination import Page
 from fastapi_pagination import Params as PaginationParams
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import and_
+from sqlmodel import and_, or_
 
 from core.core.content import (
     build_shared_with_object,
@@ -21,6 +21,7 @@ from core.db.models import (
     Project,
     ProjectOrganizationLink,
     ProjectTeamLink,
+    ResourceGrant,
     Role,
     Team,
 )
@@ -94,17 +95,40 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
         ids: list | None = None,
         team_id: UUID | None = None,
         organization_id: UUID | None = None,
+        team_ids: list[UUID] | None = None,
+        user_organization_id: UUID | None = None,
     ) -> Page[IProjectRead]:
         """Get projects for a user and folder"""
 
         # Build query and filters
         if team_id or organization_id:
-            filters = []
+            filters = [Project.folder_id == folder_id] if folder_id else []
         elif folder_id:
-            filters = [
-                Project.user_id == user_id,
-                Project.folder_id == folder_id,
-            ]
+            # Check if the folder is shared with the user via a grant.
+            # If so, show all projects in the folder (not just the user's own).
+            has_grant = False
+            grant_conditions = []
+            if team_ids:
+                grant_conditions.append(
+                    and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id.in_(team_ids))
+                )
+            if user_organization_id:
+                grant_conditions.append(
+                    and_(ResourceGrant.grantee_type == "organization", ResourceGrant.grantee_id == user_organization_id)
+                )
+            if grant_conditions:
+                grant_result = await async_session.execute(
+                    select(ResourceGrant.id).where(
+                        ResourceGrant.resource_type == "folder",
+                        ResourceGrant.resource_id == folder_id,
+                        or_(*grant_conditions),
+                    ).limit(1)
+                )
+                has_grant = grant_result.first() is not None
+
+            filters = [Project.folder_id == folder_id]
+            if not has_grant:
+                filters.append(Project.user_id == user_id)
         else:
             filters = [Project.user_id == user_id]
 

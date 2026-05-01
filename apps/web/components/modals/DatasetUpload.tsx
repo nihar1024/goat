@@ -29,7 +29,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
 import { requestDatasetUpload } from "@/lib/api/datasets";
-import { useFolders } from "@/lib/api/folders";
+import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { createLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { useProject } from "@/lib/api/projects";
@@ -66,7 +66,8 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
     order: "descendent",
     order_by: "updated_at",
   };
-  const { folders } = useFolders(queryParams);
+  const { folders: allFolders } = useFolders(queryParams);
+  const folders = getWritableFolders(allFolders);
   const [activeStep, setActiveStep] = useState(0);
   const [fileValue, setFileValue] = useState<File>();
   const [fileUploadError, setFileUploadError] = useState<string>();
@@ -95,11 +96,9 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
   const confirmationStep = isTabular ? 3 : 2;
 
   useEffect(() => {
-    const homeFolder = folders?.find((folder) => folder.name === "home");
     const projectFolder = folders?.find((folder) => folder.id === project?.folder_id);
-    const preSelectedFolder = projectFolder || homeFolder;
-    if (preSelectedFolder) {
-      setSelectedFolder(preSelectedFolder);
+    if (projectFolder) {
+      setSelectedFolder(projectFolder);
     }
   }, [folders, project?.folder_id]);
 

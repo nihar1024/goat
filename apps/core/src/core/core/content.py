@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Any, List, Type
+from typing import TYPE_CHECKING, Any, List, Optional, Type
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from pydantic import UUID4
-from sqlalchemy import Row, and_, select
+from sqlalchemy import Row, and_, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager, selectinload
 from sqlalchemy.sql import Select
@@ -17,10 +17,12 @@ from core.db.models import (
     Project,
     ProjectOrganizationLink,
     ProjectTeamLink,
+    ResourceGrant,
     Role,
     Team,
     User,
 )
+from core.db.models.folder import Folder
 
 if TYPE_CHECKING:
     from core.crud.crud_layer import CRUDLayer
@@ -447,3 +449,106 @@ def build_shared_with_object(
         )
 
     return result_arr
+
+
+def create_query_accessible_folders(
+    user_id: UUID,
+    team_ids: list[UUID],
+    organization_id: Optional[UUID],
+) -> Any:
+    """Return a UNION query of folder rows the user owns or has been granted access to.
+
+    Columns: id, user_id, name, created_at, updated_at
+    """
+    owned = select(
+        Folder.id,
+        Folder.user_id,
+        Folder.name,
+    ).where(Folder.user_id == user_id)
+
+    branches: list[Any] = [owned]
+
+    if team_ids:
+        shared_via_team = (
+            select(
+                Folder.id,
+                Folder.user_id,
+                Folder.name,
+            )
+            .join(
+                ResourceGrant,
+                and_(
+                    ResourceGrant.resource_type == "folder",
+                    ResourceGrant.resource_id == Folder.id,
+                    ResourceGrant.grantee_type == "team",
+                    ResourceGrant.grantee_id.in_(team_ids),
+                ),
+            )
+            .where(Folder.user_id != user_id)
+        )
+        branches.append(shared_via_team)
+
+    if organization_id:
+        shared_via_org = (
+            select(
+                Folder.id,
+                Folder.user_id,
+                Folder.name,
+            )
+            .join(
+                ResourceGrant,
+                and_(
+                    ResourceGrant.resource_type == "folder",
+                    ResourceGrant.resource_id == Folder.id,
+                    ResourceGrant.grantee_type == "organization",
+                    ResourceGrant.grantee_id == organization_id,
+                ),
+            )
+            .where(Folder.user_id != user_id)
+        )
+        branches.append(shared_via_org)
+
+    return union(*branches)
+
+
+def create_query_layers_via_folder_grant(
+    team_ids: list[UUID],
+    organization_id: Optional[UUID],
+) -> Optional[Any]:
+    """Return a subquery of layer IDs reachable via folder grants.
+
+    OR this into the layer listing query to give folder-grant visibility.
+    """
+    conditions = []
+
+    if team_ids:
+        conditions.append(
+            and_(
+                ResourceGrant.grantee_type == "team",
+                ResourceGrant.grantee_id.in_(team_ids),
+            )
+        )
+
+    if organization_id:
+        conditions.append(
+            and_(
+                ResourceGrant.grantee_type == "organization",
+                ResourceGrant.grantee_id == organization_id,
+            )
+        )
+
+    if not conditions:
+        return None
+
+    return (
+        select(Layer.id)
+        .join(
+            ResourceGrant,
+            and_(
+                ResourceGrant.resource_type == "folder",
+                ResourceGrant.resource_id == Layer.folder_id,
+                or_(*conditions),
+            ),
+        )
+        .where(Layer.folder_id.isnot(None))
+    )

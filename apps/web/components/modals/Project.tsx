@@ -9,7 +9,7 @@ import { toast } from "react-toastify";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import { useFolders } from "@/lib/api/folders";
+import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { createProject } from "@/lib/api/projects";
 import type { GetContentQueryParams } from "@/lib/validations/common";
 import type { PostProject } from "@/lib/validations/project";
@@ -31,7 +31,8 @@ const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
   };
   const router = useRouter();
 
-  const { folders } = useFolders(queryParams);
+  const { folders: allFolders } = useFolders(queryParams);
+  const folders = getWritableFolders(allFolders);
   const [isBusy, setIsBusy] = useState(false);
   const {
     handleSubmit,
@@ -87,16 +88,12 @@ const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
   };
 
   const folderOptions = useMemo(() => {
-    return folders?.map((folder) => {
-      return {
-        value: folder.id,
-        label: folder.name,
-        icon: (
-          <Icon fontSize="small" iconName={folder.name === "home" ? ICON_NAME.HOUSE : ICON_NAME.FOLDER} />
-        ),
-      };
-    });
-  }, [folders]);
+    return folders?.map((folder) => ({
+      value: folder.id,
+      label: folder.is_owned ? folder.name : `${folder.name} (${t("shared")})`,
+      icon: <Icon fontSize="small" iconName={ICON_NAME.FOLDER} />,
+    }));
+  }, [folders, t]);
 
   return (
     <Dialog open={open} onClose={handleOnClose} fullWidth maxWidth="sm">

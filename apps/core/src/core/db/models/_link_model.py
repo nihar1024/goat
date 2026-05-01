@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import (
@@ -377,6 +378,44 @@ class ProjectTeamLink(SQLModel, table=True):
     # Relationships
     project: "Project" = Relationship(back_populates="team_links")
     team: "Team" = Relationship(back_populates="project_links")
+
+
+class ResourceGrant(SQLModel, table=True):
+    """Generic sharing table: grants a role on any resource to a team or organization."""
+
+    __tablename__ = "resource_grant"
+    __table_args__ = {"schema": settings.ACCOUNTS_SCHEMA}
+
+    id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(UUID_PG(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+    )
+    resource_type: str = Field(sa_column=Column(Text, nullable=False))
+    resource_id: UUID = Field(
+        sa_column=Column(UUID_PG(as_uuid=True), nullable=False)
+    )
+    grantee_type: str = Field(sa_column=Column(Text, nullable=False))
+    grantee_id: UUID = Field(
+        sa_column=Column(UUID_PG(as_uuid=True), nullable=False)
+    )
+    role_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.ACCOUNTS_SCHEMA}.role.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    granted_by: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.ACCOUNTS_SCHEMA}.user.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    created_at: Optional[Any] = Field(
+        default=None,
+        sa_column=Column(sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+    )
 
 
 class ProjectOrganizationLink(SQLModel, table=True):

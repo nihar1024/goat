@@ -8,20 +8,18 @@ Opening GOAT will lead you to the **Workspace Interface**.
 Here, you can explore your datasets and projects, create new ones, and manage your account settings.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/workspace_interface.png').default} alt="Workspace Interface Overview in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/workspace_interface.webp').default} alt="Workspace Interface Overview in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div>   
 
 
 ### Navigation Bar
 The list below explains the navigation toolbar in the Workspace.
 
-| Icon and Label| Usage |
-| :-: | --- |
-| <img src={require('/img/workspace/workspace_home.png').default} alt="home" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/> | The landing page when you login |
-| <img src={require('/img/workspace/workspace_projects.png').default} alt="projects" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/> | Here, you can manage your projects |
-| <img src={require('/img/workspace/workspace_datasets.png').default} alt="datasets" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/> | Here, you can manage your datasets |
-| <img src={require('/img/workspace/workspace_catalog.png').default} alt="catalog" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/> | Here, you can browse all the datasets available within GOAT |
-| <img src={require('/img/workspace/workspace_settings.png').default} alt="settings" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/> | The page where you can edit your profile and preferences settings |
+- <img src={require('/img/icons/home.png').default} alt="Home" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Home</code>: The landing page when you login
+- <img src={require('/img/icons/projects.png').default} alt="Projects" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Projects</code>: Here, you can manage your projects
+- <img src={require('/img/icons/datasets.png').default} alt="Datasets" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Datasets</code>: Here, you can manage your datasets
+- <img src={require('/img/icons/catalog.png').default} alt="Catalog" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Catalog</code>: Here, you can browse all the datasets available within GOAT
+- <img src={require('/img/icons/settings.png').default} alt="Settings" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Settings</code>: The page where you can edit your profile and preferences settings
 
 ### User's profile 
 By clicking on the <code>user's profile</code> button, you can see your name, your organization, and the `Logout` button.

@@ -7,7 +7,17 @@ import {
   Close as CloseIcon,
   DragIndicator as DragIndicatorIcon,
 } from "@mui/icons-material";
-import { Box, Button, IconButton, Stack, TextField, Typography, useTheme } from "@mui/material";
+import {
+  Box,
+  Button,
+  IconButton,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,8 +43,12 @@ interface SortableLinkItemProps {
   index: number;
   label: string;
   url: string;
+  linkType: "url" | "popup";
+  popupContent: string;
   onLabelChange: (index: number, value: string) => void;
   onUrlChange: (index: number, value: string) => void;
+  onLinkTypeChange: (index: number, value: "url" | "popup") => void;
+  onPopupContentChange: (index: number, value: string) => void;
   onDelete: (index: number) => void;
 }
 
@@ -43,8 +57,12 @@ const SortableLinkItem = ({
   index,
   label,
   url,
+  linkType,
+  popupContent,
   onLabelChange,
   onUrlChange,
+  onLinkTypeChange,
+  onPopupContentChange,
   onDelete,
 }: SortableLinkItemProps) => {
   const theme = useTheme();
@@ -62,10 +80,10 @@ const SortableLinkItem = ({
       style={style}
       sx={{
         border: "1px solid",
-        borderColor: "divider",
+        borderColor: linkType === "popup" ? "primary.light" : "divider",
         borderRadius: 1,
         p: 1,
-        "&:hover": { borderColor: theme.palette.action.hover },
+        "&:hover": { borderColor: linkType === "popup" ? "primary.main" : theme.palette.action.hover },
       }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
         <Box {...attributes} {...listeners} sx={{ cursor: "grab", display: "flex" }}>
@@ -88,6 +106,21 @@ const SortableLinkItem = ({
           <CloseIcon sx={{ fontSize: 16, color: "text.disabled", "&:hover": { color: "error.main" } }} />
         </IconButton>
       </Stack>
+
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={linkType}
+        onChange={(_, value) => value && onLinkTypeChange(index, value as "url" | "popup")}
+        sx={{ mb: 1, width: "100%" }}>
+        <ToggleButton value="url" sx={{ flex: 1, fontSize: 11, py: 0.5, textTransform: "none" }}>
+          {t("link_url")}
+        </ToggleButton>
+        <ToggleButton value="popup" sx={{ flex: 1, fontSize: 11, py: 0.5, textTransform: "none" }}>
+          {t("popup")}
+        </ToggleButton>
+      </ToggleButtonGroup>
+
       <Stack spacing={1}>
         <TextField
           size="small"
@@ -96,13 +129,25 @@ const SortableLinkItem = ({
           value={label}
           onChange={(e) => onLabelChange(index, e.target.value)}
         />
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="https://..."
-          value={url}
-          onChange={(e) => onUrlChange(index, e.target.value)}
-        />
+        {linkType === "popup" ? (
+          <TextField
+            size="small"
+            fullWidth
+            multiline
+            minRows={3}
+            placeholder={t("popup_content_placeholder")}
+            value={popupContent}
+            onChange={(e) => onPopupContentChange(index, e.target.value)}
+          />
+        ) : (
+          <TextField
+            size="small"
+            fullWidth
+            placeholder="https://..."
+            value={url}
+            onChange={(e) => onUrlChange(index, e.target.value)}
+          />
+        )}
       </Stack>
     </Box>
   );
@@ -152,6 +197,24 @@ const LinksConfiguration = ({ config, onChange }: LinksConfigurationProps) => {
     [links, handleSetupChange]
   );
 
+  const handleLinkTypeChange = useCallback(
+    (index: number, link_type: "url" | "popup") => {
+      const updated = [...links];
+      updated[index] = { ...updated[index], link_type };
+      handleSetupChange("links", updated);
+    },
+    [links, handleSetupChange]
+  );
+
+  const handlePopupContentChange = useCallback(
+    (index: number, popup_content: string) => {
+      const updated = [...links];
+      updated[index] = { ...updated[index], popup_content };
+      handleSetupChange("links", updated);
+    },
+    [links, handleSetupChange]
+  );
+
   const handleDeleteLink = useCallback(
     (index: number) => {
       const updated = links.filter((_, i) => i !== index);
@@ -161,7 +224,7 @@ const LinksConfiguration = ({ config, onChange }: LinksConfigurationProps) => {
   );
 
   const handleAddLink = useCallback(() => {
-    handleSetupChange("links", [...links, { label: "", url: "" }]);
+    handleSetupChange("links", [...links, { label: "", url: "", link_type: "url" as const, popup_content: "" }]);
   }, [links, handleSetupChange]);
 
   const handleDragEnd = useCallback(
@@ -251,9 +314,13 @@ const LinksConfiguration = ({ config, onChange }: LinksConfigurationProps) => {
                       id={`link-${index}`}
                       index={index}
                       label={link.label}
-                      url={link.url}
+                      url={link.url ?? ""}
+                      linkType={(link.link_type as "url" | "popup") ?? "url"}
+                      popupContent={link.popup_content ?? ""}
                       onLabelChange={handleLinkLabelChange}
                       onUrlChange={handleLinkUrlChange}
+                      onLinkTypeChange={handleLinkTypeChange}
+                      onPopupContentChange={handlePopupContentChange}
                       onDelete={handleDeleteLink}
                     />
                   ))}

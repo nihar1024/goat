@@ -1,5 +1,6 @@
 // Icons
 import AddIcon from "@mui/icons-material/Add";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 // MUI
 import {
   Badge,
@@ -73,6 +74,7 @@ import { LayerIcon } from "./legend/LayerIcon";
 import { MaskedImageIcon } from "@/components/map/panels/style/other/MaskedImageIcon";
 import { LayerLegendPanel } from "./legend/LayerLegend";
 import { getLegendColorMap, getLegendMarkerMap } from "@/lib/utils/map/legend";
+import MarkdownPopupDialog from "@/components/builder/widgets/common/MarkdownPopupDialog";
 
 // Extended tree item interface to include project layer data
 interface ProjectTreeItem extends BaseTreeItem {
@@ -356,6 +358,8 @@ interface ProjectLayerTreeProps {
   dimOutOfZoom?: boolean;
   /** Content rendered inside the scroll container, above the tree (e.g. a "show all" toggle row) */
   headerContent?: React.ReactNode;
+  /** Per-group info text (keyed by group ID string) shown as an ⓘ button on the group row */
+  groupInfo?: Record<string, string>;
 }
 
 export const ProjectLayerTree = ({
@@ -380,6 +384,7 @@ export const ProjectLayerTree = ({
   groupIcons,
   dimOutOfZoom = true,
   headerContent,
+  groupInfo,
 }: ProjectLayerTreeProps) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -397,6 +402,7 @@ export const ProjectLayerTree = ({
     mode: "create" | "rename" | "delete";
     group?: ProjectLayerTreeNode;
   }>({ open: false, mode: "create" });
+  const [groupInfoDialogId, setGroupInfoDialogId] = useState<number | null>(null);
 
   const activeLayerId = useAppSelector((state) => state.layers.activeLayerId);
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
@@ -892,6 +898,18 @@ export const ProjectLayerTree = ({
           )
         )}
 
+        {/* Group info ⓘ button */}
+        {node.type === "group" && groupInfo?.[String(node.id)] && (
+          <Tooltip title={t("group_info")} placement="top">
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); setGroupInfoDialogId(node.id); }}
+              sx={{ p: 0.25, color: "primary.main", opacity: 0.75, "&:hover": { opacity: 1 } }}>
+              <InfoOutlinedIcon sx={{ fontSize: "15px" }} />
+            </IconButton>
+          </Tooltip>
+        )}
+
         {/* Visibility toggle - very right when position is "right" */}
         {togglePosition !== "left" && !hideActions && node.layer_type !== "table" && (
           <>
@@ -1284,6 +1302,14 @@ export const ProjectLayerTree = ({
           sx={{ width: "100%" }}
         />
       </Box>
+      {groupInfoDialogId !== null && groupInfo?.[String(groupInfoDialogId)] && (
+        <MarkdownPopupDialog
+          open
+          onClose={() => setGroupInfoDialogId(null)}
+          title={projectLayerGroups.find((g) => g.id === groupInfoDialogId)?.name ?? ""}
+          content={groupInfo[String(groupInfoDialogId)]}
+        />
+      )}
     </Box>
   );
 };

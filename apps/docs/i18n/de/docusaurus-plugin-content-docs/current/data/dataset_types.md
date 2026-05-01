@@ -10,10 +10,10 @@ Auf GOAT können Sie mit Datensätzen aus Plan4Betters Katalog arbeiten oder Ihr
 
 ### 1.1 Räumliche Features
 
-Feature-Datensätze speichern **räumliche Features wie Punkte, Linien oder Polygone**. Auf GOAT können Sie Daten aus **Shapefiles**, **GeoPackages**, **GeoJSON** oder **KML**-Dateien hochladen oder einen **WFS**-Link von einer externen URL hinzufügen. Sie können diese Datensätze mit den verschiedenen Werkzeugen aus der Werkzeugkiste visualisieren, gestalten und analysieren.
+Feature-Datensätze speichern **räumliche Features wie Punkte, Linien oder Polygone**. Auf GOAT können Sie Daten aus **Shapefiles**, **GeoPackages**, **GeoJSON**, **KML**, **ZIP** oder **Parquet**-Dateien hochladen oder eine **WFS**-externe-URL hinzufügen. Für externe Raster-Quellen (WMS, WMTS, XYZ-Kacheln, COG) siehe [Raster-Datensätze](#raster-datensätze) unten. Sie können diese Datensätze mit den verschiedenen Werkzeugen aus der Werkzeugkiste visualisieren, gestalten und analysieren.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/data/spatial.png').default} alt="Räumliche Features in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
+  <img src={require('/img/data/spatial_de.webp').default} alt="Räumliche Features in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
   <p style={{ textAlign: 'center', fontStyle: 'italic', marginTop: '8px', color: '#666' }}> Beispiel für räumliche Features, die in GOAT angezeigt werden</p>
 </div>
 
@@ -36,14 +36,14 @@ GOAT erkennt zwei Typen von Feature-Datensätzen basierend auf ihrer Quelle:
 
 ## Raster-Datensätze
 
-Raster-Datensätze können aus externen Quellen wie **WMS** (Web Map Service) oder **WMTS** (Web Map Tile Service) kommen. Sie bieten georeferenzierte Kartenbilder, wie topografische Karten, aber auf GOAT sind sie statisch, daher unterstützen sie keine Analyse oder Bearbeitung.
+Raster-Datensätze können direkt als **COG (Cloud Optimized GeoTIFF)**-Dateien hochgeladen oder aus externen Quellen über **WMS** (Web Map Service), **WMTS** (Web Map Tile Service), **XYZ-Kacheln** oder eine direkte **COG-URL** (.tif/.tiff-Link) verbunden werden. Sie bieten georeferenzierte Kartenbilder, wie topografische Karten, aber auf GOAT sind sie statisch, daher unterstützen sie keine Analyse oder Bearbeitung.
 
 :::tip Hinweis
 Raster-Styling hängt vom externen Service ab (z.B. GeoServer). Sie können das Farbschema oder die Feature-Darstellung in GOAT nicht ändern.
 :::
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/data/raster.png').default} alt="Raster-Datensätze in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
+  <img src={require('/img/data/raster_de.webp').default} alt="Raster-Datensätze in GOAT" style={{ maxHeight: "750px", maxWidth: "750px", objectFit: "cover"}}/>
   <p style={{ textAlign: 'center', fontStyle: 'italic', marginTop: '8px', color: '#666' }}> Beispiel eines in GOAT angezeigten Raster-Layers</p>
 
 </div>

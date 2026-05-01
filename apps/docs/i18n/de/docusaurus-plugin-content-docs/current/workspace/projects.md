@@ -10,10 +10,11 @@ Die **Projekte**-Seite ist Ihr zentraler Hub zum Erstellen, Verwalten und Teilen
 - **Projekte filtern und sortieren** nach Name, Erstellungsdatum oder letzter Aktualisierung
 - **Projekt-Metadaten bearbeiten** einschließlich Titel und Beschreibungen
 - **Projekte teilen** mit Teammitgliedern oder Ihrer gesamten Organisation
+- **Projekte exportieren, importieren und duplizieren**
 - **Projekte löschen**, wenn sie nicht mehr benötigt werden
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
-  <img src={require('/img/workspace/projects/projects_general.png').default} alt="Projekte-Seite im Workspace von GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workspace/projects/projects_general_de.webp').default} alt="Projekte-Seite im Workspace von GOAT" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div> 
 
 
@@ -36,27 +37,52 @@ Folgen Sie diesen einfachen Schritten, um ein neues **Projekt** zu erstellen:
   <div class="content">
   <p>Füllen Sie die erforderlichen Informationen aus:</p>
     <ul>
-      <li><strong>Projekt-Titel</strong> - Geben Sie Ihrem **Projekt** einen beschreibenden Namen</li>
-      <li><strong>Projekt-Ordner</strong> - Wählen Sie einen Ordner aus oder erstellen Sie einen, um Ihr **Projekt** zu organisieren</li>
-      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details zum Zweck Ihres **Projekts** hinzu</li>
+      <li><strong>Projekt-Titel</strong> - Geben Sie Ihrem Projekt einen beschreibenden Namen</li>
+      <li><strong>Projekt-Ordner</strong> - Wählen Sie einen Ordner aus oder erstellen Sie einen, um Ihr Projekt zu organisieren</li>
+      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details zum Zweck Ihres Projekts hinzu</li>
     </ul>
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Überprüfen Sie Ihre Informationen und klicken Sie auf die <code>Erstellen</code>-Schaltfläche, um Ihr neues **Projekt** zu finalisieren.</div>
+  <div class="content">Überprüfen Sie Ihre Informationen und klicken Sie auf die <code>Erstellen</code>-Schaltfläche, um Ihr neues Projekt zu finalisieren.</div>
+</div>
+
+## Ein Projekt importieren
+
+Sie können eine zuvor exportierte GOAT-Projektdatei importieren:
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Klicken Sie auf die <code>+ Neues Projekt</code>-Schaltfläche in der oberen rechten Ecke.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Wählen Sie <code>Importieren</code>, um eine vorhandene Projektdatei hochzuladen.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Wählen Sie einen <strong>Projekt-Ordner</strong> und klicken Sie auf <code>Importieren</code>, um den Vorgang abzuschließen.</div>
+</div>
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <img src={require('/img/workspace/projects/project_import_de.webp').default} alt="Ein Projekt in GOAT importieren" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
 </div>
 
 ## Projekte verwalten
 
-Greifen Sie auf zusätzliche **Projekt**-Optionen zu, indem Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü neben jedem **Projekt** klicken. Dies ermöglicht Ihnen:
+Greifen Sie auf zusätzliche Projekt-Optionen zu, indem Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü neben jedem Projekt klicken. Sie haben folgende Optionen:
 
-- **Metadaten anzeigen und bearbeiten** - **Projekt**-Titel, Beschreibungen und andere Details aktualisieren
-- **In verschiedene Ordner verschieben** - Ihre **Projekt**-Struktur neu organisieren
-- **Mit anderen teilen** - Zusammenarbeiten, indem Sie **Projekte** mit Teammitgliedern oder Ihrer Organisation teilen
-- **Projekte löschen** - **Projekte** entfernen, die Sie nicht mehr benötigen
+- <code>Metadaten bearbeiten</code> - Projekt-Metadaten aufrufen und bearbeiten
+- <code>In Ordner verschieben</code> - Ihren Projekt-Speicherort neu organisieren
+- <code>Teilen</code> - Zusammenarbeiten, indem Sie Projekte mit Teammitgliedern oder Ihrer Organisation teilen
+- <code>Exportieren</code> - Das Projekt als Datei exportieren
+- <code>Duplizieren</code> - Eine Kopie des Projekts erstellen
+- <code>Löschen</code> - Projekte entfernen, die Sie nicht mehr benötigen
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/projects/options.png').default} alt="Projekt-Verwaltungsoptionen" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
+  <img src={require('/img/workspace/projects/options_de.webp').default} alt="Projekt-Verwaltungsoptionen" style={{ maxHeight: "auto", maxWidth: "100%"}}/>
 </div>

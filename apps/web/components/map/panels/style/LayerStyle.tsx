@@ -1,5 +1,5 @@
 import { Box, Divider, Stack, Typography } from "@mui/material";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 
@@ -20,7 +20,9 @@ import useLayerFields from "@/hooks/map/CommonHooks";
 import { useActiveLayer, useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 
 import AccordionWrapper from "@/components/common/AccordionWrapper";
+import FormLabelHelper from "@/components/common/FormLabelHelper";
 import SectionHeader from "@/components/map/panels/common/SectionHeader";
+import SliderInput from "@/components/map/panels/common/SliderInput";
 import ColorOptions from "@/components/map/panels/style/color/ColorOptions";
 import GeneralOptions from "@/components/map/panels/style/general/GeneralOptions";
 import InteractionOptions from "@/components/map/panels/style/interaction/InteractionOptions";
@@ -319,6 +321,12 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
   const [collapseStrokeWidthOptions, setCollapseStrokeWidthOptions] = useState(true);
   const [collapsedMarkerIconOptions, setCollapsedMarkerIconOptions] = useState(true);
   const [collapseRadiusOptions, setCollapseRadiusOptions] = useState(true);
+  const [rasterOpacity, setRasterOpacity] = useState(layerProperties?.opacity ?? 1);
+
+  useEffect(() => {
+    setRasterOpacity(layerProperties?.opacity ?? 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayer?.id]);
 
   if (!activeLayer || !layerProperties) return null;
 
@@ -341,6 +349,26 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
         )}
       </Box>
       <Divider sx={{ mb: 0 }} />
+      {activeLayer?.type === "raster" && (
+        <Box sx={{ p: 2 }}>
+          <FormLabelHelper label={t("opacity")} color="inherit" />
+          <Box sx={{ px: 1 }}>
+            <SliderInput
+              value={rasterOpacity}
+              isRange={false}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setRasterOpacity(value as number)}
+              onChangeCommitted={(value) => {
+                const newStyle = JSON.parse(JSON.stringify(layerProperties)) || {};
+                newStyle.opacity = value as number;
+                updateLayerStyle(newStyle);
+              }}
+            />
+          </Box>
+        </Box>
+      )}
       {activeLayer?.type === "feature" && (
         <>
           <AccordionWrapper

@@ -284,6 +284,11 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
               .map(([values], index) => [values, newColors[index]] as ColorMap[number]);
             newStyle[`${updateType}_range`].colors = newColors.slice(0, entryCount);
           }
+          // Preserve custom legend labels — they are keyed by category value, which hasn't changed
+          const existingLegends = layerProperties[`${updateType}_range`]?.color_legends;
+          if (existingLegends) {
+            newStyle[`${updateType}_range`].color_legends = existingLegends;
+          }
         }
       }
       updateLayerStyle(newStyle);

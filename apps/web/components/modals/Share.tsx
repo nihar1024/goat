@@ -86,13 +86,14 @@ interface ShareWithItemsTabProps {
   items: Item[];
   roleOptions: string[];
   onRoleChange: (id: string, role: string) => void;
+  disableInherited?: boolean;
 }
 
 interface ShareWithPublicTabProps {
   project: Project;
 }
 
-const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOptions, onRoleChange }) => {
+const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOptions, onRoleChange, disableInherited = false }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const open = Boolean(anchorEl);
@@ -140,7 +141,13 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
                   gap: 1,
                 }}>
                 {item.inheritedRole && (
-                  <Tooltip title={t("access_via_folder")} placement="top">
+                  <Tooltip
+                    title={
+                      disableInherited
+                        ? t("access_via_folder_disable_hint")
+                        : t("access_via_folder")
+                    }
+                    placement="top">
                     <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
                       {t("via_folder")}
                     </Typography>
@@ -151,6 +158,7 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
                   sx={{ borderRadius: "4px" }}
                   size="small"
                   color="secondary"
+                  disabled={disableInherited && Boolean(item.inheritedRole)}
                   onClick={(event) => handleClick(event, item.id)}
                   endIcon={<KeyboardArrowDownIcon color="inherit" />}>
                   <Typography variant="body2" fontWeight="bold" color="inherit">
@@ -471,10 +479,15 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
     type === "folder" && open ? content.id : null
   );
 
-  // For layers: fetch the folder's grants to show inherited access read-only
-  const layerFolderId = type === "layer" ? (content as Layer).folder_id : null;
+  // For layers and projects: fetch the folder's grants to show inherited access read-only
+  const itemFolderId =
+    type === "layer"
+      ? (content as Layer).folder_id
+      : type === "project"
+        ? (content as Project).folder_id
+        : null;
   const { data: layerFolderGrants } = useFolderGrants(
-    type === "layer" && open && layerFolderId ? layerFolderId : null
+    (type === "layer" || type === "project") && open && itemFolderId ? itemFolderId : null
   );
   const grantsLoaded = useRef(false);
   useEffect(() => {
@@ -715,6 +728,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                         items={organizationsAccessLevel}
                         roleOptions={roleOptions}
                         onRoleChange={handleOrganizationRoleChange}
+                        disableInherited={type === "layer" || type === "project"}
                       />
                     </>
                   )}
@@ -729,6 +743,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                         items={teamsAccessLevel}
                         roleOptions={roleOptions}
                         onRoleChange={handleTeamRoleChange}
+                        disableInherited={type === "layer" || type === "project"}
                       />
                     </>
                   )}

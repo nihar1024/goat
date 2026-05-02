@@ -13,11 +13,12 @@ interface FolderCardProps {
   selected?: boolean;
   enableActions?: boolean;
   showRoleChip?: boolean;
+  fullWidth?: boolean;
   onClick: (folder: Folder) => void;
   onMenuSelect?: (item: PopperMenuItem, folder: Folder) => void;
 }
 
-export default function FolderCard({ folder, selected, enableActions, showRoleChip, onClick, onMenuSelect }: FolderCardProps) {
+export default function FolderCard({ folder, selected, enableActions, showRoleChip, fullWidth, onClick, onMenuSelect }: FolderCardProps) {
   const theme = useTheme();
   const { t } = useTranslation("common");
 
@@ -38,7 +39,7 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
           gap: 1.5,
           px: 2,
           py: 1.5,
-          width: 190,
+          width: fullWidth ? "100%" : 190,
           cursor: "pointer",
           border: "1px solid",
           borderColor: selected ? "primary.main" : "divider",

@@ -218,23 +218,24 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
                   </Breadcrumbs>
                 )}
 
-                <Stack direction="column">
+                <Stack direction="column" sx={{ mt: 2 }}>
                   {/* Folder cards at root */}
                   {showFolders && contextFolders.length > 0 && (
                     <Box sx={{ mb: 3 }}>
                       <Typography
-                        variant="subtitle2"
+                        variant="overline"
                         color="text.secondary"
-                        sx={{ mb: 1, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 11 }}>
+                        sx={{ mb: 1.5, display: "block", lineHeight: 1 }}>
                         {t("folders")}
                       </Typography>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
                         {contextFolders.map((folder) => (
                           <FolderCard
                             key={folder.id}
                             folder={folder}
                             enableActions={false}
                             showRoleChip={!isMyContent}
+                            fullWidth
                             onClick={handleFolderClick}
                           />
                         ))}
@@ -245,9 +246,9 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
                   {/* Datasets label when folders are also shown */}
                   {showFolders && (
                     <Typography
-                      variant="subtitle2"
+                      variant="overline"
                       color="text.secondary"
-                      sx={{ mb: 1, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 11 }}>
+                      sx={{ mb: 1.5, display: "block", lineHeight: 1 }}>
                       {t("datasets")}
                     </Typography>
                   )}

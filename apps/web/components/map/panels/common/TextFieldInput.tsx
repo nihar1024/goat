@@ -66,8 +66,7 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
           },
         }}
         endAdornment={
-          !!value &&
-          clearable && (
+          !disabled && !!value && clearable && (
             <InputAdornment position="end" sx={{ mr: 2 }}>
               <IconButton size="small" aria-label="clear input" onClick={() => onChange("")} edge="end">
                 <ClearIcon />

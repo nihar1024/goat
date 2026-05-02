@@ -11,8 +11,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
-import { COLLECTIONS_API_BASE_URL, addColumn, deleteColumn, renameColumn, useLayerQueryables } from "@/lib/api/layers";
-import type { FieldDefinition } from "@/lib/validations/layer";
+import { COLLECTIONS_API_BASE_URL, addColumn, deleteColumn, renameColumn, updateColumnDisplayConfig, useDataset, useLayerQueryables } from "@/lib/api/layers";
+import type { FieldDefinition, FieldKind } from "@/lib/validations/layer";
 import { mutate as globalMutate } from "swr";
 
 import FieldEditor from "@/components/common/FieldEditor";
@@ -24,19 +24,21 @@ interface EditFieldsModalProps {
   layerId: string;
   /** If provided, this field will be pre-selected on open */
   initialFieldName?: string | null;
+  /**
+   * Layer geometry type — passed through to FieldEditor to filter the kind
+   * dropdown. If omitted, geometryType is fetched from the layer record via
+   * useDataset. This prop serves as an optional override / initial hint.
+   */
+  geometryType?:
+    | "point"
+    | "multipoint"
+    | "line"
+    | "multiline"
+    | "polygon"
+    | "multipolygon"
+    | null;
 }
 
-/** Type mapping from queryables schema types to our FieldDefinition types */
-const mapQueryableType = (type: string): "string" | "number" => {
-  if (type === "number" || type === "integer") return "number";
-  return "string";
-};
-
-/** Type mapping from our FieldDefinition types to GeoAPI column types */
-const mapToColumnType = (type: "string" | "number"): string => {
-  if (type === "number") return "number";
-  return "string";
-};
 
 /** Hidden system fields that should not appear in the editor */
 const HIDDEN_FIELDS = ["layer_id", "id", "h3_3", "h3_6", "geom", "geometry"];
@@ -46,10 +48,27 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
   onClose,
   layerId,
   initialFieldName,
+  geometryType: geometryTypeProp,
 }) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
   const { queryables, mutate: mutateQueryables } = useLayerQueryables(layerId);
+  const { dataset } = useDataset(layerId);
+
+  // Derive geometry type: prefer the fetched layer record, fall back to the prop.
+  // The fetched type is "point" | "line" | "polygon" (no multi-variants from the
+  // backend enum), so we cast it to the broader union used by FieldEditor /
+  // AddFieldDialog which also accepts multi-variants from callers.
+  const layerGeometryType = (
+    dataset?.feature_layer_geometry_type ?? geometryTypeProp ?? null
+  ) as
+    | "point"
+    | "multipoint"
+    | "line"
+    | "multiline"
+    | "polygon"
+    | "multipolygon"
+    | null;
 
   const [fields, setFields] = useState<FieldDefinition[]>([]);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
@@ -72,16 +91,25 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
         const t = (schema as { type?: string }).type;
         return t !== "object" && t !== "geometry";
       })
-      .map(([name, schema]) => ({
-        id: name, // Use the column name as the stable ID for existing fields
-        name,
-        type: mapQueryableType((schema as { type?: string }).type || "string"),
-      }));
+      .map(([name, schema]) => {
+        const s = schema as {
+          kind?: FieldKind;
+          is_computed?: boolean;
+          display_config?: Record<string, unknown>;
+          type?: string;
+        };
+        return {
+          id: name,
+          name,
+          kind: s.kind ?? (s.type === "number" || s.type === "integer" ? "number" : "string"),
+          is_computed: s.is_computed ?? false,
+          display_config: s.display_config ?? {},
+        };
+      });
 
     setFields(loaded);
     setOriginalFields(loaded);
 
-    // Pre-select the requested field
     if (initialFieldName) {
       const match = loaded.find((f) => f.name === initialFieldName);
       if (match) setSelectedFieldId(match.id);
@@ -160,15 +188,28 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
 
       for (const field of fields) {
         if (!originalIds.has(field.id)) {
-          // New field — add column
-          await addColumn(layerId, field.name, mapToColumnType(field.type));
+          // New field — add column with kind + display_config
+          await addColumn(layerId, {
+            name: field.name,
+            kind: field.kind,
+            display_config: field.display_config ?? {},
+          });
         } else {
           const orig = originalMap.get(field.id);
           if (orig && orig.name !== field.name) {
-            // Renamed field
             await renameColumn(layerId, orig.name, field.name);
           }
-          // Note: type changes on existing columns are not supported by GeoAPI
+          // Persist display_config edits on existing fields
+          const origConfig = JSON.stringify(orig?.display_config ?? {});
+          const nextConfig = JSON.stringify(field.display_config ?? {});
+          if (orig && origConfig !== nextConfig) {
+            await updateColumnDisplayConfig(
+              layerId,
+              field.name,
+              field.display_config ?? {},
+            );
+          }
+          // Note: kind changes on existing columns are not supported.
         }
       }
 
@@ -189,7 +230,11 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
     return fields.some((f) => {
       const orig = originalMap.get(f.id);
       if (!orig) return true; // new field
-      return orig.name !== f.name;
+      if (orig.name !== f.name) return true;
+      return (
+        JSON.stringify(orig.display_config ?? {}) !==
+        JSON.stringify(f.display_config ?? {})
+      );
     });
   }, [fields, originalFields, originalMap]);
 
@@ -207,6 +252,7 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
             onSelectField={setSelectedFieldId}
             onRemoveOverride={handleRemoveRequest}
             lockedFieldIds={lockedFieldIds}
+            geometryType={layerGeometryType}
           />
         </DialogContent>
         <DialogActions

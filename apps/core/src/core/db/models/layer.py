@@ -498,6 +498,22 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
         sa_column=Column(Text, nullable=True),
         description="Description of the upload file type",
     )
+    field_config: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(
+            JSONB,
+            nullable=False,
+            server_default=text("'{}'::jsonb"),
+        ),
+        description=(
+            "Per-column metadata keyed by column name. "
+            "Each entry has shape "
+            '{"kind": str, "is_computed": bool, "depends_on": [str], '
+            '"display_config": {...}}. '
+            "Columns with no entry use default config inferred from the "
+            "DuckDB type."
+        ),
+    )
 
     # Relationships
     data_store: "DataStore" = Relationship(back_populates="layers")

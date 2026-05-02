@@ -5,10 +5,11 @@ import { useParams } from "next/navigation";
 import type { MapRef } from "react-map-gl/maplibre";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { mutate as globalMutate } from "swr";
 
 import type { MapLayerMouseEvent } from "react-map-gl/maplibre";
 
-import { createFeaturesBulk, deleteFeature, getFeature, getFeatures, replaceFeature } from "@/lib/api/layers";
+import { COLLECTIONS_API_BASE_URL, createFeaturesBulk, deleteFeature, getFeature, getFeatures, replaceFeature } from "@/lib/api/layers";
 import { useProjectLayers } from "@/lib/api/projects";
 import {
   addPendingFeature,
@@ -679,6 +680,21 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
           { revalidate: false },
         );
       }
+      // Revalidate any SWR cache entry for this layer's collection items
+      // (data table feature pages, queryables) so newly written values
+      // — including recomputed columns like area/perimeter — show up.
+      const itemsPrefix = `${COLLECTIONS_API_BASE_URL}/${activeLayerId}`;
+      globalMutate(
+        (key) => {
+          if (typeof key === "string") return key.startsWith(itemsPrefix);
+          if (Array.isArray(key) && typeof key[0] === "string") {
+            return key[0].startsWith(itemsPrefix);
+          }
+          return false;
+        },
+        undefined,
+        { revalidate: true },
+      );
     } catch (error) {
       console.error("Failed to save features:", error);
       toast.error(t("error_saving_features"));

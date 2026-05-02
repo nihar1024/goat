@@ -105,7 +105,7 @@ const CreateLayerModal: React.FC<CreateLayerModalProps> = ({ open, onClose, proj
         {
           name: data.name,
           geometry_type: data.geometryType,
-          fields: data.fields.map((f) => ({ name: f.name, type: f.type })),
+          fields: data.fields.map((f) => ({ name: f.name, type: f.kind === "number" ? "number" : "string" })),
         },
         projectId
       );
@@ -199,7 +199,9 @@ const CreateLayerModal: React.FC<CreateLayerModalProps> = ({ open, onClose, proj
                   const defaultField: FieldDefinition = {
                     id: crypto.randomUUID(),
                     name: "name",
-                    type: "string",
+                    kind: "string",
+                    is_computed: false,
+                    display_config: {},
                   };
                   setValue("fields", [defaultField], { shouldValidate: true });
                   setSelectedFieldId(defaultField.id);

@@ -186,13 +186,21 @@ ERROR_MAPPING = {
 }
 
 
+def _resolve_status_code(exc_type: type[BaseException]) -> int | None:
+    """Walk the MRO so subclasses inherit their parent's mapping."""
+    for t in exc_type.__mro__:
+        if t in ERROR_MAPPING:
+            return ERROR_MAPPING[t]  # type: ignore[index]
+    return None
+
+
 async def http_error_handler(
     func: Callable[..., Any], *args: Any, **kwargs: Any
 ) -> Any:
     try:
         return await func(*args, **kwargs)
     except Exception as e:
-        error_status_code = ERROR_MAPPING.get(type(e))
+        error_status_code = _resolve_status_code(type(e))
         if error_status_code:
             raise HTTPException(status_code=error_status_code, detail=str(e))
         else:
@@ -208,7 +216,7 @@ class HTTPErrorHandler:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if exc_type is not None:
-            error_status_code = ERROR_MAPPING.get(exc_type)
+            error_status_code = _resolve_status_code(exc_type)
             if error_status_code:
                 raise HTTPException(status_code=error_status_code, detail=str(exc_val))
             else:

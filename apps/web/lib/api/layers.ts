@@ -11,6 +11,7 @@ import type {
   DatasetCollectionItems,
   DatasetDownloadRequest,
   DatasetMetadataAggregated,
+  FieldKind,
   GetCollectionItemsQueryParams,
   GetDatasetSchema,
   GetLayerUniqueValuesQueryParams,
@@ -633,13 +634,26 @@ export const deleteFeaturesBulk = async (layerId: string, featureIds: string[]) 
 };
 
 // --- Column Management API Functions ---
+//
+// These hit geoapi, which manages both the DuckLake DDL and the
+// `customer.layer.field_config` JSONB metadata in one place.
 
-export const addColumn = async (layerId: string, name: string, type: string, defaultValue?: unknown) => {
-  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/columns`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, type, default_value: defaultValue }),
-  });
+export interface AddColumnPayload {
+  name: string;
+  kind: FieldKind;
+  display_config?: Record<string, unknown>;
+  default_value?: unknown;
+}
+
+export const addColumn = async (layerId: string, payload: AddColumnPayload) => {
+  const response = await apiRequestAuth(
+    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to add column");
@@ -647,12 +661,19 @@ export const addColumn = async (layerId: string, name: string, type: string, def
   return response.json();
 };
 
-export const renameColumn = async (layerId: string, columnName: string, newName: string) => {
-  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ new_name: newName }),
-  });
+export const renameColumn = async (
+  layerId: string,
+  columnName: string,
+  newName: string,
+) => {
+  const response = await apiRequestAuth(
+    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ new_name: newName }),
+    }
+  );
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to rename column");
@@ -660,13 +681,34 @@ export const renameColumn = async (layerId: string, columnName: string, newName:
   return response.json();
 };
 
+export const updateColumnDisplayConfig = async (
+  layerId: string,
+  columnName: string,
+  displayConfig: Record<string, unknown>,
+) => {
+  const response = await apiRequestAuth(
+    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_config: displayConfig }),
+    }
+  );
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to update column");
+  }
+  return response.json();
+};
+
 export const deleteColumn = async (layerId: string, columnName: string) => {
-  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`, {
-    method: "DELETE",
-  });
+  const response = await apiRequestAuth(
+    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
+    { method: "DELETE" }
+  );
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to delete column");
   }
-  return response.json();
+  return null; // 204 No Content
 };

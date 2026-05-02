@@ -1,11 +1,15 @@
 import { Box, Divider, IconButton, Link, Paper, Stack, Tooltip, Typography } from "@mui/material";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Popup } from "react-map-gl/maplibre";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { formatFieldValue } from "@/lib/utils/formatFieldValue";
+import type { FieldKind } from "@/lib/validations/layer";
 import type { MapPopoverInfoProps } from "@/types/map/popover";
+
+import useLayerFields from "@/hooks/map/CommonHooks";
 
 // Assuming this type remains relevant for the popover itself
 import { OverflowTypograpy } from "@/components/common/OverflowTypography";
@@ -256,9 +260,40 @@ export const MapPopoverInfo: React.FC<MapPopoverInfoProps> = ({
   properties,
   jsonProperties,
   lngLat,
+  layerId,
   onClose,
 }) => {
   const [detailsView, setDetailsView] = useState<DetailsViewType | undefined>(undefined);
+  const { layerFields } = useLayerFields(layerId || "");
+
+  // Apply per-field formatting (kind + display_config) to property values
+  // whose key matches a known column. Keys that don't match (e.g. when the
+  // caller used interaction-based display labels) pass through unchanged.
+  // formatFieldValue is a no-op for plain strings, applies the
+  // user-configured display_config when present, and otherwise falls back
+  // to the kind-default (e.g. 2 decimals for float numbers, auto unit for
+  // dimensioned kinds).
+  const formattedProperties = useMemo(() => {
+    if (!properties) return properties;
+    if (!layerId || layerFields.length === 0) return properties;
+    const byName = new Map(layerFields.map((f) => [f.name, f]));
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(properties)) {
+      const f = byName.get(k);
+      if (!f || v === null || v === undefined || v === "") {
+        out[k] = v == null ? "" : String(v);
+        continue;
+      }
+      const kind: FieldKind =
+        (f.kind as FieldKind) ?? (f.type === "number" ? "number" : "string");
+      // Coerce numeric strings back to a number so kind-aware formatting
+      // (decimals, units) actually applies.
+      const numericValue =
+        f.type === "number" && !isNaN(Number(v)) ? Number(v) : v;
+      out[k] = formatFieldValue(numericValue, kind, f.display_config ?? {});
+    }
+    return out;
+  }, [properties, layerId, layerFields]);
 
   return (
     <Popup
@@ -277,7 +312,7 @@ export const MapPopoverInfo: React.FC<MapPopoverInfoProps> = ({
         <Divider sx={{ mb: 0 }} />
         <Box sx={{ overflowY: "auto", maxHeight: "280px" }}>
           <LayerInfo
-            properties={properties}
+            properties={formattedProperties}
             jsonProperties={jsonProperties}
             detailsView={detailsView}
             setDetailsView={setDetailsView}

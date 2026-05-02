@@ -39,7 +39,7 @@ const FolderModal: React.FC<FolderDialogProps> = ({
   onClose,
   onEdit,
 }) => {
-  const [folderName, setFolderName] = useState<string>("");
+  const [folderName, setFolderName] = useState<string>(selectedFolder?.name ?? "");
   const { t } = useTranslation("common");
 
   const handleFolderEdit = async () => {
@@ -65,7 +65,7 @@ const FolderModal: React.FC<FolderDialogProps> = ({
       toast.error(error.message);
     }
 
-    setFolderName("");
+    setFolderName(selectedFolder?.name ?? "");
     onEdit?.();
   };
 
@@ -73,7 +73,7 @@ const FolderModal: React.FC<FolderDialogProps> = ({
     <Dialog
       open={open}
       onClose={() => {
-        setFolderName("");
+        setFolderName(selectedFolder?.name ?? "");
         onClose?.();
       }}>
       <DialogTitle>
@@ -92,7 +92,7 @@ const FolderModal: React.FC<FolderDialogProps> = ({
             autoComplete="off"
             sx={{ my: 2, minWidth: 300 }}
             id="folder-name"
-            defaultValue={selectedFolder?.name || folderName}
+            value={folderName}
             inputProps={{ maxLength: 30 }}
             label={t("folder_name")}
             variant="outlined"
@@ -125,7 +125,7 @@ const FolderModal: React.FC<FolderDialogProps> = ({
         }}>
         <Button
           onClick={() => {
-            setFolderName("");
+            setFolderName(selectedFolder?.name ?? "");
             onClose?.();
           }}
           variant="text"

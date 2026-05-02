@@ -36,7 +36,7 @@ import { toast } from "react-toastify";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
-import { useFolders } from "@/lib/api/folders";
+import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { createLayer, createRasterLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { addProjectLayers, useProject, useProjectLayers } from "@/lib/api/projects";
@@ -458,7 +458,8 @@ const DatasetExternal: React.FC<DatasetExternalProps> = ({ open, onClose, projec
     order: "descendent",
     order_by: "updated_at",
   };
-  const { folders } = useFolders(queryParams);
+  const { folders: allFolders } = useFolders(queryParams);
+  const folders = getWritableFolders(allFolders);
   const {
     register,
     reset,
@@ -484,11 +485,9 @@ const DatasetExternal: React.FC<DatasetExternalProps> = ({ open, onClose, projec
       const urlCapabilities = findExternalDatasetType(externalUrl);
       if (urlCapabilities) {
         setCapabilities(urlCapabilities);
-        const homeFolder = folders?.find((folder) => folder.name === "home");
         const projectFolder = folders?.find((folder) => folder.id === project?.folder_id);
-        const preselectedFolder = projectFolder || homeFolder;
-        if (preselectedFolder) {
-          setSelectedFolder(preselectedFolder);
+        if (projectFolder) {
+          setSelectedFolder(projectFolder);
         }
 
         // For COG type, set default layer name from URL filename
@@ -548,11 +547,9 @@ const DatasetExternal: React.FC<DatasetExternalProps> = ({ open, onClose, projec
     // STEP 1: Select Dataset
     else if (activeStep === 1) {
       setActiveStep((prevActiveStep) => prevActiveStep + 1);
-      const homeFolder = folders?.find((folder) => folder.name === "home");
       const projectFolder = folders?.find((folder) => folder.id === project?.folder_id);
-      const preselectedFolder = projectFolder || homeFolder;
-      if (preselectedFolder) {
-        setSelectedFolder(preselectedFolder);
+      if (projectFolder) {
+        setSelectedFolder(projectFolder);
       }
       if (
         (capabilities?.type === vectorDataType.Enum.wfs ||

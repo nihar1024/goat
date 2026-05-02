@@ -2140,5 +2140,13 @@
   "zoom_to_feature": "Zum Objekt zoomen",
   "zoom_to_selection": "Zoomen zur Auswahl",
   "zoom_to_starting_point": "Zoomen zum Startpunkt",
-  "zoom_visibility": "Zoom-Sichtbarkeit"
+  "zoom_visibility": "Zoom-Sichtbarkeit",
+  "folder_label": "Ordner",
+  "read_access": "Lesen",
+  "write_access": "Schreiben",
+  "shared": "Geteilt",
+  "shared_folders": "Geteilte Ordner",
+  "folder_share_conflict_warning": "Zugriff hier zu gewähren entfernt die bestehende Berechtigung im anderen Tab.",
+  "via_folder": "Über Ordner",
+  "access_via_folder": "Zugriff wird vom Ordner geerbt, in dem sich dieser Layer befindet"
 }

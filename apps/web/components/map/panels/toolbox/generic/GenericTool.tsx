@@ -556,6 +556,7 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
       ...filterFields,
       user_id: userProfile.id,
       project_id: projectId,
+      folder_id: project?.folder_id,
       scenario_id: scenarioId,
       save_results: true,
     };

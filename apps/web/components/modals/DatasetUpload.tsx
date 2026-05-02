@@ -23,13 +23,13 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
 import { requestDatasetUpload } from "@/lib/api/datasets";
-import { useFolders } from "@/lib/api/folders";
+import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { createLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { useProject } from "@/lib/api/projects";
@@ -51,9 +51,10 @@ interface DatasetUploadDialogProps {
   open: boolean;
   onClose?: () => void;
   projectId?: string;
+  defaultFolderId?: string;
 }
 
-const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose, projectId }) => {
+const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose, projectId, defaultFolderId }) => {
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
   const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
@@ -66,11 +67,13 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
     order: "descendent",
     order_by: "updated_at",
   };
-  const { folders } = useFolders(queryParams);
+  const { folders: allFolders } = useFolders(queryParams);
+  const folders = getWritableFolders(allFolders);
   const [activeStep, setActiveStep] = useState(0);
   const [fileValue, setFileValue] = useState<File>();
   const [fileUploadError, setFileUploadError] = useState<string>();
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>();
+  const folderInitialized = useRef(false);
   const [isBusy, setIsBusy] = useState(false);
   const [tabularPreview, setTabularPreview] = useState<TabularPreview | null>(null);
   const [hasHeader, setHasHeader] = useState(true);
@@ -95,13 +98,19 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
   const confirmationStep = isTabular ? 3 : 2;
 
   useEffect(() => {
-    const homeFolder = folders?.find((folder) => folder.name === "home");
-    const projectFolder = folders?.find((folder) => folder.id === project?.folder_id);
-    const preSelectedFolder = projectFolder || homeFolder;
-    if (preSelectedFolder) {
-      setSelectedFolder(preSelectedFolder);
+    if (!folders || folderInitialized.current) return;
+    const projectFolder = folders.find((folder) => folder.id === project?.folder_id);
+    if (projectFolder) {
+      setSelectedFolder(projectFolder);
+      folderInitialized.current = true;
+    } else if (defaultFolderId) {
+      const defaultFolder = folders.find((folder) => folder.id === defaultFolderId);
+      if (defaultFolder) {
+        setSelectedFolder(defaultFolder);
+        folderInitialized.current = true;
+      }
     }
-  }, [folders, project?.folder_id]);
+  }, [folders, project?.folder_id, defaultFolderId]);
 
   useEffect(() => {
     if (!fileValue || !isTabular) {
@@ -182,6 +191,8 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
     setTabularPreview(null);
     setHasHeader(true);
     setSelectedSheet("");
+    setSelectedFolder(undefined);
+    folderInitialized.current = false;
     reset();
     onClose?.();
   };

@@ -451,11 +451,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
         onDelete={
           editing
             ? async () => {
-                const id = editing.id;
-                await deleteCustomBasemap(id);
-                if (project?.basemap === id) {
-                  await onProjectUpdate?.("basemap", DEFAULT_BASEMAP);
-                }
+                await deleteCustomBasemap(editing.id, DEFAULT_BASEMAP);
               }
             : undefined
         }

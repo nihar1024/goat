@@ -24,20 +24,39 @@ logger = logging.getLogger(__name__)
 _redis_pool: Optional[redis.ConnectionPool] = None
 _redis_client: Optional[redis.Redis] = None
 
+# Throttle reconnect attempts when Redis is down so a hot read path doesn't
+# spam connect attempts (and warning logs) on every call.
+_REDIS_RETRY_INTERVAL_SECONDS = 30.0
+_redis_last_failure_at: float = 0.0
+_redis_failure_warning_logged: bool = False
+
 
 def get_redis_client() -> Optional[redis.Redis]:
     """Get or create Redis client with connection pooling.
 
     Returns:
-        Redis client or None if caching is disabled or connection fails
+        Redis client or None if caching is disabled or connection fails.
+
+    When Redis is unavailable we don't retry on every call — that would
+    flood the logs and add latency to hot read paths. We back off for
+    `_REDIS_RETRY_INTERVAL_SECONDS` and log the failure exactly once per
+    outage; subsequent calls during the back-off return None silently.
     """
     global _redis_pool, _redis_client
+    global _redis_last_failure_at, _redis_failure_warning_logged
 
     if not settings.TILE_CACHE_ENABLED:
         return None
 
     if _redis_client is not None:
         return _redis_client
+
+    import time
+
+    now = time.monotonic()
+    if now - _redis_last_failure_at < _REDIS_RETRY_INTERVAL_SECONDS:
+        # Still in back-off after a recent failure: stay silent.
+        return None
 
     try:
         _redis_pool = redis.ConnectionPool.from_url(
@@ -49,11 +68,24 @@ def get_redis_client() -> Optional[redis.Redis]:
         _redis_client = redis.Redis(connection_pool=_redis_pool)
         # Test connection
         _redis_client.ping()
-        logger.info("Redis tile cache connected: %s", settings.REDIS_URL)
+        if _redis_failure_warning_logged:
+            logger.info("Redis reconnected: %s", settings.REDIS_URL)
+        else:
+            logger.info("Redis tile cache connected: %s", settings.REDIS_URL)
+        _redis_failure_warning_logged = False
+        _redis_last_failure_at = 0.0
         return _redis_client
     except Exception as e:
-        logger.warning("Redis connection failed, tile caching disabled: %s", e)
         _redis_client = None
+        _redis_last_failure_at = now
+        if not _redis_failure_warning_logged:
+            logger.warning(
+                "Redis connection failed, caching disabled "
+                "(will retry every %.0fs): %s",
+                _REDIS_RETRY_INTERVAL_SECONDS,
+                e,
+            )
+            _redis_failure_warning_logged = True
         return None
 
 

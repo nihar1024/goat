@@ -4,6 +4,7 @@ This service retrieves layer metadata from the DuckLake catalog
 and PostgreSQL metadata tables.
 """
 
+import json
 import logging
 from typing import Any, Optional
 from uuid import UUID
@@ -13,11 +14,12 @@ from cachetools import TTLCache
 
 from geoapi.config import settings
 from geoapi.dependencies import LayerInfo
+from geoapi.tile_cache import get_redis_client
 
 logger = logging.getLogger(__name__)
 
-# Cache for layer metadata (5 minute TTL, max 1000 entries)
-_metadata_cache: TTLCache[str, "LayerMetadata"] = TTLCache(maxsize=1000, ttl=300)
+_METADATA_KEY_PREFIX = "geoapi:layer-meta:"
+_METADATA_TTL_SECONDS = 300
 
 
 class LayerMetadata:
@@ -42,6 +44,24 @@ class LayerMetadata:
         self.columns = columns
         self.srid = srid
         self.geometry_column = geometry_column
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a JSON-friendly dict for Redis storage."""
+        return {
+            "layer_id": self.layer_id,
+            "name": self.name,
+            "geometry_type": self.geometry_type,
+            "bounds": self.bounds,
+            "columns": self.columns,
+            "srid": self.srid,
+            "user_id": self.user_id,
+            "geometry_column": self.geometry_column,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LayerMetadata":
+        """Reconstruct from the dict produced by `to_dict`."""
+        return cls(**data)
 
     @property
     def column_names(self) -> list[str]:
@@ -76,6 +96,123 @@ class LayerMetadata:
         if self.user_id:
             return f"user_{self.user_id}"
         return "public"
+
+
+class LayerMetadataCache:
+    """Redis-backed `LayerMetadata` cache with in-process fallback.
+
+    Cache-aside pattern. Reads return None on miss; the caller is expected
+    to fetch from the source of truth (PG + DuckLake) and `set` the value.
+
+    Behaviour:
+
+    * Redis is the **shared** layer when available. All pods read/write the
+      same key, so an invalidation by one pod is immediately visible to all
+      others — no pub/sub needed.
+    * Every Redis call is wrapped in try/except. Connection errors,
+      time-outs, OOM-on-write, evictions all degrade silently to a cache
+      miss; the caller falls through to PG/DuckLake.
+    * When Redis is unreachable (e.g. local single-pod dev with no Redis),
+      we fall back to a small in-process `TTLCache`. Keeps single-pod fast
+      without forcing Redis as a dev dependency.
+
+    The class deliberately exposes a dict-like API (`__contains__`,
+    `__getitem__`, `__setitem__`, `pop`) so it can replace the previous
+    `TTLCache` with a one-line swap at the call sites.
+    """
+
+    def __init__(self, ttl_seconds: int = _METADATA_TTL_SECONDS) -> None:
+        self._ttl = ttl_seconds
+        # In-process fallback for when Redis is down or returns None
+        # because of OOM/eviction. Bounded so we don't grow unbounded.
+        self._local: TTLCache[str, "LayerMetadata"] = TTLCache(
+            maxsize=1000, ttl=ttl_seconds
+        )
+
+    @staticmethod
+    def _key(layer_id: str) -> str:
+        return f"{_METADATA_KEY_PREFIX}{layer_id}"
+
+    # --- Redis ops, each tolerant of failures ---
+
+    def _redis_get(self, layer_id: str) -> Optional["LayerMetadata"]:
+        client = get_redis_client()
+        if client is None:
+            return None
+        try:
+            raw = client.get(self._key(layer_id))
+        except Exception as e:
+            logger.debug("Redis layer-meta GET failed: %s", e)
+            return None
+        if raw is None:
+            return None
+        try:
+            data = json.loads(raw)
+            return LayerMetadata.from_dict(data)
+        except Exception as e:
+            # Stale/garbled value — drop it and treat as miss.
+            logger.warning("Discarding malformed layer-meta cache entry: %s", e)
+            try:
+                client.delete(self._key(layer_id))
+            except Exception:
+                pass
+            return None
+
+    def _redis_set(self, layer_id: str, metadata: "LayerMetadata") -> bool:
+        client = get_redis_client()
+        if client is None:
+            return False
+        try:
+            client.set(
+                self._key(layer_id),
+                json.dumps(metadata.to_dict()),
+                ex=self._ttl,
+            )
+            return True
+        except Exception as e:
+            # OOM (with `noeviction`), connection drop, etc. — fine.
+            logger.debug("Redis layer-meta SET failed: %s", e)
+            return False
+
+    def _redis_delete(self, layer_id: str) -> None:
+        client = get_redis_client()
+        if client is None:
+            return
+        try:
+            client.delete(self._key(layer_id))
+        except Exception as e:
+            logger.debug("Redis layer-meta DEL failed: %s", e)
+
+    # --- Public dict-like API ---
+
+    def __contains__(self, key: str) -> bool:
+        return self._redis_get(key) is not None or key in self._local
+
+    def __getitem__(self, key: str) -> "LayerMetadata":
+        v = self._redis_get(key)
+        if v is None:
+            v = self._local.get(key)
+        if v is None:
+            raise KeyError(key)
+        return v
+
+    def __setitem__(self, key: str, value: "LayerMetadata") -> None:
+        wrote_to_redis = self._redis_set(key, value)
+        if not wrote_to_redis:
+            # Only populate the local fallback when Redis isn't carrying
+            # the value, so single-pod dev still benefits from a cache.
+            self._local[key] = value
+
+    def pop(
+        self, key: str, default: Optional["LayerMetadata"] = None
+    ) -> Optional["LayerMetadata"]:
+        self._redis_delete(key)
+        return self._local.pop(key, default)
+
+
+# Layer metadata cache (5-min TTL). Backed by Redis when available, with
+# an in-process TTLCache fallback for local/single-pod dev.
+_metadata_cache: LayerMetadataCache = LayerMetadataCache()
 
 
 class LayerService:

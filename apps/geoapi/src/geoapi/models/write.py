@@ -1,8 +1,10 @@
 """Pydantic models for write operations (feature CRUD, column management)."""
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+FieldKind = Literal["string", "number", "area", "perimeter", "length"]
 
 # --- Feature Write Models ---
 
@@ -95,19 +97,31 @@ VALID_COLUMN_TYPES = list(COLUMN_TYPE_MAP.keys())
 
 
 class ColumnCreate(BaseModel):
-    """Create a new column."""
+    """Create a new column.
+
+    Either `kind` (preferred — public field kind: string/number/area/...)
+    or `type` (legacy — raw DuckDB type) must be supplied. When `kind`
+    is given, the server resolves the underlying DuckDB type and (for
+    computed kinds) the compute SQL via the registry.
+    """
 
     name: str = Field(..., min_length=1, max_length=255, pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    type: str = Field(..., description=f"Column type. Valid values: {', '.join(VALID_COLUMN_TYPES)}")
+    kind: Optional[FieldKind] = None
+    type: Optional[str] = Field(
+        None,
+        description=f"Legacy column type. Valid values: {', '.join(VALID_COLUMN_TYPES)}",
+    )
+    display_config: dict[str, Any] = Field(default_factory=dict)
     default_value: Optional[Any] = None
 
 
 class ColumnUpdate(BaseModel):
-    """Update column properties (rename)."""
+    """Update column properties (rename, display config)."""
 
     new_name: Optional[str] = Field(
         None, min_length=1, max_length=255, pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$"
     )
+    display_config: Optional[dict[str, Any]] = None
 
 
 class ColumnResponse(BaseModel):

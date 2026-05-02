@@ -2137,6 +2137,8 @@
   "select_field_to_edit": "Select a field to edit its settings",
   "untitled_layer": "Untitled layer",
   "field_type": "Field type",
+  "computed_read_only": "Computed (read-only)",
+  "computed_on_save": "Computed on save",
   "layer_name": "Layer name",
   "geometry_type": "Geometry type",
   "define_fields": "Define fields",
@@ -2171,5 +2173,17 @@
   "folder_share_conflict_warning": "Assigning access here will remove the current grant on the other tab.",
   "via_folder": "Via folder",
   "access_via_folder": "Access is inherited from the folder this layer belongs to",
-  "access_via_folder_disable_hint": "Already has access via folder sharing — individual sharing is redundant"
+  "access_via_folder_disable_hint": "Already has access via folder sharing — individual sharing is redundant",
+  "add_field_to_dataset": "Add new field to dataset",
+  "enter_column_name": "Enter column name",
+  "show_thousands_separator": "Show thousands separator",
+  "abbreviate_large_numbers": "Abbreviate large numbers",
+  "always_show_sign": "Always show sign",
+  "examples": "Examples",
+  "auto": "Auto",
+  "field_kind_string": "Text",
+  "field_kind_number": "Number",
+  "field_kind_area": "Area",
+  "field_kind_perimeter": "Perimeter",
+  "field_kind_length": "Length"
 }

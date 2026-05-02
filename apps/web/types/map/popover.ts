@@ -28,6 +28,12 @@ export interface MapPopoverInfoProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   jsonProperties?: Record<string, Array<{ [key: string]: any }>>; // Allow any value type in data
   lngLat: [number, number];
+  /**
+   * Optional layer id. When set, the popup applies the layer's
+   * per-field formatting (kind + display_config from queryables) to
+   * property values whose key matches a known column.
+   */
+  layerId?: string;
   onClose: () => void;
 }
 

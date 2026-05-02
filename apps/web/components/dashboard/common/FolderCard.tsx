@@ -1,4 +1,4 @@
-import { Chip, IconButton, Paper, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Chip, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -29,8 +29,7 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
   ];
 
   return (
-    <Tooltip title={folder.name} placement="top" disableInteractive>
-      <Paper
+    <Paper
         elevation={0}
         onClick={() => onClick(folder)}
         sx={{
@@ -102,6 +101,5 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
           />
         )}
       </Paper>
-    </Tooltip>
   );
 }

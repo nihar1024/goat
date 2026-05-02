@@ -165,40 +165,78 @@ async def read_folders(
     result = await async_session.execute(folders_query)
     folders = result.scalars().all()
 
-    # Build FolderRead list, annotating is_owned / role / shared_from_name
+    owned_ids = [f.id for f in folders if f.user_id == user_id]
+    shared_ids = [f.id for f in folders if f.user_id != user_id]
+
+    # Batch: owned-folder grantee_ids (one query for all owned folders)
+    owned_grants: dict[UUID, list[UUID]] = {}
+    if owned_ids:
+        rows = (await async_session.execute(
+            select(ResourceGrant.resource_id, ResourceGrant.grantee_id).where(
+                ResourceGrant.resource_type == "folder",
+                ResourceGrant.resource_id.in_(owned_ids),
+            )
+        )).all()
+        for resource_id, grantee_id in rows:
+            owned_grants.setdefault(resource_id, []).append(grantee_id)
+
+    # Batch: shared-folder grants + roles (one query for all shared folders)
+    shared_grant_map: dict[UUID, tuple[ResourceGrant, Role]] = {}
+    if shared_ids:
+        conditions = []
+        if team_ids:
+            conditions.append(and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id.in_(team_ids)))
+        if organization_id:
+            conditions.append(and_(ResourceGrant.grantee_type == "organization", ResourceGrant.grantee_id == organization_id))
+        if conditions:
+            grant_rows = (await async_session.execute(
+                select(ResourceGrant, Role)
+                .join(Role, Role.id == ResourceGrant.role_id)
+                .where(
+                    ResourceGrant.resource_type == "folder",
+                    ResourceGrant.resource_id.in_(shared_ids),
+                    or_(*conditions),
+                )
+            )).all()
+            for grant, role in grant_rows:
+                if grant.resource_id not in shared_grant_map:
+                    shared_grant_map[grant.resource_id] = (grant, role)
+
+    # Batch: team / org display names (one query each, only if needed)
+    team_ids_needed = {g.grantee_id for g, _ in shared_grant_map.values() if g.grantee_type == "team"}
+    org_ids_needed = {g.grantee_id for g, _ in shared_grant_map.values() if g.grantee_type == "organization"}
+
+    teams_by_id: dict[UUID, str] = {}
+    if team_ids_needed:
+        team_rows = (await async_session.execute(select(Team).where(Team.id.in_(team_ids_needed)))).scalars().all()
+        teams_by_id = {t.id: t.name for t in team_rows}
+
+    orgs_by_id: dict[UUID, str] = {}
+    if org_ids_needed:
+        org_rows = (await async_session.execute(select(Organization).where(Organization.id.in_(org_ids_needed)))).scalars().all()
+        orgs_by_id = {o.id: o.name for o in org_rows}
+
+    # Assemble response
     folder_reads: List[FolderRead] = []
     for f in folders:
-        is_owned = f.user_id == user_id
-        if is_owned:
-            grants_result = await async_session.execute(
-                select(ResourceGrant.grantee_id).where(
-                    ResourceGrant.resource_type == "folder",
-                    ResourceGrant.resource_id == f.id,
-                )
-            )
-            shared_with_ids = [row[0] for row in grants_result.all()] or None
-            folder_reads.append(
-                FolderRead(
-                    **f.model_dump(),
-                    is_owned=True,
-                    role="folder-owner",
-                    shared_from_name=None,
-                    shared_with_ids=shared_with_ids,
-                )
-            )
+        if f.user_id == user_id:
+            shared_with_ids = owned_grants.get(f.id) or None
+            folder_reads.append(FolderRead(
+                **f.model_dump(), is_owned=True, role="folder-owner",
+                shared_from_name=None, shared_with_ids=shared_with_ids,
+            ))
         else:
-            # Look up the grant to find role + grantee display name
-            role_name, grantee_name = await _resolve_folder_role(
-                async_session, f.id, team_ids, organization_id
-            )
-            folder_reads.append(
-                FolderRead(
-                    **f.model_dump(),
-                    is_owned=False,
-                    role=role_name,
-                    shared_from_name=grantee_name,
-                )
-            )
+            entry = shared_grant_map.get(f.id)
+            if entry:
+                grant, role = entry
+                name = teams_by_id.get(grant.grantee_id) or orgs_by_id.get(grant.grantee_id) or str(grant.grantee_id)
+            else:
+                role, name = None, None  # type: ignore[assignment]
+            folder_reads.append(FolderRead(
+                **f.model_dump(), is_owned=False,
+                role=role.name if role else None,
+                shared_from_name=name,
+            ))
 
     return folder_reads
 

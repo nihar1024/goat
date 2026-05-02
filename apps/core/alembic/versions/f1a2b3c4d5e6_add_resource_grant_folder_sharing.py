@@ -59,19 +59,9 @@ def upgrade() -> None:
             ON accounts.resource_grant (grantee_type, grantee_id)
     """)
 
-    # Insert folder roles (idempotent — role table has no UNIQUE on name)
-    op.execute("""
-        INSERT INTO accounts.role (name, created_at, updated_at)
-        SELECT v.name, now(), now()
-        FROM (VALUES ('folder-viewer'), ('folder-editor')) AS v(name)
-        WHERE NOT EXISTS (
-            SELECT 1 FROM accounts.role r WHERE r.name = v.name
-        )
-    """)
 
 
 def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS accounts.resource_grant")
-    op.execute("DELETE FROM accounts.role WHERE name IN ('folder-viewer', 'folder-editor')")
     op.execute('ALTER TABLE accounts.user_team DROP COLUMN IF EXISTS role_id')
     op.execute('ALTER TABLE accounts."user" DROP COLUMN IF EXISTS organization_id')

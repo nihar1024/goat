@@ -112,9 +112,13 @@ const Datasets = () => {
     setAddDatasetAnchorEl(null);
   };
 
-  const openAddDatasetModal = (sourceType: AddLayerSourceType) => {
+  const openAddDatasetModal = (sourceType: AddLayerSourceType | "document") => {
     handleAddDatasetClose();
-    setAddDatasetModal(sourceType);
+    if (sourceType === "document") {
+      setOpenDocumentUpload(true);
+    } else {
+      setAddDatasetModal(sourceType);
+    }
   };
 
   const closeAddDatasetModal = () => {
@@ -132,6 +136,11 @@ const Datasets = () => {
       sourceType: AddLayerSourceType.DataSourceExternal,
       iconName: ICON_NAME.LINK,
       label: t("dataset_external"),
+    },
+    {
+      sourceType: "document" as const,
+      iconName: ICON_NAME.FILE,
+      label: t("upload_document"),
     },
   ];
 
@@ -235,7 +244,7 @@ const Datasets = () => {
         <ShareModal
           type="folder"
           open={true}
-          onClose={() => setShareFolder(null)}
+          onClose={() => { setShareFolder(null); mutateFolders(); }}
           content={shareFolder}
         />
       )}
@@ -255,20 +264,12 @@ const Datasets = () => {
         }}>
         <Typography variant="h6">{t("datasets")}</Typography>
         {isOrgEditor && (
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="outlined"
-              startIcon={<Icon iconName={ICON_NAME.UPLOAD} style={{ fontSize: 12 }} />}
-              onClick={() => setOpenDocumentUpload(true)}>
-              {t("upload_document")}
-            </Button>
-            <Button
-              disableElevation={true}
-              startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: 12 }} />}
-              onClick={handleAddDatasetClick}>
-              {t("add_dataset")}
-            </Button>
-          </Stack>
+          <Button
+            disableElevation={true}
+            startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: 12 }} />}
+            onClick={handleAddDatasetClick}>
+            {t("add_dataset")}
+          </Button>
         )}
         <Menu
           anchorEl={addDatasetAnchorEl}
@@ -289,7 +290,7 @@ const Datasets = () => {
             <ClickAwayListener onClickAway={handleAddDatasetClose}>
               <MenuList>
                 {addDatasetMenuItems.map((item, index) => (
-                  <MenuItem key={index} onClick={() => openAddDatasetModal(item.sourceType)}>
+                  <MenuItem key={index} onClick={() => openAddDatasetModal(item.sourceType as AddLayerSourceType | "document")}>
                     <ListItemIcon>
                       <Icon iconName={item.iconName} style={{ fontSize: "15px" }} />
                     </ListItemIcon>

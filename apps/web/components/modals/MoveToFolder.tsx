@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
-import { useFolders } from "@/lib/api/folders";
+import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { LAYERS_API_BASE_URL, updateDataset } from "@/lib/api/layers";
 import { PROJECTS_API_BASE_URL, updateProject } from "@/lib/api/projects";
 import type { GetContentQueryParams } from "@/lib/validations/common";
@@ -46,18 +46,21 @@ const ContentMoveToFolderModal: React.FC<ContentMoveToFolderDialogProps> = ({
     order: "descendent",
     order_by: "updated_at",
   };
-  const { folders } = useFolders(queryParams);
+  const { folders: allFolders } = useFolders(queryParams);
+  const folders = getWritableFolders(allFolders);
 
   const [isBusy, setIsBusy] = useState(false);
-
-  const [selectedFolder, setSelectedFolder] = useState<Folder | null>();
+  const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
 
   useEffect(() => {
-    if (selectedFolder === undefined && folders) {
+    if (allFolders && selectedFolder === null) {
       const folderId = content.folder_id;
-      setSelectedFolder(folders.find((folder) => folder.id === folderId));
+      const match = allFolders.find((folder) => folder.id === folderId);
+      if (match && match.is_owned && match.name !== "home") {
+        setSelectedFolder(match);
+      }
     }
-  }, [content.folder_id, folders, selectedFolder]);
+  }, [content.folder_id, allFolders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMoveToFolder = async () => {
     try {
@@ -90,13 +93,11 @@ const ContentMoveToFolderModal: React.FC<ContentMoveToFolderDialogProps> = ({
       <DialogContent>
         <Stack spacing={2} sx={{ py: 2 }}>
           <Box>
-            {selectedFolder && (
-              <FolderSelect
-                folders={folders}
-                selectedFolder={selectedFolder}
-                setSelectedFolder={setSelectedFolder}
-              />
-            )}
+            <FolderSelect
+              folders={folders}
+              selectedFolder={selectedFolder}
+              setSelectedFolder={setSelectedFolder}
+            />
           </Box>
         </Stack>
       </DialogContent>
@@ -113,7 +114,7 @@ const ContentMoveToFolderModal: React.FC<ContentMoveToFolderDialogProps> = ({
         <LoadingButton
           loading={isBusy}
           onClick={handleMoveToFolder}
-          disabled={disabled || selectedFolder?.id === content.folder_id}>
+          disabled={disabled || !selectedFolder || selectedFolder.id === content.folder_id}>
           <Typography variant="body2" fontWeight="bold" color="inherit">
             {t("move")}
           </Typography>

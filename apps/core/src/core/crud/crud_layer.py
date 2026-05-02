@@ -21,6 +21,7 @@ from core.crud.base import CRUDBase
 from core.db.models._link_model import (
     LayerOrganizationLink,
     LayerTeamLink,
+    ResourceGrant,
 )
 from core.db.models.layer import Layer, LayerType
 from core.db.models.organization import Organization
@@ -440,10 +441,6 @@ class CRUDLayer(CRUDLayerBase):
                 )
                 and value is not None
             ):
-                # Avoid adding folder_id in case team_id or organization_id is provided
-                if key == "folder_id" and (team_id or organization_id):
-                    continue
-
                 # Convert value to list if not list
                 if not isinstance(value, list):
                     value = [value]
@@ -521,11 +518,75 @@ class CRUDLayer(CRUDLayerBase):
             organization_id=organization_id,
         )
 
+        # When a folder_id is set in a team/org context, check if folder is shared
+        # via ResourceGrant. If so, bypass LayerTeamLink join — layers in
+        # folder-shared folders have no such link entry.
+        use_folder_grant_query = False
+        folder_id = getattr(params, "folder_id", None)
+        grant_conditions: list[Any] = []
+        if team_id:
+            grant_conditions.append(
+                and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id == team_id)
+            )
+        if organization_id:
+            grant_conditions.append(
+                and_(ResourceGrant.grantee_type == "organization", ResourceGrant.grantee_id == organization_id)
+            )
+
+        if folder_id and grant_conditions:
+            grant_result = await async_session.execute(
+                select(ResourceGrant.id).where(
+                    ResourceGrant.resource_type == "folder",
+                    ResourceGrant.resource_id == folder_id,
+                    or_(*grant_conditions),
+                ).limit(1)
+            )
+            use_folder_grant_query = grant_result.first() is not None
+        elif not folder_id and grant_conditions:
+            # At team/org root: show only layers explicitly shared via direct link
+            # (LayerTeamLink / LayerOrganizationLink). Layers that live inside a
+            # folder shared with the team/org are NOT shown here — they surface only
+            # when the user navigates into that shared folder.
+            accessible: list[Any] = []
+            # Sub-select: folders granted to this team/org — layers in these are excluded
+            # from the direct-link list so they don't bleed through here.
+            folder_granted_ids = select(ResourceGrant.resource_id).where(
+                ResourceGrant.resource_type == "folder",
+                or_(*grant_conditions),
+            )
+            if team_id:
+                accessible.append(
+                    and_(
+                        Layer.id.in_(
+                            select(LayerTeamLink.layer_id).where(LayerTeamLink.team_id == team_id)
+                        ),
+                        Layer.folder_id.notin_(folder_granted_ids),
+                    )
+                )
+            if organization_id:
+                accessible.append(
+                    and_(
+                        Layer.id.in_(
+                            select(LayerOrganizationLink.layer_id).where(
+                                LayerOrganizationLink.organization_id == organization_id
+                            )
+                        ),
+                        Layer.folder_id.notin_(folder_granted_ids),
+                    )
+                )
+            if accessible:
+                filters.append(or_(*accessible))
+            use_folder_grant_query = True
+
         # Get roles
         roles = await CRUDBase(Role).get_all(
             async_session,
         )
         role_mapping = {role.id: role.name for role in roles}
+
+        # Bypass the INNER JOIN when the result set is already constrained by an
+        # ID-based filter (folder grant or root-level accessible-layer OR).
+        bypass_join = use_folder_grant_query
 
         # Build query
         query = create_query_shared_content(
@@ -536,8 +597,8 @@ class CRUDLayer(CRUDLayerBase):
             Organization,
             Role,
             filters,
-            team_id=team_id,
-            organization_id=organization_id,
+            team_id=None if bypass_join else team_id,
+            organization_id=None if bypass_join else organization_id,
         )
 
         # Build params and filter out None values
@@ -563,8 +624,8 @@ class CRUDLayer(CRUDLayerBase):
             team_key="team_links",
             org_key="organization_links",
             model_name="layer",
-            team_id=team_id,
-            organization_id=organization_id,
+            team_id=None if bypass_join else team_id,
+            organization_id=None if bypass_join else organization_id,
         )
         layers.items = layers_arr
         return layers

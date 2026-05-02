@@ -91,6 +91,8 @@ jobs:
           echo "SAFE_IMAGE=$safe_image" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: 🐹 Set up QEMU for cross-arch builds
         uses: docker/setup-qemu-action@v3

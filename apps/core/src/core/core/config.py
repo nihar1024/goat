@@ -164,6 +164,7 @@ class Settings(BaseSettings):
     )
     ASSETS_URL: Optional[str] = None
     ASSETS_MAX_FILE_SIZE: Optional[int] = 4194304
+    DOCUMENTS_MAX_FILE_SIZE: int = 52428800  # 50 MiB
 
     THUMBNAIL_DIR_LAYER: Optional[str] = None
 

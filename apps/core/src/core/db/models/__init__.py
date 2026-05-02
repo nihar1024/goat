@@ -4,6 +4,7 @@ from ._link_model import (
     LayerTeamLink,
     ProjectOrganizationLink,
     ProjectTeamLink,
+    ResourceGrant,
     ScenarioScenarioFeatureLink,
     UserProjectLink,
 )

@@ -81,6 +81,9 @@ cache
 # Submodules
 apps/accounts
 
+# Git worktrees
+.worktrees/
+
 # Local nigiri builds (SDK is fetched automatically during cmake build)
 packages/cpp/nigiri/
 

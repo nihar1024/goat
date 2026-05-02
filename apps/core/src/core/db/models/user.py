@@ -1,10 +1,11 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID
 
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import (
     Column,
     Field,
+    ForeignKey,
     Relationship,
     SQLModel,
     Text,
@@ -29,6 +30,14 @@ class User(SQLModel, table=True):
     firstname: str = Field(sa_column=Column(Text, nullable=True))
     lastname: str = Field(sa_column=Column(Text, nullable=True))
     avatar: str = Field(sa_column=Column(Text, nullable=True))
+    organization_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.ACCOUNTS_SCHEMA}.organization.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+    )
 
     # Relationships
     scenarios: List["Scenario"] = Relationship(

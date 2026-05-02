@@ -31,6 +31,7 @@ export const publicUserSchema = userSchemaBase.extend({
   firstname: z.string(),
   lastname: z.string(),
   avatar: z.string(),
+  email: z.string().optional(),
 });
 
 export const userSchemaUpdate = userSchemaBase.partial();

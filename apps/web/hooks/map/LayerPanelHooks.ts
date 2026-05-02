@@ -29,6 +29,7 @@ export const useLayerSettingsMoreMenu = () => {
     _inCatalog?: ProjectLayer["in_catalog"],
     readOnly?: boolean,
     canEdit?: boolean,
+    mapView?: boolean,
   ): PopperMenuItem[] {
     if (readOnly) {
       const readOnlyOptions: PopperMenuItem[] = [
@@ -66,16 +67,20 @@ export const useLayerSettingsMoreMenu = () => {
 
     if (layerType === "feature") {
       const featureOptions: PopperMenuItem[] = [
-        {
-          id: MapLayerActions.PROPERTIES,
-          label: t("properties"),
-          icon: ICON_NAME.CIRCLEINFO,
-        },
-        {
-          id: MapLayerActions.STYLE,
-          label: t("style"),
-          icon: ICON_NAME.STYLE,
-        },
+        ...(!mapView
+          ? [
+              {
+                id: MapLayerActions.PROPERTIES,
+                label: t("properties"),
+                icon: ICON_NAME.CIRCLEINFO,
+              },
+              {
+                id: MapLayerActions.STYLE,
+                label: t("style"),
+                icon: ICON_NAME.STYLE,
+              },
+            ]
+          : []),
         {
           id: MapLayerActions.ZOOM_TO,
           label: t("zoom_to"),
@@ -183,17 +188,21 @@ export const useLayerSettingsMoreMenu = () => {
       return tableOptions;
     }
     if (layerType === "raster") {
-      const rasterOptions = [
-        {
-          id: MapLayerActions.PROPERTIES,
-          label: t("properties"),
-          icon: ICON_NAME.CIRCLEINFO,
-        },
-        {
-          id: MapLayerActions.STYLE,
-          label: t("style"),
-          icon: ICON_NAME.STYLE,
-        },
+      const rasterOptions: PopperMenuItem[] = [
+        ...(!mapView
+          ? [
+              {
+                id: MapLayerActions.PROPERTIES,
+                label: t("properties"),
+                icon: ICON_NAME.CIRCLEINFO,
+              },
+              {
+                id: MapLayerActions.STYLE,
+                label: t("style"),
+                icon: ICON_NAME.STYLE,
+              },
+            ]
+          : []),
         {
           id: MapLayerActions.ZOOM_TO,
           label: t("zoom_to"),

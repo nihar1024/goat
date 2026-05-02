@@ -121,6 +121,11 @@ class LayerExportParams(ToolInputBase):
             widget="sql-editor",
         ),
     )
+    layer_owner_id: str | None = Field(
+        None,
+        description="Owner user ID of the layer (used for shared/catalog layers)",
+        json_schema_extra=ui_field(section="output", field_order=95, hidden=True),
+    )
     # user_id inherited from ToolInputBase
 
 
@@ -142,22 +147,29 @@ class LayerExportRunner(SimpleToolRunner):
     Extends SimpleToolRunner for shared infrastructure (DuckDB, S3, settings, logging).
     """
 
-    def _get_table_name(self: Self, layer_id: str, user_id: str) -> str:
-        """Build DuckLake table name, looking up the actual layer owner.
+    def _get_table_name(self: Self, layer_id: str, user_id: str, layer_owner_id: str | None = None) -> str:
+        """Build DuckLake table name for the layer owner.
 
-        This correctly handles catalog/shared layers owned by other users.
+        Uses layer_owner_id when provided (e.g., for shared/catalog layers).
+        Falls back to a PostgreSQL lookup, then to user_id as last resort.
 
         Args:
             layer_id: Layer UUID string
-            user_id: Fallback user UUID if layer owner lookup fails
+            user_id: Fallback user UUID if owner cannot be determined
+            layer_owner_id: Explicit owner UUID (skips PostgreSQL lookup)
 
         Returns:
             Fully qualified table name: lake.user_{owner_id}.t_{layer_id}
         """
-        # Look up the layer's actual owner
-        layer_owner_id = self.get_layer_owner_id_sync(layer_id)
         if layer_owner_id is None:
-            layer_owner_id = user_id  # Fallback to passed user_id
+            layer_owner_id = self.get_layer_owner_id_sync(layer_id)
+        if layer_owner_id is None:
+            logger.warning(
+                "Could not determine layer owner for layer %s, falling back to user_id %s",
+                layer_id,
+                user_id,
+            )
+            layer_owner_id = user_id
 
         user_schema = f"user_{layer_owner_id.replace('-', '')}"
         table_name = f"t_{layer_id.replace('-', '')}"
@@ -277,6 +289,7 @@ class LayerExportRunner(SimpleToolRunner):
         output_format: str,
         crs: str | None = None,
         query: str | dict[str, Any] | None = None,
+        layer_owner_id: str | None = None,
     ) -> None:
         """Export layer from DuckLake to file.
 
@@ -287,12 +300,18 @@ class LayerExportRunner(SimpleToolRunner):
             output_format: GDAL driver name (GPKG, GeoJSON, etc.)
             crs: Target CRS for reprojection (e.g., "EPSG:4326")
             query: WHERE clause filter (string or CQL2 dict)
+            layer_owner_id: Explicit owner UUID for shared/catalog layers
         """
-        table_name = self._get_table_name(layer_id, user_id)
+        table_name = self._get_table_name(layer_id, user_id, layer_owner_id)
 
         # Get columns that can be exported to OGR formats
         # (excludes STRUCT, MAP, and other unsupported types)
         exportable_columns = self._get_exportable_columns(table_name)
+        if not exportable_columns:
+            raise ValueError(
+                f"No exportable columns found for table '{table_name}'. "
+                "The layer may not exist in DuckLake or the owner lookup failed."
+            )
 
         # Check if table has geometry
         has_geometry = self._has_geometry_column(table_name)
@@ -574,6 +593,7 @@ class LayerExportRunner(SimpleToolRunner):
                 output_format=gdal_format,
                 crs=params.crs,
                 query=params.query,
+                layer_owner_id=params.layer_owner_id,
             )
 
             # Create zip

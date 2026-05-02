@@ -315,7 +315,20 @@ const castNodeToProjectLayer = (node: ProjectLayerTreeNode): ProjectLayer => {
 
 // Helper function to filter menu options for view mode
 const filterMenuForViewMode = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
-  const excludedActions = [ContentActions.DELETE, MapLayerActions.RENAME, MapLayerActions.DUPLICATE];
+  const excludedActions = [
+    ContentActions.DELETE,
+    MapLayerActions.RENAME,
+    MapLayerActions.DUPLICATE,
+    MapLayerActions.STYLE,
+    MapLayerActions.EDIT_FEATURES,
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
+};
+
+// Catalogue layers cannot be renamed, duplicated, or have features edited
+const filterMenuForCatalogLayer = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
+  const excludedActions = [MapLayerActions.RENAME, MapLayerActions.DUPLICATE, MapLayerActions.EDIT_FEATURES];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
 };
@@ -408,7 +421,6 @@ export const ProjectLayerTree = ({
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const selectedLayerIds = useAppSelector((state) => state.layers.selectedLayerIds || []);
   const mapMode = useAppSelector((state) => state.map.mapMode);
-
   const {
     getLayerMoreMenuOptions,
     openMoreMenu,
@@ -509,6 +521,7 @@ export const ProjectLayerTree = ({
 
   const handleVisibilityToggle = async (node: ProjectLayerTreeNode, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isEditMode) return;
 
     const currentVisibility = node.properties?.visibility ?? true;
 
@@ -688,15 +701,21 @@ export const ProjectLayerTree = ({
       menuOptions = getLayerMoreMenuOptions(
         (node.layer_type as "table" | "feature" | "raster") || "feature",
         !!node.query,
-        false,
+        !!node.in_catalog,
         false,
         node.user_id === userProfile?.id,
+        isEditMode,
       );
     }
 
     // Filter menu options based on view mode
     if (viewMode === "view") {
       menuOptions = filterMenuForViewMode(menuOptions);
+    }
+
+    // Catalogue layers cannot be renamed, duplicated, or have features edited
+    if (node.in_catalog) {
+      menuOptions = filterMenuForCatalogLayer(menuOptions);
     }
 
     // Edit features only available in data (map) mode
@@ -1247,6 +1266,7 @@ export const ProjectLayerTree = ({
         <DraggableTreeView
           items={itemsWithIcons}
           onItemsChange={(newItems) => {
+            if (!isEditMode) return;
             setItems(newItems);
             if (onTreeUpdate) {
               const updatePayload = formatDndDataForApi(newItems);

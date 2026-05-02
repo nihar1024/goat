@@ -554,13 +554,18 @@ class CRUDLayer(CRUDLayerBase):
                 ResourceGrant.resource_type == "folder",
                 or_(*grant_conditions),
             )
+            # NULL-safe: folder_id IS NULL means no folder, always include such layers.
+            # Without this, NULL NOT IN (...) evaluates to UNKNOWN (= excluded).
+            def not_in_granted(col: Any) -> Any:
+                return or_(col.is_(None), col.notin_(folder_granted_ids))
+
             if team_id:
                 accessible.append(
                     and_(
                         Layer.id.in_(
                             select(LayerTeamLink.layer_id).where(LayerTeamLink.team_id == team_id)
                         ),
-                        Layer.folder_id.notin_(folder_granted_ids),
+                        not_in_granted(Layer.folder_id),
                     )
                 )
             if organization_id:
@@ -571,7 +576,7 @@ class CRUDLayer(CRUDLayerBase):
                                 LayerOrganizationLink.organization_id == organization_id
                             )
                         ),
-                        Layer.folder_id.notin_(folder_granted_ids),
+                        not_in_granted(Layer.folder_id),
                     )
                 )
             if accessible:

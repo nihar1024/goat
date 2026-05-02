@@ -35,6 +35,7 @@ export interface TileCard {
   onMoreMenuSelect?: (menuItem: PopperMenuItem, contentItem: Project | Layer) => void;
   enableActions?: boolean;
   selected?: Project | Layer;
+  roleChip?: { icon: ICON_NAME; tooltip: string };
 }
 
 export interface ActiveCard {
@@ -167,6 +168,17 @@ const TileCard = (props: TileCard) => {
     </>
   );
 
+  const roleChipEl = props.roleChip ? (
+    <Tooltip title={props.roleChip.tooltip} placement="top" arrow>
+      <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Icon
+          iconName={props.roleChip.icon}
+          style={{ fontSize: 11, color: theme.palette.text.secondary }}
+        />
+      </Box>
+    </Tooltip>
+  ) : null;
+
   const gridContent = (
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: theme.spacing(2) }}>
@@ -177,6 +189,7 @@ const TileCard = (props: TileCard) => {
       <Stack direction="row" alignItems="center" spacing={2} sx={{ pb: 0 }}>
         {ownedBy}
         {updatedAtText}
+        {roleChipEl}
       </Stack>
       {/* Tags */}
       <Box sx={{ mt: theme.spacing(2) }} display="flex-start">
@@ -314,7 +327,9 @@ const TileCard = (props: TileCard) => {
                 <Grid item xs={1} sm={2} md={1}>
                   <Box
                     sx={{
-                      display: { xs: "none", sm: "block" },
+                      display: { xs: "none", sm: "flex" },
+                      alignItems: "center",
+                      gap: 1,
                     }}>
                     {ownedBy}
                   </Box>
@@ -326,8 +341,9 @@ const TileCard = (props: TileCard) => {
                   sx={{
                     display: { xs: "none", sm: "block" },
                   }}>
-                  <Box sx={{ px: 1, pb: 0 }} display="flex-start">
+                  <Box sx={{ px: 1, pb: 0, display: "flex", alignItems: "center", gap: 1 }}>
                     {updatedAtText}
+                    {roleChipEl}
                   </Box>
                 </Grid>
                 <Grid

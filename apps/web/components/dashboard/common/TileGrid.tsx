@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
 import type { Layer } from "@/lib/validations/layer";
+import type { Folder } from "@/lib/validations/folder";
 import type { Project } from "@/lib/validations/project";
 
 import { ContentActions } from "@/types/common";
@@ -23,6 +24,55 @@ interface TileGridProps {
   onClick?: (item: Project | Layer) => void;
   onAction?: (action: ContentActions, item: Project | Layer) => void;
   selected?: Project | Layer;
+  /** Pass folders + currentUserId to show ownership/access role chips on cards */
+  folders?: Folder[];
+  currentUserId?: string;
+  activeTeamId?: string;
+  activeOrgId?: string;
+}
+
+const ROLE_CHIP_OWNER = { icon: ICON_NAME.CROWN, tooltip: "Owner" };
+const ROLE_CHIP_WRITE = { icon: ICON_NAME.EDIT, tooltip: "Editor" };
+const ROLE_CHIP_READ = { icon: ICON_NAME.EYE, tooltip: "Viewer" };
+
+function getRoleChip(
+  item: Project | Layer,
+  folders: Folder[] | undefined,
+  currentUserId: string | undefined,
+  activeTeamId?: string,
+  activeOrgId?: string,
+) {
+  if (!currentUserId) return undefined;
+
+  // Owner check
+  if ((item as Project).owned_by?.id === currentUserId) return ROLE_CHIP_OWNER;
+
+  // Folder-grant path: look up folder role
+  if (folders) {
+    const folder = folders.find((f) => f.id === (item as { folder_id?: string }).folder_id);
+    if (folder) {
+      if (folder.is_owned) return ROLE_CHIP_OWNER;
+      if (folder.role === "folder-editor") return ROLE_CHIP_WRITE;
+      if (folder.role === "folder-viewer") return ROLE_CHIP_READ;
+    }
+  }
+
+  // Fallback: item shared individually via team/org link.
+  // In team/org context the backend returns exactly one shared_with entry
+  // for the current team/org, so [0] is safe.
+  const sharedWith = (item as { shared_with?: { teams?: { role?: string }[]; organizations?: { role?: string }[] } }).shared_with;
+  if (activeTeamId && sharedWith?.teams?.length) {
+    const role = sharedWith.teams[0]?.role;
+    if (role?.endsWith("-editor")) return ROLE_CHIP_WRITE;
+    if (role?.endsWith("-viewer")) return ROLE_CHIP_READ;
+  }
+  if (activeOrgId && sharedWith?.organizations?.length) {
+    const role = sharedWith.organizations[0]?.role;
+    if (role?.endsWith("-editor")) return ROLE_CHIP_WRITE;
+    if (role?.endsWith("-viewer")) return ROLE_CHIP_READ;
+  }
+
+  return undefined;
 }
 
 const TileGrid = (props: TileGridProps) => {
@@ -99,8 +149,9 @@ const TileGrid = (props: TileGridProps) => {
                     enableActions={props.enableActions}
                     cardType={props.view}
                     item={item}
-                    moreMenuOptions={getMoreMenuOptions(props.type, item)}
+                    moreMenuOptions={getMoreMenuOptions(props.type, item, props.currentUserId)}
                     onMoreMenuSelect={handleMoreMenuSelect}
+                    roleChip={getRoleChip(item, props.folders, props.currentUserId, props.activeTeamId, props.activeOrgId)}
                   />
                 )}
               </Grid>

@@ -1,3 +1,0 @@
-[submodule "apps/accounts"]
-	path = apps/accounts
-	url = git@github.com:EPajares/goat-accounts.git

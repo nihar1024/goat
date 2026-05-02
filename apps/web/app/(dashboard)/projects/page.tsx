@@ -69,10 +69,22 @@ const Projects = () => {
   const [view, setView] = useState<"list" | "grid">("grid");
   const { t } = useTranslation("common");
 
-  const { projects, isLoading: isProjectLoading, isError: _isProjectError, mutate } = useProjects(queryParams);
   const { folders, mutate: mutateFolders } = useFolders({});
   const { teams } = useTeams();
   const { organization } = useOrganization();
+
+  const homeFolder = useMemo(() => folders?.find((f) => f.is_owned && f.name === "home"), [folders]);
+
+  // When browsing "My Content" root (no folder selected), restrict to the home
+  // folder so projects moved into named folders don't bleed into the root view.
+  const effectiveQueryParams = useMemo<GetProjectsQueryParams>(() => {
+    if (!queryParams.folder_id && !queryParams.team_id && !queryParams.organization_id && homeFolder) {
+      return { ...queryParams, folder_id: homeFolder.id };
+    }
+    return queryParams;
+  }, [queryParams, homeFolder]);
+
+  const { projects, isLoading: isProjectLoading, isError: _isProjectError, mutate } = useProjects(effectiveQueryParams);
 
   const [openProjectModal, setOpenProjectModal] = useState(false);
   const [openImportModal, setOpenImportModal] = useState(false);
@@ -182,7 +194,12 @@ const Projects = () => {
 
   return (
     <Container sx={{ py: 10, px: 10 }} maxWidth="xl">
-      <ProjectModal type="create" open={openProjectModal} onClose={() => setOpenProjectModal(false)} />
+      <ProjectModal
+       
+        open={openProjectModal}
+        onClose={() => setOpenProjectModal(false)}
+        defaultFolderId={activeFolderId ?? homeFolder?.id}
+      />
       <ProjectImportModal
         open={openImportModal}
         onClose={() => setOpenImportModal(false)}

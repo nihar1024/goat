@@ -6,7 +6,7 @@ from fastapi_pagination import Page
 from fastapi_pagination import Params as PaginationParams
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import and_, or_
+from sqlmodel import and_, not_, or_
 
 from core.core.content import (
     build_shared_with_object,
@@ -101,8 +101,43 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
         """Get projects for a user and folder"""
 
         # Build query and filters
+        use_folder_grant_query = False
         if team_id or organization_id:
-            filters = [Project.folder_id == folder_id] if folder_id else []
+            grant_conditions = []
+            if team_id:
+                grant_conditions.append(
+                    and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id == team_id)
+                )
+            if organization_id:
+                grant_conditions.append(
+                    and_(ResourceGrant.grantee_type == "organization", ResourceGrant.grantee_id == organization_id)
+                )
+            if folder_id:
+                # Check whether this folder is accessible via a ResourceGrant for the
+                # given team/org. If so, bypass the ProjectTeamLink join — projects in
+                # folder-shared folders have no such link.
+                grant_result = await async_session.execute(
+                    select(ResourceGrant.id).where(
+                        ResourceGrant.resource_type == "folder",
+                        ResourceGrant.resource_id == folder_id,
+                        or_(*grant_conditions),
+                    ).limit(1)
+                )
+                use_folder_grant_query = grant_result.first() is not None
+                filters = [Project.folder_id == folder_id]
+            else:
+                # At team/org root: exclude projects that live inside a folder
+                # already shared with this team/org — those surface when navigating
+                # into the folder, not at the root level.
+                folder_granted_ids = (
+                    select(ResourceGrant.resource_id).where(
+                        ResourceGrant.resource_type == "folder",
+                        or_(*grant_conditions),
+                    )
+                )
+                filters = [
+                    not_(Project.folder_id.in_(folder_granted_ids))
+                ]
         elif folder_id:
             # Check if the folder is shared with the user via a grant.
             # If so, show all projects in the folder (not just the user's own).
@@ -134,6 +169,20 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
 
         if ids:
             query = select(Project).where(Project.id.in_(ids))
+        elif use_folder_grant_query:
+            # Folder is shared via ResourceGrant — bypass team/org link join so we
+            # see all projects in the folder regardless of ProjectTeamLink entries.
+            query = create_query_shared_content(
+                Project,
+                ProjectTeamLink,
+                ProjectOrganizationLink,
+                Team,
+                Organization,
+                Role,
+                filters,
+                team_id=None,
+                organization_id=None,
+            )
         else:
             query = create_query_shared_content(
                 Project,
@@ -162,14 +211,16 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
             order_by=order_by,
             order=order,
         )
+        effective_team_id = None if use_folder_grant_query else team_id
+        effective_org_id = None if use_folder_grant_query else organization_id
         projects.items = build_shared_with_object(
             items=projects.items,
             role_mapping=role_mapping,
             team_key="team_links",
             org_key="organization_links",
             model_name="project",
-            team_id=team_id,
-            organization_id=organization_id,
+            team_id=effective_team_id,
+            organization_id=effective_org_id,
         )
         return projects
 

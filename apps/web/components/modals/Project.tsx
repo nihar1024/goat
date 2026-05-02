@@ -7,23 +7,22 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
-import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
-
 import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { createProject } from "@/lib/api/projects";
 import type { GetContentQueryParams } from "@/lib/validations/common";
+import type { Folder } from "@/lib/validations/folder";
 import type { PostProject } from "@/lib/validations/project";
 import { postProjectSchema } from "@/lib/validations/project";
 
-import { RhfAutocompleteField } from "@/components/common/form-inputs/AutocompleteField";
+import FolderSelect from "@/components/dashboard/common/FolderSelect";
 
 interface ProjectDialogProps {
-  type: "upload" | "create";
   open: boolean;
   onClose?: () => void;
+  defaultFolderId?: string;
 }
 
-const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
+const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose, defaultFolderId }) => {
   const { t } = useTranslation("common");
   const queryParams: GetContentQueryParams = {
     order: "descendent",
@@ -32,7 +31,7 @@ const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
   const router = useRouter();
 
   const { folders: allFolders } = useFolders(queryParams);
-  const folders = getWritableFolders(allFolders);
+  const writableFolders = getWritableFolders(allFolders);
   const [isBusy, setIsBusy] = useState(false);
   const {
     handleSubmit,
@@ -40,13 +39,14 @@ const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
     getValues,
     watch,
     reset,
-    control,
+    setValue,
     formState: { errors },
   } = useForm<PostProject>({
     mode: "onChange",
     resolver: zodResolver(postProjectSchema),
     defaultValues: {
       description: "",
+      folder_id: defaultFolderId,
       //todo: get this from user preferences settings.
       thumbnail_url: "https://assets.plan4better.de/img/goat_new_project_artwork.png",
       initial_view_state: {
@@ -61,6 +61,11 @@ const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
     },
   });
   const watchFormValues = watch();
+
+  const selectedFolder = useMemo(
+    () => writableFolders?.find((f) => f.id === watchFormValues.folder_id) ?? null,
+    [writableFolders, watchFormValues.folder_id]
+  );
 
   const handleOnClose = () => {
     reset();
@@ -87,26 +92,16 @@ const ProjectModal: React.FC<ProjectDialogProps> = ({ open, onClose }) => {
     }
   };
 
-  const folderOptions = useMemo(() => {
-    return folders?.map((folder) => ({
-      value: folder.id,
-      label: folder.is_owned ? folder.name : `${folder.name} (${t("shared")})`,
-      icon: <Icon fontSize="small" iconName={ICON_NAME.FOLDER} />,
-    }));
-  }, [folders, t]);
-
   return (
     <Dialog open={open} onClose={handleOnClose} fullWidth maxWidth="sm">
       <DialogTitle>{t("create_project")}</DialogTitle>
       <Box sx={{ px: 4, pb: 2 }}>
         <Box sx={{ width: "100%" }} component="form" onSubmit={handleSubmit(onSubmit)}>
           <Stack direction="column" spacing={4} sx={{ my: 1 }}>
-            <RhfAutocompleteField
-              disabled={isBusy}
-              options={folderOptions ?? []}
-              control={control}
-              name="folder_id"
-              label={t("folder_location")}
+            <FolderSelect
+              folders={writableFolders}
+              selectedFolder={selectedFolder}
+              setSelectedFolder={(folder: Folder | null) => setValue("folder_id", folder?.id ?? "")}
             />
             <TextField
               fullWidth

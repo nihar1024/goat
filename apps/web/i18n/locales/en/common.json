@@ -2147,5 +2147,8 @@
   "read_access": "Read",
   "write_access": "Write",
   "shared": "Shared",
-  "folder_share_conflict_warning": "Assigning access here will remove the current grant on the other tab."
+  "shared_folders": "Shared Folders",
+  "folder_share_conflict_warning": "Assigning access here will remove the current grant on the other tab.",
+  "via_folder": "Via folder",
+  "access_via_folder": "Access is inherited from the folder this layer belongs to"
 }

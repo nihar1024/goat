@@ -59,7 +59,7 @@ export const updateFolder = async (id: string, name: string) => {
 };
 
 export const getWritableFolders = (folders: FolderResponse | undefined) =>
-  folders?.filter((f) => (f.is_owned && f.name !== "home") || f.role === "folder-editor") ?? [];
+  folders?.filter((f) => f.is_owned || f.role === "folder-editor") ?? [];
 
 export const useFolderGrants = (folderId: string | null) => {
   return useSWR<FolderGrantsResponse>(

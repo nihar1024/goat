@@ -282,18 +282,28 @@ async def read_project_initial_view_state(
 ) -> InitialViewState:
     """Retrieve initial view state of a project by its ID."""
 
-    # Get initial view state
     user_projects = await crud_user_project.get_by_multi_keys(
         async_session, keys={"user_id": user_id, "project_id": project_id}
     )
-    if not user_projects:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found or user has no access to this project",
-        )
-    user_project = user_projects[0]
-    assert type(user_project) is UserProjectLink
-    return InitialViewState(**user_project.initial_view_state)
+    if user_projects:
+        user_project = user_projects[0]
+        assert type(user_project) is UserProjectLink
+        return InitialViewState(**user_project.initial_view_state)
+
+    # Shared-folder user: no personal row yet — fall back to the owner's view state.
+    project = await crud_project.get(async_session, id=project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    owner_projects = await crud_user_project.get_by_multi_keys(
+        async_session, keys={"user_id": project.user_id, "project_id": project_id}
+    )
+    if owner_projects:
+        return InitialViewState(**owner_projects[0].initial_view_state)
+
+    raise HTTPException(
+        status_code=404,
+        detail="Project not found or user has no access to this project",
+    )
 
 
 @router.put(

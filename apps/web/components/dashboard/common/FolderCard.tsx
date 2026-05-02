@@ -38,8 +38,7 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
           gap: 1.5,
           px: 2,
           py: 1.5,
-          minWidth: 150,
-          maxWidth: 220,
+          width: 190,
           cursor: "pointer",
           border: "1px solid",
           borderColor: selected ? "primary.main" : "divider",
@@ -63,12 +62,6 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
           </Typography>
           {showRoleChip && folder.role && (
             <>
-              {/* Team / org source — only for folders shared to you */}
-              {!folder.is_owned && folder.shared_from_name && (
-                <Typography variant="caption" noWrap sx={{ color: "text.secondary", fontSize: "9px" }}>
-                  {folder.shared_from_name}
-                </Typography>
-              )}
               <Chip
                 label={
                   folder.is_owned

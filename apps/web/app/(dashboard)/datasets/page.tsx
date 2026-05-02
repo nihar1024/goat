@@ -65,17 +65,29 @@ const Datasets = () => {
   const [datasetSchema, setDatasetSchema] = useState<GetDatasetSchema>({});
   const [view, setView] = useState<"list" | "grid">("grid");
 
+  const { folders, mutate: mutateFolders } = useFolders({});
+  const { teams } = useTeams();
+  const { organization } = useOrganization();
+  const { isOrgEditor } = useAuthZ();
+
+  const homeFolder = useMemo(() => folders?.find((f) => f.is_owned && f.name === "home"), [folders]);
+
+  // When browsing "My Content" root (no folder selected), restrict to the home
+  // folder so layers moved into named folders don't bleed into the root view.
+  const effectiveDatasetSchema = useMemo<GetDatasetSchema>(() => {
+    if (!datasetSchema.folder_id && !queryParams.team_id && !queryParams.organization_id && homeFolder) {
+      return { ...datasetSchema, folder_id: homeFolder.id };
+    }
+    return datasetSchema;
+  }, [datasetSchema, queryParams.team_id, queryParams.organization_id, homeFolder]);
+
   const {
     mutate,
     layers: datasets,
     isLoading: isDatasetLoading,
     isError: _isDatasetError,
-  } = useLayers(queryParams, datasetSchema);
+  } = useLayers(queryParams, effectiveDatasetSchema);
 
-  const { folders, mutate: mutateFolders } = useFolders({});
-  const { teams } = useTeams();
-  const { organization } = useOrganization();
-  const { isOrgEditor } = useAuthZ();
   useJobStatus(mutate, mutate);
 
   const [addDatasetModal, setAddDatasetModal] = useState<AddLayerSourceType | null>(null);
@@ -185,7 +197,11 @@ const Datasets = () => {
   return (
     <Container sx={{ py: 10, px: 10 }} maxWidth="xl">
       {addDatasetModal === AddLayerSourceType.DatasourceUpload && (
-        <DatasetUploadModal open={true} onClose={closeAddDatasetModal} />
+        <DatasetUploadModal
+          open={true}
+          onClose={closeAddDatasetModal}
+          defaultFolderId={activeFolderId ?? homeFolder?.id}
+        />
       )}
       {addDatasetModal === AddLayerSourceType.DataSourceExternal && (
         <DatasetExternal open={true} onClose={closeAddDatasetModal} />
@@ -288,7 +304,7 @@ const Datasets = () => {
         <Grid item xs={3}>
           <Paper elevation={3} sx={{ backgroundImage: "none" }}>
             <FoldersTreeView
-              queryParams={datasetSchema}
+              queryParams={{ ...datasetSchema, team_id: queryParams.team_id, organization_id: queryParams.organization_id }}
               enableActions={isOrgEditor}
               hideMyContent={!isOrgEditor}
               setQueryParams={(params, teamId, organizationId) => {
@@ -301,7 +317,8 @@ const Datasets = () => {
                   newQueryParams.organization_id = organizationId;
                 }
                 setQueryParams(newQueryParams);
-                setDatasetSchema(params as GetDatasetSchema);
+                const { team_id: _t, organization_id: _o, ...schemaParams } = params as Record<string, unknown>;
+                setDatasetSchema(schemaParams as GetDatasetSchema);
               }}
             />
           </Paper>

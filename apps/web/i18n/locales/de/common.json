@@ -2145,5 +2145,8 @@
   "read_access": "Lesen",
   "write_access": "Schreiben",
   "shared": "Geteilt",
-  "folder_share_conflict_warning": "Zugriff hier zu gewähren entfernt die bestehende Berechtigung im anderen Tab."
+  "shared_folders": "Geteilte Ordner",
+  "folder_share_conflict_warning": "Zugriff hier zu gewähren entfernt die bestehende Berechtigung im anderen Tab.",
+  "via_folder": "Über Ordner",
+  "access_via_folder": "Zugriff wird vom Ordner geerbt, in dem sich dieser Layer befindet"
 }

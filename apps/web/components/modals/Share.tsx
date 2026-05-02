@@ -79,6 +79,7 @@ interface Item {
   name: string;
   avatar: string;
   role: string;
+  inheritedRole?: string;
 }
 
 interface ShareWithItemsTabProps {
@@ -136,7 +137,15 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
                 sx={{
                   display: "flex",
                   alignItems: "center",
+                  gap: 1,
                 }}>
+                {item.inheritedRole && (
+                  <Tooltip title={t("access_via_folder")} placement="top">
+                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                      {t("via_folder")}
+                    </Typography>
+                  </Tooltip>
+                )}
                 <Button
                   variant="text"
                   sx={{ borderRadius: "4px" }}
@@ -145,7 +154,7 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
                   onClick={(event) => handleClick(event, item.id)}
                   endIcon={<KeyboardArrowDownIcon color="inherit" />}>
                   <Typography variant="body2" fontWeight="bold" color="inherit">
-                    {item.role ? getRoleTranslation(item.role) : t("no_access")}
+                    {item.role ? getRoleTranslation(item.role) : item.inheritedRole ? getRoleTranslation(item.inheritedRole) : t("no_access")}
                   </Typography>
                 </Button>
               </ListItemSecondaryAction>
@@ -461,6 +470,12 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
   const { data: folderGrants } = useFolderGrants(
     type === "folder" && open ? content.id : null
   );
+
+  // For layers: fetch the folder's grants to show inherited access read-only
+  const layerFolderId = type === "layer" ? (content as Layer).folder_id : null;
+  const { data: layerFolderGrants } = useFolderGrants(
+    type === "layer" && open && layerFolderId ? layerFolderId : null
+  );
   const grantsLoaded = useRef(false);
   useEffect(() => {
     if (type === "folder" && folderGrants && !grantsLoaded.current) {
@@ -511,16 +526,20 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       return [];
     }
     const sharedWitthOrg = sharedWith?.organizations;
+    const inheritedOrgRole = layerFolderGrants?.grants.find(
+      (g) => g.grantee_type === "organization" && g.grantee_id === organization.id
+    )?.role;
     const accessLevels = [
       {
         id: organization.id,
         name: organization.name,
         avatar: organization.avatar as string,
         role: sharedWitthOrg?.find((org) => org.id === organization.id)?.role || "",
+        inheritedRole: inheritedOrgRole,
       },
     ];
     return accessLevels;
-  }, [organization, sharedWith]);
+  }, [organization, sharedWith, layerFolderGrants]);
 
   const teamsAccessLevel: Item[] = useMemo(() => {
     if (!teamsList) {
@@ -532,9 +551,12 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       name: team.name,
       avatar: team.avatar as string,
       role: sharedWithTeams?.find((t) => t.id === team.id)?.role || "",
+      inheritedRole: layerFolderGrants?.grants.find(
+        (g) => g.grantee_type === "team" && g.grantee_id === team.id
+      )?.role,
     }));
     return accessLevels;
-  }, [teamsList, sharedWith]);
+  }, [teamsList, sharedWith, layerFolderGrants]);
 
   const roleOptions = useMemo(() => {
     if (type === "layer") return [...layerShareRoleEnum.options, ""] as string[];

@@ -77,7 +77,7 @@ const ProjectSection = (props: ProjectSectionProps) => {
   );
   return (
     <Box>
-      <ProjectModal type="create" open={openProjectModal} onClose={() => setOpenProjectModal(false)} />
+      <ProjectModal open={openProjectModal} onClose={() => setOpenProjectModal(false)} />
       {activeContent && moreMenuState && (
         <>
           <ContentDialogWrapper

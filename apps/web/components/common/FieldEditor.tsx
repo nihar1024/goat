@@ -7,9 +7,13 @@ import { DragIndicator as DragIndicatorIcon } from "@mui/icons-material";
 import {
   Box,
   Button,
+  FormControlLabel,
   IconButton,
   Input,
+  MenuItem,
+  Select,
   Stack,
+  Switch,
   Typography,
   alpha,
   useTheme,
@@ -19,12 +23,31 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import type { FieldDefinition } from "@/lib/validations/layer";
-import { RESERVED_FIELD_NAMES } from "@/lib/validations/layer";
+import { formatFieldValue } from "@/lib/utils/formatFieldValue";
+import type { FieldDefinition, FieldKind } from "@/lib/validations/layer";
+import { ALLOWED_KINDS_BY_GEOM_TYPE, COMPUTED_KINDS, RESERVED_FIELD_NAMES } from "@/lib/validations/layer";
 
 import type { SelectorItem } from "@/types/map/common";
 
 import Selector from "@/components/map/panels/common/Selector";
+
+const DECIMALS_OPTIONS: ("auto" | number)[] = ["auto", 0, 1, 2, 3, 4, 5];
+
+const UNIT_OPTIONS_BY_KIND: Record<FieldKind, string[]> = {
+  string: [],
+  number: [],
+  area: ["auto", "mm²", "cm²", "m²", "ha", "km²"],
+  perimeter: ["auto", "mm", "cm", "m", "km"],
+  length: ["auto", "mm", "cm", "m", "km"],
+};
+
+const PREVIEW_VALUES_BY_KIND: Record<FieldKind, number[]> = {
+  string: [],
+  number: [1234.567, 12.35],
+  area: [42500, 12.35],
+  perimeter: [4250, 12.35],
+  length: [4250, 12.35],
+};
 
 interface FieldEditorProps {
   fields: FieldDefinition[];
@@ -35,17 +58,37 @@ interface FieldEditorProps {
   onRemoveOverride?: (id: string) => void;
   /** IDs of fields whose type cannot be changed (existing DB columns) */
   lockedFieldIds?: Set<string>;
+  /** Layer geometry type — controls which computed kinds are offered. */
+  geometryType?:
+    | "point"
+    | "multipoint"
+    | "line"
+    | "multiline"
+    | "polygon"
+    | "multipolygon"
+    | null;
+  /**
+   * When provided, clicking "Add field" calls this instead of creating an
+   * in-place stub. Use this to open an AddFieldDialog from the parent.
+   */
+  onAddField?: () => void;
 }
 
-const FIELD_TYPE_ICON: Record<string, ICON_NAME> = {
+const FIELD_TYPE_ICON: Record<FieldKind, ICON_NAME> = {
   string: ICON_NAME.LETTER_T,
   number: ICON_NAME.HASHTAG,
+  area: ICON_NAME.RULES_COMBINED,
+  perimeter: ICON_NAME.RULER_HORIZONTAL,
+  length: ICON_NAME.RULER_HORIZONTAL,
 };
 
-const fieldTypeItems: SelectorItem[] = [
-  { value: "string", label: "Text", icon: ICON_NAME.LETTER_T },
-  { value: "number", label: "Number", icon: ICON_NAME.HASHTAG },
-];
+const ALL_FIELD_TYPE_ITEMS: Record<FieldKind, SelectorItem> = {
+  string: { value: "string", label: "Text", icon: ICON_NAME.LETTER_T },
+  number: { value: "number", label: "Number", icon: ICON_NAME.HASHTAG },
+  area: { value: "area", label: "Area", icon: ICON_NAME.RULES_COMBINED },
+  perimeter: { value: "perimeter", label: "Perimeter", icon: ICON_NAME.RULER_HORIZONTAL },
+  length: { value: "length", label: "Length", icon: ICON_NAME.RULER_HORIZONTAL },
+};
 
 // --- Sortable field row ---
 
@@ -115,7 +158,7 @@ const SortableFieldRow = ({
         {/* Type indicator */}
         <Box sx={{ width: 18, flexShrink: 0, display: "flex", justifyContent: "center" }}>
           <Icon
-            iconName={FIELD_TYPE_ICON[field.type] || ICON_NAME.LETTER_T}
+            iconName={FIELD_TYPE_ICON[field.kind] ?? ICON_NAME.LETTER_T}
             style={{ fontSize: 12 }}
             htmlColor={error ? theme.palette.error.main : theme.palette.text.secondary}
           />
@@ -203,11 +246,19 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
   onSelectField,
   onRemoveOverride,
   lockedFieldIds,
+  geometryType,
+  onAddField,
 }) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
 
   const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
+
+  const availableKinds: FieldKind[] = geometryType
+    ? ALLOWED_KINDS_BY_GEOM_TYPE[geometryType] ?? ["string", "number"]
+    : ["string", "number"];
+
+  const fieldTypeItems: SelectorItem[] = availableKinds.map((k) => ALL_FIELD_TYPE_ITEMS[k]);
   const hasFields = fields.length > 0;
 
   // Compute per-field validation errors
@@ -241,6 +292,15 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
   }, [fields, t]);
 
   const handleAddField = () => {
+    // If caller provides an onAddField handler, delegate to it (e.g. to open
+    // an AddFieldDialog) rather than creating an in-place stub.
+    if (onAddField) {
+      onAddField();
+      return;
+    }
+
+    // Fallback: create an in-place stub (used by CreateLayer and other
+    // consumers that don't have a dedicated add-field dialog).
     // Auto-increment name: new_field, new_field_2, new_field_3, ...
     const baseName = t("field_name_default");
     const existingNames = new Set(fields.map((f) => f.name.toLowerCase()));
@@ -253,7 +313,9 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
     const newField: FieldDefinition = {
       id: crypto.randomUUID(),
       name: fieldName,
-      type: "string",
+      kind: "string",
+      is_computed: false,
+      display_config: {},
     };
     onChange([...fields, newField]);
     onSelectField(newField.id);
@@ -271,7 +333,9 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
     const copy: FieldDefinition = {
       id: crypto.randomUUID(),
       name: copyName,
-      type: field.type,
+      kind: field.kind,
+      is_computed: field.is_computed,
+      display_config: field.display_config,
     };
     const idx = fields.findIndex((f) => f.id === field.id);
     const next = [...fields];
@@ -298,7 +362,20 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
 
   const handleTypeChange = (id: string, item: SelectorItem | SelectorItem[] | undefined) => {
     if (!item || Array.isArray(item)) return;
-    onChange(fields.map((f) => (f.id === id ? { ...f, type: item.value as "string" | "number" } : f)));
+    onChange(fields.map((f) => (f.id === id ? { ...f, kind: item.value as FieldKind } : f)));
+  };
+
+  const handleDisplayConfigChange = (
+    id: string,
+    partial: Record<string, unknown>,
+  ) => {
+    onChange(
+      fields.map((f) =>
+        f.id === id
+          ? { ...f, display_config: { ...(f.display_config ?? {}), ...partial } }
+          : f,
+      ),
+    );
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -402,20 +479,167 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
           p: 2,
           display: "flex",
           flexDirection: "column",
+          overflowY: "auto",
         }}>
         {selectedField ? (
-          <Stack spacing={2}>
-            <Typography variant="subtitle2" fontWeight="bold">
-              {selectedField.name}
-            </Typography>
-            <Selector
-              label={t("field_type")}
-              selectedItems={fieldTypeItems.find((i) => i.value === selectedField.type)}
-              setSelectedItems={(item) => handleTypeChange(selectedField.id, item)}
-              items={fieldTypeItems}
-              disabled={lockedFieldIds?.has(selectedField.id)}
-            />
-          </Stack>
+          (() => {
+            const cfg = (selectedField.display_config ?? {}) as {
+              decimals?: "auto" | number;
+              unit?: string;
+              thousands_separator?: boolean;
+              abbreviate?: boolean;
+              always_show_sign?: boolean;
+            };
+            const showFormat = selectedField.kind !== "string";
+            const unitOptions = UNIT_OPTIONS_BY_KIND[selectedField.kind];
+            const previewValues = PREVIEW_VALUES_BY_KIND[selectedField.kind];
+            return (
+              <Stack spacing={2}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  {selectedField.name}
+                </Typography>
+                {COMPUTED_KINDS.has(selectedField.kind) && (
+                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                    <Icon iconName={ICON_NAME.LOCK} style={{ fontSize: 12 }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {t("computed_read_only")}
+                    </Typography>
+                  </Box>
+                )}
+                <Selector
+                  label={t("field_type")}
+                  selectedItems={
+                    ALL_FIELD_TYPE_ITEMS[selectedField.kind] ??
+                    fieldTypeItems.find((i) => i.value === selectedField.kind)
+                  }
+                  setSelectedItems={(item) => handleTypeChange(selectedField.id, item)}
+                  items={fieldTypeItems}
+                  disabled={lockedFieldIds?.has(selectedField.id) || COMPUTED_KINDS.has(selectedField.kind)}
+                />
+
+                {showFormat && (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                      {t("number_format")}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Select
+                        size="small"
+                        fullWidth
+                        value={String(cfg.decimals ?? "auto")}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          handleDisplayConfigChange(selectedField.id, {
+                            decimals: v === "auto" ? "auto" : Number(v),
+                          });
+                        }}>
+                        {DECIMALS_OPTIONS.map((o) => (
+                          <MenuItem key={String(o)} value={String(o)}>
+                            {o === "auto" ? t("auto") : o}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {unitOptions.length > 0 && (
+                        <Select
+                          size="small"
+                          fullWidth
+                          value={cfg.unit ?? "auto"}
+                          onChange={(e) =>
+                            handleDisplayConfigChange(selectedField.id, {
+                              unit: e.target.value,
+                            })
+                          }>
+                          {unitOptions.map((u) => (
+                            <MenuItem key={u} value={u}>
+                              {u === "auto" ? t("auto") : u}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      )}
+                    </Stack>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={cfg.thousands_separator ?? false}
+                          onChange={(e) =>
+                            handleDisplayConfigChange(selectedField.id, {
+                              thousands_separator: e.target.checked,
+                            })
+                          }
+                        />
+                      }
+                      label={
+                        <Typography variant="caption">
+                          {t("show_thousands_separator")}
+                        </Typography>
+                      }
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={cfg.abbreviate ?? false}
+                          onChange={(e) =>
+                            handleDisplayConfigChange(selectedField.id, {
+                              abbreviate: e.target.checked,
+                            })
+                          }
+                        />
+                      }
+                      label={
+                        <Typography variant="caption">
+                          {t("abbreviate_large_numbers")}
+                        </Typography>
+                      }
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={cfg.always_show_sign ?? false}
+                          onChange={(e) =>
+                            handleDisplayConfigChange(selectedField.id, {
+                              always_show_sign: e.target.checked,
+                            })
+                          }
+                        />
+                      }
+                      label={
+                        <Typography variant="caption">
+                          {t("always_show_sign")}
+                        </Typography>
+                      }
+                    />
+
+                    {previewValues.length > 0 && (
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {t("examples")}
+                        </Typography>
+                        <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                          {previewValues.map((v) => (
+                            <Box
+                              key={v}
+                              sx={{
+                                px: 1,
+                                py: 0.5,
+                                bgcolor: "action.hover",
+                                borderRadius: 1,
+                                fontFamily: "monospace",
+                                fontSize: "0.75rem",
+                              }}>
+                              {formatFieldValue(v, selectedField.kind, cfg)}
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Stack>
+            );
+          })()
         ) : (
           <Box
             sx={{

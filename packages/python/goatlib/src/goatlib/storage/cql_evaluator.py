@@ -95,10 +95,15 @@ class DuckDBCQLEvaluator(Evaluator):
 
     @handle(ast.Like)
     def like(self, node, lhs):
-        """Handle LIKE operator (always case-insensitive with ILIKE)."""
+        """Handle LIKE operator (always case-insensitive with ILIKE).
+
+        Casts the left-hand side to VARCHAR so ILIKE works for numeric
+        columns too — e.g., autocomplete searches against a DOUBLE column
+        like AREA_SQKM where the user types digits.
+        """
         pattern = self._add_param(node.pattern)
         # Always use ILIKE for case-insensitive matching (better UX)
-        result = f"{lhs} ILIKE {pattern}"
+        result = f"CAST({lhs} AS VARCHAR) ILIKE {pattern}"
         return f"NOT ({result})" if node.not_ else result
 
     @handle(ast.In)

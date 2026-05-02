@@ -59,6 +59,10 @@ const layerFieldType = z.object({
   $ref: z.string().optional(),
   name: z.string(),
   type: z.string(),
+  // D2: computed-field metadata exposed by the queryables endpoint
+  kind: z.string().optional(),
+  is_computed: z.boolean().optional(),
+  display_config: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const layerClassBreaks = z.object({
@@ -585,15 +589,52 @@ export type RasterLayerProperties = z.infer<typeof rasterLayerPropertiesSchema>;
 // Union type for all layer properties
 export type LayerProperties = FeatureLayerProperties | RasterLayerProperties;
 
-// --- Create Empty Layer ---
+// --- Field definitions ---
+
+export const fieldKindSchema = z.enum([
+  "string",
+  "number",
+  "area",
+  "perimeter",
+  "length",
+]);
+export type FieldKind = z.infer<typeof fieldKindSchema>;
+
+const numericFormatSchema = z.object({
+  decimals: z.union([z.literal("auto"), z.number().int().min(0).max(10)])
+    .default("auto"),
+  thousands_separator: z.boolean().default(false),
+  abbreviate: z.boolean().default(false),
+  always_show_sign: z.boolean().default(false),
+});
+
+export const stringDisplayConfigSchema = z.object({}).strict();
+export const numberDisplayConfigSchema = numericFormatSchema.strict();
+export const areaDisplayConfigSchema = numericFormatSchema.extend({
+  unit: z.enum(["auto", "mm²", "cm²", "m²", "ha", "km²"]).default("auto"),
+}).strict();
+export const lengthLikeUnitSchema = z.enum(["auto", "mm", "cm", "m", "km"]);
+export const perimeterDisplayConfigSchema = numericFormatSchema.extend({
+  unit: lengthLikeUnitSchema.default("auto"),
+}).strict();
+export const lengthDisplayConfigSchema = numericFormatSchema.extend({
+  unit: lengthLikeUnitSchema.default("auto"),
+}).strict();
+
+export const displayConfigSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("string"), config: stringDisplayConfigSchema }),
+  z.object({ kind: z.literal("number"), config: numberDisplayConfigSchema }),
+  z.object({ kind: z.literal("area"), config: areaDisplayConfigSchema }),
+  z.object({ kind: z.literal("perimeter"), config: perimeterDisplayConfigSchema }),
+  z.object({ kind: z.literal("length"), config: lengthDisplayConfigSchema }),
+]);
 
 export const fieldDefinitionSchema = z.object({
   id: z.string(),
-  name: z
-    .string()
-    .min(1, "Field name is required")
-    .max(255, "Field name too long"),
-  type: z.enum(["string", "number"]),
+  name: z.string().min(1, "Field name is required").max(255, "Field name too long"),
+  kind: fieldKindSchema,
+  is_computed: z.boolean().default(false),
+  display_config: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const RESERVED_FIELD_NAMES = ["id", "geometry", "geom", "__duckdb_row_id"];
@@ -619,3 +660,19 @@ export const createEmptyLayerSchema = z.object({
 
 export type FieldDefinition = z.infer<typeof fieldDefinitionSchema>;
 export type CreateEmptyLayerInput = z.infer<typeof createEmptyLayerSchema>;
+
+// Map of geometry types to allowed kinds for the Add-Field dropdown
+export const ALLOWED_KINDS_BY_GEOM_TYPE: Record<string, FieldKind[]> = {
+  point: ["string", "number"],
+  multipoint: ["string", "number"],
+  line: ["string", "number", "length"],
+  multiline: ["string", "number", "length"],
+  polygon: ["string", "number", "area", "perimeter"],
+  multipolygon: ["string", "number", "area", "perimeter"],
+};
+
+export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([
+  "area",
+  "perimeter",
+  "length",
+]);

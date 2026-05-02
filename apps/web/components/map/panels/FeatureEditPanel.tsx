@@ -16,6 +16,9 @@ import { useDraw } from "@/lib/providers/DrawProvider";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import useLayerFields from "@/hooks/map/CommonHooks";
 
+import { formatFieldValue } from "@/lib/utils/formatFieldValue";
+import type { FieldKind } from "@/lib/validations/layer";
+
 import Container from "@/components/map/panels/Container";
 import TextFieldInput from "@/components/map/panels/common/TextFieldInput";
 
@@ -154,17 +157,49 @@ const FeatureEditPanel: React.FC = () => {
       close={handleCancel}
       body={
         <Stack spacing={2}>
-          {filteredFields.map((field) => (
-            <TextFieldInput
-              key={field.name}
-              label={field.name}
-              type={field.type === "number" ? "number" : "text"}
-              placeholder={field.type === "number" ? t("enter_a_number") : t("enter_text")}
-              value={feature?.properties[field.name] != null ? String(feature.properties[field.name]) : ""}
-              onChange={(value) => handlePropertyChange(field.name, value)}
-              clearable={false}
-            />
-          ))}
+          {filteredFields.map((field) => {
+            const isComputed = field.is_computed === true;
+            let displayValue = "";
+            if (isComputed) {
+              const raw = feature?.properties[field.name];
+              if (raw != null && raw !== "") {
+                displayValue = formatFieldValue(
+                  raw,
+                  (field.kind as FieldKind) ?? "number",
+                  field.display_config ?? {},
+                );
+              } else if (mode === "draw") {
+                displayValue = t("computed_on_save");
+              }
+            } else {
+              displayValue =
+                feature?.properties[field.name] != null
+                  ? String(feature.properties[field.name])
+                  : "";
+            }
+
+            return (
+              <TextFieldInput
+                key={field.name}
+                label={field.name}
+                type={isComputed || field.type !== "number" ? "text" : "number"}
+                placeholder={
+                  isComputed
+                    ? ""
+                    : field.type === "number"
+                      ? t("enter_a_number")
+                      : t("enter_text")
+                }
+                value={displayValue}
+                disabled={isComputed}
+                onChange={(value) => {
+                  if (isComputed) return;
+                  handlePropertyChange(field.name, value);
+                }}
+                clearable={false}
+              />
+            );
+          })}
         </Stack>
       }
       action={

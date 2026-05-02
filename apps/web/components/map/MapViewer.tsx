@@ -238,6 +238,14 @@ const MapViewer: React.FC<MapProps> = ({
             properties: primitiveProperties,
             jsonProperties: jsonProperties,
             title: layerName ?? "",
+            // ProjectLayer.id is the project-layer-link id, not the
+            // underlying dataset id. queryables expects the dataset id,
+            // which lives on `.layer_id` for ProjectLayers and on `.id`
+            // for plain Layers. Prefer `layer_id` when present.
+            layerId: (
+              (interactiveLayer as { layer_id?: string }).layer_id ??
+              interactiveLayer.id
+            )?.toString(),
             onClose: handlePopoverClose,
           })
         );

@@ -10,6 +10,9 @@ import { EditorModes } from "@/types/map/popover";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
 
+import { formatFieldValue } from "@/lib/utils/formatFieldValue";
+import type { FieldKind } from "@/lib/validations/layer";
+
 import TextFieldInput from "@/components/map/panels/common/TextFieldInput";
 
 const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
@@ -49,7 +52,9 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
 
   const { layerFields } = useLayerFields(layer?.id || "");
   const filteredLayerFields = useMemo(() => {
-    return layerFields.filter((field) => field.type === "string" || field.type === "number");
+    return layerFields.filter(
+      (field) => field.type === "string" || field.type === "number",
+    );
   }, [layerFields]);
 
   const [featureProperties, setFeatureProperties] = useState<Record<string, string | number>>(
@@ -109,22 +114,47 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
             )}
             {(editMode === EditorModes.MODIFY_ATTRIBUTES || editMode === EditorModes.DRAW) && (
               <Stack sx={{ pt: 2, px: 2 }} direction="column" spacing={2} minWidth="300px">
-                {filteredLayerFields.map((field) => (
-                  <Stack key={field.name} direction="row" spacing={2} alignItems="center">
-                    {(field.type === "string" || field.type === "number") && (
-                      <TextFieldInput
-                        type={field.type === "number" ? "number" : "text"}
-                        label={field.name}
-                        clearable={false}
-                        value={featureProperties[field.name] ? featureProperties[field.name].toString() : ""}
-                        onChange={(value: string) => {
-                          const parsedValue = field.type === "number" ? Number(value) : value;
-                          setFeatureProperties((prev) => ({ ...prev, [field.name]: parsedValue }));
-                        }}
-                      />
-                    )}
-                  </Stack>
-                ))}
+                {filteredLayerFields.map((field) => {
+                  const isComputed = field.is_computed === true;
+                  let displayValue = "";
+                  if (isComputed) {
+                    // Format the computed value via the shared formatter so the
+                    // user sees the same string they get in the data table.
+                    const raw = featureProperties[field.name];
+                    if (raw !== undefined && raw !== null && raw !== "") {
+                      displayValue = formatFieldValue(
+                        raw,
+                        (field.kind as FieldKind) ?? "number",
+                        field.display_config ?? {},
+                      );
+                    } else if (editMode === EditorModes.DRAW) {
+                      displayValue = t("computed_on_save");
+                    }
+                  } else {
+                    displayValue = featureProperties[field.name]
+                      ? featureProperties[field.name].toString()
+                      : "";
+                  }
+
+                  return (
+                    <Stack key={field.name} direction="row" spacing={2} alignItems="center">
+                      {(field.type === "string" || field.type === "number") && (
+                        <TextFieldInput
+                          type={isComputed || field.type !== "number" ? "text" : "number"}
+                          label={field.name}
+                          clearable={false}
+                          disabled={isComputed}
+                          value={displayValue}
+                          onChange={(value: string) => {
+                            if (isComputed) return;
+                            const parsedValue = field.type === "number" ? Number(value) : value;
+                            setFeatureProperties((prev) => ({ ...prev, [field.name]: parsedValue }));
+                          }}
+                        />
+                      )}
+                    </Stack>
+                  );
+                })}
               </Stack>
             )}
           </Box>

@@ -7,6 +7,9 @@ type PseudoFieldName = "$area" | "$length" | "$perimeter";
 interface PseudoField {
   name: PseudoFieldName;
   type: "string" | "number" | "object";
+  kind?: string;
+  is_computed?: boolean;
+  display_config?: Record<string, unknown>;
 }
 
 const useLayerFields = (
@@ -37,9 +40,18 @@ const useLayerFields = (
         }
       })
       .map(([key, value]) => {
+        const v = value as {
+          type: string;
+          kind?: string;
+          is_computed?: boolean;
+          display_config?: Record<string, unknown>;
+        };
         return {
           name: key,
-          type: normalizeType(value.type),
+          type: normalizeType(v.type),
+          kind: v.kind,
+          is_computed: v.is_computed ?? false,
+          display_config: v.display_config ?? {},
         };
       });
 

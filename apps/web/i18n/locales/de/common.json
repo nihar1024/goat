@@ -629,6 +629,8 @@
   "field_required": "Dieses Feld ist erforderlich",
   "field_to_match_text": "Wählen Sie den Layer aus, zu dem Sie Daten hinzufügen möchten",
   "field_type": "Feldtyp",
+  "computed_read_only": "Berechnet (schreibgeschützt)",
+  "computed_on_save": "Beim Speichern berechnet",
   "fields": "Felder",
   "fields_saved": "Felder gespeichert",
   "fields_to_match": "Übereinstimmende Felder",
@@ -2169,5 +2171,17 @@
   "folder_share_conflict_warning": "Zugriff hier zu gewähren entfernt die bestehende Berechtigung im anderen Tab.",
   "via_folder": "Über Ordner",
   "access_via_folder": "Zugriff wird vom Ordner geerbt, in dem sich dieser Layer befindet",
-  "access_via_folder_disable_hint": "Hat bereits Zugriff über Ordner-Freigabe — individuelle Freigabe ist redundant"
+  "access_via_folder_disable_hint": "Hat bereits Zugriff über Ordner-Freigabe — individuelle Freigabe ist redundant",
+  "add_field_to_dataset": "Neues Feld zum Datensatz hinzufügen",
+  "enter_column_name": "Spaltenname eingeben",
+  "show_thousands_separator": "Tausendertrennzeichen anzeigen",
+  "abbreviate_large_numbers": "Große Zahlen abkürzen",
+  "always_show_sign": "Vorzeichen immer anzeigen",
+  "examples": "Beispiele",
+  "auto": "Auto",
+  "field_kind_string": "Text",
+  "field_kind_number": "Zahl",
+  "field_kind_area": "Fläche",
+  "field_kind_perimeter": "Umfang",
+  "field_kind_length": "Länge"
 }

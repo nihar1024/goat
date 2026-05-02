@@ -8,6 +8,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import EditIcon from "@mui/icons-material/Edit";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import LockIcon from "@mui/icons-material/Lock";
 import bbox from "@turf/bbox";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -52,6 +53,8 @@ import {
   useDatasetCollectionItems,
   useLayerQueryables,
 } from "@/lib/api/layers";
+import type { FieldKind } from "@/lib/validations/layer";
+import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
@@ -113,7 +116,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   const pendingFeatures = useAppSelector((state) => state.featureEditor.pendingFeatures);
   const isEditing = editLayerId === layerId;
   const { layerFields, isLoading: areFieldsLoading } = useLayerFields(layerId);
-  const { mutate: mutateQueryables } = useLayerQueryables(layerId);
+  const { queryables, mutate: mutateQueryables } = useLayerQueryables(layerId);
 
   // CQL filter from layer settings — applied to table queries and stats
   const cqlArgs = projectLayer?.query?.cql?.args;
@@ -191,6 +194,27 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
     () => layerFields.filter((f) => f.type !== "object" && f.type !== "geometry"),
     [layerFields]
   );
+
+  // Per-column metadata from queryables: kind, is_computed, display_config
+  // Keyed by field name for O(1) lookup during rendering
+  const columnMeta = useMemo(() => {
+    const meta: Record<string, { kind: FieldKind; isComputed: boolean; displayConfig: Record<string, unknown> }> = {};
+    if (!queryables?.properties) return meta;
+    for (const [fieldName, prop] of Object.entries(queryables.properties)) {
+      // Infer kind from JSON type if not explicitly provided by the backend
+      const rawKind = (prop as { kind?: string }).kind;
+      const kind: FieldKind =
+        rawKind === "area" || rawKind === "length" || rawKind === "perimeter"
+          ? rawKind
+          : rawKind === "number" || prop.type === "number" || prop.type === "integer"
+            ? "number"
+            : "string";
+      const isComputed = !!(prop as { is_computed?: boolean }).is_computed;
+      const displayConfig = ((prop as { display_config?: Record<string, unknown> }).display_config) ?? {};
+      meta[fieldName] = { kind, isComputed, displayConfig };
+    }
+    return meta;
+  }, [queryables]);
 
   // Build search CQL — OR across all display fields (temporary, not persisted)
   const searchCql = useMemo(() => {
@@ -383,6 +407,8 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
 
   const handleCellClick = (rowId: string, column: string, value: unknown) => {
     if (!isEditing) return; // Cells are only editable in edit mode
+    // Computed columns are always read-only — never enter edit mode
+    if (columnMeta[column]?.isComputed) return;
     const isAlreadySelected = selectedCell?.rowId === rowId && selectedCell?.column === column;
     if (isAlreadySelected) {
       // Second click — enter edit mode
@@ -960,19 +986,36 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                       const isEditing = editingCell?.rowId === rowId && editingCell?.column === field.name;
                       const isSelected = selectedCell?.rowId === rowId && selectedCell?.column === field.name;
                       const isDirty = dirtyCells.has(`${rowId}:${field.name}`);
+                      const meta = columnMeta[field.name];
+                      const isComputed = meta?.isComputed ?? false;
+                      const fieldKind = meta?.kind ?? (field.type === "number" ? "number" : "string");
+                      const fieldDisplayConfig = meta?.displayConfig ?? {};
+
+                      // Format value using formatFieldValue when the column has a non-trivial kind or display_config
+                      const hasNonDefaultDisplay =
+                        fieldKind !== "string" || Object.keys(fieldDisplayConfig).length > 0;
+                      const formattedValue =
+                        displayValue === null || displayValue === undefined
+                          ? ""
+                          : hasNonDefaultDisplay
+                            ? formatFieldValue(displayValue, fieldKind as FieldKind, fieldDisplayConfig)
+                            : String(displayValue);
 
                       return (
                         <TableCell
                           key={field.name}
                           sx={{
                             ...(columnWidths[field.name] ? { width: columnWidths[field.name], minWidth: columnWidths[field.name], maxWidth: columnWidths[field.name] } : {}),
-                            cursor: "text",
+                            cursor: isComputed ? "default" : "text",
                             position: "relative",
+                            // Computed columns get a subtle read-only tint
                             backgroundColor: isDirty
                               ? "rgba(255, 193, 7, 0.12)"
-                              : isSelected && !isEditing
-                                ? "action.hover"
-                                : undefined,
+                              : isComputed
+                                ? (theme) => `${theme.palette.action.disabledBackground}40`
+                                : isSelected && !isEditing
+                                  ? "action.hover"
+                                  : undefined,
                             p: isEditing ? 0 : undefined,
                             ...(isEditing && {
                               outline: (theme) => `2px solid ${theme.palette.primary.main}`,
@@ -1010,18 +1053,24 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                               }}
                             />
                           ) : (
-                            <Typography
-                              variant="body2"
-                              noWrap
-                              sx={{
-                                display: "block",
-                                lineHeight: 1.43,
-                                minHeight: "1.43em",
-                              }}>
-                              {displayValue === null || displayValue === undefined
-                                ? ""
-                                : String(displayValue)}
-                            </Typography>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                              <Typography
+                                variant="body2"
+                                noWrap
+                                sx={{
+                                  display: "block",
+                                  lineHeight: 1.43,
+                                  minHeight: "1.43em",
+                                  flex: 1,
+                                }}>
+                                {formattedValue}
+                              </Typography>
+                              {isComputed && (
+                                <Tooltip title={t("computed_read_only", { defaultValue: "Computed (read-only)" })}>
+                                  <LockIcon sx={{ fontSize: 10, color: "text.disabled", flexShrink: 0 }} />
+                                </Tooltip>
+                              )}
+                            </Box>
                           )}
                         </TableCell>
                       );

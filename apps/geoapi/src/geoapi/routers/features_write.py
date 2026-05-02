@@ -79,16 +79,24 @@ async def _get_authorized_metadata(
 
 
 def _invalidate_caches(layer_id: str) -> None:
-    """Invalidate tile cache and metadata cache for a layer."""
+    """Invalidate tile cache and metadata cache for a layer.
+
+    Both caches are Redis-backed (cross-pod by definition), so a single
+    pod's invalidation is immediately visible to every other pod's next
+    read.
+    """
     # Invalidate tile cache (Redis)
     invalidate_layer_cache(layer_id)
 
-    # Invalidate metadata cache (in-memory TTL cache)
+    # Invalidate layer-metadata cache (Redis when available, in-process
+    # fallback otherwise — both keys popped here)
     layer_id_clean = layer_id.replace("-", "")
     _metadata_cache.pop(layer_id_clean, None)
     _metadata_cache.pop(layer_id, None)
 
-    # Bump in-memory version so dynamic tile ETags change
+    # Bump in-memory version so dynamic tile ETags change. This is a
+    # per-pod hint used only for ETag freshness; PMTiles existence (the
+    # real source of truth) lives on the shared volume.
     bump_layer_version(layer_id)
 
     logger.debug("Caches invalidated for layer %s", layer_id)

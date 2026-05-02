@@ -14,9 +14,10 @@ from fastapi.responses import JSONResponse
 from fastapi_pagination import Page
 from fastapi_pagination import Params as PaginationParams
 from pydantic import UUID4, BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlmodel import update
 
+from core.core.config import settings
 from core.crud.crud_layer_project import layer_project as crud_layer_project
 from core.crud.crud_layer_project_group import (
     layer_project_group as crud_layer_project_group,
@@ -32,7 +33,9 @@ from core.db.models._link_model import (
     LayerProjectGroup,
     LayerProjectLink,
     UserProjectLink,
+    UserTeamLink,
 )
+from core.db.models.user import User
 from core.db.models.organization_domain import CertStatus
 from core.db.models.project import Project, ProjectPublic
 from core.db.models.scenario import Scenario
@@ -94,11 +97,24 @@ async def create_project(
     """This will create an empty project with a default initial view state. The project does not contains layers."""
 
     # Create project
-    return await crud_project.create(
+    project = await crud_project.create(
         async_session=async_session,
         project_in=Project(**project_in.model_dump(exclude_none=True), user_id=user_id),
         initial_view_state=project_in.initial_view_state,
     )
+
+    # Grant the creator project-owner access in accounts.project_user so auth_z can resolve it
+    await async_session.execute(
+        text(
+            f"INSERT INTO {settings.ACCOUNTS_SCHEMA}.project_user (project_id, user_id, role_id) "
+            f"SELECT :project_id, :user_id, r.id FROM {settings.ACCOUNTS_SCHEMA}.role r "
+            f"WHERE r.name = 'project-owner' ON CONFLICT DO NOTHING"
+        ),
+        {"project_id": str(project.id), "user_id": str(user_id)},
+    )
+    await async_session.commit()
+
+    return project
 
 
 @router.get(
@@ -166,6 +182,14 @@ async def read_projects(
 ) -> Page[IProjectRead]:
     """Retrieve a list of projects."""
 
+    # Resolve the user's team memberships and organization for folder-grant checks
+    team_ids_result = await async_session.execute(
+        select(UserTeamLink.team_id).where(UserTeamLink.user_id == user_id)
+    )
+    team_ids = [row[0] for row in team_ids_result.all()]
+    user_obj = await async_session.get(User, user_id)
+    user_organization_id = user_obj.organization_id if user_obj else None
+
     projects = await crud_project.get_projects(
         async_session=async_session,
         user_id=user_id,
@@ -176,6 +200,8 @@ async def read_projects(
         order=order,
         team_id=team_id,
         organization_id=organization_id,
+        team_ids=team_ids,
+        user_organization_id=user_organization_id,
     )
 
     return projects
@@ -256,18 +282,28 @@ async def read_project_initial_view_state(
 ) -> InitialViewState:
     """Retrieve initial view state of a project by its ID."""
 
-    # Get initial view state
     user_projects = await crud_user_project.get_by_multi_keys(
         async_session, keys={"user_id": user_id, "project_id": project_id}
     )
-    if not user_projects:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found or user has no access to this project",
-        )
-    user_project = user_projects[0]
-    assert type(user_project) is UserProjectLink
-    return InitialViewState(**user_project.initial_view_state)
+    if user_projects:
+        user_project = user_projects[0]
+        assert type(user_project) is UserProjectLink
+        return InitialViewState(**user_project.initial_view_state)
+
+    # Shared-folder user: no personal row yet — fall back to the owner's view state.
+    project = await crud_project.get(async_session, id=project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    owner_projects = await crud_user_project.get_by_multi_keys(
+        async_session, keys={"user_id": project.user_id, "project_id": project_id}
+    )
+    if owner_projects:
+        return InitialViewState(**owner_projects[0].initial_view_state)
+
+    raise HTTPException(
+        status_code=404,
+        detail="Project not found or user has no access to this project",
+    )
 
 
 @router.put(

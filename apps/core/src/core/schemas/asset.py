@@ -15,6 +15,7 @@ class AssetRead(BaseModel):
     mime_type: str
     file_size: int
     asset_type: AssetType
+    folder_id: UUID | None
     created_at: datetime
     updated_at: datetime
     user_id: UUID

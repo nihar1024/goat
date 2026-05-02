@@ -1,23 +1,18 @@
-import enum
 from enum import Enum
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import BigInteger, Column, Field, ForeignKey, String, Text
-from sqlmodel import Enum as SqlEnum
 
 from core.core.config import settings
 from core.db.models._base_class import DateTimeBase
 
 
-def enum_values(enum_class: type[enum.Enum]) -> list[str]:
-    return [status.value for status in enum_class]
-
-
 class AssetType(str, Enum):
     IMAGE = "image"
     ICON = "icon"
+    DOCUMENT = "document"
 
 
 class UploadedAsset(DateTimeBase, table=True):
@@ -40,6 +35,15 @@ class UploadedAsset(DateTimeBase, table=True):
             nullable=False,
         ),
         description="ID of the user who uploaded the asset.",
+    )
+    folder_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.CUSTOMER_SCHEMA}.folder.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        description="Optional folder this asset belongs to.",
     )
     s3_key: str = Field(
         sa_column=Column(
@@ -74,10 +78,10 @@ class UploadedAsset(DateTimeBase, table=True):
     )
     asset_type: AssetType = Field(
         sa_column=Column(
+            String(50),
             nullable=False,
-            type_=SqlEnum(AssetType, values_callable=enum_values),
         ),
-        description="Type of asset: 'image' or 'icon'.",
+        description="Type of asset: 'image', 'icon', or 'document'.",
     )
     content_hash: str = Field(
         sa_column=Column(

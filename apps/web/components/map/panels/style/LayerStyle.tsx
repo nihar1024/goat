@@ -229,26 +229,20 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
         });
         newStyle[`${updateType}_mapping`] = markerMap;
       } else if (updateType !== "marker") {
-        if (
-          (newStyle[`${updateType}_scale`] === "ordinal" &&
-            newStyle[`${updateType}_range`]?.name !== layerProperties[`${updateType}_range`]?.name) ||
-          !newStyle[`${updateType}_range`]?.color_map ||
-          oldFieldName !== newFieldName
-        ) {
-          const currentRange = newStyle[`${updateType}_range`];
-          // Request more unique values than colors to get the actual count
-          // Then limit to the smaller of: unique values found OR available colors
+        const existingColorMap = layerProperties[`${updateType}_range`]?.color_map;
+        const fieldChanged = oldFieldName !== newFieldName;
+        const currentRange = newStyle[`${updateType}_range`];
+
+        if (!existingColorMap?.length || fieldChanged) {
+          // Fetch unique values: first time setup or the attribute field changed
           const uniqueValues = await getLayerUniqueValues(
             activeLayer.layer_id,
             newStyle[`${updateType}_field`]?.name as string,
-            100 // Request up to 100 to get actual unique count
+            100
           );
 
-          // Use the actual unique values count, capped by a reasonable max
           const actualCount = Math.min(uniqueValues.items.length, 12);
 
-          // Try to find a palette with the exact number of colors needed
-          // First, look for a palette with the same category and type and correct step count
           let matchingPalette = COLOR_RANGES.find(
             (range) =>
               range.colors.length === actualCount &&
@@ -256,19 +250,16 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
               range.type === currentRange?.type
           );
 
-          // If no exact category+type match found, try matching only on type (still respecting palette semantics)
           if (!matchingPalette && currentRange?.type) {
             matchingPalette = COLOR_RANGES.find(
               (range) => range.colors.length === actualCount && range.type === currentRange.type
             );
           }
 
-          // As a last resort, if no type information is available, find any palette with the correct number of colors
           if (!matchingPalette && !currentRange?.type) {
             matchingPalette = COLOR_RANGES.find((range) => range.colors.length === actualCount);
           }
 
-          // Use the matching palette colors, or fall back to slicing current colors
           const colors = matchingPalette?.colors || currentRange?.colors?.slice(0, actualCount) || [];
 
           const colorMap = [] as ColorMap;
@@ -276,13 +267,22 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
             colorMap.push([[item.value], colors[index]]);
           });
           newStyle[`${updateType}_range`].color_map = colorMap;
-          // Update the colors array to match the selected palette
           newStyle[`${updateType}_range`].colors = colors;
-          // Update palette metadata if we found a matching one
           if (matchingPalette) {
             newStyle[`${updateType}_range`].name = matchingPalette.name;
             newStyle[`${updateType}_range`].category = matchingPalette.category;
             newStyle[`${updateType}_range`].type = matchingPalette.type;
+          }
+        } else {
+          // Palette changed but the attribute field and its values are unchanged —
+          // remap colors onto the existing value assignments without hitting the API.
+          const newColors = currentRange?.colors ?? [];
+          const entryCount = Math.min(existingColorMap.length, newColors.length);
+          if (entryCount > 0) {
+            newStyle[`${updateType}_range`].color_map = existingColorMap
+              .slice(0, entryCount)
+              .map(([values], index) => [values, newColors[index]] as ColorMap[number]);
+            newStyle[`${updateType}_range`].colors = newColors.slice(0, entryCount);
           }
         }
       }

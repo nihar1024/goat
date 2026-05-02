@@ -423,6 +423,8 @@
   "distance": "Distance",
   "diverging": "Diverging",
   "divider": "Divider",
+  "document_upload_success": "Document uploaded successfully",
+  "documents": "Documents",
   "done": "Done",
   "download": "Download",
   "download_crs": "Coordinate Reference System (CRS)",
@@ -490,6 +492,7 @@
   "error_deleting_rows": "Error deleting rows",
   "error_deleting_scenario": "Error deleting scenario",
   "error_downloading": "Error downloading",
+  "error_uploading_document": "Error uploading document",
   "error_duplicating_layer": "Error duplicating layer",
   "error_duplicating_project": "Failed to duplicate project",
   "error_exporting_project": "Failed to export project",
@@ -1122,6 +1125,7 @@
   "no_custom_icons_yet": "Upload custom icons to personalize layer styling.",
   "no_attributes": "This layer has no attributes. Add a field to get started.",
   "no_data": "No data",
+  "no_documents": "No documents",
   "no_data_available": "No data available",
   "no_dataset": "No dataset",
   "no_datasets_found": "No datasets found",
@@ -1568,6 +1572,7 @@
   "see_all": "See All",
   "select": "Select",
   "select_all": "Select all",
+  "deselect_all": "Deselect all",
   "select_an_expression": "Select an expression",
   "select_an_organization_member": "Select a member from organization",
   "select_area": "Aggregation polygons",
@@ -1869,6 +1874,7 @@
   "unsaved_changes": "Unsaved changes",
   "upload": "Upload",
   "upload_dataset": "Upload Dataset",
+  "upload_document": "Upload Document",
   "upload_icon": "Upload icon",
   "upload_image": "Upload Image",
   "upload_failed": "Upload failed",
@@ -2150,5 +2156,6 @@
   "shared_folders": "Shared Folders",
   "folder_share_conflict_warning": "Assigning access here will remove the current grant on the other tab.",
   "via_folder": "Via folder",
-  "access_via_folder": "Access is inherited from the folder this layer belongs to"
+  "access_via_folder": "Access is inherited from the folder this layer belongs to",
+  "access_via_folder_disable_hint": "Already has access via folder sharing — individual sharing is redundant"
 }

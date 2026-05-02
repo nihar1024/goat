@@ -441,6 +441,8 @@
   "distance": "Entfernung",
   "diverging": "Divergierend",
   "divider": "Trennlinie",
+  "document_upload_success": "Dokument erfolgreich hochgeladen",
+  "documents": "Dokumente",
   "done": "Fertig",
   "download": "Herunterladen",
   "download_crs": "Koordinatenreferenzsystem",
@@ -516,6 +518,7 @@
   "error_deleting_rows": "Fehler beim Löschen der Zeilen",
   "error_deleting_scenario": "Fehler beim Löschen des Szenarios",
   "error_downloading": "Fehler beim Herunterladen",
+  "error_uploading_document": "Fehler beim Hochladen des Dokuments",
   "error_duplicating_layer": "Fehler beim Duplizieren des Layers",
   "error_duplicating_project": "Projekt konnte nicht dupliziert werden",
   "error_exporting_project": "Projekt konnte nicht exportiert werden",
@@ -1178,6 +1181,7 @@
   "no_custom_icons": "Keine benutzerdefinierten Symbole",
   "no_custom_icons_yet": "Laden Sie benutzerdefinierte Symbole hoch, um die Layer-Darstellung zu personalisieren.",
   "no_data": "Keine Daten",
+  "no_documents": "Keine Dokumente",
   "no_data_available": "Keine Daten verfügbar",
   "no_dataset": "Kein Datensatz",
   "no_datasets_found": "Keine Datensätze gefunden",
@@ -1635,6 +1639,7 @@
   "see_all": "Alle anzeigen",
   "select": "Wählen",
   "select_all": "Alle auswählen",
+  "deselect_all": "Alle abwählen",
   "select_an_expression": "Einen Ausdruck auswählen",
   "select_an_organization_member": "Wählen Sie ein Mitglied aus der Organisation aus",
   "select_area": "Aggregationspolygone",
@@ -1956,6 +1961,7 @@
   "updated_successfully": "Ordner erfolgreich aktualisiert",
   "upload": "Hochladen",
   "upload_dataset": "Datensatz hochladen",
+  "upload_document": "Dokument hochladen",
   "upload_failed": "Upload fehlgeschlagen",
   "upload_icon": "Symbol hochladen",
   "upload_image": "Bild hochladen",
@@ -2148,5 +2154,6 @@
   "shared_folders": "Geteilte Ordner",
   "folder_share_conflict_warning": "Zugriff hier zu gewähren entfernt die bestehende Berechtigung im anderen Tab.",
   "via_folder": "Über Ordner",
-  "access_via_folder": "Zugriff wird vom Ordner geerbt, in dem sich dieser Layer befindet"
+  "access_via_folder": "Zugriff wird vom Ordner geerbt, in dem sich dieser Layer befindet",
+  "access_via_folder_disable_hint": "Hat bereits Zugriff über Ordner-Freigabe — individuelle Freigabe ist redundant"
 }

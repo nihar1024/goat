@@ -1,7 +1,8 @@
 import io
 import mimetypes
 import uuid
-from typing import List
+from typing import List, Optional
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -10,15 +11,19 @@ from fastapi import (
     Form,
     HTTPException,
     Path,
+    Query,
     UploadFile,
     status,
 )
 from pydantic import UUID4
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from core.core.config import settings
+from core.db.models._link_model import ResourceGrant, UserTeamLink
 from core.db.models.asset import AssetType, UploadedAsset
+from core.db.models.folder import Folder
+from core.db.models.user import User
 from core.deps.auth import auth_z
 from core.endpoints.deps import get_db, get_user_id
 from core.schemas.asset import AssetRead, AssetUpdate
@@ -26,7 +31,6 @@ from core.services.s3 import s3_service
 
 router = APIRouter()
 
-# Define allowed MIME types for each asset type
 ALLOWED_MIME_TYPES = {
     AssetType.IMAGE: [
         "image/jpeg",
@@ -46,7 +50,76 @@ ALLOWED_MIME_TYPES = {
         "image/bmp",
         "image/png",
     ],
+    AssetType.DOCUMENT: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+    ],
 }
+
+DOCUMENTS_MAX_FILE_SIZE_BYTES: int = settings.DOCUMENTS_MAX_FILE_SIZE
+
+
+async def _get_user_context(
+    async_session: AsyncSession, user_id: UUID
+) -> tuple[list[UUID], UUID | None]:
+    """Return (team_ids, organization_id) for a user — used for folder-grant checks."""
+    team_result = await async_session.execute(
+        select(UserTeamLink.team_id).where(UserTeamLink.user_id == user_id)
+    )
+    team_ids = [row[0] for row in team_result.all()]
+
+    user_result = await async_session.execute(select(User).where(User.id == user_id))
+    user_obj = user_result.scalar_one_or_none()
+    organization_id = user_obj.organization_id if user_obj else None
+
+    return team_ids, organization_id
+
+
+async def _check_folder_access(
+    async_session: AsyncSession,
+    folder_id: UUID,
+    user_id: UUID,
+) -> None:
+    """Raise 404/403 if folder doesn't exist or requesting user has no access."""
+    folder_result = await async_session.execute(
+        select(Folder).where(Folder.id == folder_id)
+    )
+    folder = folder_result.scalar_one_or_none()
+    if not folder:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found.")
+
+    if folder.user_id == user_id:
+        return  # owner — always allowed
+
+    team_ids, organization_id = await _get_user_context(async_session, user_id)
+
+    grant_conditions = []
+    for tid in team_ids:
+        grant_conditions.append(
+            and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id == tid)
+        )
+    if organization_id:
+        grant_conditions.append(
+            and_(
+                ResourceGrant.grantee_type == "organization",
+                ResourceGrant.grantee_id == organization_id,
+            )
+        )
+
+    if not grant_conditions:
+        # User has no team memberships and no organization — no grant can match.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    grant_result = await async_session.execute(
+        select(ResourceGrant.id).where(
+            ResourceGrant.resource_type == "folder",
+            ResourceGrant.resource_id == folder_id,
+            or_(*grant_conditions),
+        )
+    )
+    if not grant_result.first():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
 
 @router.post(
@@ -62,26 +135,33 @@ async def upload_asset(
     asset_type: AssetType = Form(...),
     display_name: str | None = Form(None),
     category: str | None = Form(None),
+    folder_id: Optional[UUID] = Form(None),
 ) -> AssetRead:
     """
     Uploads a new asset to S3 and records its metadata in the database.
-    - Only allows supported image/icon MIME types.
-    - For `icon` assets, `display_name` and `category` are required.
+    - Only allows supported MIME types per asset_type.
+    - For `icon` assets, `display_name` is required.
+    - For `document` assets, `folder_id` is required.
     """
-
     if not file.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="No file selected."
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file selected.")
 
-    # --- Enforce required fields for icons ---
     if asset_type == AssetType.ICON and not display_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Both 'display_name' and 'category' are required for icon uploads.",
+            detail="'display_name' is required for icon uploads.",
         )
 
-    # 1. Validate MIME type
+    if asset_type == AssetType.DOCUMENT and not folder_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="'folder_id' is required for document uploads.",
+        )
+
+    if folder_id:
+        await _check_folder_access(async_session, folder_id, user_id)
+
+    # Validate MIME type
     detected_mime_type, _ = mimetypes.guess_type(file.filename)
     actual_mime_type = detected_mime_type or file.content_type
     if actual_mime_type not in ALLOWED_MIME_TYPES.get(asset_type, []):
@@ -94,44 +174,46 @@ async def upload_asset(
             ),
         )
 
-    # 2. Read file + enforce size limit
+    # Read file + enforce size limit (document limit differs from image limit)
     file_content = await file.read()
-    if len(file_content) > settings.ASSETS_MAX_FILE_SIZE:
+    max_size = (
+        DOCUMENTS_MAX_FILE_SIZE_BYTES
+        if asset_type == AssetType.DOCUMENT
+        else settings.ASSETS_MAX_FILE_SIZE
+    )
+    if len(file_content) > max_size:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File too large. Maximum allowed size is {settings.ASSETS_MAX_FILE_SIZE // (1024 * 1024)} MB.",
+            detail=f"File too large. Maximum allowed size is {max_size // (1024 * 1024)} MB.",
         )
 
-    # 3. Hash content and check if an identical asset exists (per user)
+    # Hash + deduplication (per user + asset_type)
     content_hash = s3_service.calculate_sha256(file_content)
-    existing_asset = await async_session.execute(
+    existing = await async_session.execute(
         select(UploadedAsset)
         .where(UploadedAsset.content_hash == content_hash)
         .where(UploadedAsset.user_id == user_id)
-        .where(UploadedAsset.asset_type == asset_type)
+        .where(UploadedAsset.asset_type == asset_type.value)
     )
-    existing_asset = existing_asset.fetchone()
+    existing_asset = existing.fetchone()
 
     if existing_asset:
         existing_asset = existing_asset[0]
-        # Update file_name if user re-uploads identical content with a different name
         existing_asset.file_name = file.filename
         existing_asset.display_name = display_name or existing_asset.display_name
         existing_asset.category = category or existing_asset.category
+        existing_asset.folder_id = folder_id if folder_id is not None else existing_asset.folder_id
         async_session.add(existing_asset)
         await async_session.commit()
         await async_session.refresh(existing_asset)
-        return existing_asset  # Return the existing record
+        return AssetRead.model_validate(existing_asset)
 
-    # 4. Prepare file for S3 upload
-    file_extension = mimetypes.guess_extension(actual_mime_type)
-    if not file_extension:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not determine file extension for MIME type '{actual_mime_type}'.",
-        )
-
-    s3_key = f"goat/{settings.ENVIRONMENT}/users/{user_id}/{asset_type.value}/{uuid.uuid4().hex}{file_extension}"
+    # Prepare S3 key
+    file_extension = mimetypes.guess_extension(actual_mime_type) or ""
+    s3_key = (
+        f"goat/{settings.ENVIRONMENT}/users/{user_id}"
+        f"/{asset_type.value}/{uuid.uuid4().hex}{file_extension}"
+    )
 
     settings.S3_CLIENT.upload_fileobj(
         Fileobj=io.BytesIO(file_content),
@@ -140,9 +222,9 @@ async def upload_asset(
         ExtraArgs={"ContentType": actual_mime_type},
     )
 
-    # 5. Save metadata into DB
     new_asset = UploadedAsset(
         user_id=user_id,
+        folder_id=folder_id,
         s3_key=s3_key,
         file_name=file.filename,
         mime_type=actual_mime_type,
@@ -161,7 +243,7 @@ async def upload_asset(
 
 @router.get(
     "",
-    summary="List all assets for the authenticated user",
+    summary="List assets for the authenticated user",
     response_model=List[AssetRead],
     status_code=status.HTTP_200_OK,
     dependencies=[Depends(auth_z)],
@@ -170,20 +252,25 @@ async def read_assets(
     async_session: AsyncSession = Depends(get_db),
     user_id: UUID4 = Depends(get_user_id),
     asset_type: AssetType | None = None,
+    folder_id: UUID | None = Query(None),
 ) -> List[AssetRead]:
-    query = select(UploadedAsset).where(UploadedAsset.user_id == user_id)
+    """
+    List assets. When `folder_id` is supplied the caller must own the folder or
+    have a resource_grant on it. Returns all assets in that folder.
+    Without `folder_id`, returns the caller's own assets.
+    """
+    if folder_id:
+        await _check_folder_access(async_session, folder_id, user_id)
+        query = select(UploadedAsset).where(UploadedAsset.folder_id == folder_id)
+    else:
+        query = select(UploadedAsset).where(UploadedAsset.user_id == user_id)
 
     if asset_type:
-        query = query.where(UploadedAsset.asset_type == asset_type)
+        query = query.where(UploadedAsset.asset_type == asset_type.value)
 
-    result = await async_session.execute(
-        query.order_by(UploadedAsset.created_at.desc())
-    )
+    result = await async_session.execute(query.order_by(UploadedAsset.created_at.desc()))
     assets = result.scalars().all()
-
-    response = [AssetRead.model_validate(asset) for asset in assets]
-
-    return response
+    return [AssetRead.model_validate(a) for a in assets]
 
 
 @router.put(
@@ -199,7 +286,6 @@ async def update_asset(
     async_session: AsyncSession = Depends(get_db),
     user_id: UUID4 = Depends(get_user_id),
 ) -> AssetRead:
-    # Fetch asset
     result = await async_session.execute(
         select(UploadedAsset)
         .where(UploadedAsset.id == asset_id)
@@ -207,12 +293,8 @@ async def update_asset(
     )
     asset = result.scalar_one_or_none()
     if not asset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
-    # Update fields
     if asset_update.display_name is not None:
         asset.display_name = asset_update.display_name
     if asset_update.category is not None:
@@ -221,7 +303,6 @@ async def update_asset(
     async_session.add(asset)
     await async_session.commit()
     await async_session.refresh(asset)
-
     return AssetRead.model_validate(asset)
 
 
@@ -236,7 +317,6 @@ async def delete_asset(
     async_session: AsyncSession = Depends(get_db),
     user_id: UUID4 = Depends(get_user_id),
 ) -> None:
-    # Fetch asset
     result = await async_session.execute(
         select(UploadedAsset)
         .where(UploadedAsset.id == asset_id)
@@ -244,16 +324,9 @@ async def delete_asset(
     )
     asset = result.scalar_one_or_none()
     if not asset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Asset not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
 
-    # Delete from S3
     settings.S3_CLIENT.delete_object(Bucket=settings.AWS_S3_ASSETS_BUCKET, Key=asset.s3_key)
-
-    # Delete from DB
     await async_session.delete(asset)
     await async_session.commit()
-
     return None

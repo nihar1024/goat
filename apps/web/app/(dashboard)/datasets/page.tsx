@@ -23,6 +23,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { useDocuments, deleteAsset } from "@/lib/api/assets";
 import { useFolders } from "@/lib/api/folders";
 import { useLayers } from "@/lib/api/layers";
 import { useTeams } from "@/lib/api/teams";
@@ -37,6 +38,7 @@ import { useAuthZ } from "@/hooks/auth/AuthZ";
 import { useJobStatus } from "@/hooks/jobs/JobStatus";
 
 import ContentSearchBar from "@/components/dashboard/common/ContentSearchbar";
+import DocumentCard from "@/components/dashboard/common/DocumentCard";
 import FolderCard from "@/components/dashboard/common/FolderCard";
 import FoldersTreeView from "@/components/dashboard/common/FoldersTreeView";
 import TileGrid from "@/components/dashboard/common/TileGrid";
@@ -45,6 +47,7 @@ import FolderModal from "@/components/modals/Folder";
 import ShareModal from "@/components/modals/Share";
 import DatasetExternal from "@/components/modals/DatasetExternal";
 import DatasetUploadModal from "@/components/modals/DatasetUpload";
+import DocumentUploadModal from "@/components/modals/DocumentUpload";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 
 type FolderEditModal = {
@@ -89,6 +92,12 @@ const Datasets = () => {
   } = useLayers(queryParams, effectiveDatasetSchema);
 
   useJobStatus(mutate, mutate);
+
+  const effectiveDocumentFolderId =
+    datasetSchema.folder_id ??
+    (!queryParams.team_id && !queryParams.organization_id ? homeFolder?.id : undefined);
+  const { documents, isLoading: isDocumentsLoading, mutate: mutateDocuments } = useDocuments(effectiveDocumentFolderId);
+  const [openDocumentUpload, setOpenDocumentUpload] = useState(false);
 
   const [addDatasetModal, setAddDatasetModal] = useState<AddLayerSourceType | null>(null);
   const [addDatasetAnchorEl, setAddDatasetAnchorEl] = useState<null | HTMLElement>(null);
@@ -230,6 +239,12 @@ const Datasets = () => {
           content={shareFolder}
         />
       )}
+      <DocumentUploadModal
+        open={openDocumentUpload}
+        onClose={() => setOpenDocumentUpload(false)}
+        defaultFolderId={activeFolderId}
+        onSuccess={mutateDocuments}
+      />
 
       <Box
         sx={{
@@ -240,12 +255,20 @@ const Datasets = () => {
         }}>
         <Typography variant="h6">{t("datasets")}</Typography>
         {isOrgEditor && (
-          <Button
-            disableElevation={true}
-            startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: 12 }} />}
-            onClick={handleAddDatasetClick}>
-            {t("add_dataset")}
-          </Button>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Button
+              variant="outlined"
+              startIcon={<Icon iconName={ICON_NAME.UPLOAD} style={{ fontSize: 12 }} />}
+              onClick={() => setOpenDocumentUpload(true)}>
+              {t("upload_document")}
+            </Button>
+            <Button
+              disableElevation={true}
+              startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: 12 }} />}
+              onClick={handleAddDatasetClick}>
+              {t("add_dataset")}
+            </Button>
+          </Stack>
         )}
         <Menu
           anchorEl={addDatasetAnchorEl}
@@ -357,6 +380,41 @@ const Datasets = () => {
                   />
                 ))}
               </Box>
+            </Box>
+          )}
+
+          {/* Documents section:
+               - Inside a named folder: always render (with empty state) once loading completes
+               - At My Content root (home folder): render only if documents exist (no empty state clutter) */}
+          {effectiveDocumentFolderId && !isDocumentsLoading && (activeFolderId || documents.length > 0) && (
+            <Box sx={{ mb: 3 }}>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                sx={{ mb: 2, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 11 }}>
+                {t("documents")}
+              </Typography>
+              {documents.length > 0 ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+                  {documents.map((doc) => (
+                    <DocumentCard
+                      key={doc.id}
+                      document={doc}
+                      enableActions={isOrgEditor}
+                      onMenuSelect={async (item) => {
+                        if (item.id === "delete" && doc.id) {
+                          await deleteAsset(doc.id);
+                          mutateDocuments();
+                        }
+                      }}
+                    />
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  {t("no_documents")}
+                </Typography>
+              )}
             </Box>
           )}
 

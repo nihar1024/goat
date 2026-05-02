@@ -649,7 +649,15 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                             </Tooltip>
                           )}
                           <MoreMenu
-                            menuItems={getLayerMoreMenuOptions(layer.type, !!layer.charts, layer.in_catalog, false, layer.user_id === userProfile?.id && (!layer.size || layer.size <= MAX_EDITABLE_LAYER_SIZE))}
+                            menuItems={getLayerMoreMenuOptions(
+                              layer.type,
+                              !!layer.charts,
+                              layer.in_catalog,
+                              false,
+                              layer.user_id === userProfile?.id &&
+                                (!layer.size || layer.size <= MAX_EDITABLE_LAYER_SIZE),
+                              true,
+                            )}
                             menuButton={
                               <Tooltip title={t("more_options")} arrow placement="top">
                                 <IconButton size="small">

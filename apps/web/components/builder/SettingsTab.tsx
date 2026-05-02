@@ -15,6 +15,7 @@ import { DEFAULT_CONTROL_POSITIONS, DEFAULT_FAVICON_URL, builderConfigSchema } f
 import InteractionsModal, { InteractionsEntryButton } from "@/components/builder/InteractionsModal";
 import MapControlsLayout from "@/components/builder/MapControlsLayout";
 import SettingsGroupHeader from "@/components/builder/widgets/common/SettingsGroupHeader";
+import ConfirmModal from "@/components/modals/Confirm";
 import Selector from "@/components/map/panels/common/Selector";
 import MarkerIconPicker from "@/components/map/panels/style/marker/MarkerIconPicker";
 
@@ -75,6 +76,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   }, []);
 
   const [showInteractionsModal, setShowInteractionsModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const builderConfig = useMemo(() => {
     const parsed = builderConfigSchema.safeParse(project?.builder_config);
@@ -320,12 +322,24 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         )}
       </Stack>
       <Stack>
-        <Button onClick={onReset} fullWidth size="small" color="error">
+        <Button onClick={() => setShowResetConfirm(true)} fullWidth size="small" color="error">
           <Typography variant="body2" fontWeight="bold" color="inherit">
             {t("common:reset")}
           </Typography>
         </Button>
       </Stack>
+      <ConfirmModal
+        open={showResetConfirm}
+        title={t("common:reset_dashboard_title")}
+        body={t("common:reset_dashboard_body")}
+        closeText={t("common:cancel")}
+        confirmText={t("common:reset")}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={() => {
+          setShowResetConfirm(false);
+          onReset();
+        }}
+      />
       {showInteractionsModal && builderConfig && (
         <InteractionsModal
           open={showInteractionsModal}

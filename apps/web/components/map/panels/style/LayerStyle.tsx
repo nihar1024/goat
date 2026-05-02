@@ -1,10 +1,14 @@
-import { Box, Divider, Stack, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Divider, Stack, Tooltip, Typography } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
+import { toast } from "react-toastify";
 
-import { getLayerClassBreaks, getLayerUniqueValues } from "@/lib/api/layers";
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
+import { getLayerClassBreaks, getLayerUniqueValues, updateBaseLayerProperties } from "@/lib/api/layers";
 import { updateProjectLayer } from "@/lib/api/projects";
+import { setStyleClipboard } from "@/lib/store/layer/slice";
 import { COLOR_RANGES } from "@/lib/constants/color";
 import {
   type ClassBreaks,
@@ -18,7 +22,7 @@ import type { ProjectLayer } from "@/lib/validations/project";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
 import { useActiveLayer, useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
-
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import AccordionWrapper from "@/components/common/AccordionWrapper";
 import FormLabelHelper from "@/components/common/FormLabelHelper";
 import SectionHeader from "@/components/map/panels/common/SectionHeader";
@@ -41,8 +45,12 @@ enum LayerStylePanels {
 const LayerStylePanel = ({ projectId }: { projectId: string }) => {
   const { t } = useTranslation("common");
   const { map } = useMap();
+  const dispatch = useAppDispatch();
+  const styleClipboard = useAppSelector((state) => state.layers.styleClipboard);
 
   const [expanded, setExpanded] = useState<LayerStylePanels | false>(LayerStylePanels.STYLE);
+  const [isDefaultSaved, setIsDefaultSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAccordionChange =
     (panel: LayerStylePanels) => (_event: React.SyntheticEvent, isExpanded: boolean) => {
@@ -229,26 +237,20 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
         });
         newStyle[`${updateType}_mapping`] = markerMap;
       } else if (updateType !== "marker") {
-        if (
-          (newStyle[`${updateType}_scale`] === "ordinal" &&
-            newStyle[`${updateType}_range`]?.name !== layerProperties[`${updateType}_range`]?.name) ||
-          !newStyle[`${updateType}_range`]?.color_map ||
-          oldFieldName !== newFieldName
-        ) {
-          const currentRange = newStyle[`${updateType}_range`];
-          // Request more unique values than colors to get the actual count
-          // Then limit to the smaller of: unique values found OR available colors
+        const existingColorMap = layerProperties[`${updateType}_range`]?.color_map;
+        const fieldChanged = oldFieldName !== newFieldName;
+        const currentRange = newStyle[`${updateType}_range`];
+
+        if (!existingColorMap?.length || fieldChanged) {
+          // Fetch unique values: first time setup or the attribute field changed
           const uniqueValues = await getLayerUniqueValues(
             activeLayer.layer_id,
             newStyle[`${updateType}_field`]?.name as string,
-            100 // Request up to 100 to get actual unique count
+            100
           );
 
-          // Use the actual unique values count, capped by a reasonable max
           const actualCount = Math.min(uniqueValues.items.length, 12);
 
-          // Try to find a palette with the exact number of colors needed
-          // First, look for a palette with the same category and type and correct step count
           let matchingPalette = COLOR_RANGES.find(
             (range) =>
               range.colors.length === actualCount &&
@@ -256,19 +258,16 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
               range.type === currentRange?.type
           );
 
-          // If no exact category+type match found, try matching only on type (still respecting palette semantics)
           if (!matchingPalette && currentRange?.type) {
             matchingPalette = COLOR_RANGES.find(
               (range) => range.colors.length === actualCount && range.type === currentRange.type
             );
           }
 
-          // As a last resort, if no type information is available, find any palette with the correct number of colors
           if (!matchingPalette && !currentRange?.type) {
             matchingPalette = COLOR_RANGES.find((range) => range.colors.length === actualCount);
           }
 
-          // Use the matching palette colors, or fall back to slicing current colors
           const colors = matchingPalette?.colors || currentRange?.colors?.slice(0, actualCount) || [];
 
           const colorMap = [] as ColorMap;
@@ -276,13 +275,22 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
             colorMap.push([[item.value], colors[index]]);
           });
           newStyle[`${updateType}_range`].color_map = colorMap;
-          // Update the colors array to match the selected palette
           newStyle[`${updateType}_range`].colors = colors;
-          // Update palette metadata if we found a matching one
           if (matchingPalette) {
             newStyle[`${updateType}_range`].name = matchingPalette.name;
             newStyle[`${updateType}_range`].category = matchingPalette.category;
             newStyle[`${updateType}_range`].type = matchingPalette.type;
+          }
+        } else {
+          // Palette changed but the attribute field and its values are unchanged —
+          // remap colors onto the existing value assignments without hitting the API.
+          const newColors = currentRange?.colors ?? [];
+          const entryCount = Math.min(existingColorMap.length, newColors.length);
+          if (entryCount > 0) {
+            newStyle[`${updateType}_range`].color_map = existingColorMap
+              .slice(0, entryCount)
+              .map(([values], index) => [values, newColors[index]] as ColorMap[number]);
+            newStyle[`${updateType}_range`].colors = newColors.slice(0, entryCount);
           }
         }
       }
@@ -328,10 +336,73 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayer?.id]);
 
+  useEffect(() => {
+    setIsDefaultSaved(false);
+  }, [activeLayer?.id]);
+
+  const handleCopyStyle = () => {
+    if (!activeLayer || !activeLayer.properties) return;
+    dispatch(setStyleClipboard({
+      sourceLayerName: activeLayer.name,
+      properties: activeLayer.properties as FeatureLayerProperties,
+    }));
+  };
+
+  const handlePasteStyle = async () => {
+    if (!activeLayer || !styleClipboard) return;
+    await updateLayerStyle(styleClipboard.properties);
+  };
+
+  const handleSetDefault = async () => {
+    if (!activeLayer || !activeLayer.properties || !activeLayer.layer_id) return;
+    setIsSaving(true);
+    try {
+      await updateBaseLayerProperties(
+        activeLayer.layer_id,
+        activeLayer.properties as Record<string, unknown>
+      );
+      setIsDefaultSaved(true);
+      toast.success(t("style_saved_as_dataset_default_success"));
+    } catch (e) {
+      console.error("Failed to set default style:", e);
+      toast.error(t("style_saved_as_dataset_default_error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!activeLayer || !layerProperties) return null;
 
   return (
     <>
+      <Stack direction="row" spacing={1} sx={{ px: 2, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+        <Tooltip title={t("copy_style")} placement="bottom">
+          <span style={{ display: "flex" }}>
+            <Button variant="outlined" size="small" sx={{ minWidth: 34, width: 34, px: 0 }} onClick={handleCopyStyle}>
+              <Icon iconName={ICON_NAME.COPY} style={{ fontSize: 14 }} />
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={styleClipboard ? `${t("paste_style")} (${styleClipboard.sourceLayerName})` : t("paste_style")} placement="bottom">
+          <span style={{ display: "flex" }}>
+            <Button variant="outlined" size="small" sx={{ minWidth: 34, width: 34, px: 0 }} disabled={!styleClipboard} onClick={handlePasteStyle}>
+              <Icon iconName={ICON_NAME.SLIDERS} style={{ fontSize: 14 }} />
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={t("set_as_default_style")} placement="bottom">
+          <span style={{ display: "flex" }}>
+            <Button
+              variant={isDefaultSaved ? "contained" : "outlined"}
+              size="small"
+              sx={{ minWidth: 34, width: 34, px: 0 }}
+              disabled={isSaving}
+              onClick={handleSetDefault}>
+              {isSaving ? <CircularProgress size={14} color="inherit" /> : <Icon iconName={ICON_NAME.STAR} style={{ fontSize: 14 }} />}
+            </Button>
+          </span>
+        </Tooltip>
+      </Stack>
       <Box
         sx={{
           display: "flex",

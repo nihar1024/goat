@@ -14,6 +14,7 @@ import {
   useProjectLayerGroups,
   useProjectLayers,
 } from "@/lib/api/projects";
+import { useFolders } from "@/lib/api/folders";
 import { MAPBOX_TOKEN, SYSTEM_LAYERS_IDS } from "@/lib/constants";
 import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
@@ -94,7 +95,25 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   const isDataPanelOpen = useAppSelector((state) => state.map.isDataPanelOpen);
   const mapMode = useAppSelector((state) => state.map.mapMode);
   const dataPanelVisible = mapMode === "data" && isDataPanelOpen;
-  const { isAppFeatureEnabled } = useAuthZ();
+  const { isOrgEditor, isAppFeatureEnabled } = useAuthZ();
+  const { folders } = useFolders({});
+  const projectFolder = useMemo(
+    () => (project.folder_id && folders ? folders.find((f) => f.id === project.folder_id) : undefined),
+    [folders, project.folder_id]
+  );
+  const isProjectEditor = useMemo(() => {
+    // my_role from the single GET endpoint is authoritative when present
+    if (project.my_role) {
+      return project.my_role === "project-owner" || project.my_role === "project-editor";
+    }
+    // Folder grant fallback (e.g. shared via folder, not individual project share)
+    if (projectFolder) {
+      if (projectFolder.is_owned) return true;
+      if (projectFolder.role === "folder-editor") return true;
+      if (projectFolder.role === "folder-viewer") return false;
+    }
+    return isOrgEditor;
+  }, [project.my_role, projectFolder, isOrgEditor]);
 
   // 1. Redux Global Selection
   // Assume array of IDs (number/string)
@@ -295,7 +314,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               onCreateGroup={handleCreateGroup}
               onUpdateGroup={handleUpdateGroup}
               onDeleteGroup={handleDeleteGroup}
-              viewMode="edit"
+              viewMode={isProjectEditor ? "edit" : "view"}
             />
           </FloatingPanel>
           <Box sx={{ marginTop: "auto" }}>
@@ -316,8 +335,8 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               dispatch(setGeocoderResult(result));
             }}
           />
-          <ToolboxCtrl onToggle={handleToolboxToggle} open={activeRight === MapSidebarItemID.TOOLBOX} />
-          <ScenarioCtrl onToggle={handleScenarioToggle} open={activeRight === MapSidebarItemID.SCENARIO} />
+          {isProjectEditor && <ToolboxCtrl onToggle={handleToolboxToggle} open={activeRight === MapSidebarItemID.TOOLBOX} />}
+          {isProjectEditor && <ScenarioCtrl onToggle={handleScenarioToggle} open={activeRight === MapSidebarItemID.SCENARIO} />}
           <MeasureButton {...measureTool} />
         </Box>
       </Box>

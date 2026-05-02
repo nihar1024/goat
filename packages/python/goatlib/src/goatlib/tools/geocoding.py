@@ -246,9 +246,13 @@ class GeocodingToolRunner(BaseToolRunner[GeocodingToolParams]):
         columns = dict(input_layer)
 
         # Add geocoding result columns
-        columns["geocode_status"] = "VARCHAR"
+        columns["geocode_input_text"] = "VARCHAR"
+        columns["geocode_latitude"] = "DOUBLE"
+        columns["geocode_longitude"] = "DOUBLE"
         columns["geocode_confidence"] = "DOUBLE"
+        columns["geocode_match_type"] = "VARCHAR"
         columns["geocode_label"] = "VARCHAR"
+        columns["geocode_postalcode"] = "VARCHAR"
         columns["geometry"] = "GEOMETRY"
 
         return columns

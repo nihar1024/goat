@@ -142,7 +142,96 @@ async def read_project(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
-    return IProjectRead(**project.model_dump())
+
+    # Populate owned_by from the project owner
+    owner = await async_session.get(User, project.user_id)
+    owned_by = (
+        {
+            "id": str(owner.id),
+            "firstname": owner.firstname,
+            "lastname": owner.lastname,
+            "avatar": owner.avatar,
+        }
+        if owner
+        else None
+    )
+
+    # Get current user's role, checking all grant paths (user, team, org, folder).
+    # The query returns the most permissive role across all paths.
+    role_result = await async_session.execute(
+        text(
+            f"""
+            SELECT role_name FROM (
+                -- 1. Project owner (user_id matches project owner)
+                SELECT 'project-owner' AS role_name, 1 AS priority
+                FROM customer.project p
+                WHERE p.id = :pid AND p.user_id = :uid
+
+                UNION ALL
+
+                -- 2. Direct user grant
+                SELECT r.name, 2
+                FROM {settings.ACCOUNTS_SCHEMA}.project_user pu
+                JOIN {settings.ACCOUNTS_SCHEMA}.role r ON r.id = pu.role_id
+                WHERE pu.project_id = :pid AND pu.user_id = :uid
+
+                UNION ALL
+
+                -- 3. Team grant
+                SELECT r.name, 3
+                FROM {settings.ACCOUNTS_SCHEMA}.project_team pt
+                JOIN {settings.ACCOUNTS_SCHEMA}.user_team ut ON ut.team_id = pt.team_id
+                JOIN {settings.ACCOUNTS_SCHEMA}.role r ON r.id = pt.role_id
+                WHERE pt.project_id = :pid AND ut.user_id = :uid
+
+                UNION ALL
+
+                -- 4. Organisation grant
+                SELECT r.name, 4
+                FROM {settings.ACCOUNTS_SCHEMA}.project_organization po
+                JOIN {settings.ACCOUNTS_SCHEMA}.role r ON r.id = po.role_id
+                JOIN {settings.ACCOUNTS_SCHEMA}.user u ON u.organization_id = po.organization_id
+                WHERE po.project_id = :pid AND u.id = :uid
+
+                UNION ALL
+
+                -- 5. Folder grant (team or org)
+                SELECT
+                    CASE rg.role_name
+                        WHEN 'folder-editor' THEN 'project-editor'
+                        WHEN 'folder-viewer' THEN 'project-viewer'
+                        ELSE NULL
+                    END,
+                    5
+                FROM customer.project p
+                JOIN (
+                    SELECT rg2.resource_id, r2.name AS role_name
+                    FROM {settings.ACCOUNTS_SCHEMA}.resource_grant rg2
+                    JOIN {settings.ACCOUNTS_SCHEMA}.role r2 ON r2.id = rg2.role_id
+                    WHERE rg2.resource_type = 'folder'
+                      AND (
+                          (rg2.grantee_type = 'team' AND EXISTS (
+                              SELECT 1 FROM {settings.ACCOUNTS_SCHEMA}.user_team ut2
+                              WHERE ut2.team_id = rg2.grantee_id AND ut2.user_id = :uid
+                          ))
+                          OR (rg2.grantee_type = 'organization' AND EXISTS (
+                              SELECT 1 FROM {settings.ACCOUNTS_SCHEMA}.user u2
+                              WHERE u2.id = :uid AND u2.organization_id = rg2.grantee_id
+                          ))
+                      )
+                ) rg ON rg.resource_id = p.folder_id
+                WHERE p.id = :pid AND p.folder_id IS NOT NULL
+            ) sub
+            WHERE role_name IS NOT NULL
+            ORDER BY priority ASC
+            LIMIT 1
+            """
+        ),
+        {"pid": str(project_id), "uid": str(user_id)},
+    )
+    my_role = role_result.scalars().first()
+
+    return IProjectRead(**project.model_dump(), owned_by=owned_by, my_role=my_role)
 
 
 @router.get(
@@ -1090,6 +1179,7 @@ async def create_layer_group(
     summary="Update a layer group",
     response_model=ILayerProjectGroupRead,
     status_code=200,
+    dependencies=[Depends(auth_z)],
 )
 async def update_layer_group(
     async_session: AsyncSession = Depends(get_db),
@@ -1107,7 +1197,10 @@ async def update_layer_group(
 
 
 @router.delete(
-    "/{project_id}/group/{group_id}", summary="Delete a layer group", status_code=204
+    "/{project_id}/group/{group_id}",
+    summary="Delete a layer group",
+    status_code=204,
+    dependencies=[Depends(auth_z)],
 )
 async def delete_layer_group(
     async_session: AsyncSession = Depends(get_db),
@@ -1135,6 +1228,7 @@ async def delete_layer_group(
     "/{project_id}/layer-tree",
     summary="Update layer tree structure (Reorder/Reparent)",
     status_code=204,
+    dependencies=[Depends(auth_z)],
 )
 async def update_project_layer_tree(
     project_id: UUID4 = Path(..., description="The Project ID"),

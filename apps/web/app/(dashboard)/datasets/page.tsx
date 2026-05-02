@@ -27,7 +27,7 @@ import { useDocuments, deleteAsset } from "@/lib/api/assets";
 import { useFolders } from "@/lib/api/folders";
 import { useLayers } from "@/lib/api/layers";
 import { useTeams } from "@/lib/api/teams";
-import { useOrganization } from "@/lib/api/users";
+import { useOrganization, useUserProfile } from "@/lib/api/users";
 import type { PaginatedQueryParams } from "@/lib/validations/common";
 import type { Folder } from "@/lib/validations/folder";
 import type { GetDatasetSchema } from "@/lib/validations/layer";
@@ -72,6 +72,7 @@ const Datasets = () => {
   const { teams } = useTeams();
   const { organization } = useOrganization();
   const { isOrgEditor } = useAuthZ();
+  const { userProfile } = useUserProfile();
 
   const homeFolder = useMemo(() => folders?.find((f) => f.is_owned && f.name === "home"), [folders]);
 
@@ -112,9 +113,13 @@ const Datasets = () => {
     setAddDatasetAnchorEl(null);
   };
 
-  const openAddDatasetModal = (sourceType: AddLayerSourceType) => {
+  const openAddDatasetModal = (sourceType: AddLayerSourceType | "document") => {
     handleAddDatasetClose();
-    setAddDatasetModal(sourceType);
+    if (sourceType === "document") {
+      setOpenDocumentUpload(true);
+    } else {
+      setAddDatasetModal(sourceType);
+    }
   };
 
   const closeAddDatasetModal = () => {
@@ -132,6 +137,11 @@ const Datasets = () => {
       sourceType: AddLayerSourceType.DataSourceExternal,
       iconName: ICON_NAME.LINK,
       label: t("dataset_external"),
+    },
+    {
+      sourceType: "document" as const,
+      iconName: ICON_NAME.FILE,
+      label: t("upload_document"),
     },
   ];
 
@@ -235,7 +245,7 @@ const Datasets = () => {
         <ShareModal
           type="folder"
           open={true}
-          onClose={() => setShareFolder(null)}
+          onClose={() => { setShareFolder(null); mutateFolders(); }}
           content={shareFolder}
         />
       )}
@@ -255,20 +265,12 @@ const Datasets = () => {
         }}>
         <Typography variant="h6">{t("datasets")}</Typography>
         {isOrgEditor && (
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="outlined"
-              startIcon={<Icon iconName={ICON_NAME.UPLOAD} style={{ fontSize: 12 }} />}
-              onClick={() => setOpenDocumentUpload(true)}>
-              {t("upload_document")}
-            </Button>
-            <Button
-              disableElevation={true}
-              startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: 12 }} />}
-              onClick={handleAddDatasetClick}>
-              {t("add_dataset")}
-            </Button>
-          </Stack>
+          <Button
+            disableElevation={true}
+            startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: 12 }} />}
+            onClick={handleAddDatasetClick}>
+            {t("add_dataset")}
+          </Button>
         )}
         <Menu
           anchorEl={addDatasetAnchorEl}
@@ -289,7 +291,7 @@ const Datasets = () => {
             <ClickAwayListener onClickAway={handleAddDatasetClose}>
               <MenuList>
                 {addDatasetMenuItems.map((item, index) => (
-                  <MenuItem key={index} onClick={() => openAddDatasetModal(item.sourceType)}>
+                  <MenuItem key={index} onClick={() => openAddDatasetModal(item.sourceType as AddLayerSourceType | "document")}>
                     <ListItemIcon>
                       <Icon iconName={item.iconName} style={{ fontSize: "15px" }} />
                     </ListItemIcon>
@@ -383,10 +385,8 @@ const Datasets = () => {
             </Box>
           )}
 
-          {/* Documents section:
-               - Inside a named folder: always render (with empty state) once loading completes
-               - At My Content root (home folder): render only if documents exist (no empty state clutter) */}
-          {effectiveDocumentFolderId && !isDocumentsLoading && (activeFolderId || documents.length > 0) && (
+          {/* Documents section: only render when there are actual documents */}
+          {effectiveDocumentFolderId && !isDocumentsLoading && documents.length > 0 && (
             <Box sx={{ mb: 3 }}>
               <Typography
                 variant="subtitle2"
@@ -418,12 +418,10 @@ const Datasets = () => {
             </Box>
           )}
 
-          {/* Datasets section label when folders are also shown */}
-          {showFolders && (
-            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 11 }}>
-              {t("datasets")}
-            </Typography>
-          )}
+          {/* Datasets section label */}
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 11 }}>
+            {t("datasets")}
+          </Typography>
 
           <TileGrid
             view={view}
@@ -436,6 +434,10 @@ const Datasets = () => {
                 router.push(`/datasets/${item.id}`);
               }
             }}
+            folders={!isMyContent ? folders : undefined}
+            currentUserId={!isMyContent ? userProfile?.id : undefined}
+            activeTeamId={activeTeamId}
+            activeOrgId={activeOrgId}
           />
           {!isDatasetLoading && datasets && datasets?.items.length > 0 && (
             <Stack direction="row" justifyContent="center" alignItems="center" sx={{ p: 4 }}>

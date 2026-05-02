@@ -1,3 +1,4 @@
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import { Box, Collapse, IconButton, Skeleton } from "@mui/material";
@@ -153,6 +154,9 @@ interface WidgetRecordsTableProps {
   onReorderColumns?: (fromColumnKey: string, toColumnKey: string) => void;
   onRowClick?: (row: Record<string, unknown>, rowIndex: number) => void;
   getRowSx?: (row: Record<string, unknown>) => Record<string, unknown> | undefined;
+  onColumnSortClick?: (columnKey: string) => void;
+  sortColumn?: string;
+  sortDirection?: "asc" | "desc";
 }
 
 const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
@@ -173,6 +177,9 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
   onReorderColumns,
   onRowClick,
   getRowSx,
+  onColumnSortClick,
+  sortColumn,
+  sortDirection,
 }) => {
   const primitiveFields = useMemo(() => fields.filter((field) => field.type !== "object"), [fields]);
   const isGenericMode = Array.isArray(tableColumns) && Array.isArray(tableRows);
@@ -264,12 +271,23 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
                     }
                     setDraggedColumnKey(null);
                   }}
+                  onClick={
+                    onColumnSortClick
+                      ? (e) => {
+                          if ((e.target as HTMLElement).closest("[data-resize-handle='true']")) return;
+                          onColumnSortClick(column.key);
+                        }
+                      : undefined
+                  }
                   sx={{
                     width: getColumnWidth?.(column.key),
                     maxWidth: 900,
                     position: "relative",
-                    cursor: onReorderColumns ? "grab" : undefined,
+                    cursor: onReorderColumns ? "grab" : onColumnSortClick ? "pointer" : undefined,
                     ...getHeaderCellDropSx(column.key),
+                    ...(onColumnSortClick && {
+                      "&:hover .col-sort-arrow": { opacity: sortColumn === column.key ? 1 : 0.35 },
+                    }),
                   }}>
                   <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pr: 0 }}>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -285,10 +303,27 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
                         </Typography>
                       )}
                     </Box>
+                    {onColumnSortClick && (
+                      <Box
+                        className="col-sort-arrow"
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          color: "primary.main",
+                          opacity: sortColumn === column.key ? 1 : 0,
+                          transform: sortColumn === column.key && sortDirection === "desc" ? "rotate(180deg)" : "none",
+                          transition: "opacity 0.15s, transform 0.2s",
+                          flexShrink: 0,
+                          ml: 0.5,
+                        }}>
+                        <ArrowUpwardIcon sx={{ fontSize: 14 }} />
+                      </Box>
+                    )}
                   </Box>
                   {onHeaderResizeStart && (
                     <Box
                       data-resize-handle="true"
+                      onClick={(e) => e.stopPropagation()}
                       sx={{
                         position: "absolute",
                         top: 0,
@@ -419,12 +454,23 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
                       }
                       setDraggedColumnKey(null);
                     }}
+                    onClick={
+                      onColumnSortClick
+                        ? (e) => {
+                            if ((e.target as HTMLElement).closest("[data-resize-handle='true']")) return;
+                            onColumnSortClick(field.name);
+                          }
+                        : undefined
+                    }
                     sx={{
                       width: getColumnWidth?.(field.name),
                       maxWidth: 900,
                       position: "relative",
-                      cursor: onReorderColumns ? "grab" : undefined,
+                      cursor: onReorderColumns ? "grab" : onColumnSortClick ? "pointer" : undefined,
                       ...getHeaderCellDropSx(field.name),
+                      ...(onColumnSortClick && {
+                        "&:hover .col-sort-arrow": { opacity: sortColumn === field.name ? 1 : 0.35 },
+                      }),
                     }}>
                     <Box
                       sx={{
@@ -443,10 +489,27 @@ const WidgetRecordsTable: React.FC<WidgetRecordsTableProps> = ({
                           </Typography>
                         )}
                       </Box>
+                      {onColumnSortClick && (
+                        <Box
+                          className="col-sort-arrow"
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            color: "primary.main",
+                            opacity: sortColumn === field.name ? 1 : 0,
+                            transform: sortColumn === field.name && sortDirection === "desc" ? "rotate(180deg)" : "none",
+                            transition: "opacity 0.15s, transform 0.2s",
+                            flexShrink: 0,
+                            ml: 0.5,
+                          }}>
+                          <ArrowUpwardIcon sx={{ fontSize: 14 }} />
+                        </Box>
+                      )}
                     </Box>
                     {onHeaderResizeStart && (
                       <Box
                         data-resize-handle="true"
+                        onClick={(e) => e.stopPropagation()}
                         sx={{
                           position: "absolute",
                           top: 0,

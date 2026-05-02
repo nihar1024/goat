@@ -69,12 +69,22 @@ export function useCustomBasemapMutations(
   );
 
   const deleteCustomBasemap = useCallback(
-    async (id: string) => {
+    async (id: string, fallbackBasemap?: string) => {
       if (!onProjectUpdate) throw new Error("onProjectUpdate not provided");
       const current =
         (project?.custom_basemaps as CustomBasemap[] | undefined) ?? [];
       const next = current.filter((c) => c.id !== id);
-      await onProjectUpdate("custom_basemaps", next);
+      // When the deleted basemap is the active one, patch both fields in a
+      // single mutation. Two sequential awaited calls share a stale `project`
+      // closure inside handleProjectUpdate and the second call would revert
+      // the cache to include the deleted entry (the server PUT already
+      // succeeded, so a page reload would still show it gone — but the local
+      // list keeps the ghost row until then).
+      if (fallbackBasemap !== undefined && project?.basemap === id) {
+        await onProjectUpdate({ custom_basemaps: next, basemap: fallbackBasemap });
+      } else {
+        await onProjectUpdate("custom_basemaps", next);
+      }
     },
     [project, onProjectUpdate]
   );

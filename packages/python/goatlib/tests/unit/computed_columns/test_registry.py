@@ -55,7 +55,10 @@ def test_area_kind_registered() -> None:
     assert kind.duckdb_type == "DOUBLE"
     assert kind.allowed_geom_types == frozenset({"polygon", "multipolygon"})
     assert kind.depends_on == ("geometry",)
-    assert kind.compute_sql("geometry") == 'ST_Area_Spheroid("geometry")'
+    assert (
+        kind.compute_sql("geometry")
+        == 'ST_Area_Spheroid(ST_FlipCoordinates("geometry"))'
+    )
 
 
 def test_perimeter_kind_registered() -> None:
@@ -64,7 +67,10 @@ def test_perimeter_kind_registered() -> None:
     assert kind.duckdb_type == "DOUBLE"
     assert kind.allowed_geom_types == frozenset({"polygon", "multipolygon"})
     assert kind.depends_on == ("geometry",)
-    assert kind.compute_sql("geometry") == 'ST_Perimeter_Spheroid("geometry")'
+    assert (
+        kind.compute_sql("geometry")
+        == 'ST_Perimeter_Spheroid(ST_FlipCoordinates("geometry"))'
+    )
 
 
 def test_length_kind_registered() -> None:
@@ -73,7 +79,10 @@ def test_length_kind_registered() -> None:
     assert kind.duckdb_type == "DOUBLE"
     assert kind.allowed_geom_types == frozenset({"line", "multiline"})
     assert kind.depends_on == ("geometry",)
-    assert kind.compute_sql("geometry") == 'ST_Length_Spheroid("geometry")'
+    assert (
+        kind.compute_sql("geometry")
+        == 'ST_Length_Spheroid(ST_FlipCoordinates("geometry"))'
+    )
 
 
 def test_is_computed_kind_true_for_built_ins() -> None:

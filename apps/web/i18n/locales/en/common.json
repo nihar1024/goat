@@ -134,6 +134,10 @@
       "subtitle": "Relief",
       "title": "BKG (Germany)"
     },
+    "basemap_de_landuse": {
+      "subtitle": "Landuse",
+      "title": "BKG (Germany)"
+    },
     "dark": {
       "subtitle": "For highlighting data overlays",
       "title": "Dark"

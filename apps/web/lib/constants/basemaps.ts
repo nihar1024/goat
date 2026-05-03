@@ -67,6 +67,15 @@ export const BASEMAPS: BuiltInBasemap[] = [
     subtitle: "Topographic",
     thumbnail: "https://basemap.de/viewer/assets/basemap_hillshade.png",
   },
+  {
+    source: "builtin",
+    type: "vector",
+    value: "basemap_de_landuse",
+    url: `https://assets.plan4better.de/goat/basemaps/bm_web_col_landuse_plan4better.json`,
+    title: "BKG Basemap",
+    subtitle: "Landuse",
+    thumbnail: "https://basemap.de/viewer/assets/basemap_hillshade.png",
+  },
 ];
 
 export const DEFAULT_BASEMAP = "light";

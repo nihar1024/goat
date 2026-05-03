@@ -168,6 +168,31 @@ export const strokeWidthSchema = z.object({
   stroke_width_ordinal_map: sizeOrdinalMap.optional(),
 });
 
+export const lineStyleSchema = z.object({
+  stroke_pattern: z.enum(["solid", "dashed", "dotted", "dash_dot"]).default("solid"),
+  stroke_dash_density: z.enum(["tight", "normal", "loose"]).default("normal"),
+  stroke_cap: z.enum(["butt", "round", "square"]).default("butt"),
+  stroke_join: z.enum(["bevel", "round", "miter"]).default("miter"),
+  // "decoration" is the cartography term for repeating symbols along a line.
+  // Generic so v2 can add "chevron" / "dot" / "tick" without a migration.
+  decoration_type: z.enum(["none", "arrow"]).default("none"),
+  decoration_direction: z.enum(["forward", "backward", "both"]).default("forward"),
+  decoration_placement: z
+    .enum(["repeat", "start", "end", "start_and_end", "center"])
+    .default("repeat"),
+  decoration_spacing: z.number().min(50).max(800).default(200),
+  // Target arrow size in screen pixels (matches the visible arrow extent
+  // because the source SVG fills its 32x32 viewBox). `.catch(32)` ensures
+  // out-of-range legacy values (e.g. the pre-pixel-scale fractional sizes)
+  // silently fall back to the default instead of throwing at parse time.
+  decoration_size: z.number().min(8).max(64).catch(32).default(32),
+  // When true, arrows render even where they'd collide with other symbols
+  // (and don't block other symbols from rendering near them). When false,
+  // MapLibre's collision detector culls overlapping arrows — arrows can
+  // disappear at low zoom or in dense areas.
+  decoration_allow_overlap: z.boolean().default(true),
+});
+
 export const radiusSchema = z.object({
   radius: z.number().min(0).max(100).default(10),
   radius_range: z.array(z.number().min(0).max(500)).default([0, 10]),
@@ -273,7 +298,8 @@ export const featureLayerPointPropertiesSchema = featureLayerBasePropertiesSchem
   .merge(radiusSchema)
   .merge(markerSchema);
 
-export const featureLayerLinePropertiesSchema = featureLayerBasePropertiesSchema;
+export const featureLayerLinePropertiesSchema =
+  featureLayerBasePropertiesSchema.merge(lineStyleSchema);
 
 export const featureLayerPolygonPropertiesSchema = featureLayerBasePropertiesSchema.merge(strokeColorSchema);
 

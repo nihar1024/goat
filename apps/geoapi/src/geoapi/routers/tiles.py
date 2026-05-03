@@ -5,9 +5,9 @@ import json
 import logging
 import time
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Header, Path, Query, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Path, Query, Request, Response
 
 from geoapi.dependencies import (
     BBoxDep,
@@ -55,6 +55,7 @@ def get_layer_version(layer_id: str) -> int:
     """Return current version for a layer (0 if never bumped)."""
     return _layer_versions.get(layer_id.replace("-", ""), 0)
 
+
 router = APIRouter(tags=["Tiles"])
 
 
@@ -83,8 +84,17 @@ async def get_tile(
     cql_filter: CqlFilterDep = None,
     bbox: BBoxDep = None,
     limit: int = Query(default=None, ge=1, le=100000, description="Max features"),
-    label: bool = Query(default=False, description="Merge polygon label anchor points into tile response"),
-    dynamic: bool = Query(default=False, description="Force dynamic tile generation, bypassing PMTiles"),
+    label: bool = Query(
+        default=False,
+        description="Merge polygon label anchor points into tile response",
+    ),
+    decoration: Literal["start", "end", "start_and_end", "center"] | None = Query(
+        default=None,
+        description="If set, emit per-line decoration placement points + bearings in a separate MVT layer.",
+    ),
+    dynamic: bool = Query(
+        default=False, description="Force dynamic tile generation, bypassing PMTiles"
+    ),
     if_none_match: str | None = Header(default=None, alias="if-none-match"),
 ) -> Response:
     """Get a vector tile for the specified collection and tile coordinates."""
@@ -102,7 +112,13 @@ async def get_tile(
 
     # Try ultra-fast PMTiles path first (wrapped in try-except to ensure fallback)
     try:
-        if not dynamic and tile_service.can_serve_from_pmtiles_by_layer_id(layer_id, cql_filter, bbox):
+        if (
+            not dynamic
+            and decoration is None
+            and tile_service.can_serve_from_pmtiles_by_layer_id(
+                layer_id, cql_filter, bbox
+            )
+        ):
             result = await tile_service.get_tile_from_pmtiles_by_layer_id(
                 layer_id=layer_id,
                 z=z,
@@ -145,7 +161,11 @@ async def get_tile(
     layer_info = await get_layer_info(collection_id)
 
     # Check if we can still use PMTiles with layer_info (redundant but safe)
-    if not dynamic and tile_service.can_serve_from_pmtiles(layer_info, cql_filter, bbox):
+    if (
+        not dynamic
+        and decoration is None
+        and tile_service.can_serve_from_pmtiles(layer_info, cql_filter, bbox)
+    ):
         result = await tile_service.get_tile_from_pmtiles_only(
             layer_info=layer_info,
             z=z,
@@ -186,6 +206,8 @@ async def get_tile(
         etag_seed += f":f={json.dumps(cql_filter, sort_keys=True)}"
     if bbox:
         etag_seed += f":b={bbox}"
+    if decoration:
+        etag_seed += f":d={decoration}"
     etag = f'W/"{hashlib.md5(etag_seed.encode()).hexdigest()[:16]}"'
 
     if if_none_match and if_none_match.strip() == etag:
@@ -218,6 +240,7 @@ async def get_tile(
             geometry_column=geometry_column,
             geometry_type=metadata.geometry_type,
             force_dynamic=dynamic,
+            decoration=decoration,
         )
     except TimeoutError:
         # Query exceeded timeout - return 504 Gateway Timeout

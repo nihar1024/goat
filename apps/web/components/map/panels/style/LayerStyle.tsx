@@ -28,6 +28,7 @@ import GeneralOptions from "@/components/map/panels/style/general/GeneralOptions
 import InteractionOptions from "@/components/map/panels/style/interaction/InteractionOptions";
 import LabelOptions from "@/components/map/panels/style/label/LabelOptions";
 import { LegendOptions } from "@/components/map/panels/style/legend/LegendOptions";
+import LineStyleSection from "@/components/map/panels/style/line/LineStyleSection";
 import MarkerOptions from "@/components/map/panels/style/marker/MarkerOptions";
 import Settings from "@/components/map/panels/style/settings/Settings";
 
@@ -504,6 +505,13 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                             />
                           </>
                         )}
+
+                      {activeLayer.feature_layer_geometry_type === "line" && (
+                        <LineStyleSection
+                          layerProperties={layerProperties}
+                          onStyleChange={(newStyle) => updateLayerStyle(newStyle)}
+                        />
+                      )}
 
                       {/* {MARKER ICON} */}
                       {activeLayer.feature_layer_geometry_type &&

@@ -1,6 +1,7 @@
 import type { MapGeoJSONFeature } from "react-map-gl/maplibre";
 
 import { rgbToHex } from "@/lib/utils/helpers";
+import { resolveLineDashArray } from "@/lib/transformers/lineStyle";
 import type {
   FeatureLayerLineProperties,
   FeatureLayerPointProperties,
@@ -254,16 +255,31 @@ export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
   } else if (type === "line") {
     const lineProperties = data.properties as FeatureLayerLineProperties;
 
+    const pattern = lineProperties.stroke_pattern ?? "solid";
+    const density = lineProperties.stroke_dash_density ?? "normal";
+    const dashArray = resolveLineDashArray(pattern, density);
+
+    const cap = lineProperties.stroke_cap;
+    const join = lineProperties.stroke_join;
+
+    const layout: Record<string, unknown> = {
+      visibility: data.properties.visibility ? "visible" : "none",
+    };
+    // Only emit when non-default to keep output byte-identical for legacy layers.
+    if (cap && cap !== "butt") layout["line-cap"] = cap;
+    if (join && join !== "miter") layout["line-join"] = join;
+
+    const paint: Record<string, unknown> = {
+      "line-color": getMapboxStyleColor(data, "stroke_color"),
+      "line-opacity": lineProperties.opacity,
+      "line-width": getMapboxStyleSize(data, "stroke_width"),
+    };
+    if (dashArray) paint["line-dasharray"] = dashArray;
+
     return {
       type: "line",
-      layout: {
-        visibility: data.properties.visibility ? "visible" : "none",
-      },
-      paint: {
-        "line-color": getMapboxStyleColor(data, "stroke_color"),
-        "line-opacity": lineProperties.opacity,
-        "line-width": getMapboxStyleSize(data, "stroke_width"),
-      },
+      layout,
+      paint,
     };
   } else {
     throw new Error(`Invalid type: ${type}`);

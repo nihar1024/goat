@@ -19,6 +19,7 @@ interface FolderCardProps {
 }
 
 export default function FolderCard({ folder, selected, enableActions, showRoleChip, fullWidth, onClick, onMenuSelect }: FolderCardProps) {
+  const isShared = !showRoleChip && folder.is_owned && (folder.shared_with_ids?.length ?? 0) > 0;
   const theme = useTheme();
   const { t } = useTranslation("common");
 
@@ -80,13 +81,20 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
             )}
           </Box>
         </Tooltip>
-        <Stack sx={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
+        <Stack direction="row" alignItems="center" sx={{ overflow: "hidden", flex: 1, minWidth: 0, gap: 1 }}>
           <Typography
             variant="body2"
             noWrap
-            sx={{ fontWeight: selected ? 700 : 400, color: selected ? "primary.main" : "text.primary" }}>
+            sx={{ fontWeight: selected ? 700 : 400, color: selected ? "primary.main" : "text.primary", flex: 1, minWidth: 0 }}>
             {folder.name}
           </Typography>
+          {isShared && (
+            <Tooltip title={t("shared")} placement="top" arrow>
+              <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                <Icon iconName={ICON_NAME.USERS} style={{ fontSize: 10, color: theme.palette.text.secondary }} />
+              </Box>
+            </Tooltip>
+          )}
         </Stack>
         {/* Only show actions on owned non-home folders */}
         {enableActions && folder.is_owned && onMenuSelect && (

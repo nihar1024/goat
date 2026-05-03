@@ -337,7 +337,7 @@ const Projects = () => {
             onClick={(item) => { if (item?.id) router.push(`/map/${item.id}`); }}
             onAction={handleProjectAction}
             folders={!isMyContent ? folders : undefined}
-            currentUserId={!isMyContent ? userProfile?.id : undefined}
+            currentUserId={userProfile?.id}
             activeTeamId={activeTeamId}
             activeOrgId={activeOrgId}
           />

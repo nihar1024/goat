@@ -531,7 +531,7 @@ const PublicProjectLayout = ({
   const allowedStyles = useMemo(() => {
     const allowed = builderConfig?.settings.allowed_basemaps;
     if (!allowed) return translatedBaseMaps;
-    return translatedBaseMaps.filter((b) => allowed.includes(b.value));
+    return translatedBaseMaps.filter((b) => b.source === "custom" || allowed.includes(b.value));
   }, [builderConfig, translatedBaseMaps]);
 
   const renderControl = useCallback(

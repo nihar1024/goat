@@ -435,7 +435,7 @@ const Datasets = () => {
               }
             }}
             folders={!isMyContent ? folders : undefined}
-            currentUserId={!isMyContent ? userProfile?.id : undefined}
+            currentUserId={userProfile?.id}
             activeTeamId={activeTeamId}
             activeOrgId={activeOrgId}
           />

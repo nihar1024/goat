@@ -34,6 +34,18 @@ interface TileGridProps {
 const ROLE_CHIP_OWNER = { icon: ICON_NAME.CROWN, tooltip: "Owner" };
 const ROLE_CHIP_WRITE = { icon: ICON_NAME.EDIT, tooltip: "Editor" };
 const ROLE_CHIP_READ = { icon: ICON_NAME.EYE, tooltip: "Viewer" };
+const SHARED_CHIP = { icon: ICON_NAME.USERS, tooltip: "Shared" };
+
+function getSharedChip(
+  item: Project | Layer,
+  currentUserId: string | undefined,
+) {
+  if (!currentUserId) return undefined;
+  if ((item as Project).owned_by?.id !== currentUserId) return undefined;
+  const sharedWith = (item as { shared_with?: { teams?: unknown[]; organizations?: unknown[] } }).shared_with;
+  if (sharedWith?.teams?.length || sharedWith?.organizations?.length) return SHARED_CHIP;
+  return undefined;
+}
 
 function getRoleChip(
   item: Project | Layer,
@@ -43,6 +55,8 @@ function getRoleChip(
   activeOrgId?: string,
 ) {
   if (!currentUserId) return undefined;
+  // Only show role chips in a team/org context — redundant in "My Content"
+  if (!activeTeamId && !activeOrgId) return undefined;
 
   // Owner check
   if ((item as Project).owned_by?.id === currentUserId) return ROLE_CHIP_OWNER;
@@ -152,6 +166,7 @@ const TileGrid = (props: TileGridProps) => {
                     moreMenuOptions={getMoreMenuOptions(props.type, item, props.currentUserId)}
                     onMoreMenuSelect={handleMoreMenuSelect}
                     roleChip={getRoleChip(item, props.folders, props.currentUserId, props.activeTeamId, props.activeOrgId)}
+                    sharedChip={!props.activeTeamId && !props.activeOrgId ? getSharedChip(item, props.currentUserId) : undefined}
                   />
                 )}
               </Grid>

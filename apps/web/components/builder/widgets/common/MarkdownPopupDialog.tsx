@@ -11,7 +11,7 @@ interface MarkdownPopupDialogProps {
 }
 
 const MarkdownPopupDialog = ({ open, onClose, title, content }: MarkdownPopupDialogProps) => (
-  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+  <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
     <DialogTitle sx={{ pr: 6 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <InfoOutlinedIcon sx={{ fontSize: 20, color: "primary.main", opacity: 0.75, flexShrink: 0 }} />

@@ -376,18 +376,18 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
 
   return (
     <>
-      <Stack direction="row" spacing={1} sx={{ px: 2, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+      <Stack direction="row" spacing={1} sx={{ px: 2, py: 2, borderBottom: "1px solid", borderColor: "divider" }}>
         <Tooltip title={t("copy_style")} placement="bottom">
           <span style={{ display: "flex" }}>
-            <Button variant="outlined" size="small" sx={{ minWidth: 34, width: 34, px: 0 }} onClick={handleCopyStyle}>
-              <Icon iconName={ICON_NAME.COPY} style={{ fontSize: 14 }} />
+            <Button variant="outlined" size="small" sx={{ minWidth: 36, width: 36, height: 36, px: 0 }} onClick={handleCopyStyle}>
+              <Icon iconName={ICON_NAME.COPY} style={{ fontSize: 16 }} />
             </Button>
           </span>
         </Tooltip>
         <Tooltip title={styleClipboard ? `${t("paste_style")} (${styleClipboard.sourceLayerName})` : t("paste_style")} placement="bottom">
           <span style={{ display: "flex" }}>
-            <Button variant="outlined" size="small" sx={{ minWidth: 34, width: 34, px: 0 }} disabled={!styleClipboard} onClick={handlePasteStyle}>
-              <Icon iconName={ICON_NAME.SLIDERS} style={{ fontSize: 14 }} />
+            <Button variant="outlined" size="small" sx={{ minWidth: 36, width: 36, height: 36, px: 0 }} disabled={!styleClipboard} onClick={handlePasteStyle}>
+              <Icon iconName={ICON_NAME.SLIDERS} style={{ fontSize: 16 }} />
             </Button>
           </span>
         </Tooltip>
@@ -396,10 +396,10 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
             <Button
               variant={isDefaultSaved ? "contained" : "outlined"}
               size="small"
-              sx={{ minWidth: 34, width: 34, px: 0 }}
+              sx={{ minWidth: 36, width: 36, height: 36, px: 0 }}
               disabled={isSaving}
               onClick={handleSetDefault}>
-              {isSaving ? <CircularProgress size={14} color="inherit" /> : <Icon iconName={ICON_NAME.STAR} style={{ fontSize: 14 }} />}
+              {isSaving ? <CircularProgress size={16} color="inherit" /> : <Icon iconName={ICON_NAME.STAR} style={{ fontSize: 16 }} />}
             </Button>
           </span>
         </Tooltip>

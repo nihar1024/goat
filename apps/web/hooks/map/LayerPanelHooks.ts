@@ -106,8 +106,6 @@ export const useLayerSettingsMoreMenu = () => {
                 id: MapLayerActions.EDIT_FEATURES,
                 label: t("edit_features"),
                 icon: ICON_NAME.EDITPEN,
-                tag: "Beta",
-                tagTooltip: t("beta_feature_editing_info"),
               },
             ]
           : []),
@@ -162,8 +160,6 @@ export const useLayerSettingsMoreMenu = () => {
                 id: MapLayerActions.EDIT_FEATURES,
                 label: t("edit_features"),
                 icon: ICON_NAME.EDITPEN,
-                tag: "Beta",
-                tagTooltip: t("beta_feature_editing_info"),
               },
             ]
           : []),

@@ -59,6 +59,7 @@ type FolderEditModal = {
 const Datasets = () => {
   const router = useRouter();
   const { t } = useTranslation("common");
+
   const [queryParams, setQueryParams] = useState<PaginatedQueryParams>({
     order: "descendent",
     order_by: "updated_at",
@@ -400,7 +401,7 @@ const Datasets = () => {
                     <DocumentCard
                       key={doc.id}
                       document={doc}
-                      enableActions={isOrgEditor}
+                      enableActions={!!userProfile?.id && doc.user_id === userProfile.id}
                       onMenuSelect={async (item) => {
                         if (item.id === "delete" && doc.id) {
                           await deleteAsset(doc.id);
@@ -428,7 +429,7 @@ const Datasets = () => {
             items={datasets?.items ?? []}
             isLoading={isDatasetLoading}
             type="layer"
-            enableActions={isOrgEditor}
+            enableActions={!!userProfile?.id}
             onClick={(item) => {
               if (item && item.id) {
                 router.push(`/datasets/${item.id}`);

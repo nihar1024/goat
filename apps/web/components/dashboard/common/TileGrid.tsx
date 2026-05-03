@@ -65,7 +65,11 @@ function getRoleChip(
   if (folders) {
     const folder = folders.find((f) => f.id === (item as { folder_id?: string }).folder_id);
     if (folder) {
-      if (folder.is_owned) return ROLE_CHIP_OWNER;
+      // Only infer crown from folder ownership if item owner is unknown;
+      // if owned_by is present and it's someone else, don't show crown.
+      const itemOwner = (item as { owned_by?: { id: string } }).owned_by;
+      if (folder.is_owned && !itemOwner) return ROLE_CHIP_OWNER;
+      if (folder.is_owned) return ROLE_CHIP_WRITE;
       if (folder.role === "folder-editor") return ROLE_CHIP_WRITE;
       if (folder.role === "folder-viewer") return ROLE_CHIP_READ;
     }
@@ -163,7 +167,7 @@ const TileGrid = (props: TileGridProps) => {
                     enableActions={props.enableActions}
                     cardType={props.view}
                     item={item}
-                    moreMenuOptions={getMoreMenuOptions(props.type, item, props.currentUserId)}
+                    moreMenuOptions={getMoreMenuOptions(props.type, item, props.currentUserId, props.folders)}
                     onMoreMenuSelect={handleMoreMenuSelect}
                     roleChip={getRoleChip(item, props.folders, props.currentUserId, props.activeTeamId, props.activeOrgId)}
                     sharedChip={!props.activeTeamId && !props.activeOrgId ? getSharedChip(item, props.currentUserId) : undefined}

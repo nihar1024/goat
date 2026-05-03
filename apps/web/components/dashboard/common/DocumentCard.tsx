@@ -34,10 +34,7 @@ export default function DocumentCard({ document, enableActions, onMenuSelect }: 
     <Tooltip title={document.file_name} placement="top" disableInteractive>
       <Paper
         elevation={0}
-        component="a"
-        href={document.url}
-        target="_blank"
-        rel="noopener noreferrer"
+        onClick={() => window.open(document.url, "_blank", "noopener,noreferrer")}
         sx={{
           display: "flex",
           alignItems: "center",
@@ -81,8 +78,7 @@ export default function DocumentCard({ document, enableActions, onMenuSelect }: 
             menuButton={
               <IconButton
                 size="small"
-                sx={{ ml: "auto", flexShrink: 0 }}
-                onClick={(e) => e.preventDefault()}>
+                sx={{ ml: "auto", flexShrink: 0 }}>
                 <Icon iconName={ICON_NAME.MORE_VERT} style={{ fontSize: 14 }} />
               </IconButton>
             }

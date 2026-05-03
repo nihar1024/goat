@@ -19,9 +19,10 @@ export const DATA_PANEL_HEIGHT_VAR = "--data-panel-height";
 
 interface DataPanelProps {
   projectLayers: ProjectLayer[];
+  isEditor?: boolean;
 }
 
-const DataPanel: React.FC<DataPanelProps> = ({ projectLayers }) => {
+const DataPanel: React.FC<DataPanelProps> = ({ projectLayers, isEditor = true }) => {
   const theme = useTheme();
   const dispatch = useAppDispatch();
   const [isDragging, setIsDragging] = useState(false);
@@ -197,6 +198,7 @@ const DataPanel: React.FC<DataPanelProps> = ({ projectLayers }) => {
           projectLayer={activeProjectLayer}
           layerName={activeProjectLayer.name}
           isExpanded={isExpanded}
+          isEditor={isEditor}
           onToggleExpand={handleToggleExpand}
           onClose={handleClose}
           onDownload={() => setIsDownloadOpen(true)}

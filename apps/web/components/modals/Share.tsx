@@ -486,7 +486,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       : type === "project"
         ? (content as Project).folder_id
         : null;
-  const { data: layerFolderGrants } = useFolderGrants(
+  const { data: layerFolderGrants, error: layerFolderGrantsError } = useFolderGrants(
     (type === "layer" || type === "project") && open && itemFolderId ? itemFolderId : null
   );
   const grantsLoaded = useRef(false);
@@ -728,6 +728,11 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                           {t("folder_share_conflict_warning")}
                         </Typography>
                       )}
+                      {(type === "layer" || type === "project") && layerFolderGrantsError && itemFolderId && (
+                        <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
+                          {t("folder_access_may_apply")}
+                        </Typography>
+                      )}
                       <ShareWithItemsTab
                         items={organizationsAccessLevel}
                         roleOptions={roleOptions}
@@ -741,6 +746,11 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                       {type === "folder" && sharedWith.organizations.length > 0 && (
                         <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
                           {t("folder_share_conflict_warning")}
+                        </Typography>
+                      )}
+                      {(type === "layer" || type === "project") && layerFolderGrantsError && itemFolderId && (
+                        <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
+                          {t("folder_access_may_apply")}
                         </Typography>
                       )}
                       <ShareWithItemsTab

@@ -89,6 +89,7 @@ interface EditableDataTableProps {
   projectLayer: ProjectLayer;
   layerName?: string;
   isExpanded?: boolean;
+  isEditor?: boolean;
   onToggleExpand?: () => void;
   onClose?: () => void;
   onDownload?: () => void;
@@ -101,6 +102,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   projectLayer,
   layerName,
   isExpanded,
+  isEditor = true,
   onToggleExpand,
   onClose,
   onDownload,
@@ -642,18 +644,20 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
         <Box sx={{ flex: 1 }} />
 
         {/* Right: action buttons + utility icons */}
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={() => {
-            setEditFieldsInitialField(null);
-            setEditFieldsOpen(true);
-          }}
-          sx={{ textTransform: "none", whiteSpace: "nowrap" }}>
-          {t("add_field", { defaultValue: "Add a field" })}
-        </Button>
-        {(isEditing || (projectLayer.user_id === userProfile?.id && (!projectLayer.size || projectLayer.size <= MAX_EDITABLE_LAYER_SIZE))) && (
+        {isEditor && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setEditFieldsInitialField(null);
+              setEditFieldsOpen(true);
+            }}
+            sx={{ textTransform: "none", whiteSpace: "nowrap" }}>
+            {t("add_field", { defaultValue: "Add a field" })}
+          </Button>
+        )}
+        {isEditor && (isEditing || (projectLayer.user_id === userProfile?.id && (!projectLayer.size || projectLayer.size <= MAX_EDITABLE_LAYER_SIZE))) && (
           <Button
             size="small"
             variant="outlined"
@@ -1166,19 +1170,21 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           <ListItemText>{t("sort_desc", { defaultValue: "Sort Z-A" })}</ListItemText>
         </MenuItem>
         <Divider sx={{ my: 0.5 }} />
-        <MenuItem
-          onClick={() => {
-            if (columnMenuField) {
-              setEditFieldsInitialField(columnMenuField);
-              setEditFieldsOpen(true);
-            }
-            handleColumnMenuClose();
-          }}>
-          <ListItemIcon>
-            <EditIcon />
-          </ListItemIcon>
-          <ListItemText>{t("edit_field", { defaultValue: "Edit field" })}</ListItemText>
-        </MenuItem>
+        {isEditor && (
+          <MenuItem
+            onClick={() => {
+              if (columnMenuField) {
+                setEditFieldsInitialField(columnMenuField);
+                setEditFieldsOpen(true);
+              }
+              handleColumnMenuClose();
+            }}>
+            <ListItemIcon>
+              <EditIcon />
+            </ListItemIcon>
+            <ListItemText>{t("edit_field", { defaultValue: "Edit field" })}</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             if (columnMenuField) setStatsColumn(columnMenuField);
@@ -1202,24 +1208,30 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           </ListItemIcon>
           <ListItemText>{t("add_filter", { defaultValue: "Add filter" })}</ListItemText>
         </MenuItem>
-        <MenuItem disabled>
-          <ListItemIcon>
-            <CalculateIcon />
-          </ListItemIcon>
-          <ListItemText>{t("calculate_field", { defaultValue: "Calculate field" })}</ListItemText>
-        </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem
-          onClick={() => {
-            if (columnMenuField) handleDeleteColumnRequest(columnMenuField);
-            handleColumnMenuClose();
-          }}
-          sx={{ color: "error.main" }}>
-          <ListItemIcon>
-            <DeleteIcon sx={{ color: "error.main" }} />
-          </ListItemIcon>
-          <ListItemText>{t("delete_column", { defaultValue: "Delete column" })}</ListItemText>
-        </MenuItem>
+        {isEditor && (
+          <MenuItem disabled>
+            <ListItemIcon>
+              <CalculateIcon />
+            </ListItemIcon>
+            <ListItemText>{t("calculate_field", { defaultValue: "Calculate field" })}</ListItemText>
+          </MenuItem>
+        )}
+        {isEditor && (
+          <>
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem
+              onClick={() => {
+                if (columnMenuField) handleDeleteColumnRequest(columnMenuField);
+                handleColumnMenuClose();
+              }}
+              sx={{ color: "error.main" }}>
+              <ListItemIcon>
+                <DeleteIcon sx={{ color: "error.main" }} />
+              </ListItemIcon>
+              <ListItemText>{t("delete_column", { defaultValue: "Delete column" })}</ListItemText>
+            </MenuItem>
+          </>
+        )}
       </Menu>
 
       {/* Row Context Menu */}
@@ -1240,17 +1252,19 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           </ListItemIcon>
           <ListItemText primary={t("zoom_to_feature", { defaultValue: "Zoom to feature" })} />
         </ListItemButton>
-        <ListItemButton
-          onClick={handleDeleteRow}
-          sx={{ color: (theme) => theme.palette.error.main }}>
-          <ListItemIcon sx={{ minWidth: 0, pr: 4, color: "inherit" }}>
-            <Icon iconName={ICON_NAME.TRASH} style={{ fontSize: 15 }} htmlColor="inherit" />
-          </ListItemIcon>
-          <ListItemText
-            primary={t("delete")}
-            sx={{ "& .MuiTypography-root": { color: "inherit" } }}
-          />
-        </ListItemButton>
+        {isEditor && (
+          <ListItemButton
+            onClick={handleDeleteRow}
+            sx={{ color: (theme) => theme.palette.error.main }}>
+            <ListItemIcon sx={{ minWidth: 0, pr: 4, color: "inherit" }}>
+              <Icon iconName={ICON_NAME.TRASH} style={{ fontSize: 15 }} htmlColor="inherit" />
+            </ListItemIcon>
+            <ListItemText
+              primary={t("delete")}
+              sx={{ "& .MuiTypography-root": { color: "inherit" } }}
+            />
+          </ListItemButton>
+        )}
       </Menu>
 
       {/* Quick Filter Popover */}

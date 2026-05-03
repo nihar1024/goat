@@ -1,6 +1,5 @@
 // Icons
 import AddIcon from "@mui/icons-material/Add";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 // MUI
 import {
   Badge,
@@ -523,7 +522,6 @@ export const ProjectLayerTree = ({
 
   const handleVisibilityToggle = useCallback(async (node: ProjectLayerTreeNode, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isEditMode) return;
 
     const currentVisibility = node.properties?.visibility ?? true;
     const newVisibility = !currentVisibility;
@@ -569,7 +567,7 @@ export const ProjectLayerTree = ({
       toast.error(t("error_updating_visibility"));
       console.error("Error in handleVisibilityToggle:", err);
     }
-  }, [isEditMode, dispatch, onTreeUpdate, t]);
+  }, [dispatch, onTreeUpdate, t]);
 
   const handleProperties = useCallback((layer: ProjectLayer) => {
     dispatch(setSelectedLayers([layer.id]));
@@ -916,12 +914,12 @@ export const ProjectLayerTree = ({
 
         {/* Group info ⓘ button */}
         {node.type === "group" && groupInfo?.[String(node.id)] && (
-          <Tooltip title={t("group_info")} placement="top">
+          <Tooltip title={t("properties")} placement="top">
             <IconButton
               size="small"
               onClick={(e) => { e.stopPropagation(); setGroupInfoDialogId(node.id); }}
-              sx={{ p: 0.25, color: "primary.main", opacity: 0.75, "&:hover": { opacity: 1 } }}>
-              <InfoOutlinedIcon sx={{ fontSize: "15px" }} />
+              sx={{ p: 0.25 }}>
+              <Icon iconName={ICON_NAME.CIRCLEINFO} style={{ fontSize: "15px" }} />
             </IconButton>
           </Tooltip>
         )}

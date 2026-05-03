@@ -247,6 +247,7 @@ export interface PreviewSqlResponse {
   columns: Array<{ name: string; type: string }>;
   rows: PreviewSqlRow[];
   total_count?: number | null;
+  has_more?: boolean;
   error?: string | null;
 }
 

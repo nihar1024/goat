@@ -479,12 +479,7 @@ export const TableDataWidget = ({
         const incomingRows = (result.rows || []).map((row) => row.values || {});
         setSqlRows((previous) => (sqlPage === 0 ? incomingRows : [...previous, ...incomingRows]));
 
-        if (typeof result.total_count === "number" && Number.isFinite(result.total_count)) {
-          const loadedCount = pageOffset + incomingRows.length;
-          setSqlHasMore(loadedCount < result.total_count);
-        } else {
-          setSqlHasMore(incomingRows.length >= rowsPerPage);
-        }
+        setSqlHasMore(result.has_more ?? incomingRows.length >= rowsPerPage);
       } catch (error) {
         if (!isCancelled) {
           setSqlRows([]);

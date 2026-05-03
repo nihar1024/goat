@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
 from processes.config import settings
-from processes.ducklake import ducklake_manager
+from processes.ducklake import ducklake_manager, preview_ducklake_manager
 from processes.models import HealthCheck
 from processes.routers import processes_router, workflows_router
 from processes.services.windmill_client import windmill_client
@@ -50,8 +50,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     logger.info("Starting Processes API...")
 
-    # Initialize DuckLake connection for sync analytics queries
+    # Initialize DuckLake connections
     ducklake_manager.init(settings)
+    preview_ducklake_manager.init(settings)
 
     # Log resource limits for visibility
     logger.info(
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down Processes API...")
     await windmill_client.close()
     ducklake_manager.close()
+    preview_ducklake_manager.close()
     logger.info("Processes API shutdown complete")
 
 

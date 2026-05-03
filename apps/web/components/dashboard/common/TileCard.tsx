@@ -36,6 +36,7 @@ export interface TileCard {
   enableActions?: boolean;
   selected?: Project | Layer;
   roleChip?: { icon: ICON_NAME; tooltip: string };
+  sharedChip?: { icon: ICON_NAME; tooltip: string };
 }
 
 export interface ActiveCard {
@@ -124,22 +125,6 @@ const TileCard = (props: TileCard) => {
     </>
   );
 
-  const _createdAtText = (
-    <>
-      {item?.created_at && (
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ pb: 0 }}>
-          <Tooltip title={t("created")} placement="top" arrow>
-            <Typography variant="caption" noWrap>
-              {formatDistance(new Date(item.created_at), new Date(), {
-                addSuffix: true,
-                locale: dateLocale,
-              })}
-            </Typography>
-          </Tooltip>
-        </Stack>
-      )}
-    </>
-  );
 
   const cardTitle = (
     <>
@@ -179,6 +164,17 @@ const TileCard = (props: TileCard) => {
     </Tooltip>
   ) : null;
 
+  const sharedChipEl = props.sharedChip ? (
+    <Tooltip title={props.sharedChip.tooltip} placement="top" arrow>
+      <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Icon
+          iconName={props.sharedChip.icon}
+          style={{ fontSize: 11, color: theme.palette.text.secondary }}
+        />
+      </Box>
+    </Tooltip>
+  ) : null;
+
   const gridContent = (
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: theme.spacing(2) }}>
@@ -190,6 +186,7 @@ const TileCard = (props: TileCard) => {
         {ownedBy}
         {updatedAtText}
         {roleChipEl}
+        {sharedChipEl}
       </Stack>
       {/* Tags */}
       <Box sx={{ mt: theme.spacing(2) }} display="flex-start">
@@ -344,6 +341,7 @@ const TileCard = (props: TileCard) => {
                   <Box sx={{ px: 1, pb: 0, display: "flex", alignItems: "center", gap: 1 }}>
                     {updatedAtText}
                     {roleChipEl}
+                    {sharedChipEl}
                   </Box>
                 </Grid>
                 {enableActions && (

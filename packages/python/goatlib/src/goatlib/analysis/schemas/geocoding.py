@@ -321,22 +321,11 @@ class GeocodingParams(BaseModel):
         return self.country_constant
 
     def build_query_text(self, row: dict) -> str:
-        """
-        Build the free-text query string from a row of data.
-
-        For full_address mode, returns the full address column value.
-        For structured mode, concatenates address components with commas.
-
-        Args:
-            row: Dictionary of column values from the input data.
-
-        Returns:
-            Query string for Pelias free-text search.
-        """
+        """Build the free-text query string (used for full_address mode)."""
         if self.input_mode == GeocodingInputMode.full_address:
             return str(row.get(self.full_address_field, "")).strip()
 
-        # Structured mode: concatenate components
+        # Fallback for structured mode (kept for backward compatibility)
         components: list[str] = []
 
         if self.address_field and row.get(self.address_field):
@@ -359,6 +348,34 @@ class GeocodingParams(BaseModel):
 
         return ", ".join(components)
 
+    def build_structured_query_params(self, row: dict) -> dict:
+        """Build query parameters for Pelias /v1/search/structured endpoint.
+
+        Sends each address component as a separate parameter, preventing
+        libpostal from misinterpreting region names (e.g. "Baden") as cities.
+        """
+        params: dict = {}
+
+        if self.address_field and row.get(self.address_field):
+            params["address"] = str(row[self.address_field]).strip()
+
+        locality = self._get_locality(row)
+        if locality:
+            params["locality"] = locality
+
+        if self.postalcode_field and row.get(self.postalcode_field):
+            params["postalcode"] = str(row[self.postalcode_field]).strip()
+
+        region = self._get_region(row)
+        if region:
+            params["region"] = region
+
+        country = self._get_country(row)
+        if country:
+            params["country"] = country
+
+        return params
+
 
 # =============================================================================
 # Result Schema
@@ -374,4 +391,8 @@ class GeocodingResult(BaseModel):
     confidence: float | None = Field(default=None, description="Match confidence (0-1)")
     match_type: str | None = Field(
         default=None, description="Match type (exact, fallback, etc.)"
+    )
+    label: str | None = Field(default=None, description="Formatted address label from geocoder")
+    geocoded_postalcode: str | None = Field(
+        default=None, description="Postal code from geocoded result for PLZ validation"
     )

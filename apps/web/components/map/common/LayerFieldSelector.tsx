@@ -5,9 +5,11 @@ import {
   FormControl,
   IconButton,
   InputAdornment,
+  Link,
   ListSubheader,
   MenuItem,
   Select,
+  Stack,
   TextField,
   Typography,
   styled,
@@ -107,11 +109,11 @@ const LayerFieldSelector = (props: SelectorProps) => {
         fullWidth
         MenuProps={{
           autoFocus: false,
-          sx: { width: "120px" },
           slotProps: {
             paper: {
               sx: {
                 maxHeight: "350px",
+                maxWidth: "300px",
                 overflowY: "auto",
               },
             },
@@ -225,6 +227,55 @@ const LayerFieldSelector = (props: SelectorProps) => {
               }
             }}
           />
+          {props.multiple && (
+            <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+              <Link
+                component="button"
+                variant="caption"
+                underline="hover"
+                disabled={Array.isArray(selectedField) && selectedField.length === safeFields.length}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  setSelectedField(safeFields as any);
+                }}
+                sx={{
+                  color:
+                    Array.isArray(selectedField) && selectedField.length === safeFields.length
+                      ? theme.palette.text.disabled
+                      : theme.palette.primary.main,
+                  cursor:
+                    Array.isArray(selectedField) && selectedField.length === safeFields.length
+                      ? "default"
+                      : "pointer",
+                }}>
+                {t("select_all")}
+              </Link>
+              <Typography variant="caption" color="text.secondary">
+                |
+              </Typography>
+              <Link
+                component="button"
+                variant="caption"
+                underline="hover"
+                disabled={!Array.isArray(selectedField) || selectedField.length === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  setSelectedField([] as any);
+                }}
+                sx={{
+                  color:
+                    !Array.isArray(selectedField) || selectedField.length === 0
+                      ? theme.palette.text.disabled
+                      : theme.palette.primary.main,
+                  cursor:
+                    !Array.isArray(selectedField) || selectedField.length === 0 ? "default" : "pointer",
+                }}>
+                {t("deselect_all")}
+              </Link>
+            </Stack>
+          )}
         </ListSubheader>
         {displayedfields.map((field) => (
           <MenuItem sx={{ px: 2 }} key={field.name} value={JSON.stringify(field)}>
@@ -237,7 +288,11 @@ const LayerFieldSelector = (props: SelectorProps) => {
             )}
 
             {FieldTypeColors[field.type] && <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>}
-            <Typography variant="body2" fontWeight="bold">
+            <Typography
+              variant="body2"
+              fontWeight="bold"
+              noWrap
+              sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
               {field.name}
             </Typography>
           </MenuItem>

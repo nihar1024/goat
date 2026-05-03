@@ -614,7 +614,11 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
             await deleteFolderGrant(content.id, "organization", grant.grantee_id);
           }
         }
-        mutate((key) => typeof key === "string" && key.startsWith(FOLDERS_API_BASE_URL));
+        mutate(
+          (key) =>
+            (typeof key === "string" && key.startsWith(FOLDERS_API_BASE_URL)) ||
+            (Array.isArray(key) && typeof key[0] === "string" && key[0].startsWith(FOLDERS_API_BASE_URL))
+        );
       }
       toast.success(t("share_access_updated_successfully"));
     } catch {

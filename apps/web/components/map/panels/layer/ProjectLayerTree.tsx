@@ -18,7 +18,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
@@ -315,7 +315,20 @@ const castNodeToProjectLayer = (node: ProjectLayerTreeNode): ProjectLayer => {
 
 // Helper function to filter menu options for view mode
 const filterMenuForViewMode = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
-  const excludedActions = [ContentActions.DELETE, MapLayerActions.RENAME, MapLayerActions.DUPLICATE];
+  const excludedActions = [
+    ContentActions.DELETE,
+    MapLayerActions.RENAME,
+    MapLayerActions.DUPLICATE,
+    MapLayerActions.STYLE,
+    MapLayerActions.EDIT_FEATURES,
+  ];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
+};
+
+// Catalogue layers cannot be renamed, duplicated, or have features edited
+const filterMenuForCatalogLayer = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
+  const excludedActions = [MapLayerActions.RENAME, MapLayerActions.DUPLICATE, MapLayerActions.EDIT_FEATURES];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
 };
@@ -397,6 +410,8 @@ export const ProjectLayerTree = ({
   const currentZoom = useAppSelector((state) => (dimOutOfZoom && viewMode === "view" ? state.map.currentZoom : undefined));
 
   const [items, setItems] = useState<ProjectTreeItem[]>([]);
+  const itemsRef = useRef<ProjectTreeItem[]>([]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
   const [groupModal, setGroupModal] = useState<{
     open: boolean;
     mode: "create" | "rename" | "delete";
@@ -408,7 +423,6 @@ export const ProjectLayerTree = ({
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const selectedLayerIds = useAppSelector((state) => state.layers.selectedLayerIds || []);
   const mapMode = useAppSelector((state) => state.map.mapMode);
-
   const {
     getLayerMoreMenuOptions,
     openMoreMenu,
@@ -507,31 +521,28 @@ export const ProjectLayerTree = ({
 
   // --- Handlers ---
 
-  const handleVisibilityToggle = async (node: ProjectLayerTreeNode, e: React.MouseEvent) => {
+  const handleVisibilityToggle = useCallback(async (node: ProjectLayerTreeNode, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isEditMode) return;
 
     const currentVisibility = node.properties?.visibility ?? true;
+    const newVisibility = !currentVisibility;
 
-    // Update local UI state optimistically - create deep copies to avoid read-only errors
-    const newItems = items.map((i) => {
+    // Compute updated items from the current snapshot (via ref to avoid stale closure)
+    const newItems = itemsRef.current.map((i) => {
       if (i.data.id === node.id && i.data.type === node.type) {
-        const newVisibility = !currentVisibility;
-        const updatedData = {
-          ...i.data,
-          properties: {
-            ...i.data.properties,
-            visibility: newVisibility,
-          },
-        };
         return {
           ...i,
-          data: updatedData,
-          // Collapse legend when hiding, expand when showing
+          data: {
+            ...i.data,
+            properties: { ...i.data.properties, visibility: newVisibility },
+          },
           collapsed: !newVisibility,
         };
       }
       return i;
     });
+
     setItems(newItems);
 
     // Emit interaction events based on visibility toggle
@@ -539,39 +550,38 @@ export const ProjectLayerTree = ({
       dispatch(emitInteractionEvent({
         type: "visibility_changed",
         sourceId: node.id,
-        value: !currentVisibility,
+        value: newVisibility,
       }));
     }
     // When turning a group ON, activate it (switch tab). Turning OFF is just hiding.
-    if (node.type === "group" && !currentVisibility) {
+    if (node.type === "group" && newVisibility) {
       dispatch(emitInteractionEvent({ type: "group_activated", sourceId: node.id }));
     }
 
     try {
-      // Create update payload for this visibility change
       const updatePayload = formatDndDataForApi(newItems);
       if (onTreeUpdate) {
         await onTreeUpdate(updatePayload);
       }
     } catch (err) {
-      // Revert local state on error
-      setItems(items);
+      // Revert to the snapshot captured before the optimistic update
+      setItems(itemsRef.current);
       toast.error(t("error_updating_visibility"));
       console.error("Error in handleVisibilityToggle:", err);
     }
-  };
+  }, [isEditMode, dispatch, onTreeUpdate, t]);
 
-  const handleProperties = (layer: ProjectLayer) => {
+  const handleProperties = useCallback((layer: ProjectLayer) => {
     dispatch(setSelectedLayers([layer.id]));
     dispatch(setActiveRightPanel(MapSidebarItemID.PROPERTIES));
-  };
+  }, [dispatch]);
 
-  const handleStyle = (layer: ProjectLayer) => {
+  const handleStyle = useCallback((layer: ProjectLayer) => {
     dispatch(setSelectedLayers([layer.id]));
     dispatch(setActiveRightPanel(MapSidebarItemID.STYLE));
-  };
+  }, [dispatch]);
 
-  const handleDuplicate = async (layer: ProjectLayer) => {
+  const handleDuplicate = useCallback(async (layer: ProjectLayer) => {
     try {
       if (onLayerDuplicate) {
         await onLayerDuplicate(layer.layer_id);
@@ -579,7 +589,7 @@ export const ProjectLayerTree = ({
     } catch (error) {
       toast.error(t("error_duplicating_layer"));
     }
-  };
+  }, [onLayerDuplicate, t]);
 
   const handleNodeClick = (compositeIds: string[]) => {
     const realIds = compositeIds
@@ -656,11 +666,13 @@ export const ProjectLayerTree = ({
   };
 
   // --- ROW ACTIONS ---
-  const RenderRowActions = ({ item }: { item: ProjectTreeItem }) => {
+  // Defined as a useCallback (not a nested component) so its reference stays stable
+  // across re-renders that don't change relevant deps. A nested component definition
+  // would get a new identity on every render, causing React to unmount/remount the
+  // PopperMenu and reset its open state — closing the three-dots menu unexpectedly.
+  const renderRowActions = useCallback((item: ProjectTreeItem) => {
     const node = item.data as ProjectLayerTreeNode;
     const nodeVisibility = node.properties?.visibility ?? true;
-    const [anchorEl] = useState<null | HTMLElement>(null);
-    const isOpen = Boolean(anchorEl);
 
     // Prepare Menu Options
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -688,9 +700,10 @@ export const ProjectLayerTree = ({
       menuOptions = getLayerMoreMenuOptions(
         (node.layer_type as "table" | "feature" | "raster") || "feature",
         !!node.query,
-        false,
+        !!node.in_catalog,
         false,
         node.user_id === userProfile?.id,
+        isEditMode,
       );
     }
 
@@ -699,34 +712,39 @@ export const ProjectLayerTree = ({
       menuOptions = filterMenuForViewMode(menuOptions);
     }
 
+    // Catalogue layers cannot be renamed, duplicated, or have features edited
+    if (node.in_catalog) {
+      menuOptions = filterMenuForCatalogLayer(menuOptions);
+    }
+
     // Edit features only available in data (map) mode
     if (mapMode !== "data") {
-      menuOptions = menuOptions.filter((item) => item.id !== MapLayerActions.EDIT_FEATURES);
+      menuOptions = menuOptions.filter((opt) => opt.id !== MapLayerActions.EDIT_FEATURES);
     }
 
     // Edit features only allowed for layers under 100MB
     if (node.type === "layer" && node.layer_id) {
       const layerSize = projectLayers.find((l) => l.layer_id === node.layer_id)?.size;
       if (layerSize && layerSize > MAX_EDITABLE_LAYER_SIZE) {
-        menuOptions = menuOptions.filter((item) => item.id !== MapLayerActions.EDIT_FEATURES);
+        menuOptions = menuOptions.filter((opt) => opt.id !== MapLayerActions.EDIT_FEATURES);
       }
     }
 
     // Filter menu options based on allowedActions
     if (allowedActions) {
-      menuOptions = menuOptions.filter((item) => {
-        if (item.id === MapLayerActions.STYLE && allowedActions.style === false) return false;
-        if (item.id === ContentActions.TABLE && allowedActions.viewData === false) return false;
-        if (item.id === MapLayerActions.PROPERTIES && allowedActions.properties === false) return false;
-        if (item.id === MapLayerActions.ZOOM_TO && allowedActions.zoomTo === false) return false;
+      menuOptions = menuOptions.filter((opt) => {
+        if (opt.id === MapLayerActions.STYLE && allowedActions.style === false) return false;
+        if (opt.id === ContentActions.TABLE && allowedActions.viewData === false) return false;
+        if (opt.id === MapLayerActions.PROPERTIES && allowedActions.properties === false) return false;
+        if (opt.id === MapLayerActions.ZOOM_TO && allowedActions.zoomTo === false) return false;
         return true;
       });
     }
 
     // Filter download action based on downloadableLayers
     if (downloadableLayers && node.type === "layer") {
-      menuOptions = menuOptions.filter((item) => {
-        if (item.id === ContentActions.DOWNLOAD) {
+      menuOptions = menuOptions.filter((opt) => {
+        if (opt.id === ContentActions.DOWNLOAD) {
           return downloadableLayers.includes(node.id);
         }
         return true;
@@ -740,9 +758,7 @@ export const ProjectLayerTree = ({
       <Stack
         direction="row"
         alignItems="center"
-        spacing={1}
-        // Class for parent CSS to keep opacity 1 when menu open
-        className={isOpen ? "menu-open" : ""}>
+        spacing={1}>
         {/* Filter Badge - Only show in edit mode */}
         {isEditMode && node.type === "layer" && hasFilter && (
           <Tooltip
@@ -941,7 +957,19 @@ export const ProjectLayerTree = ({
         )}
       </Stack>
     );
-  };
+  }, [
+    t,
+    getLayerMoreMenuOptions, openMoreMenu,
+    handleVisibilityToggle, handleProperties, handleStyle, handleDuplicate,
+    setGroupModal, setGroupInfoDialogId,
+    mapRef,
+    viewMode, hideActions, toggleStyle, togglePosition, moreOptionsStyle,
+    allowedActions, downloadableLayers, projectLayers,
+    scenarioCountByLayer, isEditMode, groupInfo,
+    mapMode, userProfile,
+    dispatch,
+    activeLayerId, activeRightPanel,
+  ]);
 
   // --- ICONS & LEGEND ---
   const itemsWithIcons = useMemo(() => {
@@ -1146,6 +1174,38 @@ export const ProjectLayerTree = ({
     });
   }, [items, theme, currentZoom, viewMode, hideLegendHeading, groupIcons]);
 
+  const renderPrefix = useCallback(togglePosition === "left" ? (item: ProjectTreeItem) => {
+    const node = item.data as ProjectLayerTreeNode;
+    if (hideActions || node.layer_type === "table") return null;
+    const nodeVisibility = node.properties?.visibility ?? true;
+    return (
+      <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center" }}>
+        {toggleStyle === "checkbox" ? (
+          <Checkbox
+            size="small"
+            checked={nodeVisibility}
+            onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
+            sx={{ p: 0.25 }}
+          />
+        ) : toggleStyle === "switch" ? (
+          <Switch
+            size="small"
+            checked={nodeVisibility}
+            onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
+            sx={{ transform: "scale(0.75)", mx: -0.5 }}
+          />
+        ) : (
+          <IconButton size="small" onClick={(e) => handleVisibilityToggle(node, e)} sx={{ p: 0.25 }}>
+            <Icon
+              iconName={!nodeVisibility ? ICON_NAME.EYE_SLASH : ICON_NAME.EYE}
+              style={{ fontSize: "15px" }}
+            />
+          </IconButton>
+        )}
+      </Box>
+    );
+  } : () => null, [togglePosition, hideActions, toggleStyle, handleVisibilityToggle]);
+
   // --- RENDER ---
   if (isLoading && items.length === 0) {
     return <Box sx={{ p: 2, color: "text.secondary" }}>Loading layers...</Box>;
@@ -1247,44 +1307,15 @@ export const ProjectLayerTree = ({
         <DraggableTreeView
           items={itemsWithIcons}
           onItemsChange={(newItems) => {
+            if (!isEditMode) return;
             setItems(newItems);
             if (onTreeUpdate) {
               const updatePayload = formatDndDataForApi(newItems);
               onTreeUpdate(updatePayload);
             }
           }}
-          renderActions={(item) => <RenderRowActions item={item} />}
-          renderPrefix={togglePosition === "left" ? (item) => {
-            const node = item.data as ProjectLayerTreeNode;
-            if (hideActions || node.layer_type === "table") return null;
-            const nodeVisibility = node.properties?.visibility ?? true;
-            return (
-              <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center" }}>
-                {toggleStyle === "checkbox" ? (
-                  <Checkbox
-                    size="small"
-                    checked={nodeVisibility}
-                    onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-                    sx={{ p: 0.25 }}
-                  />
-                ) : toggleStyle === "switch" ? (
-                  <Switch
-                    size="small"
-                    checked={nodeVisibility}
-                    onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-                    sx={{ transform: "scale(0.75)", mx: -0.5 }}
-                  />
-                ) : (
-                  <IconButton size="small" onClick={(e) => handleVisibilityToggle(node, e)} sx={{ p: 0.25 }}>
-                    <Icon
-                      iconName={!nodeVisibility ? ICON_NAME.EYE_SLASH : ICON_NAME.EYE}
-                      style={{ fontSize: "15px" }}
-                    />
-                  </IconButton>
-                )}
-              </Box>
-            );
-          } : undefined}
+          renderActions={renderRowActions}
+          renderPrefix={togglePosition === "left" ? renderPrefix : undefined}
           enableSelection
           selectedIds={treeSelectedIds}
           onSelect={handleNodeClick}

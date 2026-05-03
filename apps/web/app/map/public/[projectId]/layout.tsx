@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 
 import { API_BASE_URL, APP_URL } from "@/lib/constants";
 import { getLocalizedMetadata } from "@/lib/metadata";
+import { DEFAULT_FAVICON_URL } from "@/lib/validations/project";
 import type { ProjectPublic } from "@/lib/validations/project";
 
 export async function generateMetadata({ params: { projectId } }) {
@@ -65,10 +66,7 @@ export async function generateMetadata({ params: { projectId } }) {
       }
     );
 
-    if (faviconUrl) {
-      return { ...metadata, icons: { icon: faviconUrl } };
-    }
-    return metadata;
+    return { ...metadata, icons: { icon: faviconUrl || DEFAULT_FAVICON_URL } };
   }
 
   return {};

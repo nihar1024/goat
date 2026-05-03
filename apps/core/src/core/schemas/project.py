@@ -112,6 +112,7 @@ class IProjectRead(ContentBaseAttributes, DateTimeBase):
     )
     shared_with: dict[str, Any] | None = Field(None, description="Shared with")
     owned_by: dict[str, Any] | None = Field(None, description="Owned by")
+    my_role: str | None = Field(None, description="Current user's role on this project")
     builder_config: dict[str, Any] | None = Field(None, description="Builder config")
     max_extent: list[float] | None = Field(
         None, description="Max extent of the project"

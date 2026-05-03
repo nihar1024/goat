@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 from pydantic import UUID4
-from sqlalchemy import Row, and_, or_, select, union
+from sqlalchemy import Row, and_, null, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager, selectinload
 from sqlalchemy.sql import Select
@@ -332,33 +332,30 @@ def create_query_shared_content(
             )  # Adjust field as needed for relationships
         )
     else:
-        # Query for the case with no team_id or organization_id
+        # No team/org context (e.g. folder-grant path or plain "My Content").
+        # Use null() for valid_role_id to preserve the column order that
+        # build_shared_with_object relies on (positional indices), without
+        # joining role_model — which would cause an implicit cross join and
+        # multiply rows by the number of roles in the table.
+        # selectinload handles relationship loading without row multiplication.
         query = (
-            base_query.outerjoin(
-                team_link_model, getattr(team_link_model, link_field) == model.id
-            )  # Outer join for team_link_model
-            .outerjoin(
-                team_model, team_link_model.team_id == team_model.id
-            )  # Outer join for team_model
-            .outerjoin(
-                role_model, team_link_model.role_id == role_model.id
-            )  # Outer join for role_model
-            .outerjoin(
-                organization_link_model,
-                getattr(organization_link_model, link_field) == model.id,
-            )  # Outer join for organization_link_model
-            .outerjoin(
-                organization_model,
-                organization_link_model.organization_id == organization_model.id,
-            )  # Outer join for organization_model
+            select(
+                model,
+                null().label("valid_role_id"),
+                User.id.label("valid_user_id"),
+                User.firstname.label("user_firstname"),
+                User.lastname.label("user_lastname"),
+                User.avatar.label("user_avatar"),
+            )
+            .join(User, model.user_id == User.id)
             .where(and_(*filters))
             .options(
                 selectinload(getattr(model, "team_links")).selectinload(
                     team_link_model.team
-                ),  # Preload team links and corresponding teams
+                ),
                 selectinload(getattr(model, "organization_links")).selectinload(
                     organization_link_model.organization
-                ),  # Preload organization links and corresponding organizations
+                ),
             )
         )
     return query

@@ -28,7 +28,7 @@ import { useFolders } from "@/lib/api/folders";
 import { executeProcessAsync } from "@/lib/api/processes";
 import { copyProject, useProjects } from "@/lib/api/projects";
 import { useTeams } from "@/lib/api/teams";
-import { useOrganization } from "@/lib/api/users";
+import { useOrganization, useUserProfile } from "@/lib/api/users";
 import { setRunningJobIds } from "@/lib/store/jobs/slice";
 import type { Folder } from "@/lib/validations/folder";
 import type { Layer } from "@/lib/validations/layer";
@@ -92,6 +92,7 @@ const Projects = () => {
   const [folderEditModal, setFolderEditModal] = useState<FolderEditModal | undefined>();
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   const { isOrgEditor } = useAuthZ();
+  const { userProfile } = useUserProfile();
   const dispatch = useAppDispatch();
   const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
   useJobStatus(mutate, mutate);
@@ -335,6 +336,10 @@ const Projects = () => {
             type="project"
             onClick={(item) => { if (item?.id) router.push(`/map/${item.id}`); }}
             onAction={handleProjectAction}
+            folders={!isMyContent ? folders : undefined}
+            currentUserId={userProfile?.id}
+            activeTeamId={activeTeamId}
+            activeOrgId={activeOrgId}
           />
           {!isProjectLoading && projects && projects?.items.length > 0 && (
             <Stack direction="row" justifyContent="center" alignItems="center" sx={{ p: 4 }}>

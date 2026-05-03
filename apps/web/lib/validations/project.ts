@@ -209,6 +209,7 @@ export const projectSchema = contentMetadataSchema.extend({
   created_at: z.string().optional(),
   shared_with: shareProjectSchema.optional(),
   owned_by: publicUserSchema.optional(),
+  my_role: z.string().nullish(),
 });
 
 // order: int = Field(0, description="Visual sorting order")
@@ -280,6 +281,7 @@ export const projectLayerTreeNodeSchema = z.object({
   other_properties: z.record(z.any()).nullable().optional(),
   query: z.record(z.any()).nullable().optional(),
   user_id: z.string().optional(),
+  in_catalog: z.boolean().optional(),
 });
 
 export const projectLayerTreeUpdateItemSchema = z.object({

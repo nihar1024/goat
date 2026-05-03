@@ -13,20 +13,26 @@ import type { PopperMenuItem } from "@/components/common/PopperMenu";
 
 export const useContentMoreMenu = () => {
   const { t } = useTranslation("common");
-  const getMoreMenuOptions = function (contentType: "project" | "layer", item: Project | Layer) {
+  const getMoreMenuOptions = function (contentType: "project" | "layer", item: Project | Layer, currentUserId?: string) {
+    const isOwner = !currentUserId || item.owned_by?.id === currentUserId;
+
     if (contentType === "layer") {
       const layerItem = item as Layer;
       const layerMoreMenuOptions: PopperMenuItem[] = [
-        {
-          id: ContentActions.EDIT_METADATA,
-          label: t("edit_metadata"),
-          icon: ICON_NAME.EDIT,
-        },
-        {
-          id: ContentActions.MOVE_TO_FOLDER,
-          label: t("move_to_folder"),
-          icon: ICON_NAME.FOLDER,
-        },
+        ...(isOwner
+          ? [
+              {
+                id: ContentActions.EDIT_METADATA,
+                label: t("edit_metadata"),
+                icon: ICON_NAME.EDIT,
+              },
+              {
+                id: ContentActions.MOVE_TO_FOLDER,
+                label: t("move_to_folder"),
+                icon: ICON_NAME.FOLDER,
+              },
+            ]
+          : []),
         ...(layerItem?.type === "feature" || layerItem?.type === "table"
           ? [
               {
@@ -34,14 +40,18 @@ export const useContentMoreMenu = () => {
                 label: t("download"),
                 icon: ICON_NAME.DOWNLOAD,
               },
-              {
-                id: ContentActions.UPDATE,
-                label: t("update"),
-                icon: ICON_NAME.REFRESH,
-              },
+              ...(isOwner
+                ? [
+                    {
+                      id: ContentActions.UPDATE,
+                      label: t("update"),
+                      icon: ICON_NAME.REFRESH,
+                    },
+                  ]
+                : []),
             ]
           : []),
-        ...(!ACCOUNTS_DISABLED
+        ...(!ACCOUNTS_DISABLED && isOwner
           ? [
               {
                 id: ContentActions.SHARE,
@@ -50,33 +60,41 @@ export const useContentMoreMenu = () => {
               },
             ]
           : []),
-        {
-          id: ContentActions.DELETE,
-          label: t("delete"),
-          icon: ICON_NAME.TRASH,
-          color: "error.main",
-        },
+        ...(isOwner
+          ? [
+              {
+                id: ContentActions.DELETE,
+                label: t("delete"),
+                icon: ICON_NAME.TRASH,
+                color: "error.main",
+              },
+            ]
+          : []),
       ];
       return layerMoreMenuOptions;
     }
 
     if (contentType === "project") {
       const projectMoreMenuOptions: PopperMenuItem[] = [
-        {
-          id: ContentActions.EDIT_METADATA,
-          label: t("edit_metadata"),
-          icon: ICON_NAME.EDIT,
-        },
-        {
-          id: ContentActions.MOVE_TO_FOLDER,
-          label: t("move_to_folder"),
-          icon: ICON_NAME.FOLDER,
-        },
-        {
-          id: ContentActions.SHARE,
-          label: t("share"),
-          icon: ICON_NAME.SHARE,
-        },
+        ...(isOwner
+          ? [
+              {
+                id: ContentActions.EDIT_METADATA,
+                label: t("edit_metadata"),
+                icon: ICON_NAME.EDIT,
+              },
+              {
+                id: ContentActions.MOVE_TO_FOLDER,
+                label: t("move_to_folder"),
+                icon: ICON_NAME.FOLDER,
+              },
+              {
+                id: ContentActions.SHARE,
+                label: t("share"),
+                icon: ICON_NAME.SHARE,
+              },
+            ]
+          : []),
         {
           id: ContentActions.EXPORT,
           label: t("export"),
@@ -87,12 +105,16 @@ export const useContentMoreMenu = () => {
           label: t("duplicate"),
           icon: ICON_NAME.COPY,
         },
-        {
-          id: ContentActions.DELETE,
-          label: t("delete"),
-          icon: ICON_NAME.TRASH,
-          color: "error.main",
-        },
+        ...(isOwner
+          ? [
+              {
+                id: ContentActions.DELETE,
+                label: t("delete"),
+                icon: ICON_NAME.TRASH,
+                color: "error.main",
+              },
+            ]
+          : []),
       ];
       return projectMoreMenuOptions;
     }

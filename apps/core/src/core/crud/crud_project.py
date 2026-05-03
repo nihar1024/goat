@@ -135,8 +135,13 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
                         or_(*grant_conditions),
                     )
                 )
+                # NULL-safe: folder_id IS NULL means no folder, so always include it.
+                # Without this, NULL NOT IN (...) evaluates to UNKNOWN (= excluded).
                 filters = [
-                    not_(Project.folder_id.in_(folder_granted_ids))
+                    or_(
+                        Project.folder_id.is_(None),
+                        not_(Project.folder_id.in_(folder_granted_ids)),
+                    )
                 ]
         elif folder_id:
             # Check if the folder is shared with the user via a grant.

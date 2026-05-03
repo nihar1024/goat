@@ -181,7 +181,13 @@ export default function MapPage({ params: { projectId } }) {
 
   const { activeBasemap, mapStyle } = useBasemap(project);
 
-  const { isProjectEditor, isLoading: isAuthZLoading } = useAuthZ();
+  const { isOrgEditor, isLoading: isAuthZLoading } = useAuthZ();
+  const isProjectEditor = useMemo(() => {
+    if (project?.my_role) {
+      return project.my_role === "project-owner" || project.my_role === "project-editor";
+    }
+    return isOrgEditor;
+  }, [project?.my_role, isOrgEditor]);
 
   const { scenarioFeatures } = useProjectScenarioFeatures(projectId, project?.active_scenario_id);
   const isLoading = useMemo(
@@ -497,6 +503,7 @@ export default function MapPage({ params: { projectId } }) {
                   mapHeader={true}
                   project={project}
                   onProjectUpdate={handleProjectUpdate}
+                  viewOnly={!isProjectEditor}
                 />
                 <Box
                   sx={{

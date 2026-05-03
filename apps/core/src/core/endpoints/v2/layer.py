@@ -224,13 +224,6 @@ async def update_layer(
             id=layer_id,
             layer_in=layer_in,
         )
-        assert type(result) is (
-            IFeatureStandardLayerRead
-            | IFeatureStreetNetworkLayerRead
-            | IFeatureToolLayerRead
-            | ITableLayerRead
-            | IRasterLayerRead
-        )
 
     return result
 

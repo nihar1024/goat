@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
@@ -23,12 +23,13 @@ import type { PopperMenuItem } from "@/components/common/PopperMenu";
 export const useLayerSettingsMoreMenu = () => {
   const { t } = useTranslation("common");
 
-  function getLayerMoreMenuOptions(
+  const getLayerMoreMenuOptions = useCallback(function getLayerMoreMenuOptions(
     layerType: ProjectLayer["type"],
     viewChart?: boolean,
     _inCatalog?: ProjectLayer["in_catalog"],
     readOnly?: boolean,
     canEdit?: boolean,
+    mapView?: boolean,
   ): PopperMenuItem[] {
     if (readOnly) {
       const readOnlyOptions: PopperMenuItem[] = [
@@ -66,16 +67,20 @@ export const useLayerSettingsMoreMenu = () => {
 
     if (layerType === "feature") {
       const featureOptions: PopperMenuItem[] = [
-        {
-          id: MapLayerActions.PROPERTIES,
-          label: t("properties"),
-          icon: ICON_NAME.CIRCLEINFO,
-        },
-        {
-          id: MapLayerActions.STYLE,
-          label: t("style"),
-          icon: ICON_NAME.STYLE,
-        },
+        ...(!mapView
+          ? [
+              {
+                id: MapLayerActions.PROPERTIES,
+                label: t("properties"),
+                icon: ICON_NAME.CIRCLEINFO,
+              },
+              {
+                id: MapLayerActions.STYLE,
+                label: t("style"),
+                icon: ICON_NAME.STYLE,
+              },
+            ]
+          : []),
         {
           id: MapLayerActions.ZOOM_TO,
           label: t("zoom_to"),
@@ -183,17 +188,21 @@ export const useLayerSettingsMoreMenu = () => {
       return tableOptions;
     }
     if (layerType === "raster") {
-      const rasterOptions = [
-        {
-          id: MapLayerActions.PROPERTIES,
-          label: t("properties"),
-          icon: ICON_NAME.CIRCLEINFO,
-        },
-        {
-          id: MapLayerActions.STYLE,
-          label: t("style"),
-          icon: ICON_NAME.STYLE,
-        },
+      const rasterOptions: PopperMenuItem[] = [
+        ...(!mapView
+          ? [
+              {
+                id: MapLayerActions.PROPERTIES,
+                label: t("properties"),
+                icon: ICON_NAME.CIRCLEINFO,
+              },
+              {
+                id: MapLayerActions.STYLE,
+                label: t("style"),
+                icon: ICON_NAME.STYLE,
+              },
+            ]
+          : []),
         {
           id: MapLayerActions.ZOOM_TO,
           label: t("zoom_to"),
@@ -221,7 +230,7 @@ export const useLayerSettingsMoreMenu = () => {
     }
 
     return [];
-  }
+  }, [t]);
 
   const [activeLayer, setActiveLayer] = useState<ProjectLayer>();
   const [moreMenuState, setMoreMenuState] = useState<PopperMenuItem>();
@@ -231,10 +240,10 @@ export const useLayerSettingsMoreMenu = () => {
     setMoreMenuState(undefined);
   };
 
-  const openMoreMenu = (menuItem: PopperMenuItem, layerItem: ProjectLayer) => {
+  const openMoreMenu = useCallback((menuItem: PopperMenuItem, layerItem: ProjectLayer) => {
     setActiveLayer(layerItem);
     setMoreMenuState(menuItem);
-  };
+  }, []);
 
   return {
     getLayerMoreMenuOptions,

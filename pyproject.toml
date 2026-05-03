@@ -33,14 +33,12 @@ package = false
 [tool.uv.sources]
 core = { workspace = true }
 geoapi = { workspace = true }
-accounts = { workspace = true }
 goatlib = { workspace = true }
 processes = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "apps/geoapi",
-    "apps/accounts",
     "apps/core",
     "apps/processes",
     "packages/python/goatlib",

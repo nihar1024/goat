@@ -1,4 +1,4 @@
-import { Chip, IconButton, Paper, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import { Box, IconButton, Paper, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -19,6 +19,7 @@ interface FolderCardProps {
 }
 
 export default function FolderCard({ folder, selected, enableActions, showRoleChip, fullWidth, onClick, onMenuSelect }: FolderCardProps) {
+  const isShared = !showRoleChip && folder.is_owned && (folder.shared_with_ids?.length ?? 0) > 0;
   const theme = useTheme();
   const { t } = useTranslation("common");
 
@@ -29,8 +30,7 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
   ];
 
   return (
-    <Tooltip title={folder.name} placement="top" disableInteractive>
-      <Paper
+    <Paper
         elevation={0}
         onClick={() => onClick(folder)}
         sx={{
@@ -49,44 +49,51 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
           transition: "border-color 0.15s, background-color 0.15s",
           position: "relative",
         }}>
-        <Icon
-          iconName={ICON_NAME.FOLDER}
-          fontSize="small"
-          htmlColor={selected ? theme.palette.primary.main : theme.palette.text.secondary}
-        />
-        <Stack sx={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
+        <Tooltip
+          title={showRoleChip && folder.role
+            ? (folder.is_owned ? t("owner") : folder.role === "folder-editor" ? t("write_access") : t("read_access"))
+            : ""}
+          placement="top"
+          arrow
+          disableHoverListener={!showRoleChip || !folder.role}>
+          <Box sx={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+            <Icon
+              iconName={ICON_NAME.FOLDER}
+              fontSize="small"
+              htmlColor={selected ? theme.palette.primary.main : theme.palette.text.secondary}
+            />
+            {showRoleChip && folder.role && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  bottom: -3,
+                  right: -5,
+                  bgcolor: "background.paper",
+                  borderRadius: "50%",
+                  lineHeight: 0,
+                  p: "1px",
+                }}>
+                <Icon
+                  iconName={folder.is_owned ? ICON_NAME.CROWN : folder.role === "folder-editor" ? ICON_NAME.EDIT : ICON_NAME.EYE}
+                  style={{ fontSize: 10, color: theme.palette.text.secondary }}
+                />
+              </Box>
+            )}
+          </Box>
+        </Tooltip>
+        <Stack direction="row" alignItems="center" sx={{ overflow: "hidden", flex: 1, minWidth: 0, gap: 1 }}>
           <Typography
             variant="body2"
             noWrap
-            sx={{ fontWeight: selected ? 700 : 400, color: selected ? "primary.main" : "text.primary" }}>
+            sx={{ fontWeight: selected ? 700 : 400, color: selected ? "primary.main" : "text.primary", flex: 1, minWidth: 0 }}>
             {folder.name}
           </Typography>
-          {showRoleChip && folder.role && (
-            <>
-              <Chip
-                label={
-                  folder.is_owned
-                    ? t("owner")
-                    : folder.role === "folder-editor"
-                    ? t("write_access")
-                    : t("read_access")
-                }
-                size="small"
-                sx={{
-                  height: 16,
-                  fontSize: "9px",
-                  fontWeight: 500,
-                  backgroundColor: folder.is_owned
-                    ? "#F3E8FD"
-                    : folder.role === "folder-editor"
-                    ? "#E8F4FD"
-                    : "#E2F5F4",
-                  color: folder.is_owned ? "#7B1FA2" : folder.role === "folder-editor" ? "#1565C0" : "#1A857A",
-                  alignSelf: "flex-start",
-                  "& .MuiChip-label": { px: 0.75 },
-                }}
-              />
-            </>
+          {isShared && (
+            <Tooltip title={t("shared")} placement="top" arrow>
+              <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                <Icon iconName={ICON_NAME.USERS} style={{ fontSize: 10, color: theme.palette.text.secondary }} />
+              </Box>
+            </Tooltip>
           )}
         </Stack>
         {/* Only show actions on owned non-home folders */}
@@ -102,6 +109,5 @@ export default function FolderCard({ folder, selected, enableActions, showRoleCh
           />
         )}
       </Paper>
-    </Tooltip>
   );
 }

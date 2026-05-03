@@ -14,7 +14,7 @@ export const teamRoles = {
 
 export const teamBaseSchema = z.object({
   name: z.string().min(1).max(50),
-  description: z.string().min(1).max(250).optional(),
+  description: z.string().max(250).optional(),
   avatar: z.string().optional().nullable()
 });
 

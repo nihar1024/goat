@@ -12,7 +12,7 @@
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { Box, Stack, Tooltip, Typography } from "@mui/material";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LayerFieldType } from "@/lib/validations/layer";
@@ -216,9 +216,17 @@ export default function FieldInput({
   // first render so the user sees all checkboxes ticked by default. Other
   // tools without the flag are unaffected.
   const defaultAll = input.uiMeta?.widget_options?.default_all === true;
+  // Track which field set (by name content, not reference) we've already seeded.
+  // Using a string key is immune to SWR returning new array references for the
+  // same data, which would otherwise reset a reference-based guard and re-seed
+  // after the user explicitly deselects all fields.
+  const seededFieldKey = useRef("");
   useEffect(() => {
     if (!defaultAll || !isMultiSelect || filteredFields.length === 0) return;
+    const fieldKey = filteredFields.map((f) => f.name).join("\0");
+    if (seededFieldKey.current === fieldKey) return; // already seeded for this exact field set
     const isEmpty = value === undefined || value === null || (Array.isArray(value) && value.length === 0);
+    seededFieldKey.current = fieldKey;
     if (!isEmpty) return;
     onChange(filteredFields.map((f) => f.name));
   }, [defaultAll, isMultiSelect, filteredFields, value, onChange]);

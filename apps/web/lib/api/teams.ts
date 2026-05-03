@@ -11,8 +11,12 @@ export const TEAMS_API_BASE_URL = ACCOUNTS_ENABLED ? new URL("api/v1/teams", ACC
 const ACCOUNTS_DISABLED_ERROR = { error: "ACCOUNTS_DISABLED" } as const;
 
 // Stubs for OSS mode (IDs match dev DB seeded by scripts/setup_accounts_dev.sql)
-const STUB_TEAMS: Team[] = [{ id: "00000000-0000-0000-0000-000000000003", name: "Marketing Dev Team" } as unknown as Team];
-const STUB_TEAM: Team = { id: "00000000-0000-0000-0000-000000000003", name: "Marketing Dev Team" } as unknown as Team;
+const STUB_TEAM: Team = {
+  id: "00000000-0000-0000-0000-000000000003",
+  name: "Marketing Dev Team",
+  role: "team-owner",
+};
+const STUB_TEAMS: Team[] = [STUB_TEAM];
 const STUB_TEAM_MEMBERS: TeamMember[] = [];
 
 // Hooks

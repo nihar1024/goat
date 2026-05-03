@@ -424,8 +424,8 @@ export const TableDataWidget = ({
   ]);
 
   const sqlQuerySignature = useMemo(() => {
-    return `${recordsLayerId || ""}|${config?.setup?.sql_query || ""}|${rowsPerPage}|${isSqlMode}`;
-  }, [config?.setup?.sql_query, isSqlMode, recordsLayerId, rowsPerPage]);
+    return `${recordsLayerId || ""}|${config?.setup?.sql_query || ""}|${rowsPerPage}|${isSqlMode}|${cqlFilter || ""}`;
+  }, [config?.setup?.sql_query, isSqlMode, recordsLayerId, rowsPerPage, cqlFilter]);
 
   useEffect(() => {
     setSqlPage(0);
@@ -469,6 +469,7 @@ export const TableDataWidget = ({
           layers: { [sqlAlias]: recordsLayerId },
           limit: rowsPerPage,
           offset: pageOffset,
+          filter_expr: cqlFilter ?? null,
         });
 
         if (isCancelled) return;

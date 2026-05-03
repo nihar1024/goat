@@ -580,12 +580,87 @@ class AnalyticsService:
             return str(matches[0])
         return None
 
+    def _build_where_clause_in_con(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        view_name: str,
+        filter_expr: str | None,
+    ) -> tuple[str, list[Any]]:
+        """Build a SQL WHERE clause from a CQL2 filter using an existing DuckDB connection."""
+        if not filter_expr:
+            return "TRUE", []
+
+        try:
+            filter_dict = (
+                json.loads(filter_expr) if isinstance(filter_expr, str) else filter_expr
+            )
+
+            result = con.execute(f'DESCRIBE "{view_name}"').fetchall()
+            column_names = [row[0] for row in result]
+            column_types = {row[0]: row[1] for row in result}
+
+            geometry_column = "geometry"
+            for col_name, col_type in column_types.items():
+                if "GEOMETRY" in col_type.upper() or col_name.lower() in (
+                    "geom",
+                    "geometry",
+                ):
+                    geometry_column = col_name
+                    break
+
+            cql_filter_obj = {"filter": filter_dict, "lang": "cql2-json"}
+            query_filters = build_cql_filter(
+                cql_filter_obj, column_names, geometry_column=geometry_column
+            )
+            return query_filters.to_full_where(default="TRUE"), query_filters.params
+        except Exception as e:
+            logger.warning("Failed to build WHERE clause for '%s': %s", view_name, e)
+            return "TRUE", []
+
+    def _create_alias_view(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        alias: str,
+        source_sql: str,
+        filter_expr: str | None,
+    ) -> None:
+        """Create a named view for a layer alias, with an optional CQL2 filter applied."""
+        if not filter_expr:
+            con.execute(f'CREATE VIEW "{alias}" AS {source_sql}')
+            return
+
+        src_alias = f"_src_{alias}"
+        con.execute(f'CREATE VIEW "{src_alias}" AS {source_sql}')
+
+        where_clause, params = self._build_where_clause_in_con(
+            con, src_alias, filter_expr
+        )
+
+        if where_clause == "TRUE":
+            con.execute(f'CREATE VIEW "{alias}" AS {source_sql}')
+        else:
+            try:
+                con.execute(
+                    f'CREATE TEMP TABLE "_filt_{alias}" AS '
+                    f'SELECT * FROM "{src_alias}" WHERE {where_clause}',
+                    params if params else [],
+                )
+                con.execute(f'CREATE VIEW "{alias}" AS SELECT * FROM "_filt_{alias}"')
+            except Exception as e:
+                logger.warning(
+                    "Failed to apply filter to alias '%s', using unfiltered: %s",
+                    alias,
+                    e,
+                )
+                con.execute(f'CREATE VIEW "{alias}" AS {source_sql}')
+
     def preview_sql(
         self,
         sql_query: str,
         layers: dict[str, str],
         limit: int = 10,
         offset: int = 0,
+        filter_expr: str | None = None,
     ) -> dict[str, Any]:
         """Preview a SQL query against actual layer data.
 
@@ -601,6 +676,7 @@ class AnalyticsService:
             layers: Layer mapping {alias: layer_id}
             limit: Max rows to return
             offset: Number of rows to skip
+            filter_expr: Optional CQL2-JSON filter to pre-filter source layer data
 
         Returns:
             Dict with success, columns, rows, error
@@ -651,9 +727,11 @@ class AnalyticsService:
                         f"Re-run the workflow to regenerate.",
                     }
                 try:
-                    con.execute(
-                        f'CREATE VIEW "{alias}" AS '
-                        f"SELECT * FROM read_parquet('{parquet_path}')"
+                    self._create_alias_view(
+                        con,
+                        alias,
+                        f"SELECT * FROM read_parquet('{parquet_path}')",
+                        filter_expr,
                     )
                 except Exception as e:
                     return {
@@ -691,11 +769,13 @@ class AnalyticsService:
                             "error": f"Layer {alias} ({layer_id}): {e}",
                         }
 
-                    # Create a view alias pointing to the DuckLake table
+                    # Create a view alias pointing to the DuckLake table (with optional filter)
                     try:
-                        con.execute(
-                            f'CREATE VIEW "{alias}" AS '
-                            f"SELECT * FROM {full_table}"
+                        self._create_alias_view(
+                            con,
+                            alias,
+                            f"SELECT * FROM {full_table}",
+                            filter_expr,
                         )
                     except Exception as e:
                         return {

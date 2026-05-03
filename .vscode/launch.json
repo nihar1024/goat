@@ -77,20 +77,19 @@
       "name": "Accounts Debug",
       "type": "debugpy",
       "request": "launch",
-      "module": "fastapi",
+      "module": "uvicorn",
       "args": [
-        "dev",
-        "src/accounts/main.py",
-        "--reload",
-        "--port",
-        "8100"
+        "src.main:app",
+        "--host", "0.0.0.0",
+        "--port", "5001"
       ],
       "consoleName": "Accounts Debug Console",
       "cwd": "${workspaceFolder}/apps/accounts",
       "justMyCode": false,
       "jinja": true,
-      "envFile": "${workspaceFolder}/.env",
-      "preLaunchTask": "accounts-pre-launch",
+      "envFile": "${workspaceFolder}/apps/accounts/.env",
+      "python": "/home/elias/.cache/pypoetry/virtualenvs/goat-accounts-8WettY3s-py3.11/bin/python",
+      "waitForClient": false,
       "presentation": {
         "hidden": false,
         "group": "backend",
@@ -225,6 +224,7 @@
         "GeoAPI Debug",
         "Processes Debug",
         "Core Debug",
+        "Accounts Debug",
         "Web Debug"
       ],
       "presentation": {

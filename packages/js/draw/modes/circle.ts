@@ -10,6 +10,7 @@ import { distance } from "@turf/distance";
 import { point } from "@turf/helpers";
 
 import { generateCirclePolygon } from "../helpers";
+import { applySnapToEvent } from "../utils/snap";
 import { generateGreatCirclePath } from "./great-circle";
 
 const Constants = MapboxDraw.constants;
@@ -87,7 +88,8 @@ CircleMode.onSetup = function (this: any, _opts: any) {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-CircleMode.onClick = CircleMode.onTap = function (this: any, state: any, e: any) {
+CircleMode.onClick = CircleMode.onTap = function (this: any, state: any, rawEvent: any) {
+  const { event: e } = applySnapToEvent(this.map, rawEvent);
   // End drawing after second point (edge)
   if (state.currentVertexPosition === 1) {
     state.line.updateCoordinate(state.currentVertexPosition, e.lngLat.lng, e.lngLat.lat);
@@ -123,6 +125,16 @@ CircleMode.onClick = CircleMode.onTap = function (this: any, state: any, e: any)
   }
 
   return null;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _origCircleMouseMove = (DrawLineString as any).onMouseMove;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(CircleMode as any).onMouseMove = function (this: any, state: any, rawEvent: any) {
+  const { event: e } = applySnapToEvent(this.map, rawEvent);
+  if (typeof _origCircleMouseMove === "function") {
+    return _origCircleMouseMove.call(this, state, e);
+  }
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1049,6 +1049,7 @@
   "measure_line_active": "Klicken, um eine Linie zu zeichnen. Doppelklick zum Beenden.",
   "measure_polygon": "Polygon",
   "measure_polygon_active": "Klicken, um ein Polygon zu zeichnen. Doppelklick oder auf den Startpunkt klicken, um zu beenden.",
+  "measure_snap_to_layers": "An Ebenen einrasten",
   "measure_transit": "ÖPNV",
   "measure_transit_active": "Klicken, um Wegpunkte für eine ÖPNV-Route hinzuzufügen. Doppelklick zum Beenden.",
   "measure_walking": "Zu Fuß",

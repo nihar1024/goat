@@ -101,6 +101,7 @@ export interface MapState {
   measurements: Measurement[];
   isMeasuring: boolean;
   selectedMeasurementId: string | undefined;
+  measureSnapEnabled: boolean;
   isDataPanelOpen: boolean;
   dataPanelLayerId: number | null;
   dataPanelHeight: number;
@@ -133,6 +134,7 @@ const initialState = {
   measurements: [] as Measurement[],
   isMeasuring: false,
   selectedMeasurementId: undefined,
+  measureSnapEnabled: false,
   isDataPanelOpen: false,
   dataPanelLayerId: null,
   dataPanelHeight: 0,
@@ -288,6 +290,9 @@ const mapSlice = createSlice({
     setSelectedMeasurementId: (state, action: PayloadAction<string | undefined>) => {
       state.selectedMeasurementId = action.payload;
     },
+    setMeasureSnapEnabled: (state, action: PayloadAction<boolean>) => {
+      state.measureSnapEnabled = action.payload;
+    },
     setIsDataPanelOpen: (state, action: PayloadAction<boolean>) => {
       state.isDataPanelOpen = action.payload;
       if (!action.payload) {
@@ -339,6 +344,7 @@ export const {
   clearMeasurements,
   setIsMeasuring,
   setSelectedMeasurementId,
+  setMeasureSnapEnabled,
   setIsDataPanelOpen,
   setDataPanelLayerId,
   setDataPanelHeight,

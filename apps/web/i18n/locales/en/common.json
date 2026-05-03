@@ -991,6 +991,7 @@
   "measure_line_active": "Click to draw a line. Double-click to finish.",
   "measure_polygon": "Polygon",
   "measure_polygon_active": "Click to draw a polygon. Double-click or click the starting-point to finish.",
+  "measure_snap_to_layers": "Snap to layers",
   "measure_transit": "Transit",
   "measure_transit_active": "Click to add waypoints for a transit route. Double-click to finish.",
   "measure_walking": "Walking",

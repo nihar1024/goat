@@ -9,6 +9,7 @@ import { circle } from "@turf/circle";
 import { distance } from "@turf/distance";
 import { point } from "@turf/helpers";
 
+import { applySnapToEvent } from "../utils/snap";
 import { DrawHistory } from "./draw-history";
 import { GREAT_CIRCLE_PROPERTY, generateGreatCirclePath } from "./great-circle";
 
@@ -118,12 +119,23 @@ const PolygonMode: typeof DrawPolygon = { ...DrawPolygon };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (PolygonMode as any).clickAnywhere = function (this: any, state: any, e: any) {
+  const { event } = applySnapToEvent(this.map, e);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (DrawPolygon as any).clickAnywhere.call(this, state, e);
+  (DrawPolygon as any).clickAnywhere.call(this, state, event);
   const ring = state.polygon.coordinates[0];
   if (ring && ring.length >= 2) {
     const v = ring[ring.length - 2];
     if (v) state._drawHistory.pushVertex([v[0], v[1]] as [number, number]);
+  }
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _origPolygonMouseMove = (DrawPolygon as any).onMouseMove;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(PolygonMode as any).onMouseMove = function (this: any, state: any, e: any) {
+  const { event } = applySnapToEvent(this.map, e);
+  if (typeof _origPolygonMouseMove === "function") {
+    return _origPolygonMouseMove.call(this, state, event);
   }
 };
 

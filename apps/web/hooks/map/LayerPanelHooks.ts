@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
@@ -23,7 +23,7 @@ import type { PopperMenuItem } from "@/components/common/PopperMenu";
 export const useLayerSettingsMoreMenu = () => {
   const { t } = useTranslation("common");
 
-  function getLayerMoreMenuOptions(
+  const getLayerMoreMenuOptions = useCallback(function getLayerMoreMenuOptions(
     layerType: ProjectLayer["type"],
     viewChart?: boolean,
     _inCatalog?: ProjectLayer["in_catalog"],
@@ -230,7 +230,7 @@ export const useLayerSettingsMoreMenu = () => {
     }
 
     return [];
-  }
+  }, [t]);
 
   const [activeLayer, setActiveLayer] = useState<ProjectLayer>();
   const [moreMenuState, setMoreMenuState] = useState<PopperMenuItem>();
@@ -240,10 +240,10 @@ export const useLayerSettingsMoreMenu = () => {
     setMoreMenuState(undefined);
   };
 
-  const openMoreMenu = (menuItem: PopperMenuItem, layerItem: ProjectLayer) => {
+  const openMoreMenu = useCallback((menuItem: PopperMenuItem, layerItem: ProjectLayer) => {
     setActiveLayer(layerItem);
     setMoreMenuState(menuItem);
-  };
+  }, []);
 
   return {
     getLayerMoreMenuOptions,

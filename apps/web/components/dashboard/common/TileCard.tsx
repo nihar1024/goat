@@ -124,7 +124,7 @@ const TileCard = (props: TileCard) => {
     </>
   );
 
-  const createdAtText = (
+  const _createdAtText = (
     <>
       {item?.created_at && (
         <Stack direction="row" alignItems="center" spacing={1} sx={{ pb: 0 }}>
@@ -337,23 +337,13 @@ const TileCard = (props: TileCard) => {
                 <Grid
                   item
                   sm={4}
-                  md={2}
+                  md={4}
                   sx={{
                     display: { xs: "none", sm: "block" },
                   }}>
                   <Box sx={{ px: 1, pb: 0, display: "flex", alignItems: "center", gap: 1 }}>
                     {updatedAtText}
                     {roleChipEl}
-                  </Box>
-                </Grid>
-                <Grid
-                  item
-                  md={2}
-                  sx={{
-                    display: { xs: "none", md: "block" },
-                  }}>
-                  <Box sx={{ px: 1, pb: 0 }} display="flex-start">
-                    {createdAtText}
                   </Box>
                 </Grid>
                 {enableActions && (

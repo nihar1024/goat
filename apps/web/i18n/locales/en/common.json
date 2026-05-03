@@ -2183,6 +2183,7 @@
   "via_folder": "Via folder",
   "access_via_folder": "Access is inherited from the folder this layer belongs to",
   "access_via_folder_disable_hint": "Already has access via folder sharing — individual sharing is redundant",
+  "folder_access_may_apply": "This item is inside a shared folder — access may be inherited from the folder's sharing settings.",
   "add_field_to_dataset": "Add new field to dataset",
   "enter_column_name": "Enter column name",
   "show_thousands_separator": "Show thousands separator",

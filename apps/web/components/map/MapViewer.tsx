@@ -13,7 +13,6 @@ import { PATTERN_IMAGES } from "@/lib/constants/pattern-images";
 import { setClickedFeatureForFilter, setCurrentZoom, setHighlightedFeature, setPopupInfo } from "@/lib/store/map/slice";
 import { addOrUpdateMarkerImages, addPatternImages } from "@/lib/transformers/map-image";
 import { applyMapLanguage } from "@/hooks/map/MapHooks";
-import { formatNumber } from "@/lib/utils/format-number";
 import createPulsingDot from "@/lib/utils/map/pulsing-dot-image";
 import type { FormatNumberTypes } from "@/lib/validations/common";
 import type { LayerInteractionFieldListContent } from "@/lib/validations/layer";
@@ -188,36 +187,48 @@ const MapViewer: React.FC<MapProps> = ({
           (content) => content.type === layerInteractionContentType.Enum.field_list
         ) as LayerInteractionFieldListContent[] | undefined;
 
-        const propertyLabels = interactionFieldLists?.reduce(
-          (acc, content) => {
-            content.attributes.forEach((attr) => {
-              const displayName = attr.label || attr.name;
-              const rawValue = interactiveFeature.properties[attr.name];
-              let displayValue = rawValue != null ? String(rawValue) : "";
-              if (attr.type === "number" && rawValue != null && !isNaN(Number(rawValue))) {
-                const formatted = attr.format
-                  ? formatNumber(Number(rawValue), attr.format as FormatNumberTypes, i18n.language)
-                  : String(rawValue);
-                displayValue = `${attr.prefix || ""}${formatted}${attr.suffix || ""}`;
-              }
-              acc[displayName] = displayValue;
-            });
-            return acc;
-          },
-          {} as Record<string, string>
-        );
+        // Build field list metadata (labels, order, decorators) from all field_list
+        // interaction contents. Raw values stay keyed by column name so that
+        // LayerInfo can apply kind-aware formatting (e.g. m² → ha for area fields).
+        const fieldLabels: Record<string, string> = {};
+        const fieldOrder: string[] = [];
+        const fieldDecorators: Record<string, { prefix?: string; suffix?: string; format?: FormatNumberTypes }> = {};
+        interactionFieldLists?.forEach((content) => {
+          content.attributes.forEach((attr) => {
+            if (fieldOrder.includes(attr.name)) return; // first definition wins
+            fieldOrder.push(attr.name);
+            fieldLabels[attr.name] = attr.label || attr.name;
+            if (attr.format || attr.prefix || attr.suffix) {
+              fieldDecorators[attr.name] = {
+                format: attr.format as FormatNumberTypes | undefined,
+                prefix: attr.prefix,
+                suffix: attr.suffix,
+              };
+            }
+          });
+        });
+        const hasFieldList = fieldOrder.length > 0;
 
-        const properties =
-          propertyLabels && Object.keys(propertyLabels).length > 0
-            ? propertyLabels
-            : interactiveFeature.properties;
+        // When a field list is configured, filter to the listed columns (raw values).
+        // Otherwise, pass all feature properties.
+        const rawProperties = hasFieldList
+          ? fieldOrder.reduce(
+              (acc, name) => {
+                if (!isSystemPropertyKey(name)) {
+                  acc[name] = interactiveFeature.properties[name];
+                }
+                return acc;
+              },
+              {} as Record<string, unknown>
+            )
+          : interactiveFeature.properties;
 
         const jsonProperties = {};
         const primitiveProperties = {};
-        if (properties) {
-          for (const key in properties) {
+        if (rawProperties) {
+          for (const key in rawProperties) {
             if (!isSystemPropertyKey(key)) {
-              const value = properties[key];
+              const value = rawProperties[key];
               try {
                 // Type assertion to satisfy JSON.parse
                 const parsedValue = JSON.parse(value as string);
@@ -246,6 +257,11 @@ const MapViewer: React.FC<MapProps> = ({
               (interactiveLayer as { layer_id?: string }).layer_id ??
               interactiveLayer.id
             )?.toString(),
+            ...(hasFieldList && {
+              fieldLabels,
+              fieldOrder,
+              ...(Object.keys(fieldDecorators).length > 0 && { fieldDecorators }),
+            }),
             onClose: handlePopoverClose,
           })
         );

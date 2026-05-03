@@ -1,4 +1,5 @@
 import type { Layer } from "@/lib/validations/layer";
+import type { FormatNumberTypes } from "@/lib/validations/common";
 import type { MapGeoJSONFeature } from "react-map-gl/maplibre";
 
 
@@ -34,6 +35,17 @@ export interface MapPopoverInfoProps {
    * property values whose key matches a known column.
    */
   layerId?: string;
+  /**
+   * When a field_list interaction is configured, maps column names to
+   * display labels and controls which fields are shown (and in what order).
+   */
+  fieldLabels?: Record<string, string>;
+  fieldOrder?: string[];
+  /**
+   * Per-field prefix/suffix/format overrides from the field_list config.
+   * Applied after kind-aware formatting (so area units are preserved).
+   */
+  fieldDecorators?: Record<string, { prefix?: string; suffix?: string; format?: FormatNumberTypes }>;
   onClose: () => void;
 }
 

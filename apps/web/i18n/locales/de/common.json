@@ -2181,6 +2181,7 @@
   "via_folder": "Über Ordner",
   "access_via_folder": "Zugriff wird vom Ordner geerbt, in dem sich dieser Layer befindet",
   "access_via_folder_disable_hint": "Hat bereits Zugriff über Ordner-Freigabe — individuelle Freigabe ist redundant",
+  "folder_access_may_apply": "Dieses Element befindet sich in einem freigegebenen Ordner — der Zugriff kann über die Freigabeeinstellungen des Ordners vererbt werden.",
   "add_field_to_dataset": "Neues Feld zum Datensatz hinzufügen",
   "enter_column_name": "Spaltenname eingeben",
   "show_thousands_separator": "Tausendertrennzeichen anzeigen",

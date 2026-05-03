@@ -179,7 +179,7 @@ const TileCard = (props: TileCard) => {
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: theme.spacing(2) }}>
         {cardTitle}
-        {enableActions && moreMenu}
+        {enableActions && !!props.moreMenuOptions?.length && moreMenu}
       </Stack>
       {/* Created by info  */}
       <Stack direction="row" alignItems="center" spacing={2} sx={{ pb: 0 }}>
@@ -344,7 +344,7 @@ const TileCard = (props: TileCard) => {
                     {sharedChipEl}
                   </Box>
                 </Grid>
-                {enableActions && (
+                {enableActions && !!props.moreMenuOptions?.length && (
                   <Grid item sm={1}>
                     <Box display="flex" justifyContent="flex-end">
                       {moreMenu}

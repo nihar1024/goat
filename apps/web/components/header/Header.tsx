@@ -13,7 +13,7 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import { useDateFnsLocale } from "@/i18n/utils";
 
-import { useOrganization } from "@/lib/api/users";
+import { useOrganization, useUserProfile } from "@/lib/api/users";
 import { CONTACT_US_URL, DOCS_URL, WEBSITE_URL } from "@/lib/constants";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setMapMode } from "@/lib/store/map/slice";
@@ -55,6 +55,8 @@ export default function Header(props: HeaderProps) {
   const { onMenuIconClick, showHambugerMenu, height = 52, title, project, onProjectUpdate, viewOnly } = props;
   const { organization } = useOrganization();
   const { isOrgAdmin } = useAuthZ();
+  const { userProfile } = useUserProfile();
+  const isLoggedIn = !!userProfile;
   const dateLocale = useDateFnsLocale();
   const lng = i18n.language === "de" ? "/de" : "";
   const dispatch = useAppDispatch();
@@ -145,12 +147,16 @@ export default function Header(props: HeaderProps) {
       },
     ];
 
+    const homeItem = editorMenuItems[0]; // reuse the already-defined "home" item
+
     if (!viewOnly) {
       return [...editorMenuItems, ...commonMenuItems];
+    } else if (isLoggedIn) {
+      return [homeItem, ...commonMenuItems];
     } else {
       return [...publicMenuItems, ...commonMenuItems];
     }
-  }, [t, theme.palette.error.main, project?.max_extent, viewOnly, map, onProjectUpdate, lng]);
+  }, [t, theme.palette.error.main, project?.max_extent, viewOnly, isLoggedIn, map, onProjectUpdate, lng]);
 
   return (
     <>
@@ -358,6 +364,12 @@ export default function Header(props: HeaderProps) {
                   </IconButton>
                 </Tooltip>
                 <JobsPopper />
+                <Divider orientation="vertical" flexItem />
+                <UserInfoMenu />
+              </Stack>
+            )}
+            {props.viewOnly && isLoggedIn && (
+              <Stack direction="row" spacing={2} justifyContent="center" alignItems="center">
                 <Divider orientation="vertical" flexItem />
                 <UserInfoMenu />
               </Stack>

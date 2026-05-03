@@ -331,7 +331,7 @@ const Projects = () => {
           <TileGrid
             view={view}
             items={projects?.items ?? []}
-            enableActions={isOrgEditor}
+            enableActions={!!userProfile?.id}
             isLoading={isProjectLoading}
             type="project"
             onClick={(item) => { if (item?.id) router.push(`/map/${item.id}`); }}

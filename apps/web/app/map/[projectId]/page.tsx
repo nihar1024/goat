@@ -13,6 +13,7 @@ import { MapProvider } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
 import { v4 } from "uuid";
 
+import { useFolders } from "@/lib/api/folders";
 import {
   updateProject,
   updateProjectInitialViewState,
@@ -182,12 +183,22 @@ export default function MapPage({ params: { projectId } }) {
   const { activeBasemap, mapStyle } = useBasemap(project);
 
   const { isOrgEditor, isLoading: isAuthZLoading } = useAuthZ();
+  const { folders, isLoading: isFoldersLoading } = useFolders({});
+  const projectFolder = useMemo(
+    () => (project?.folder_id && folders ? folders.find((f) => f.id === project.folder_id) : undefined),
+    [folders, project?.folder_id]
+  );
   const isProjectEditor = useMemo(() => {
     if (project?.my_role) {
       return project.my_role === "project-owner" || project.my_role === "project-editor";
     }
+    if (projectFolder) {
+      if (projectFolder.is_owned) return true;
+      if (projectFolder.role === "folder-editor") return true;
+      if (projectFolder.role === "folder-viewer") return false;
+    }
     return isOrgEditor;
-  }, [project?.my_role, isOrgEditor]);
+  }, [project?.my_role, projectFolder, isOrgEditor]);
 
   const { scenarioFeatures } = useProjectScenarioFeatures(projectId, project?.active_scenario_id);
   const isLoading = useMemo(
@@ -196,13 +207,15 @@ export default function MapPage({ params: { projectId } }) {
       isInitialViewLoading ||
       areProjectLayersLoading ||
       areProjectLayerGroupsLoading ||
-      isAuthZLoading,
+      isAuthZLoading ||
+      isFoldersLoading,
     [
       isProjectLoading,
       isInitialViewLoading,
       areProjectLayersLoading,
       areProjectLayerGroupsLoading,
       isAuthZLoading,
+      isFoldersLoading,
     ]
   );
 
@@ -574,7 +587,7 @@ export default function MapPage({ params: { projectId } }) {
                             {...(isProjectEditor ? { onMoveEnd: updateViewState } : {})}
                             isEditor={isProjectEditor}
                           />
-                          <DataPanel projectLayers={allProjectLayersIncludingTables} />
+                          <DataPanel projectLayers={allProjectLayersIncludingTables} isEditor={isProjectEditor} />
                         </Box>
                         {mapMode === "builder" && (
                           <Box

@@ -6,26 +6,54 @@ import { ICON_NAME } from "@p4b/ui/components/Icon";
 import { ACCOUNTS_DISABLED } from "@/lib/constants";
 import type { Layer } from "@/lib/validations/layer";
 import type { Project } from "@/lib/validations/project";
+import type { Folder } from "@/lib/validations/folder";
 
 import { ContentActions } from "@/types/common";
 
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 
+type ItemWithSharedWith = {
+  shared_with?: {
+    teams?: { role?: string }[];
+    organizations?: { role?: string }[];
+  };
+  folder_id?: string;
+};
+
 export const useContentMoreMenu = () => {
   const { t } = useTranslation("common");
-  const getMoreMenuOptions = function (contentType: "project" | "layer", item: Project | Layer, currentUserId?: string) {
+  const getMoreMenuOptions = function (
+    contentType: "project" | "layer",
+    item: Project | Layer,
+    currentUserId?: string,
+    folders?: Folder[],
+  ) {
+    // When currentUserId is absent (profile not yet loaded) treat as owner to avoid
+    // hiding menu options before auth resolves; enableActions gates the button itself.
     const isOwner = !currentUserId || item.owned_by?.id === currentUserId;
+    const sw = (item as ItemWithSharedWith).shared_with;
+    const folderId = (item as ItemWithSharedWith).folder_id;
+    const folderRole = folders?.find((f) => f.id === folderId)?.role;
+    const isEditor =
+      isOwner ||
+      sw?.teams?.some((t) => t.role?.endsWith("-editor")) ||
+      sw?.organizations?.some((o) => o.role?.endsWith("-editor")) ||
+      folderRole === "folder-editor";
 
     if (contentType === "layer") {
       const layerItem = item as Layer;
       const layerMoreMenuOptions: PopperMenuItem[] = [
-        ...(isOwner
+        ...(isEditor
           ? [
               {
                 id: ContentActions.EDIT_METADATA,
                 label: t("edit_metadata"),
                 icon: ICON_NAME.EDIT,
               },
+            ]
+          : []),
+        ...(isOwner
+          ? [
               {
                 id: ContentActions.MOVE_TO_FOLDER,
                 label: t("move_to_folder"),
@@ -40,7 +68,7 @@ export const useContentMoreMenu = () => {
                 label: t("download"),
                 icon: ICON_NAME.DOWNLOAD,
               },
-              ...(isOwner
+              ...(isEditor
                 ? [
                     {
                       id: ContentActions.UPDATE,
@@ -76,13 +104,17 @@ export const useContentMoreMenu = () => {
 
     if (contentType === "project") {
       const projectMoreMenuOptions: PopperMenuItem[] = [
-        ...(isOwner
+        ...(isEditor
           ? [
               {
                 id: ContentActions.EDIT_METADATA,
                 label: t("edit_metadata"),
                 icon: ICON_NAME.EDIT,
               },
+            ]
+          : []),
+        ...(isOwner
+          ? [
               {
                 id: ContentActions.MOVE_TO_FOLDER,
                 label: t("move_to_folder"),

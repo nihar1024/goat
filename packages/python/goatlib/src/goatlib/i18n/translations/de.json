@@ -986,7 +986,7 @@
       "description": "Flächenstatistiken für Polygonobjekte berechnen"
     },
     "catchment_area": {
-      "title": "Einzugsgebiet",
+      "title": "Einzugsgebiet (Legacy)",
       "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können.",
       "docs_path": "toolbox/accessibility_indicators/catchments"
     },
@@ -1011,11 +1011,11 @@
       "description": "Fasst Objekte mit gleichen Attributwerten zusammen. Optional können Statistiken für numerische Felder berechnet werden."
     },
     "catchment_area_v2": {
-      "title": "Einzugsgebiet v2 (Beta)",
+      "title": "Einzugsgebiet",
       "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können."
     },
     "travel_cost_matrix": {
-      "title": "Reisezeitmatrix (Beta)",
+      "title": "Reisezeitmatrix",
       "description": "Berechnet Reisezeiten und Entfernungen zwischen Start- und Zielpunkt-Layern."
     }
   },

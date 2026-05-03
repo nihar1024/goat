@@ -141,6 +141,10 @@
       "subtitle": "Relief",
       "title": "BKG (DE)"
     },
+    "basemap_de_landuse": {
+      "subtitle": "Flächennutzung",
+      "title": "BKG (DE)"
+    },
     "dark": {
       "subtitle": "Zum Hervorheben von Datenüberlagerungen",
       "title": "Dunkel"

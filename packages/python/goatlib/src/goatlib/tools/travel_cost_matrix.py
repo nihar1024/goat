@@ -963,9 +963,9 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         # Validate max extent for routed modes.
         if params.routing_mode != RoutingMode.flight_distance:
             max_reach_m = {
-                RoutingMode.walking: 50_000,
-                RoutingMode.bicycle: 50_000,
-                RoutingMode.pedelec: 50_000,
+                RoutingMode.walking: 100_000,
+                RoutingMode.bicycle: 100_000,
+                RoutingMode.pedelec: 100_000,
                 RoutingMode.car: 300_000,
                 RoutingMode.pt: 300_000,
             }.get(params.routing_mode, 300_000)

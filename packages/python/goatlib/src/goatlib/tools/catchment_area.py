@@ -501,7 +501,7 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
                     order=SortOrder.ascendent,
                     limit=20,  # Allow more values with interpolation
                 )
-                unique_values = [v.value for v in result.values]
+                unique_values = sorted(int(v.value) for v in result.values)
                 logger.info("Found unique %s values: %s", color_field, unique_values)
             except Exception as e:
                 logger.warning("Failed to query unique values: %s", e)

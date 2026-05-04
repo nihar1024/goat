@@ -313,14 +313,22 @@ const castNodeToProjectLayer = (node: ProjectLayerTreeNode): ProjectLayer => {
 };
 
 // Helper function to filter menu options for view mode
-const filterMenuForViewMode = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
-  const excludedActions = [
+const filterMenuForViewMode = (
+  menuOptions: PopperMenuItem[],
+  allowedActions?: { style?: boolean },
+): PopperMenuItem[] => {
+  const excludedActions: string[] = [
     ContentActions.DELETE,
     MapLayerActions.RENAME,
     MapLayerActions.DUPLICATE,
-    MapLayerActions.STYLE,
     MapLayerActions.EDIT_FEATURES,
   ];
+  // Only remove the Style action when the widget has not explicitly allowed it.
+  // allowedActions.style === true means the dashboard builder configured this
+  // layer-tree widget to expose styling to public/view-mode users.
+  if (allowedActions?.style !== true) {
+    excludedActions.push(MapLayerActions.STYLE);
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
 };
@@ -707,7 +715,7 @@ export const ProjectLayerTree = ({
 
     // Filter menu options based on view mode
     if (viewMode === "view") {
-      menuOptions = filterMenuForViewMode(menuOptions);
+      menuOptions = filterMenuForViewMode(menuOptions, allowedActions);
     }
 
     // Catalogue layers cannot be renamed, duplicated, or have features edited
@@ -1305,8 +1313,10 @@ export const ProjectLayerTree = ({
         <DraggableTreeView
           items={itemsWithIcons}
           onItemsChange={(newItems) => {
-            if (!isEditMode) return;
+            // Always update local state so expand/collapse arrows work in view mode.
+            // Persist to the API only in edit mode.
             setItems(newItems);
+            if (!isEditMode) return;
             if (onTreeUpdate) {
               const updatePayload = formatDndDataForApi(newItems);
               onTreeUpdate(updatePayload);

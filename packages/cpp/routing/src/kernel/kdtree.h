@@ -54,6 +54,24 @@ namespace routing::kernel
             return {best_index, std::sqrt(best_d2)};
         }
 
+        // Same as nearest() but bounded to a search radius. Returns {-1, inf}
+        // if no point is within max_dist. The radius cap lets the kd-tree prune
+        // far subtrees on the very first descent, making empty-region queries
+        // O(log n) instead of pulling the full tree into the search.
+        std::pair<int32_t, double> nearest_within(Point3857 const &query,
+                                                  double max_dist) const
+        {
+            if (root_ < 0 || !(max_dist > 0.0))
+                return {-1, std::numeric_limits<double>::infinity()};
+
+            int32_t best_index = -1;
+            double best_d2 = max_dist * max_dist;
+            nearest_recursive(root_, query, best_index, best_d2);
+            if (best_index < 0)
+                return {-1, std::numeric_limits<double>::infinity()};
+            return {best_index, std::sqrt(best_d2)};
+        }
+
         // Returns up to k nearest {node_index, euclidean_distance} pairs,
         // sorted by distance (closest first).
         std::vector<std::pair<int32_t, double>> k_nearest(

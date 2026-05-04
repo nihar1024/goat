@@ -72,8 +72,7 @@ class OriginDestinationTool(AnalysisTool):
                 ST_MakeLine(ST_Centroid(ANY_VALUE(origin.{geom_col})), ST_Centroid(ANY_VALUE(dest.{geom_col}))) as geometry,
                 matrix.{params.origin_column} as origin,
                 matrix.{params.destination_column} as destination,
-                SUM(CAST(matrix.{params.weight_column} AS DOUBLE)) as weight,
-                ST_Length(ST_MakeLine(ST_Centroid(ANY_VALUE(origin.{geom_col})), ST_Centroid(ANY_VALUE(dest.{geom_col})))) as length_m
+                SUM(CAST(matrix.{params.weight_column} AS DOUBLE)) as weight
             FROM {matrix_view} matrix
             JOIN {geom_view} origin ON CAST(matrix.{params.origin_column} AS VARCHAR) = CAST(origin.{params.unique_id_column} AS VARCHAR)
             JOIN {geom_view} dest ON CAST(matrix.{params.destination_column} AS VARCHAR) = CAST(dest.{params.unique_id_column} AS VARCHAR)

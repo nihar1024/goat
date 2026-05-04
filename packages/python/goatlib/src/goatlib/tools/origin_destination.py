@@ -170,6 +170,12 @@ class OriginDestinationToolParams(
     # =========================================================================
     # Result Layer Naming Section
     # =========================================================================
+    # Hide the generic result_layer_name from ToolInputBase
+    result_layer_name: str | None = Field(
+        default=None,
+        json_schema_extra=ui_field(section="result", hidden=True),
+    )
+
     lines_layer_name: str | None = Field(
         default=get_default_layer_name("origin_destination_lines", "en"),
         description="Custom name for the OD lines layer.",

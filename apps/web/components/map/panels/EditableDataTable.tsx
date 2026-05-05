@@ -278,6 +278,11 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
     dispatch(setHighlightedFeature(undefined));
   }, [layerId, dispatch]);
 
+  // Reset page to 0 when the active filter changes so results are always visible
+  useEffect(() => {
+    setPage(0);
+  }, [combinedFilter]);
+
   // Clear highlight on unmount (table closed)
   useEffect(() => {
     return () => {

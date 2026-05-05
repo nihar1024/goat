@@ -419,13 +419,16 @@ export const PieChartWidget = ({ config: rawConfig }: { config: PieChartSchema }
                         const vb = props.viewBox as { cx?: number; cy?: number } | undefined;
                         const cx = vb?.cx ?? 0;
                         const cy = vb?.cy ?? 0;
-                        const activeColor = baseColors[activeIndex % baseColors.length];
+                        const safeIndex = Math.min(activeIndex, displayData.length - 1);
+                        const activeItem = displayData[safeIndex];
+                        if (!activeItem) return null;
+                        const activeColor = baseColors[safeIndex % baseColors.length];
                         const percentText = formatNumber(
-                          displayData[activeIndex].operation_value / totalOperationValue,
+                          totalOperationValue ? activeItem.operation_value / totalOperationValue : 0,
                           "percent_1d",
                           i18n.language
                         );
-                        const label = getDisplayLabel(displayData[activeIndex].grouped_value);
+                        const label = getDisplayLabel(activeItem.grouped_value);
                         const maxChars = 12;
                         const words = label.split(/\s+/);
                         const lines: string[] = [];

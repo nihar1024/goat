@@ -626,33 +626,37 @@ class AnalyticsService:
     ) -> None:
         """Create a named view for a layer alias, with an optional CQL2 filter applied."""
         if not filter_expr:
-            con.execute(f'CREATE VIEW "{alias}" AS {source_sql}')
+            con.execute(f'CREATE OR REPLACE VIEW "{alias}" AS {source_sql}')
             return
 
         src_alias = f"_src_{alias}"
-        con.execute(f'CREATE VIEW "{src_alias}" AS {source_sql}')
+        con.execute(f'CREATE OR REPLACE VIEW "{src_alias}" AS {source_sql}')
 
         where_clause, params = self._build_where_clause_in_con(
             con, src_alias, filter_expr
         )
 
         if where_clause == "TRUE":
-            con.execute(f'CREATE VIEW "{alias}" AS {source_sql}')
+            con.execute(f'CREATE OR REPLACE VIEW "{alias}" AS {source_sql}')
         else:
             try:
+                filt_table = f"_filt_{alias}"
+                con.execute(f'DROP TABLE IF EXISTS "{filt_table}"')
                 con.execute(
-                    f'CREATE TEMP TABLE "_filt_{alias}" AS '
+                    f'CREATE TEMP TABLE "{filt_table}" AS '
                     f'SELECT * FROM "{src_alias}" WHERE {where_clause}',
                     params if params else [],
                 )
-                con.execute(f'CREATE VIEW "{alias}" AS SELECT * FROM "_filt_{alias}"')
+                con.execute(
+                    f'CREATE OR REPLACE VIEW "{alias}" AS SELECT * FROM "{filt_table}"'
+                )
             except Exception as e:
                 logger.warning(
                     "Failed to apply filter to alias '%s', using unfiltered: %s",
                     alias,
                     e,
                 )
-                con.execute(f'CREATE VIEW "{alias}" AS {source_sql}')
+                con.execute(f'CREATE OR REPLACE VIEW "{alias}" AS {source_sql}')
 
     def preview_sql(
         self,
@@ -830,6 +834,14 @@ class AnalyticsService:
                 for alias in created_views:
                     try:
                         con.execute(f'DROP VIEW IF EXISTS "{alias}"')
+                    except Exception:
+                        pass
+                    try:
+                        con.execute(f'DROP VIEW IF EXISTS "_src_{alias}"')
+                    except Exception:
+                        pass
+                    try:
+                        con.execute(f'DROP TABLE IF EXISTS "_filt_{alias}"')
                     except Exception:
                         pass
 

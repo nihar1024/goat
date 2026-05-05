@@ -21,7 +21,7 @@ Im Einstellungs-Bereich können Sie **verschiedene allgemeine Funktionalitäten 
 ## Bedienelemente
 
 - <code>Zoom-Steuerung</code>: <b>Schaltflächen zum Hinein- und Herauszoomen</b>.
-- <code>Grundkarten-Umschalter</code>: <b>Wählen Sie die gewünschte Grundkarte</b> aus der Liste der verfügbaren Optionen.
+- <code>Grundkarten-Umschalter</code>: <b>Wählen Sie die gewünschte Grundkarte</b> aus der Liste der verfügbaren Optionen. Sie können auch eigene Grundkarten hinzufügen — siehe <a href="../map/map_interface#kartennavigation">Kartennavigation</a> für Details.
 
 ## Ansicht
 

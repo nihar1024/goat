@@ -20,7 +20,7 @@ In the Settings section, **you can enable or disable various general functionali
 ## Controls
 
 - <code>Zoom controls</code>: <b>Zoom in and out</b>.
-- <code>Basemap switcher</code>: <b>Choose the desired basemap</b> from the list of available options.
+- <code>Basemap switcher</code>: <b>Choose the desired basemap</b> from the list of available options. You can also add custom basemaps — see <a href="../map/map_interface#map-navigation">Map Navigation</a> for details.
 
 ## View
 

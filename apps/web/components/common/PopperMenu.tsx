@@ -25,10 +25,18 @@ export interface PopperMenuProps {
   onSelect?: (item: PopperMenuItem) => void;
   disablePortal?: boolean;
   placement?: "bottom" | "right" | "left" | "top";
+  enableFlip?: boolean;
 }
 
 export default function PopperMenu(props: PopperMenuProps) {
-  const { menuItems, menuButton, selectedItem, disablePortal = true, placement = "bottom" } = props;
+  const {
+    menuItems,
+    menuButton,
+    selectedItem,
+    disablePortal = true,
+    placement = "bottom",
+    enableFlip = false,
+  } = props;
   const theme = useTheme();
   const [popperMenuOpen, setPopperMenuOpen] = useState<boolean>(false);
 
@@ -51,6 +59,7 @@ export default function PopperMenu(props: PopperMenuProps) {
       placement={placement}
       onClose={() => setPopperMenuOpen(false)}
       disablePortal={disablePortal}
+      enableFlip={enableFlip}
       arrow={false}
       popperStyle={{ zIndex: 10000, pointerEvents: "all" }} // Ensure the popper menu is above any other element and clickable
       content={

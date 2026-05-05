@@ -2222,5 +2222,14 @@
   "bevel": "Abgeschrägt",
   "miter": "Spitz",
   "show_advanced": "Erweitert anzeigen",
-  "hide_advanced": "Erweitert ausblenden"
+  "hide_advanced": "Erweitert ausblenden",
+  "social_sharing": "Social Sharing",
+  "social_sharing_description": "Lege fest, wie dieses Dashboard beim Teilen in sozialen Medien oder Messenger-Apps erscheint.",
+  "social_preview_image": "Vorschaubild",
+  "social_preview_image_helper": "Empfohlen: 1200×630 Pixel. Ohne eigenes Bild wird die GOAT-Standardvorschau verwendet.",
+  "meta_description": "Beschreibung",
+  "meta_description_placeholder": "Beschreibe dein Dashboard in ein bis zwei Sätzen.",
+  "meta_description_helper": "Wird in Social-Media-Vorschauen und Suchergebnissen verwendet",
+  "upload_or_drop_image": "Bild klicken oder hierher ziehen, um es hochzuladen",
+  "image_upload_failed": "Bild-Upload fehlgeschlagen"
 }

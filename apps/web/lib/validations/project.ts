@@ -147,6 +147,10 @@ export const builderConfigSchema = z.object({
       icon_color: z.string().optional(),
       font_color: z.string().optional(),
       favicon_url: z.string().default(DEFAULT_FAVICON_URL),
+      // Social sharing — when unset, public pages fall back to GOAT defaults
+      // (see lib/metadata.ts and app/map/public/[projectId]/layout.tsx).
+      og_image_url: z.string().optional(),
+      meta_description: z.string().max(300).optional(),
     })
     .default({}),
   interface: z.preprocess(

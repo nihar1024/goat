@@ -23,7 +23,10 @@ export async function generateMetadata({ params: { projectId } }) {
 
   if (publicProject?.config?.project?.name) {
     const title = publicProject.config.project.name;
-    const faviconUrl = publicProject.config.project.builder_config?.settings?.favicon_url;
+    const builderSettings = publicProject.config.project.builder_config?.settings;
+    const faviconUrl = builderSettings?.favicon_url;
+    const ogImageUrl = builderSettings?.og_image_url;
+    const metaDescription = builderSettings?.meta_description;
 
     // Use the request's Host header so OG previews on a custom domain
     // show that domain, not the canonical app URL.
@@ -54,11 +57,15 @@ export async function generateMetadata({ params: { projectId } }) {
         ? `${baseUrl}/`
         : `${baseUrl}/map/public/${projectId}`;
 
+    const overrides: { title: string; description?: string; image?: string } = { title };
+    if (metaDescription) overrides.description = metaDescription;
+    if (ogImageUrl) overrides.image = ogImageUrl;
+
     const metadata = getLocalizedMetadata(
       lng,
       {
-        en: { title },
-        de: { title },
+        en: overrides,
+        de: overrides,
       },
       {
         openGraphUrl: url,

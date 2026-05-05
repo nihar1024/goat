@@ -2224,5 +2224,14 @@
   "bevel": "Bevel",
   "miter": "Miter",
   "show_advanced": "Show advanced",
-  "hide_advanced": "Hide advanced"
+  "hide_advanced": "Hide advanced",
+  "social_sharing": "Social sharing",
+  "social_sharing_description": "Customize how this dashboard appears when shared on social media or messaging apps.",
+  "social_preview_image": "Preview image",
+  "social_preview_image_helper": "Recommended: 1200×630 pixels. Falls back to the default GOAT preview when unset.",
+  "meta_description": "Description",
+  "meta_description_placeholder": "Describe your dashboard in a sentence or two.",
+  "meta_description_helper": "Used in social previews and search results",
+  "upload_or_drop_image": "Click or drop an image to upload",
+  "image_upload_failed": "Image upload failed"
 }

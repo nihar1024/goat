@@ -146,6 +146,16 @@ Organize your datasets into folders for better structure and easier navigation.
 
 <p></p>
 
+**To rename, share, or delete a folder:**
+
+Click the <img src={require('/img/icons/3dots.png').default} alt="Options" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>More Options</code> icon next to any folder:
+
+- <code>Rename</code> — Change the folder name
+- <code>Share</code> — Open the <strong>Manage access</strong> dialog to grant access by <strong>Organization</strong> or per <strong>Team</strong>. Set the access level for each and click <code>Save</code>.
+- <code>Delete</code> — Remove the folder
+
+<p></p>
+
 **To move datasets to folders:**
 
 <div class="step">

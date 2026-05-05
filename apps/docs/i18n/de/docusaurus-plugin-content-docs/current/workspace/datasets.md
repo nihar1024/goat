@@ -40,18 +40,18 @@ GOAT unterstützt mehrere Dateiformate zum **Hochladen**: **GeoPackage**, **GeoJ
 <div class="step">
   <div class="step-number">4</div>
   <div class="content">
-    <p>Konfigurieren Sie Ihren **Datensatz**:</p>
+    <p>Konfigurieren Sie Ihren Datensatz:</p>
     <ul> 
-      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren **Datensatz** organisieren möchten</li>
-      <li><strong>Name</strong> - Geben Sie Ihrem **Datensatz** einen beschreibenden Namen</li>
-      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über den Inhalt und Zweck Ihres **Datensatzes** hinzu</li>
+      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren Datensatz organisieren möchten</li>
+      <li><strong>Name</strong> - Geben Sie Ihrem Datensatz einen beschreibenden Namen</li>
+      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über den Inhalt und Zweck Ihres Datensatzes hinzu</li>
     </ul>
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Klicken Sie auf <code>Hochladen</code>, um den **Datensatz** zu Ihrem **Workspace** hinzuzufügen.</div>
+  <div class="content">Klicken Sie auf <code>Hochladen</code>, um den Datensatz zu Ihrem Workspace hinzuzufügen.</div>
 </div>
 
 ### Externe Datenquellen
@@ -81,10 +81,10 @@ Verbinden Sie sich mit externen Datendiensten einschließlich **Web Feature Serv
 <div class="step">
   <div class="step-number">5</div>
   <div class="content">
-  <p>Konfigurieren Sie Ihren **Datensatz**:</p>
+  <p>Konfigurieren Sie Ihren Datensatz:</p>
     <ul>
-      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren **Datensatz** organisieren möchten</li>
-      <li><strong>Name</strong> - Geben Sie Ihrem **Datensatz** einen beschreibenden Namen</li>
+      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren Datensatz organisieren möchten</li>
+      <li><strong>Name</strong> - Geben Sie Ihrem Datensatz einen beschreibenden Namen</li>
       <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über die externe Datenquelle hinzu</li>
     </ul>
   </div>
@@ -92,7 +92,7 @@ Verbinden Sie sich mit externen Datendiensten einschließlich **Web Feature Serv
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Überprüfen Sie Ihre Konfiguration und klicken Sie auf <code>Speichern</code>, um den externen **Datensatz** hinzuzufügen.</div>
+  <div class="content">Überprüfen Sie Ihre Konfiguration und klicken Sie auf <code>Speichern</code>, um den externen Datensatz hinzuzufügen.</div>
 </div>
 
 :::tip Alternative Upload-Methode
@@ -144,11 +144,21 @@ Organisieren Sie Ihre **Datensätze** in Ordnern für bessere Struktur und einfa
 
 <p></p>
 
+**Um einen Ordner umzubenennen, zu teilen oder zu löschen:**
+
+Klicken Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Symbol neben einem Ordner:
+
+- <code>Umbenennen</code> — Ordnernamen ändern
+- <code>Teilen</code> — Den Dialog <strong>Zugriff verwalten</strong> öffnen, um den Zugriff nach <strong>Organisation</strong> oder pro <strong>Team</strong> zu vergeben. Zugriffsebene festlegen und auf <code>Speichern</code> klicken.
+- <code>Löschen</code> — Ordner entfernen
+
+<p></p>
+
 **Um Datensätze in Ordner zu verschieben:**
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Klicken Sie auf die drei Punkte <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px"}}/> neben Ihrem **Datensatz**</div>
+  <div class="content">Klicken Sie auf die drei Punkte <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px"}}/> neben Ihrem Datensatz</div>
 </div>
 
 <div class="step">
@@ -172,6 +182,7 @@ Greifen Sie auf umfassende **Datensatz**-Verwaltungsoptionen über das <img src=
 - **Info anzeigen/bearbeiten** - Zugriff und Änderung von **Datensatz**-Metadaten
 - **In Ordner verschieben** - Ihre **Datensatz**-Struktur neu organisieren  
 - **Herunterladen** - **Datensätze** auf Ihr lokales Gerät exportieren
+- **Aktualisieren** - **Datensatz** mit neuen Daten aktualisieren
 - **Teilen** - Zusammenarbeiten durch Teilen mit Teammitgliedern oder Organisation
 - **Löschen** - **Datensätze** entfernen, die Sie nicht mehr benötigen
 

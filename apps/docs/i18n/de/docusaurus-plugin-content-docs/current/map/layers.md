@@ -45,7 +45,7 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Externer Datensatz</code>, <code>Katalog-Explorer</code> oder <code>Layer erstellen</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
+  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Katalog-Explorer</code>, <code>Externer Datensatz</code> oder <code>Layer erstellen</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
 </div>
 
 <Tabs>
@@ -103,15 +103,7 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 
  </TabItem>
-  <TabItem value="Create Layer" label="Layer erstellen" className="tabItemBox">
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Geben Sie einen <strong>Namen</strong> für Ihren neuen Layer ein und klicken Sie auf <code>Erstellen</code>, um <strong>einen neuen leeren Layer</strong> in Ihrem Projekt zu erstellen. Anschließend können Sie mit dem <a href="./layers#features-bearbeiten">Features bearbeiten</a>-Werkzeug Objekte hinzufügen.</div>
-</div>
-
-  </TabItem>
-  <TabItem value="Dataset External" label="Externer Datensatz" default className="tabItemBox">
+  <TabItem value="Dataset External" label="Externer Datensatz" className="tabItemBox">
   
 <div class="step">
   <div class="step-number">4</div>
@@ -143,6 +135,14 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
     </TabItem>
   </Tabs>
 </TabItem>
+  <TabItem value="Create Layer" label="Layer erstellen" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Erstellen Sie einen neuen leeren Layer direkt in Ihrem Projekt. Geben Sie einen <strong>Layernamen</strong> ein, wählen Sie den <strong>Geometrietyp</strong> (<code>Point</code>, <code>Line</code>, <code>Polygon</code> oder <code>Table</code>) und definieren Sie Ihre <strong>Felder</strong>. Weitere Details finden Sie unter <a href="./layer_editing">Layer-Bearbeitung</a>.</div>
+</div>
+
+  </TabItem>
 </Tabs>
 
 
@@ -221,10 +221,6 @@ Durch Klicken auf das <code>weitere Optionen</code> <img src={require('/img/icon
 </div>
 
 <p></p>
-
-#### Features bearbeiten
-
-Die Option **Features bearbeiten** *(Beta)* ermöglicht es Ihnen, **Features direkt auf der Karte hinzuzufügen, zu bearbeiten oder zu löschen**. Klicken Sie auf <code>Features bearbeiten</code> im Layer-Optionen-Menü, um das Bearbeitungspanel am unteren Bildschirmrand zu öffnen, in dem Sie mit der Attributtabelle des Layers interagieren und Geometrien auf der Karte bearbeiten können.
 
 :::tip Tipp
 

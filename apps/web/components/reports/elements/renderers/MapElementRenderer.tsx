@@ -1,15 +1,18 @@
 "use client";
 
 import { Box, Chip, CircularProgress, useTheme } from "@mui/material";
+import type { StyleSpecification } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map, MapProvider, type MapRef, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 
 import { PATTERN_IMAGES } from "@/lib/constants/pattern-images";
 import type { AtlasPage } from "@/lib/print/atlas-utils";
+import { calculateMapViewport, zoomToScale } from "@/lib/print/atlas-utils";
+import { mmToPx, SCREEN_DPI } from "@/lib/print/units";
 import { addOrUpdateMarkerImages, addPatternImages } from "@/lib/transformers/map-image";
 import type { FeatureLayerPointProperties } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
-import type { ReportElement } from "@/lib/validations/reportLayout";
+import type { MapAtlasControl, ReportElement } from "@/lib/validations/reportLayout";
 
 import Layers from "@/components/map/Layers";
 
@@ -27,7 +30,7 @@ const DEFAULT_VIEW_STATE = {
 
 interface MapElementRendererProps {
   element: ReportElement;
-  basemapUrl?: string; // Live from project (synced)
+  basemapUrl?: string | StyleSpecification; // Live from project (synced) — string URL for vector basemaps, synthesized StyleSpecification for raster/solid customs
   layers?: ProjectLayer[]; // Live from project (synced)
   zoom?: number; // Page zoom level for scaling
   atlasPage?: AtlasPage | null; // Current atlas page (if atlas enabled)
@@ -79,10 +82,11 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
   const lockStyles = element.config?.lock_styles === true;
   const lockedLayerIds = element.config?.locked_layer_ids as number[] | undefined;
   const lockedLayerStyles = element.config?.locked_layer_styles as Record<string, Record<string, unknown>> | undefined;
-  const lockedBasemapUrl = element.config?.locked_basemap_url as string | undefined;
+  const lockedBasemapUrl = element.config?.locked_basemap_url as string | StyleSpecification | undefined;
 
   // Use locked basemap when layers are locked, otherwise live from props
-  const mapStyleUrl = (lockLayers && lockedBasemapUrl) ? lockedBasemapUrl : (basemapUrl || DEFAULT_BASEMAP_URL);
+  const mapStyleUrl: string | StyleSpecification =
+    (lockLayers && lockedBasemapUrl) ? lockedBasemapUrl : (basemapUrl || DEFAULT_BASEMAP_URL);
 
   // Check if this map element is controlled by atlas
   const isAtlasControlled = element.config?.atlas?.enabled === true;
@@ -119,40 +123,38 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
       });
     }
 
-    // Atlas coverage layer handling: hide or filter to current feature
-    if (atlasPage && isAtlasControlled && atlasPage.coverageLayerProjectId) {
-      const covLayerId = atlasPage.coverageLayerProjectId;
-
-      if (atlasPage.hiddenCoverageLayer) {
-        // Hide the coverage layer entirely
-        filtered = filtered.filter((layer) => layer.id !== covLayerId);
-      } else if (atlasPage.filterToCurrentFeature && atlasPage.feature) {
-        // Filter coverage layer to only show the current feature
-        const currentFeatureId = atlasPage.feature.id;
-        const idFilter = {
-          op: "=",
-          args: [{ property: "id" }, currentFeatureId],
-        };
-        filtered = filtered.map((layer) => {
-          if (layer.id !== covLayerId) return layer;
-          const existingCql = layer.query?.cql;
-          // Combine with existing CQL filter if present
-          const combinedCql = existingCql
-            ? { op: "and", args: [existingCql, idFilter] }
-            : idFilter;
-          return {
-            ...layer,
-            query: {
-              ...layer.query,
-              cql: combinedCql,
-            },
-          };
-        });
-      }
+    // Atlas coverage layer hiding (filter-to-current-feature is applied
+    // client-side via the atlasFilter prop on <Layers> below, so the
+    // tile URL stays stable across page changes and tiles aren't refetched).
+    if (
+      atlasPage &&
+      isAtlasControlled &&
+      atlasPage.coverageLayerProjectId &&
+      atlasPage.hiddenCoverageLayer
+    ) {
+      filtered = filtered.filter((layer) => layer.id !== atlasPage.coverageLayerProjectId);
     }
 
     return filtered;
   }, [layers, lockLayers, lockStyles, lockedLayerIds, lockedLayerStyles, atlasPage, isAtlasControlled]);
+
+  // Atlas filter: applied client-side to the coverage layer's MapLibre filter
+  // so changing pages doesn't change the tile URL (no setTiles refetch).
+  const atlasFilter = useMemo(() => {
+    if (
+      !atlasPage ||
+      !isAtlasControlled ||
+      !atlasPage.coverageLayerProjectId ||
+      !atlasPage.filterToCurrentFeature ||
+      !atlasPage.feature
+    ) {
+      return undefined;
+    }
+    return {
+      layerId: atlasPage.coverageLayerProjectId,
+      featureId: atlasPage.feature.id,
+    };
+  }, [atlasPage, isAtlasControlled]);
 
   // Use controlled viewState to prevent map from changing when container resizes (page zoom)
   const [viewState, setViewState] = useState({
@@ -185,94 +187,81 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configKey, atlasPage, isAtlasControlled]);
 
-  // Atlas mode: update map view when atlas page changes
-  // "best_fit" mode: fitBounds to feature with margin padding
-  // "fixed_scale" mode: center on feature, keep zoom from config
+  // Atlas mode: compute the target viewState from the atlas page bounds and the
+  // element's pixel dimensions. This is a pure derivation — no imperative
+  // map.fitBounds()/once("idle") dance and no dependence on the map being
+  // mounted. Earlier versions called fitBounds imperatively; in print
+  // (Playwright + non-interactive controlled <Map>) the imperative move was
+  // either swallowed by the silent try/catch on a 0×0 canvas or undone by
+  // the controlled-prop reapply, leaving every page at the saved snapshot.
   const atlasMode = (element.config?.atlas?.mode as string) ?? "best_fit";
+  const atlasMarginPercent = (element.config?.atlas?.margin_percent as number) ?? 10;
+  const atlasFixedScale = element.config?.atlas?.fixed_scale as number | null | undefined;
+  const atlasPredefinedScales = element.config?.atlas?.predefined_scales as
+    | number[]
+    | null
+    | undefined;
 
   useEffect(() => {
-    if (!atlasPage || !isAtlasControlled || !mapLoaded || !mapRef.current) return;
+    if (!atlasPage || !isAtlasControlled) return;
 
-    const [west, south, east, north] = atlasPage.bounds;
+    const widthPx = mmToPx(element.position.width, SCREEN_DPI);
+    const heightPx = mmToPx(element.position.height, SCREEN_DPI);
+    if (widthPx <= 0 || heightPx <= 0) return;
+
+    const atlasControl: MapAtlasControl = {
+      enabled: true,
+      mode: atlasMode as MapAtlasControl["mode"],
+      margin_percent: atlasMarginPercent,
+      fixed_scale: atlasFixedScale ?? null,
+      predefined_scales: atlasPredefinedScales ?? null,
+    };
+
+    const viewport = calculateMapViewport(atlasPage, atlasControl, widthPx, heightPx);
+    // Cap zoom to match the previous fitBounds maxZoom: 18 behaviour
+    // (avoids absurd zoom on tiny features like Points).
+    const cappedZoom = Math.min(viewport.zoom, 18);
+
     const configBearing = configViewState?.bearing ?? DEFAULT_VIEW_STATE.bearing;
     const configPitch = configViewState?.pitch ?? DEFAULT_VIEW_STATE.pitch;
-    const map = mapRef.current;
 
-    try {
-      if (atlasMode === "fixed_scale") {
-        // Fixed scale: center on feature bounds, keep the configured zoom
-        const centerLat = (south + north) / 2;
-        const centerLng = (west + east) / 2;
-        const configZoom = configViewState?.zoom ?? DEFAULT_VIEW_STATE.zoom;
+    const newViewState = {
+      latitude: viewport.center[1],
+      longitude: viewport.center[0],
+      zoom: cappedZoom,
+      bearing: configBearing,
+      pitch: configPitch,
+      // Derived scale denominator for the atlas page. The scalebar's "numeric"
+      // style prefers viewState.scale_denominator over the zoom-derived value,
+      // so we must set it explicitly per page — otherwise a stored snapshot
+      // value would be re-read and shown identically on every print page.
+      scale_denominator: Math.round(zoomToScale(cappedZoom, viewport.center[1])),
+    };
 
-        // Update local React state directly (controlled mode — jumpTo may not
-        // trigger onMove reliably in react-map-gl)
-        const newViewState = {
-          latitude: centerLat,
-          longitude: centerLng,
-          zoom: configZoom,
-          bearing: configBearing,
-          pitch: configPitch,
-        };
-        setViewState(newViewState);
+    setViewState(newViewState);
 
-        // Also write to config so scalebar reads correct lat/lng
-        if (onElementUpdate) {
-          onElementUpdate(element.id, {
-            ...element.config,
-            viewState: newViewState,
-          });
-        }
-        setAtlasViewStateReady(true);
-      } else {
-        // Best fit: fitBounds to feature with margin padding
-        const marginPercent = (element.config?.atlas?.margin_percent as number) ?? 10;
-        const container = map.getContainer();
-        const containerWidth = container?.clientWidth ?? 400;
-        const containerHeight = container?.clientHeight ?? 300;
-        const minDim = Math.min(containerWidth, containerHeight);
-        const maxPadding = Math.floor(Math.min(containerWidth, containerHeight) / 2) - 1;
-        const paddingPx = Math.min(Math.round((marginPercent / 100) * minDim), Math.max(0, maxPadding));
-
-        map.fitBounds(
-          [
-            [west, south],
-            [east, north],
-          ],
-          {
-            padding: paddingPx,
-            duration: 0,
-            maxZoom: 18,
-            bearing: configBearing,
-          }
-        );
-
-        // Write the actual computed viewState back after fitBounds settles
-        map.once("idle", () => {
-          const center = map.getCenter();
-          const actualZoom = map.getZoom();
-          const newViewState = {
-            latitude: center.lat,
-            longitude: center.lng,
-            zoom: actualZoom,
-            bearing: configBearing,
-            pitch: configPitch,
-          };
-          setViewState(newViewState);
-          if (onElementUpdate) {
-            onElementUpdate(element.id, {
-              ...element.config,
-              viewState: newViewState,
-            });
-          }
-          setAtlasViewStateReady(true);
-        });
-      }
-    } catch {
-      // fitBounds/jumpTo can throw if the canvas is too small
+    // Writeback so the scalebar (which reads element.config.viewState) sees
+    // the atlas-derived center/zoom/scale per page.
+    if (onElementUpdate) {
+      onElementUpdate(element.id, {
+        ...element.config,
+        viewState: newViewState,
+      });
     }
+    setAtlasViewStateReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [atlasPage, isAtlasControlled, atlasMode, mapLoaded, configViewState?.bearing, element.config?.atlas?.margin_percent]);
+  }, [
+    atlasPage,
+    isAtlasControlled,
+    atlasMode,
+    atlasMarginPercent,
+    atlasFixedScale,
+    atlasPredefinedScales,
+    element.position.width,
+    element.position.height,
+    configViewState?.bearing,
+    configViewState?.pitch,
+  ]);
 
   // Handle double-click to enter navigation mode
   const handleDoubleClick = useCallback(
@@ -379,7 +368,14 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
           width: "100%",
           height: "100%",
           position: "relative",
-          cursor: isNavigationMode ? "grab" : "default",
+          cursor: isNavigationMode ? "grab" : "inherit",
+          "&:active": isNavigationMode ? { cursor: "grabbing" } : {},
+          // Override MapLibre's internal canvas cursor to stay consistent
+          ...(isNavigationMode && {
+            "& .maplibregl-canvas": {
+              cursor: "inherit !important",
+            },
+          }),
           outline: "none",
           pointerEvents: "auto",
           overflow: "hidden",
@@ -431,8 +427,8 @@ const MapElementRenderer: React.FC<MapElementRendererProps> = ({
             onLoad={handleMapLoad}
             onIdle={handleMapIdle}
             interactive={isNavigationMode}
-            preserveDrawingBuffer={true}>
-            {visibleLayers.length > 0 && <Layers layers={visibleLayers} />}
+            canvasContextAttributes={{ preserveDrawingBuffer: true }}>
+            {visibleLayers.length > 0 && <Layers layers={visibleLayers} atlasFilter={atlasFilter} />}
           </Map>
         </Box>
 

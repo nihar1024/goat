@@ -1,4 +1,5 @@
 import type { Layer } from "@/lib/validations/layer";
+import type { FormatNumberTypes } from "@/lib/validations/common";
 import type { MapGeoJSONFeature } from "react-map-gl/maplibre";
 
 
@@ -28,6 +29,23 @@ export interface MapPopoverInfoProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   jsonProperties?: Record<string, Array<{ [key: string]: any }>>; // Allow any value type in data
   lngLat: [number, number];
+  /**
+   * Optional layer id. When set, the popup applies the layer's
+   * per-field formatting (kind + display_config from queryables) to
+   * property values whose key matches a known column.
+   */
+  layerId?: string;
+  /**
+   * When a field_list interaction is configured, maps column names to
+   * display labels and controls which fields are shown (and in what order).
+   */
+  fieldLabels?: Record<string, string>;
+  fieldOrder?: string[];
+  /**
+   * Per-field prefix/suffix/format overrides from the field_list config.
+   * Applied after kind-aware formatting (so area units are preserved).
+   */
+  fieldDecorators?: Record<string, { prefix?: string; suffix?: string; format?: FormatNumberTypes }>;
   onClose: () => void;
 }
 

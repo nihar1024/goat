@@ -95,10 +95,15 @@ class DuckDBCQLEvaluator(Evaluator):
 
     @handle(ast.Like)
     def like(self, node, lhs):
-        """Handle LIKE operator (always case-insensitive with ILIKE)."""
+        """Handle LIKE operator (always case-insensitive with ILIKE).
+
+        Casts the left-hand side to VARCHAR so ILIKE works for numeric
+        columns too — e.g., autocomplete searches against a DOUBLE column
+        like AREA_SQKM where the user types digits.
+        """
         pattern = self._add_param(node.pattern)
         # Always use ILIKE for case-insensitive matching (better UX)
-        result = f"{lhs} ILIKE {pattern}"
+        result = f"CAST({lhs} AS VARCHAR) ILIKE {pattern}"
         return f"NOT ({result})" if node.not_ else result
 
     @handle(ast.In)
@@ -137,10 +142,14 @@ class DuckDBCQLEvaluator(Evaluator):
             # Use the actual geometry column name
             return self._quote_identifier(self.geometry_column)
 
-        # When filtering on "id" but the table has no id column, use rowid
-        # (GeoAPI uses DuckDB's rowid as fallback feature ID)
+        # _rowid is a virtual property that maps to DuckDB's rowid + 1
+        # (feature_id = rowid + 1 because MVT feature ID 0 is "unset" in MapLibre)
+        if name == "_rowid":
+            return "(rowid + 1)"
+
+        # When filtering on "id" but the table has no id column, use rowid + 1
         if name.lower() == "id" and "id" not in self.field_names:
-            return "rowid"
+            return "(rowid + 1)"
 
         # Validate column name
         if name.lower() not in self.field_names:

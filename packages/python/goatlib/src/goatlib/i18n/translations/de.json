@@ -98,6 +98,9 @@
     },
     "result": {
       "label": "Ergebnisse"
+    },
+    "result_layer_section": {
+      "label": "Ergebnis-Layer"
     }
   },
   "fields": {
@@ -113,12 +116,28 @@
       "label": "Reisezeitlimit (Min)",
       "description": "Definieren Sie die maximale Reisezeit in Minuten"
     },
+    "limit": {
+      "label": "Limit",
+      "description": "Maximales Reisebudget"
+    },
     "steps": {
-      "label": "Anzahl der Schritte (Steps)",
+      "label": "Anzahl der Schritte",
       "description": "Definieren Sie die Anzahl der Schritte"
     },
+    "step_sizes": {
+      "label": "Schrittgrößen",
+      "description": "Schrittgrößen-Intervalle für das Einzugsgebiet"
+    },
+    "advanced_options": {
+      "label": "Erweiterte Optionen",
+      "description": "Erweiterte Konfigurationsoptionen anzeigen"
+    },
+    "point_grid_layer": {
+      "label": "Punktraster-Layer",
+      "description": "Wählen Sie einen Punkt-Layer als Raster"
+    },
     "speed": {
-      "label": "Reisegeschwindigkeit (Km/h)",
+      "label": "Reisegeschwindigkeit (km/h)",
       "description": "Definieren Sie die Reisegeschwindigkeit"
     },
     "access_mode": {
@@ -133,9 +152,9 @@
       "label": "Form des Einzugsgebiets",
       "description": "Wählen Sie die Form der Einzugsgebietsgeometrie aus."
     },
-    "polygon_difference": {
-      "label": "Differenz zwischen Schritten",
-      "description": "Wenn aktiviert, zeigen Polygone die Differenz zwischen aufeinanderfolgenden Schritten"
+    "steps_style": {
+      "label": "Darstellung der Schritte",
+      "description": "Darstellungsart der Schritte in der Ausgabe"
     },
     "choose_pt_mode": {
       "label": "ÖV-Modi wählen",
@@ -482,7 +501,7 @@
       "description": "Durchzuführende statistische Operation"
     },
     "measure_type": {
-      "label": "Art des Einzugsgebiets",
+      "label": "Berechnen nach",
       "description": "Berechnung des Einzugsgebiets nach Zeit oder Entfernung"
     },
     "max_distance": {
@@ -669,6 +688,14 @@
       "label": "Name der Ergebnislayer",
       "description": "Benutzerdefinierter Name für die Ergebnis-Layer"
     },
+    "add_join_fields": {
+      "label": "Verknüpfungsfelder hinzufügen",
+      "description": "Felder der Verknüpfungsebene zur Ausgabe hinzufügen. Wenn deaktiviert, werden keine Verknüpfungsfelder hinzugefügt."
+    },
+    "join_fields": {
+      "label": "Verknüpfungsfelder",
+      "description": "Wählen Sie, welche Felder der Verknüpfungsebene in die Ausgabe übernommen werden."
+    },
     "summary_layer_name": {
       "label": "Name der Zusammenfassungsebene",
       "description": "Benutzerdefinierter Name für die Cluster-Zusammenfassungsebene"
@@ -688,9 +715,65 @@
     "stations_layer_name": {
       "label": "Name des Stationen-Layer",
       "description": "Benutzerdefinierter Name für die Stationen-Layer"
+    },
+    "destinations_layer_name": {
+      "label": "Name des Zielpunkte-Layers",
+      "description": "Name für den Ergebnis-Layer der Zielpunkte"
+    },
+    "matrix_layer_name": {
+      "label": "Name des Matrix-Layers",
+      "description": "Name für die Kostenmatrix-Tabelle"
+    },
+    "origins_layer": {
+      "label": "Startpunkte-Layer",
+      "description": "Layer mit den Startpunkten"
+    },
+    "destinations_layer": {
+      "label": "Zielpunkte-Layer",
+      "description": "Layer mit den Zielpunkten"
+    },
+    "origins_label": {
+      "label": "Herkunft-Bezeichnung",
+      "description": "Spalte zur Beschriftung der Startpunkte in der Ergebnismatrix"
+    },
+    "destinations_label": {
+      "label": "Ziel-Bezeichnung",
+      "description": "Spalte zur Beschriftung der Zielpunkte in der Ergebnismatrix"
+    },
+    "calculate_by": {
+      "label": "Berechnung nach",
+      "description": "Reisekosten nach Zeit oder Entfernung berechnen"
+    },
+    "limit_time_min": {
+      "label": "Limit - Zeit (Min)",
+      "description": "Maximale Reisezeit in Minuten"
+    },
+    "travel_time_limit_min": {
+      "label": "Reisezeitlimit (Min)",
+      "description": "Maximale Reisezeit in Minuten"
+    },
+    "limit_distance_m": {
+      "label": "Limit - Distanz (m)",
+      "description": "Maximale Entfernung in Metern"
+    },
+    "max_transfers": {
+      "label": "Max. Umstiege",
+      "description": "Maximale Anzahl der Umstiege"
+    },
+    "speed_kmh": {
+      "label": "Geschw. (km/h)",
+      "description": "Reisegeschwindigkeit in km/h"
     }
   },
   "enums": {
+    "cost_type": {
+      "time": "Zeit (Min)",
+      "distance": "Entfernung (m)"
+    },
+    "steps_style": {
+      "separate": "Getrennte Schritte",
+      "cumulative": "Kumulative Schritte"
+    },
     "routing_mode": {
       "walking": "Zu Fuß",
       "bicycle": "Fahrrad",
@@ -738,7 +821,12 @@
       "within_distance": "In einer Entfernung von",
       "identical_to": "Identisch mit",
       "completely_contains": "Enthält vollständig",
-      "completely_within": "Vollständig innerhalb von"
+      "completely_within": "Vollständig innerhalb von",
+      "touches": "Berührt",
+      "overlaps": "Überlappt",
+      "covers": "Bedeckend",
+      "covered_by": "Bedeckt",
+      "disjoint": "Disjunkt"
     },
     "join_operation_type": {
       "one_to_one": "Eins zu Eins",
@@ -792,7 +880,9 @@
     "catchment_area_type": {
       "polygon": "Polygon",
       "network": "Netzwerk",
-      "rectangular_grid": "Sechseckiges Gitter"
+      "hexagonal_grid": "Sechseckiges Gitter",
+      "rectangular_grid": "Sechseckiges Gitter",
+      "point_grid": "Punktraster"
     },
     "aggregation_area_type": {
       "polygon": "Polygon",
@@ -896,7 +986,7 @@
       "description": "Flächenstatistiken für Polygonobjekte berechnen"
     },
     "catchment_area": {
-      "title": "Einzugsgebiet",
+      "title": "Einzugsgebiet (Legacy)",
       "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können.",
       "docs_path": "toolbox/accessibility_indicators/catchments"
     },
@@ -919,7 +1009,21 @@
     "dissolve": {
       "title": "Zusammenführen",
       "description": "Fasst Objekte mit gleichen Attributwerten zusammen. Optional können Statistiken für numerische Felder berechnet werden."
+    },
+    "catchment_area_v2": {
+      "title": "Einzugsgebiet",
+      "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können."
+    },
+    "travel_cost_matrix": {
+      "title": "Reisezeitmatrix",
+      "description": "Berechnet Reisezeiten und Entfernungen zwischen Start- und Zielpunkt-Layern."
     }
+  },
+  "groups": {
+    "origins": "Startpunkte",
+    "destinations": "Zielpunkte",
+    "access_leg": "Zugang",
+    "egress_leg": "Abgang"
   },
   "routing_modes": {
     "walk": "Zu Fuß",
@@ -928,6 +1032,7 @@
     "pedelec": "Pedelec",
     "car": "Auto",
     "pt": "ÖPNV",
+    "flight_distance": "Luftlinie",
     "bus": "Bus",
     "tram": "Straßenbahn",
     "rail": "Bahn",
@@ -963,7 +1068,9 @@
     "join": "Objekte verbinden",
     "geocoding": "Geokodierung",
     "clustered_features": "Clusterzuordnung",
-    "cluster_summary": "Cluster-Zusammenfassung"
+    "cluster_summary": "Cluster-Zusammenfassung",
+    "travel_cost_matrix": "Reisezeitmatrix",
+    "travel_cost_matrix_destinations": "Zielpunkte"
   },
   "two_sfca_type": {
     "twosfca": "2SFCA",

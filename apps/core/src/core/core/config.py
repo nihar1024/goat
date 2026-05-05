@@ -164,6 +164,7 @@ class Settings(BaseSettings):
     )
     ASSETS_URL: Optional[str] = None
     ASSETS_MAX_FILE_SIZE: Optional[int] = 4194304
+    DOCUMENTS_MAX_FILE_SIZE: int = 52428800  # 50 MiB
 
     THUMBNAIL_DIR_LAYER: Optional[str] = None
 
@@ -211,6 +212,20 @@ class Settings(BaseSettings):
     PRINT_FRONTEND_URL: Optional[str] = "http://localhost:3000"  # Next.js frontend URL
     PRINT_TIMEOUT: int = 120  # seconds to wait for page to render
     PRINT_OUTPUT_DIR: Optional[str] = "prints"  # S3 subdirectory for print outputs
+
+    # Custom domains (white label).
+    # Customers CNAME their domains at this hostname. We maintain it as a CNAME
+    # in the plan4better.de zone pointing at the actual Caddy LoadBalancer's
+    # hostname, so the underlying LB can be migrated without breaking customer
+    # DNS records.
+    CUSTOM_DOMAIN_CNAME_TARGET: str = "cname.goat.plan4better.de"
+
+    # Public resolvers used by white-label DNS reconciliation. We query
+    # these directly instead of the pod's resolver so we see DNS the way
+    # customers do — bypassing split-DNS setups (e.g. pfSense in dev,
+    # where the cluster sees an internal IP for the canonical target
+    # while the public sees the WAN IP). Comma-separated list of IPs.
+    CUSTOM_DOMAIN_DNS_RESOLVERS: str = "1.1.1.1,8.8.8.8"
 
     class Config:
         case_sensitive = True

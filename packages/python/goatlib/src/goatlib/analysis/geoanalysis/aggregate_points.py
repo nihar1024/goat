@@ -238,7 +238,7 @@ class AggregatePointsTool(AnalysisTool):
             self.con.execute(f"""
                 CREATE OR REPLACE TABLE aggregation_result AS
                 SELECT
-                    a.{area_geom} AS geom,
+                    a.{area_geom} AS geometry,
                     {area_select_with_prefix},
                     COALESCE(t.total_stats, 0) AS {result_col},
                     g.grouped_stats AS {result_col}_grouped
@@ -266,7 +266,7 @@ class AggregatePointsTool(AnalysisTool):
             self.con.execute(f"""
                 CREATE OR REPLACE TABLE aggregation_result AS
                 SELECT
-                    a.{area_geom} AS geom,
+                    a.{area_geom} AS geometry,
                     {area_select_with_prefix},
                     COALESCE(t.total_stats, 0) AS {result_col}
                 FROM area_with_id a
@@ -358,7 +358,7 @@ class AggregatePointsTool(AnalysisTool):
             self.con.execute(f"""
                 CREATE OR REPLACE TABLE aggregation_result AS
                 SELECT
-                    ST_GeomFromText(h3_cell_to_boundary_wkt(t.h3_index)) AS geom,
+                    ST_GeomFromText(h3_cell_to_boundary_wkt(t.h3_index)) AS geometry,
                     h3_h3_to_string(t.h3_index) AS h3_{h3_resolution},
                     t.total_stats AS {result_col},
                     g.grouped_stats AS {result_col}_grouped
@@ -388,7 +388,7 @@ class AggregatePointsTool(AnalysisTool):
             self.con.execute(f"""
                 CREATE OR REPLACE TABLE aggregation_result AS
                 SELECT
-                    ST_GeomFromText(h3_cell_to_boundary_wkt(h3_index)) AS geom,
+                    ST_GeomFromText(h3_cell_to_boundary_wkt(h3_index)) AS geometry,
                     h3_h3_to_string(h3_index) AS h3_{h3_resolution},
                     total_stats AS {result_col}
                 FROM total_stats

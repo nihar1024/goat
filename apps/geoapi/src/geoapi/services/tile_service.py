@@ -147,18 +147,32 @@ def _get_cached_pmtiles_reader(
 
     Uses per-file locking so requests for different files can proceed in parallel.
 
+    If the file on disk has been modified since we cached it (e.g. the layer
+    was overwritten by a workflow export or ``layer_update``), the stale
+    reader is evicted and the file is re-opened. This keeps tile output fresh
+    across in-place regenerations without requiring explicit cross-process
+    cache invalidation.
+
     Returns:
         Tuple of (reader, header, is_gzip)
     """
     path_str = str(pmtiles_path)
+    current_mtime = pmtiles_path.stat().st_mtime
 
     # Fast path: check if already cached (minimal lock time)
     with _pmtiles_reader_cache_lock:
         if path_str in _pmtiles_reader_cache:
             reader, header, fh, cached_mtime = _pmtiles_reader_cache[path_str]
-            tile_compression = header.get("tile_compression")
-            is_gzip = bool(tile_compression and tile_compression.value == 2)
-            return reader, header, is_gzip
+            if cached_mtime == current_mtime:
+                tile_compression = header.get("tile_compression")
+                is_gzip = bool(tile_compression and tile_compression.value == 2)
+                return reader, header, is_gzip
+            # File has been rewritten since we cached it — evict and re-open.
+            try:
+                fh.close()
+            except Exception:
+                pass
+            del _pmtiles_reader_cache[path_str]
 
         # Get or create per-file lock
         if path_str not in _pmtiles_file_locks:
@@ -171,12 +185,18 @@ def _get_cached_pmtiles_reader(
         with _pmtiles_reader_cache_lock:
             if path_str in _pmtiles_reader_cache:
                 reader, header, fh, cached_mtime = _pmtiles_reader_cache[path_str]
-                tile_compression = header.get("tile_compression")
-                is_gzip = bool(tile_compression and tile_compression.value == 2)
-                return reader, header, is_gzip
+                if cached_mtime == current_mtime:
+                    tile_compression = header.get("tile_compression")
+                    is_gzip = bool(tile_compression and tile_compression.value == 2)
+                    return reader, header, is_gzip
+                # Stale again — evict and fall through to re-open.
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+                del _pmtiles_reader_cache[path_str]
 
         # Not in cache - open file (outside global lock)
-        current_mtime = pmtiles_path.stat().st_mtime
         fh = open(pmtiles_path, "rb")
         source = MmapSource(fh)
         reader = CachedPMTilesReader(source)
@@ -1082,6 +1102,8 @@ class TileService:
         columns: Optional[list[dict]] = None,
         geometry_column: str = "geometry",
         geometry_type: Optional[str] = None,
+        force_dynamic: bool = False,
+        decoration: Optional[str] = None,  # NEW
     ) -> Optional[tuple[bytes, bool, str]]:
         """Generate MVT tile for a layer.
 
@@ -1102,8 +1124,8 @@ class TileService:
             Tuple of (MVT tile bytes, is_gzip_compressed, source) or None if empty
             source is 'pmtiles' or 'geoparquet'
         """
-        # If CQL filter or bbox is provided, use dynamic GeoParquet generation
-        if cql_filter or bbox:
+        # If CQL filter, bbox, force_dynamic, or decoration is set, use dynamic GeoParquet generation
+        if cql_filter or bbox or force_dynamic or decoration:
             # Run in thread pool to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             tile_data = await loop.run_in_executor(
@@ -1120,6 +1142,7 @@ class TileService:
                     columns=columns,
                     geometry_column=geometry_column,
                     geometry_type=geometry_type,
+                    decoration=decoration,
                 ),
             )
             if tile_data is None:
@@ -1186,6 +1209,7 @@ class TileService:
         columns: Optional[list[dict]] = None,
         geometry_column: str = "geometry",
         geometry_type: Optional[str] = None,
+        decoration: Optional[str] = None,  # NEW
     ) -> Optional[bytes]:
         """Generate MVT tile dynamically using DuckDB.
 
@@ -1324,30 +1348,22 @@ class TileService:
             f"'EPSG:4326', 'EPSG:3857', always_xy := true), ST_Extent(bounds.bbox3857))"
         ]
 
-        # Add id field - use actual id if exists, otherwise use DuckLake's rowid
-        if has_id_column:
-            struct_fields.append('"id" := candidates."id"')
-        else:
-            # Use DuckLake's built-in rowid which is stable and globally unique
-            struct_fields.append('"id" := candidates.rowid')
+        # Include rowid+1 as _rowid — promoted to MVT feature ID via ST_AsMVT's feature_id_name.
+        # +1 because MVT feature ID 0 is treated as "unset" by MapLibre.
+        struct_fields.append('"_rowid" := candidates.rowid + 1')
 
+        # Include all property columns (including original 'id' if present)
         for col in prop_cols:
-            # Skip id since we handle it separately above
-            if col != "id":
-                struct_fields.append(f'"{col}" := candidates."{col}"')
+            struct_fields.append(f'"{col}" := candidates."{col}"')
         struct_pack_args = ", ".join(struct_fields)
 
-        # Build MVT query following working pattern:
-        # 1. bounds CTE: compute tile envelope in both projections
-        # 2. candidates CTE: filter data using bbox (no ST_AsMVTGeom here)
-        # 3. Final SELECT: ST_AsMVT with ST_AsMVTGeom inside struct_pack
+        # Build MVT query
         select_clause = f'"{geom_col}"'
         if select_props:
             select_clause += f", {select_props}"
 
-        # Add rowid to select clause if no id column exists (for stable IDs)
-        if not has_id_column:
-            select_clause += ", rowid"
+        # Always include rowid in the candidates CTE
+        select_clause += ", rowid"
 
         # Check if table has bbox column for fast row group pruning
         # Support both legacy scalar columns ($minx, etc.) and GeoParquet 1.1 struct bbox
@@ -1357,16 +1373,16 @@ class TileService:
         has_struct_bbox = "bbox" in column_names
         has_bbox_columns = has_scalar_bbox or has_struct_bbox
 
+        # Compute tile bounds unconditionally — cheap pure math needed by both
+        # the fast-path bbox query and the arrow layer (if requested).
+        tile_xmin, tile_ymin, tile_xmax, tile_ymax = tile_to_bbox_4326(z, x, y)
+        tile_xmin_3857, tile_ymin_3857, tile_xmax_3857, tile_ymax_3857 = (
+            tile_to_bbox_3857(z, x, y)
+        )
+
         if has_bbox_columns:
             # Fast path: use bbox columns for row group pruning
             # This is 10-100x faster because parquet can skip entire row groups
-            #
-            # Compute tile bounds in Python (pure math, no DB query needed!)
-            # Tile bounds are deterministic from z/x/y coordinates.
-            tile_xmin, tile_ymin, tile_xmax, tile_ymax = tile_to_bbox_4326(z, x, y)
-            tile_xmin_3857, tile_ymin_3857, tile_xmax_3857, tile_ymax_3857 = (
-                tile_to_bbox_3857(z, x, y)
-            )
 
             # Prefer scalar columns (legacy) over struct bbox (GeoParquet 1.1)
             if has_scalar_bbox:
@@ -1399,7 +1415,10 @@ class TileService:
                 )
                 SELECT ST_AsMVT(
                     struct_pack({struct_pack_args}),
-                    'default'
+                    'default',
+                    4096,
+                    'geometry',
+                    '_rowid'
                 )
                 FROM candidates, bounds
             """
@@ -1419,7 +1438,10 @@ class TileService:
                 )
                 SELECT ST_AsMVT(
                     struct_pack({struct_pack_args}),
-                    'default'
+                    'default',
+                    4096,
+                    'geometry',
+                    '_rowid'
                 )
                 FROM candidates, bounds
             """
@@ -1456,6 +1478,28 @@ class TileService:
                     # MVT is protobuf — multiple layers can be concatenated
                     tile_data = tile_data + anchor_data
 
+            # For line layers requesting decoration placement, generate and append
+            # a per-line decoration points layer. The source geometry is read
+            # pre-tile-clipping, so endpoints are real endpoints (sidesteps
+            # MapLibre's tile-boundary placement issues for non-repeat modes).
+            if decoration and geometry_type and "line" in geometry_type.lower():
+                decoration_data = self._generate_decoration_layer(
+                    table=table,
+                    geom_col=geom_col,
+                    decoration=decoration,
+                    bbox_3857=(
+                        tile_xmin_3857,
+                        tile_ymin_3857,
+                        tile_xmax_3857,
+                        tile_ymax_3857,
+                    ),
+                    bbox_4326=(tile_xmin, tile_ymin, tile_xmax, tile_ymax),
+                    extra_where_sql=extra_where_sql,
+                    params=params,
+                )
+                if decoration_data:
+                    tile_data = tile_data + decoration_data
+
             return tile_data
         except TimeoutError:
             logger.warning("Tile query timeout: z=%d, x=%d, y=%d", z, x, y)
@@ -1463,6 +1507,133 @@ class TileService:
         except Exception as e:
             logger.error("Tile generation error: %s", e)
             raise
+
+    def _generate_decoration_layer(
+        self,
+        table: str,
+        geom_col: str,
+        decoration: str,
+        bbox_3857: tuple[float, float, float, float],
+        bbox_4326: tuple[float, float, float, float],
+        extra_where_sql: str = "",
+        params: list | None = None,
+    ) -> Optional[bytes]:
+        """Generate an MVT layer of decoration placement points + bearings for a line layer.
+
+        Emits one or two point features per line that intersects the tile bbox,
+        depending on `decoration`. Each feature has a `bearing` property in degrees
+        clockwise from north (0..360), computed from the relevant segment of the
+        full source geometry (read pre-tile-clipping, so endpoints are real
+        endpoints rather than tile-boundary intersections).
+
+        Args:
+            table: Fully qualified table name
+            geom_col: Geometry column name
+            decoration: One of "start" | "end" | "start_and_end" | "center"
+            bbox_3857: (xmin, ymin, xmax, ymax) tile bounds in EPSG:3857
+            bbox_4326: (xmin, ymin, xmax, ymax) tile bounds in EPSG:4326
+            extra_where_sql: Optional additional WHERE clause text (e.g. CQL/bbox filters)
+            params: Query parameters bound by `extra_where_sql`
+
+        Returns:
+            MVT bytes for the 'default_decoration' layer, or None if empty
+        """
+        tile_xmin_3857, tile_ymin_3857, tile_xmax_3857, tile_ymax_3857 = bbox_3857
+        tile_xmin, tile_ymin, tile_xmax, tile_ymax = bbox_4326
+
+        if decoration == "start":
+            placement_cte = f"""
+                SELECT
+                    ST_StartPoint("{geom_col}") AS geom,
+                    DEGREES(ST_Azimuth(ST_StartPoint("{geom_col}"), ST_PointN("{geom_col}", 2))) AS bearing,
+                    rowid
+                FROM candidates
+                WHERE ST_NumPoints("{geom_col}") >= 2
+            """
+        elif decoration == "end":
+            placement_cte = f"""
+                SELECT
+                    ST_EndPoint("{geom_col}") AS geom,
+                    DEGREES(ST_Azimuth(ST_PointN("{geom_col}", CAST(ST_NumPoints("{geom_col}") - 1 AS INTEGER)), ST_EndPoint("{geom_col}"))) AS bearing,
+                    rowid
+                FROM candidates
+                WHERE ST_NumPoints("{geom_col}") >= 2
+            """
+        elif decoration == "start_and_end":
+            placement_cte = f"""
+                SELECT
+                    ST_StartPoint("{geom_col}") AS geom,
+                    DEGREES(ST_Azimuth(ST_StartPoint("{geom_col}"), ST_PointN("{geom_col}", 2))) AS bearing,
+                    rowid
+                FROM candidates
+                WHERE ST_NumPoints("{geom_col}") >= 2
+                UNION ALL
+                SELECT
+                    ST_EndPoint("{geom_col}") AS geom,
+                    DEGREES(ST_Azimuth(ST_PointN("{geom_col}", CAST(ST_NumPoints("{geom_col}") - 1 AS INTEGER)), ST_EndPoint("{geom_col}"))) AS bearing,
+                    rowid
+                FROM candidates
+                WHERE ST_NumPoints("{geom_col}") >= 2
+            """
+        elif decoration == "center":
+            placement_cte = f"""
+                SELECT
+                    ST_LineInterpolatePoint("{geom_col}", 0.5) AS geom,
+                    DEGREES(ST_Azimuth(
+                        ST_LineInterpolatePoint("{geom_col}", 0.49),
+                        ST_LineInterpolatePoint("{geom_col}", 0.51)
+                    )) AS bearing,
+                    rowid
+                FROM candidates
+                WHERE ST_NumPoints("{geom_col}") >= 2
+            """
+        else:
+            return None
+
+        placement_query = f"""
+            WITH bounds AS (
+                SELECT
+                    ST_MakeEnvelope({tile_xmin_3857}, {tile_ymin_3857}, {tile_xmax_3857}, {tile_ymax_3857}) AS bbox3857,
+                    ST_MakeEnvelope({tile_xmin}, {tile_ymin}, {tile_xmax}, {tile_ymax}) AS bbox4326
+            ),
+            candidates AS (
+                SELECT "{geom_col}", rowid
+                FROM {table}, bounds
+                WHERE ST_Intersects("{geom_col}", bounds.bbox4326){extra_where_sql}
+            ),
+            placement_pts AS (
+                {placement_cte}
+            )
+            SELECT ST_AsMVT(
+                struct_pack(
+                    geometry := ST_AsMVTGeom(
+                        ST_Transform(placement_pts.geom, 'EPSG:4326', 'EPSG:3857', always_xy := true),
+                        ST_Extent(bounds.bbox3857)
+                    ),
+                    "_rowid" := placement_pts.rowid + 1,
+                    "bearing" := COALESCE(((placement_pts.bearing % 360) + 360) % 360, 0)
+                ),
+                'default_decoration',
+                4096,
+                'geometry',
+                '_rowid'
+            )
+            FROM placement_pts, bounds
+        """
+
+        try:
+            result = ducklake_pool.execute_with_retry(
+                placement_query,
+                params=params if params else None,
+                max_retries=1,
+                fetch_all=False,
+                timeout=settings.QUERY_TIMEOUT,
+            )
+            if result and result[0]:
+                return bytes(result[0])
+        except Exception as e:
+            logger.warning("Decoration layer generation failed: %s", e)
+        return None
 
     def _generate_anchor_layer(
         self,
@@ -1510,8 +1681,8 @@ class TileService:
             f"struct_pack({struct_pack_args})",
             f"struct_pack({anchor_struct})",
         ).replace(
-            "'default'",
-            "'default_anchor'",
+            "'default',\n                    4096,\n                    'geometry',\n                    '_rowid'",
+            "'default_anchor',\n                    4096,\n                    'geometry',\n                    '_rowid'",
         )
 
         try:

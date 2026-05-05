@@ -235,6 +235,7 @@ export interface PreviewSqlRequest {
   layers: Record<string, string>; // alias -> layer_id
   limit?: number;
   offset?: number;
+  filter_expr?: string | null;
 }
 
 export interface PreviewSqlRow {
@@ -246,6 +247,7 @@ export interface PreviewSqlResponse {
   columns: Array<{ name: string; type: string }>;
   rows: PreviewSqlRow[];
   total_count?: number | null;
+  has_more?: boolean;
   error?: string | null;
 }
 
@@ -287,6 +289,7 @@ export async function previewSql(request: PreviewSqlRequest): Promise<PreviewSql
         layers: request.layers,
         limit: request.limit ?? 10,
         offset: request.offset ?? 0,
+        ...(request.filter_expr != null && { filter_expr: request.filter_expr }),
       },
     }),
   });

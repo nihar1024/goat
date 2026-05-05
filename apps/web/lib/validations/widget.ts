@@ -89,7 +89,11 @@ export const layersMoreOptionsStyleTypes = z.enum(["compact", "direct_actions"])
 export const layersOutOfZoomBehaviorTypes = z.enum(["hide", "dim"]);
 export const informationLayersConfigSchema = informationConfigSchema.extend({
   type: z.literal("layers"),
-  setup: informationConfigSetupBaseSchema.extend({}).default({}),
+  setup: informationConfigSetupBaseSchema
+    .extend({
+      group_info: z.record(z.string(), z.string()).optional(),
+    })
+    .default({}),
   options: informationConfigOptionsBaseSchema
     .extend({
       show_search: z.boolean().optional().default(false),
@@ -99,6 +103,7 @@ export const informationLayersConfigSchema = informationConfigSchema.extend({
       toggle_style: layersToggleStyleTypes.optional().default("eye"),
       toggle_position: layersTogglePositionTypes.optional().default("right"),
       more_options_style: layersMoreOptionsStyleTypes.optional().default("compact"),
+      show_all_toggle: z.boolean().optional().default(true),
       show_group_name: z.boolean().optional().default(true),
       show_group_icons: z.boolean().optional().default(false),
       hide_legend_heading: z.boolean().optional().default(false),
@@ -227,6 +232,7 @@ export const tableDataConfigSchema = dataConfigSchema.extend({
       format: formatNumberTypes.optional().default("none"),
       column_formats: z.record(formatNumberTypes).optional(),
       description: z.string().optional(),
+      header_color: z.string().optional(),
     })
     .default({}),
 });
@@ -274,6 +280,8 @@ export const filterDataConfigSchema = dataConfigSchema.extend({
       target_layers: z.array(filterTargetLayerSchema).optional(),
       // Cross-filter options: when enabled, filter shows only values that exist in currently filtered data
       cross_filter_options: z.boolean().optional().default(true),
+      // Allow clicking map features to populate this filter
+      filter_by_map_click: z.boolean().optional().default(false),
     })
     .default({}),
 });
@@ -458,9 +466,13 @@ export const tabsContainerConfigSchema = z.object({
 
 export const linksSeparatorTypes = z.enum(["vertical_line", "dot", "dash"]);
 
+export const linksLinkTypes = z.enum(["url", "popup"]);
+
 export const linksItemSchema = z.object({
   label: z.string(),
-  url: z.string(),
+  url: z.string().optional(),
+  link_type: linksLinkTypes.optional().default("url"),
+  popup_content: z.string().optional(),
 });
 
 export const linksElementConfigSchema = z.object({

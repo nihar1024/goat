@@ -15,6 +15,7 @@ from sqlmodel import UUID as UUID_PG
 from core.core.config import settings
 from core.db.models._base_class import ContentBaseAttributes, DateTimeBase
 from core.schemas.common import CQLQuery
+from core.schemas.custom_basemap import CustomBasemap
 from core.schemas.layer import (
     ExternalServiceOtherProperties,
     FeatureStandardRead,
@@ -106,8 +107,12 @@ class IProjectRead(ContentBaseAttributes, DateTimeBase):
     thumbnail_url: str | None = Field(description="Project thumbnail URL")
     active_scenario_id: UUID | None = Field(None, description="Active scenario ID")
     basemap: str | None = Field(None, description="Project basemap")
+    custom_basemaps: list[CustomBasemap] = Field(
+        default_factory=list, description="Per-project custom basemap library"
+    )
     shared_with: dict[str, Any] | None = Field(None, description="Shared with")
     owned_by: dict[str, Any] | None = Field(None, description="Owned by")
+    my_role: str | None = Field(None, description="Current user's role on this project")
     builder_config: dict[str, Any] | None = Field(None, description="Builder config")
     max_extent: list[float] | None = Field(
         None, description="Max extent of the project"
@@ -164,6 +169,9 @@ class IProjectBaseUpdate(SQLModel):
     )
     layer_order: list[int] | None = Field(None, description="Layer order in project")
     basemap: str | None = Field(None, description="Project basemap")
+    custom_basemaps: list[CustomBasemap] | None = Field(
+        default=None, description="Per-project custom basemap library"
+    )
     max_extent: list[float] | None = Field(
         None, description="Max extent of the project"
     )
@@ -322,6 +330,9 @@ class ProjectPublicProjectConfig(BaseModel):
         ..., description="Initial view state of the project"
     )
     basemap: str | None = Field(None, description="Project basemap")
+    custom_basemaps: list[CustomBasemap] = Field(
+        default_factory=list, description="Per-project custom basemap library"
+    )
     layer_order: list[int] | None = Field(None, description="Layer order in project")
     max_extent: list[float] | None = Field(
         None, description="Max extent of the project"
@@ -371,6 +382,10 @@ class ProjectPublicRead(BaseModel):
     updated_at: datetime = Field(..., description="Updated at")
     project_id: UUID
     config: ProjectPublicConfig
+    custom_domain_id: UUID | None = Field(
+        default=None,
+        description="ID of the custom domain assigned to this published project, if any.",
+    )
 
 
 # --- Schemas for Tree Structure Updates (Drag & Drop) ---

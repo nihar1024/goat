@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Any, List, Type
+from typing import TYPE_CHECKING, Any, List, Optional, Type
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from pydantic import UUID4
-from sqlalchemy import Row, and_, select
+from sqlalchemy import Row, and_, null, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager, selectinload
 from sqlalchemy.sql import Select
@@ -17,10 +17,12 @@ from core.db.models import (
     Project,
     ProjectOrganizationLink,
     ProjectTeamLink,
+    ResourceGrant,
     Role,
     Team,
     User,
 )
+from core.db.models.folder import Folder
 
 if TYPE_CHECKING:
     from core.crud.crud_layer import CRUDLayer
@@ -330,33 +332,30 @@ def create_query_shared_content(
             )  # Adjust field as needed for relationships
         )
     else:
-        # Query for the case with no team_id or organization_id
+        # No team/org context (e.g. folder-grant path or plain "My Content").
+        # Use null() for valid_role_id to preserve the column order that
+        # build_shared_with_object relies on (positional indices), without
+        # joining role_model — which would cause an implicit cross join and
+        # multiply rows by the number of roles in the table.
+        # selectinload handles relationship loading without row multiplication.
         query = (
-            base_query.outerjoin(
-                team_link_model, getattr(team_link_model, link_field) == model.id
-            )  # Outer join for team_link_model
-            .outerjoin(
-                team_model, team_link_model.team_id == team_model.id
-            )  # Outer join for team_model
-            .outerjoin(
-                role_model, team_link_model.role_id == role_model.id
-            )  # Outer join for role_model
-            .outerjoin(
-                organization_link_model,
-                getattr(organization_link_model, link_field) == model.id,
-            )  # Outer join for organization_link_model
-            .outerjoin(
-                organization_model,
-                organization_link_model.organization_id == organization_model.id,
-            )  # Outer join for organization_model
+            select(
+                model,
+                null().label("valid_role_id"),
+                User.id.label("valid_user_id"),
+                User.firstname.label("user_firstname"),
+                User.lastname.label("user_lastname"),
+                User.avatar.label("user_avatar"),
+            )
+            .join(User, model.user_id == User.id)
             .where(and_(*filters))
             .options(
                 selectinload(getattr(model, "team_links")).selectinload(
                     team_link_model.team
-                ),  # Preload team links and corresponding teams
+                ),
                 selectinload(getattr(model, "organization_links")).selectinload(
                     organization_link_model.organization
-                ),  # Preload organization links and corresponding organizations
+                ),
             )
         )
     return query
@@ -447,3 +446,106 @@ def build_shared_with_object(
         )
 
     return result_arr
+
+
+def create_query_accessible_folders(
+    user_id: UUID,
+    team_ids: list[UUID],
+    organization_id: Optional[UUID],
+) -> Any:
+    """Return a UNION query of folder rows the user owns or has been granted access to.
+
+    Columns: id, user_id, name, created_at, updated_at
+    """
+    owned = select(
+        Folder.id,
+        Folder.user_id,
+        Folder.name,
+    ).where(Folder.user_id == user_id)
+
+    branches: list[Any] = [owned]
+
+    if team_ids:
+        shared_via_team = (
+            select(
+                Folder.id,
+                Folder.user_id,
+                Folder.name,
+            )
+            .join(
+                ResourceGrant,
+                and_(
+                    ResourceGrant.resource_type == "folder",
+                    ResourceGrant.resource_id == Folder.id,
+                    ResourceGrant.grantee_type == "team",
+                    ResourceGrant.grantee_id.in_(team_ids),
+                ),
+            )
+            .where(Folder.user_id != user_id)
+        )
+        branches.append(shared_via_team)
+
+    if organization_id:
+        shared_via_org = (
+            select(
+                Folder.id,
+                Folder.user_id,
+                Folder.name,
+            )
+            .join(
+                ResourceGrant,
+                and_(
+                    ResourceGrant.resource_type == "folder",
+                    ResourceGrant.resource_id == Folder.id,
+                    ResourceGrant.grantee_type == "organization",
+                    ResourceGrant.grantee_id == organization_id,
+                ),
+            )
+            .where(Folder.user_id != user_id)
+        )
+        branches.append(shared_via_org)
+
+    return union(*branches)
+
+
+def create_query_layers_via_folder_grant(
+    team_ids: list[UUID],
+    organization_id: Optional[UUID],
+) -> Optional[Any]:
+    """Return a subquery of layer IDs reachable via folder grants.
+
+    OR this into the layer listing query to give folder-grant visibility.
+    """
+    conditions = []
+
+    if team_ids:
+        conditions.append(
+            and_(
+                ResourceGrant.grantee_type == "team",
+                ResourceGrant.grantee_id.in_(team_ids),
+            )
+        )
+
+    if organization_id:
+        conditions.append(
+            and_(
+                ResourceGrant.grantee_type == "organization",
+                ResourceGrant.grantee_id == organization_id,
+            )
+        )
+
+    if not conditions:
+        return None
+
+    return (
+        select(Layer.id)
+        .join(
+            ResourceGrant,
+            and_(
+                ResourceGrant.resource_type == "folder",
+                ResourceGrant.resource_id == Layer.folder_id,
+                or_(*conditions),
+            ),
+        )
+        .where(Layer.folder_id.isnot(None))
+    )

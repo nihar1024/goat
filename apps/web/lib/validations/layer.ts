@@ -43,6 +43,8 @@ export const shareLayerSchema = z.object({
 const HexColor = z.string();
 const ColorMap = z.array(z.tuple([z.union([z.array(z.string()), z.null()]), HexColor]));
 
+export const sizeOrdinalMap = z.array(z.tuple([z.string(), z.number()]));
+
 export const classBreaks = z.enum([
   "quantile",
   "standard_deviation",
@@ -57,6 +59,10 @@ const layerFieldType = z.object({
   $ref: z.string().optional(),
   name: z.string(),
   type: z.string(),
+  // D2: computed-field metadata exposed by the queryables endpoint
+  kind: z.string().optional(),
+  is_computed: z.boolean().optional(),
+  display_config: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const layerClassBreaks = z.object({
@@ -140,6 +146,7 @@ export const colorSchema = z.object({
   color_field: layerFieldType.optional(),
   color_scale: classBreaks.optional().default("quantile"),
   color_scale_breaks: layerClassBreaks.optional(),
+  color_no_data: z.string().optional(),
 });
 
 export const strokeColorSchema = z.object({
@@ -148,13 +155,42 @@ export const strokeColorSchema = z.object({
   stroke_color_field: layerFieldType.optional(),
   stroke_color_scale: classBreaks.optional().default("quantile"),
   stroke_color_scale_breaks: layerClassBreaks.optional(),
+  stroke_color_no_data: z.string().optional(),
 });
 
 export const strokeWidthSchema = z.object({
   stroke_width: z.number().min(0).max(200).default(2),
   stroke_width_range: z.array(z.number().min(0).max(200)).default([0, 10]),
   stroke_width_field: layerFieldType.optional(),
-  stroke_width_scale: sizeScale.optional().default("linear"),
+  stroke_width_scale: classBreaks.catch("quantile").optional().default("quantile"),
+  stroke_width_num_steps: z.number().min(2).max(10).default(5),
+  stroke_width_scale_breaks: layerClassBreaks.optional(),
+  stroke_width_ordinal_map: sizeOrdinalMap.optional(),
+});
+
+export const lineStyleSchema = z.object({
+  stroke_pattern: z.enum(["solid", "dashed", "dotted", "dash_dot"]).default("solid"),
+  stroke_dash_density: z.enum(["tight", "normal", "loose"]).default("normal"),
+  stroke_cap: z.enum(["butt", "round", "square"]).default("butt"),
+  stroke_join: z.enum(["bevel", "round", "miter"]).default("miter"),
+  // "decoration" is the cartography term for repeating symbols along a line.
+  // Generic so v2 can add "chevron" / "dot" / "tick" without a migration.
+  decoration_type: z.enum(["none", "arrow"]).default("none"),
+  decoration_direction: z.enum(["forward", "backward", "both"]).default("forward"),
+  decoration_placement: z
+    .enum(["repeat", "start", "end", "start_and_end", "center"])
+    .default("repeat"),
+  decoration_spacing: z.number().min(50).max(800).default(200),
+  // Target arrow size in screen pixels (matches the visible arrow extent
+  // because the source SVG fills its 32x32 viewBox). `.catch(32)` ensures
+  // out-of-range legacy values (e.g. the pre-pixel-scale fractional sizes)
+  // silently fall back to the default instead of throwing at parse time.
+  decoration_size: z.number().min(8).max(64).catch(32).default(32),
+  // When true, arrows render even where they'd collide with other symbols
+  // (and don't block other symbols from rendering near them). When false,
+  // MapLibre's collision detector culls overlapping arrows — arrows can
+  // disappear at low zoom or in dense areas.
+  decoration_allow_overlap: z.boolean().default(true),
 });
 
 export const radiusSchema = z.object({
@@ -162,7 +198,10 @@ export const radiusSchema = z.object({
   radius_range: z.array(z.number().min(0).max(500)).default([0, 10]),
   fixed_radius: z.boolean().default(false),
   radius_field: layerFieldType.optional(),
-  radius_scale: sizeScale.optional().default("linear"),
+  radius_scale: classBreaks.catch("quantile").optional().default("quantile"),
+  radius_num_steps: z.number().min(2).max(10).default(5),
+  radius_scale_breaks: layerClassBreaks.optional(),
+  radius_ordinal_map: sizeOrdinalMap.optional(),
 });
 
 export const marker = z.object({
@@ -185,6 +224,10 @@ export const markerSchema = z.object({
   marker_size: z.number().min(0).max(100).default(10),
   marker_size_range: z.array(z.number().min(0).max(500)).default([0, 10]),
   marker_size_field: layerFieldType.optional(),
+  marker_size_scale: classBreaks.catch("quantile").optional().default("quantile"),
+  marker_size_num_steps: z.number().min(2).max(10).default(5),
+  marker_size_scale_breaks: layerClassBreaks.optional(),
+  marker_size_ordinal_map: sizeOrdinalMap.optional(),
   marker_background_type: markerBackgroundType.optional().default("marker"),
   marker_allow_overlap: z.boolean().optional().default(false),
   marker_anchor: SymbolPlacementAnchor.optional().default("center"),
@@ -255,7 +298,8 @@ export const featureLayerPointPropertiesSchema = featureLayerBasePropertiesSchem
   .merge(radiusSchema)
   .merge(markerSchema);
 
-export const featureLayerLinePropertiesSchema = featureLayerBasePropertiesSchema;
+export const featureLayerLinePropertiesSchema =
+  featureLayerBasePropertiesSchema.merge(lineStyleSchema);
 
 export const featureLayerPolygonPropertiesSchema = featureLayerBasePropertiesSchema.merge(strokeColorSchema);
 
@@ -408,6 +452,8 @@ export const createLayerFromDatasetSchema = createLayerBaseSchema.extend({
   project_id: z.string().uuid().optional(),
   data_type: dataType.optional(),
   other_properties: otherPropertiesSchmea.optional(),
+  has_header: z.boolean().optional(),
+  sheet_name: z.string().optional(),
 });
 
 export const createRasterLayerSchema = createLayerBaseSchema.extend({
@@ -555,6 +601,7 @@ export type TextLabelSchemaData = z.infer<typeof TextLabelSchema>;
 export type LayerInteractionContentType = z.infer<typeof layerInteractionContentType>;
 export type LayerInteractionContent = z.infer<typeof layerInteractionContent>;
 export type LayerInteractionFieldListContent = z.infer<typeof interactionFieldListContent>;
+export type SizeOrdinalMap = z.infer<typeof sizeOrdinalMap>;
 
 // Raster styling types
 export type RasterStyleType = z.infer<typeof rasterStyleType>;
@@ -567,3 +614,91 @@ export type RasterLayerProperties = z.infer<typeof rasterLayerPropertiesSchema>;
 
 // Union type for all layer properties
 export type LayerProperties = FeatureLayerProperties | RasterLayerProperties;
+
+// --- Field definitions ---
+
+export const fieldKindSchema = z.enum([
+  "string",
+  "number",
+  "area",
+  "perimeter",
+  "length",
+]);
+export type FieldKind = z.infer<typeof fieldKindSchema>;
+
+const numericFormatSchema = z.object({
+  decimals: z.union([z.literal("auto"), z.number().int().min(0).max(10)])
+    .default("auto"),
+  thousands_separator: z.boolean().default(false),
+  abbreviate: z.boolean().default(false),
+  always_show_sign: z.boolean().default(false),
+});
+
+export const stringDisplayConfigSchema = z.object({}).strict();
+export const numberDisplayConfigSchema = numericFormatSchema.strict();
+export const areaDisplayConfigSchema = numericFormatSchema.extend({
+  unit: z.enum(["auto", "mm²", "cm²", "m²", "ha", "km²"]).default("auto"),
+}).strict();
+export const lengthLikeUnitSchema = z.enum(["auto", "mm", "cm", "m", "km"]);
+export const perimeterDisplayConfigSchema = numericFormatSchema.extend({
+  unit: lengthLikeUnitSchema.default("auto"),
+}).strict();
+export const lengthDisplayConfigSchema = numericFormatSchema.extend({
+  unit: lengthLikeUnitSchema.default("auto"),
+}).strict();
+
+export const displayConfigSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("string"), config: stringDisplayConfigSchema }),
+  z.object({ kind: z.literal("number"), config: numberDisplayConfigSchema }),
+  z.object({ kind: z.literal("area"), config: areaDisplayConfigSchema }),
+  z.object({ kind: z.literal("perimeter"), config: perimeterDisplayConfigSchema }),
+  z.object({ kind: z.literal("length"), config: lengthDisplayConfigSchema }),
+]);
+
+export const fieldDefinitionSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, "Field name is required").max(255, "Field name too long"),
+  kind: fieldKindSchema,
+  is_computed: z.boolean().default(false),
+  display_config: z.record(z.string(), z.unknown()).default({}),
+});
+
+export const RESERVED_FIELD_NAMES = ["id", "geometry", "geom", "__duckdb_row_id"];
+
+export const createEmptyLayerSchema = z.object({
+  name: z.string().min(1, "Layer name is required"),
+  geometryType: z.enum(["point", "line", "polygon"]).nullable(),
+  fields: z
+    .array(fieldDefinitionSchema)
+    .refine(
+      (fields) => {
+        const names = fields.map((f) => f.name.toLowerCase());
+        return new Set(names).size === names.length;
+      },
+      { message: "Field names must be unique" }
+    )
+    .refine(
+      (fields) =>
+        fields.every((f) => !RESERVED_FIELD_NAMES.includes(f.name.toLowerCase())),
+      { message: "Field name conflicts with a reserved system column" }
+    ),
+});
+
+export type FieldDefinition = z.infer<typeof fieldDefinitionSchema>;
+export type CreateEmptyLayerInput = z.infer<typeof createEmptyLayerSchema>;
+
+// Map of geometry types to allowed kinds for the Add-Field dropdown
+export const ALLOWED_KINDS_BY_GEOM_TYPE: Record<string, FieldKind[]> = {
+  point: ["string", "number"],
+  multipoint: ["string", "number"],
+  line: ["string", "number", "length"],
+  multiline: ["string", "number", "length"],
+  polygon: ["string", "number", "area", "perimeter"],
+  multipolygon: ["string", "number", "area", "perimeter"],
+};
+
+export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([
+  "area",
+  "perimeter",
+  "length",
+]);

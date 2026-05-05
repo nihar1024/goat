@@ -36,7 +36,7 @@ type MarkerGalleryProps = {
 const MarkerGallery = (props: MarkerGalleryProps) => {
   const theme = useTheme();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"library" | "custom">(props.selectedMarker?.source ?? "library");
+  const [tab, setTab] = useState<"library" | "custom">("library");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const { t } = useTranslation("common");

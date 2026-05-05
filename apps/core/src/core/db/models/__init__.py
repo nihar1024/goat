@@ -4,6 +4,7 @@ from ._link_model import (
     LayerTeamLink,
     ProjectOrganizationLink,
     ProjectTeamLink,
+    ResourceGrant,
     ScenarioScenarioFeatureLink,
     UserProjectLink,
 )
@@ -12,6 +13,7 @@ from .data_store import DataStore
 from .folder import Folder
 from .layer import Layer
 from .organization import Organization
+from .organization_domain import OrganizationDomain
 from .project import Project
 from .report_layout import ReportLayout
 from .role import Role

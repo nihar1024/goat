@@ -185,7 +185,6 @@ export const Container: React.FC<ContainerProps> = ({
         transition: "all 0.3s",
         pointerEvents: "all",
         ...(viewOnly && {
-          pointerEvents: "none",
           cursor: "default",
         }),
         ...(panel.config?.options?.style === "default" && {
@@ -258,6 +257,7 @@ export const Container: React.FC<ContainerProps> = ({
             transition: "all 0.3s",
             // Apply default styles when collapsed, regardless of the original style
             ...(isCollapsed && {
+              position: "relative",
               width: "100%",
               height: "100%",
               backgroundColor: alpha(panelBgColor, 0.7),
@@ -334,9 +334,7 @@ export const Container: React.FC<ContainerProps> = ({
                 overflow: isCollapsed ? "hidden" : "hidden auto",
               }),
               gap: isCollapsed ? 0 : `${panel?.config?.position?.spacing}rem`,
-              padding: isCollapsed
-                ? 0
-                : `${Math.max(panel?.config?.position?.padding ?? 0, !viewOnly && visibleWidgets.length > 0 ? 0.25 : 0)}rem`,
+              padding: isCollapsed ? 0 : `${panel?.config?.position?.padding ?? 0}rem`,
               transition: "all 0.3s",
               ...(panel.config?.options?.style === "default" && {
                 justifyContent: panel.config?.position?.alignItems,
@@ -468,17 +466,57 @@ export const Container: React.FC<ContainerProps> = ({
                 </Box>
               ))
             )}
-            {panel.config?.options?.collapsible &&
-              (panel.config?.options?.style === "default" || panel.config?.options?.style === "rounded") && (
-                <ExpandCollapseButton
-                  position={panel.position}
-                  expanded={!isCollapsed}
-                  onClick={handleToggleCollapse}
-                  isVisible={viewOnly || isHovered || isCollapsed}
-                />
-              )}
           </Box>
+          {isCollapsed && panel.config?.options?.collapsed_label && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                // Vertical panels: label at top so it doesn't overlap the centered button.
+                // Horizontal panels: label at left for the same reason.
+                alignItems: panel.orientation === "vertical" ? "flex-start" : "center",
+                justifyContent: panel.orientation === "horizontal" ? "flex-start" : "center",
+                padding:
+                  panel.orientation === "vertical"
+                    ? "16px 8px 0 8px"
+                    : "0 0 0 12px",
+                pointerEvents: "none",
+                overflow: "hidden",
+                zIndex: 1,
+              }}>
+              <Typography
+                variant="body2"
+                fontWeight="bold"
+                sx={{
+                  ...(panel.orientation === "vertical" && {
+                    transform: panel.position === "left" ? "rotate(-90deg)" : "rotate(90deg)",
+                  }),
+                  whiteSpace: "nowrap",
+                  // For horizontal panels constrain width; for vertical, overflow
+                  // clipping is handled by the container since rotate() swaps
+                  // CSS width↔visual height — maxWidth here would clip the visual height.
+                  ...(panel.orientation === "horizontal" && {
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: "80%",
+                  }),
+                  userSelect: "none",
+                }}>
+                {panel.config.options.collapsed_label}
+              </Typography>
+            </Box>
+          )}
         </Stack>
+        {panel.config?.options?.collapsible &&
+          (panel.config?.options?.style === "default" || panel.config?.options?.style === "rounded") && (
+            <ExpandCollapseButton
+              position={panel.position}
+              expanded={!isCollapsed}
+              onClick={handleToggleCollapse}
+              isVisible={viewOnly || isHovered || isCollapsed}
+            />
+          )}
       </Box>
     </Box>
   );

@@ -11,6 +11,7 @@ import {
 } from "@mui/icons-material";
 import { Box, IconButton, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { styled } from "@mui/material/styles";
+import type { StyleSpecification } from "maplibre-gl";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Rnd } from "react-rnd";
@@ -274,7 +275,7 @@ interface ReportElementRendererProps {
   element: ReportElement;
   zoom: number;
   isSelected: boolean;
-  basemapUrl?: string;
+  basemapUrl?: string | StyleSpecification;
   projectLayers?: ProjectLayer[];
   allElements: ReportElement[];
   paperWidthPx: number;
@@ -816,9 +817,8 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
-  // Get basemap URL from project (synced live)
-  const { activeBasemap } = useBasemap(project);
-  const basemapUrl = activeBasemap?.url;
+  // Get basemap style from project (synced live). Vector → URL string, raster/solid → synthesized StyleSpecification.
+  const { mapStyle: basemapUrl } = useBasemap(project);
 
   // Print config (atlas limits from backend)
   const { atlasMaxPages } = usePrintConfig();

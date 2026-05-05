@@ -1018,10 +1018,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     return hasNestedSchemaPath(schema, "options.filter_by_viewport");
   }, [schema]);
 
-  const hasZoomToSelectionDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "options.zoom_to_selection");
-  }, [schema]);
-
   const hasNumberFormatDef = useMemo(() => {
     return hasNestedSchemaPath(schema, "options.format");
   }, [schema]);
@@ -1073,7 +1069,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
     return (
       hasTargetLayersDef ||
       hasFilterViewPortDef ||
-      hasZoomToSelectionDef ||
       hasNumberFormatDef ||
       hasPaddingDef ||
       hasSelectionResponseDef ||
@@ -1082,7 +1077,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
   }, [
     hasTargetLayersDef,
     hasFilterViewPortDef,
-    hasZoomToSelectionDef,
     hasNumberFormatDef,
     hasPaddingDef,
     hasSelectionResponseDef,
@@ -1168,23 +1162,6 @@ export const WidgetOptions = ({ active = true, sectionLabel, config, onChange }:
                       />
                     }
                     label={<Typography variant="body2">{t("filter_viewport")}</Typography>}
-                  />
-                )}
-
-                {hasZoomToSelectionDef && (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        size="small"
-                        color="primary"
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        checked={!!(config as any)?.options?.zoom_to_selection}
-                        onChange={(e) => {
-                          handleOptionChange("zoom_to_selection", e.target.checked);
-                        }}
-                      />
-                    }
-                    label={<Typography variant="body2">{t("zoom_to_selection")}</Typography>}
                   />
                 )}
 
@@ -1312,6 +1289,10 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
 
   const hasHistogramXAxisTicksDef = useMemo(() => {
     return hasNestedSchemaPath(schema, "options.x_axis_ticks");
+  }, [schema]);
+
+  const hasHeaderColorDef = useMemo(() => {
+    return hasNestedSchemaPath(schema, "options.header_color");
   }, [schema]);
 
   // Check if we're in highlight mode (for showing selected color option)
@@ -1560,7 +1541,8 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
       hasPieLayoutDef ||
       hasDisplayFieldLabelDef ||
       hasHistogramNumBinsDef ||
-      hasHistogramXAxisTicksDef
+      hasHistogramXAxisTicksDef ||
+      hasHeaderColorDef
     );
   }, [
     hasColorDef,
@@ -1576,6 +1558,7 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
     hasDisplayFieldLabelDef,
     hasHistogramNumBinsDef,
     hasHistogramXAxisTicksDef,
+    hasHeaderColorDef,
     hasCustomStyleHandling,
   ]);
 
@@ -1600,6 +1583,15 @@ export const WidgetStyle = ({ active = true, sectionLabel, config, onChange }: W
                     label={t("base_color")}
                     color={(config as any)?.options?.color || "#0e58ff"}
                     onChange={(color) => handleOptionChange("color", color)}
+                  />
+                )}
+
+                {/* Header color for tables */}
+                {hasHeaderColorDef && (
+                  <WidgetColorPicker
+                    label={t("header_color")}
+                    color={(config as any)?.options?.header_color || "#ffffff"}
+                    onChange={(color) => handleOptionChange("header_color", color)}
                   />
                 )}
 

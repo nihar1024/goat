@@ -36,11 +36,16 @@ import {
   useProjectScenarioFeatures,
   useProjectScenarios,
 } from "@/lib/api/projects";
+import { useUserProfile } from "@/lib/api/users";
+import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
+import { startEditing } from "@/lib/store/featureEditor/slice";
 import { setActiveLayer } from "@/lib/store/layer/slice";
 import {
   setActiveLeftPanel,
   setActiveRightPanel,
+  setDataPanelLayerId,
   setEditingScenario,
+  setIsDataPanelOpen,
   setSelectedScenarioLayer,
 } from "@/lib/store/map/slice";
 import { zoomToProjectLayer } from "@/lib/utils/map/navigate";
@@ -293,9 +298,11 @@ const LayerPanel = ({ projectId }: PanelProps) => {
   const { t } = useTranslation("common");
   const { map } = useMap();
   const dispatch = useAppDispatch();
+  const { userProfile } = useUserProfile();
   const [previousRightPanel, setPreviousRightPanel] = useState<MapSidebarItemID | undefined>(undefined);
   const activeLayerId = useAppSelector((state) => state.layers.activeLayerId);
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
   const selectedScenarioLayer = useAppSelector((state) => state.map.selectedScenarioLayer);
   const { scenarios } = useProjectScenarios(projectId);
   const { project, mutate: mutateProject } = useProject(projectId);
@@ -642,7 +649,15 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                             </Tooltip>
                           )}
                           <MoreMenu
-                            menuItems={getLayerMoreMenuOptions(layer.type, !!layer.charts, layer.in_catalog)}
+                            menuItems={getLayerMoreMenuOptions(
+                              layer.type,
+                              !!layer.charts,
+                              layer.in_catalog,
+                              false,
+                              layer.user_id === userProfile?.id &&
+                                (!layer.size || layer.size <= MAX_EDITABLE_LAYER_SIZE),
+                              true,
+                            )}
                             menuButton={
                               <Tooltip title={t("more_options")} arrow placement="top">
                                 <IconButton size="small">
@@ -651,6 +666,7 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                               </Tooltip>
                             }
                             onSelect={async (menuItem: PopperMenuItem) => {
+                              dispatch(setActiveLayer(layer.id));
                               if (menuItem.id === MapLayerActions.PROPERTIES) {
                                 openPropertiesPanel(layer);
                               } else if (menuItem.id === MapLayerActions.DUPLICATE) {
@@ -658,6 +674,22 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                               } else if (menuItem.id === MapLayerActions.ZOOM_TO) {
                                 if (map) {
                                   await zoomToProjectLayer(map, layer);
+                                }
+                              } else if (menuItem.id === MapLayerActions.EDIT_FEATURES) {
+                                if (layer.feature_layer_geometry_type) {
+                                  dispatch(
+                                    startEditing({
+                                      layerId: layer.layer_id,
+                                      geometryType: layer.feature_layer_geometry_type,
+                                    })
+                                  );
+                                }
+                              } else if (menuItem.id === ContentActions.TABLE) {
+                                if (mapMode === "data") {
+                                  dispatch(setDataPanelLayerId(layer.id));
+                                  dispatch(setIsDataPanelOpen(true));
+                                } else {
+                                  openMoreMenu(menuItem, layer);
                                 }
                               } else {
                                 openMoreMenu(menuItem, layer);

@@ -32,7 +32,7 @@ from processes.dependencies import (
     get_schema_for_layer,
     normalize_layer_id,
 )
-from processes.ducklake import ducklake_manager
+from processes.ducklake import ducklake_manager, preview_ducklake_manager
 
 logger = logging.getLogger(__name__)
 
@@ -580,12 +580,91 @@ class AnalyticsService:
             return str(matches[0])
         return None
 
+    def _build_where_clause_in_con(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        view_name: str,
+        filter_expr: str | None,
+    ) -> tuple[str, list[Any]]:
+        """Build a SQL WHERE clause from a CQL2 filter using an existing DuckDB connection."""
+        if not filter_expr:
+            return "TRUE", []
+
+        try:
+            filter_dict = (
+                json.loads(filter_expr) if isinstance(filter_expr, str) else filter_expr
+            )
+
+            result = con.execute(f'DESCRIBE "{view_name}"').fetchall()
+            column_names = [row[0] for row in result]
+            column_types = {row[0]: row[1] for row in result}
+
+            geometry_column = "geometry"
+            for col_name, col_type in column_types.items():
+                if "GEOMETRY" in col_type.upper() or col_name.lower() in (
+                    "geom",
+                    "geometry",
+                ):
+                    geometry_column = col_name
+                    break
+
+            cql_filter_obj = {"filter": filter_dict, "lang": "cql2-json"}
+            query_filters = build_cql_filter(
+                cql_filter_obj, column_names, geometry_column=geometry_column
+            )
+            return query_filters.to_full_where(default="TRUE"), query_filters.params
+        except Exception as e:
+            logger.warning("Failed to build WHERE clause for '%s': %s", view_name, e)
+            return "TRUE", []
+
+    def _create_alias_view(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        alias: str,
+        source_sql: str,
+        filter_expr: str | None,
+    ) -> None:
+        """Create a named view for a layer alias, with an optional CQL2 filter applied."""
+        if not filter_expr:
+            con.execute(f'CREATE OR REPLACE VIEW "{alias}" AS {source_sql}')
+            return
+
+        src_alias = f"_src_{alias}"
+        con.execute(f'CREATE OR REPLACE VIEW "{src_alias}" AS {source_sql}')
+
+        where_clause, params = self._build_where_clause_in_con(
+            con, src_alias, filter_expr
+        )
+
+        if where_clause == "TRUE":
+            con.execute(f'CREATE OR REPLACE VIEW "{alias}" AS {source_sql}')
+        else:
+            try:
+                filt_table = f"_filt_{alias}"
+                con.execute(f'DROP TABLE IF EXISTS "{filt_table}"')
+                con.execute(
+                    f'CREATE TEMP TABLE "{filt_table}" AS '
+                    f'SELECT * FROM "{src_alias}" WHERE {where_clause}',
+                    params if params else [],
+                )
+                con.execute(
+                    f'CREATE OR REPLACE VIEW "{alias}" AS SELECT * FROM "{filt_table}"'
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to apply filter to alias '%s', using unfiltered: %s",
+                    alias,
+                    e,
+                )
+                con.execute(f'CREATE OR REPLACE VIEW "{alias}" AS {source_sql}')
+
     def preview_sql(
         self,
         sql_query: str,
         layers: dict[str, str],
         limit: int = 10,
         offset: int = 0,
+        filter_expr: str | None = None,
     ) -> dict[str, Any]:
         """Preview a SQL query against actual layer data.
 
@@ -601,6 +680,7 @@ class AnalyticsService:
             layers: Layer mapping {alias: layer_id}
             limit: Max rows to return
             offset: Number of rows to skip
+            filter_expr: Optional CQL2-JSON filter to pre-filter source layer data
 
         Returns:
             Dict with success, columns, rows, error
@@ -619,65 +699,54 @@ class AnalyticsService:
                 "error": "No layers provided for preview",
             }
 
-        con = duckdb.connect()
-        try:
-            con.execute("LOAD spatial;")
+        # Separate temp layers from DuckLake layers up front so we know which
+        # views to clean up even if an error occurs mid-setup.
+        temp_layers: dict[str, str] = {}
+        ducklake_layers: dict[str, str] = {}
+        for alias, layer_id in layers.items():
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", alias):
+                return {
+                    "success": False,
+                    "columns": [],
+                    "rows": [],
+                    "error": f"Invalid table alias: {alias}",
+                }
+            if layer_id.startswith("temp:"):
+                temp_layers[alias] = layer_id[5:]  # strip "temp:" prefix
+            else:
+                ducklake_layers[alias] = layer_id
 
-            # Separate temp layers from DuckLake layers
-            temp_layers: dict[str, str] = {}
-            ducklake_layers: dict[str, str] = {}
-            for alias, layer_id in layers.items():
-                if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", alias):
-                    return {
-                        "success": False,
-                        "columns": [],
-                        "rows": [],
-                        "error": f"Invalid table alias: {alias}",
-                    }
-                if layer_id.startswith("temp:"):
-                    temp_layers[alias] = layer_id[5:]  # strip "temp:" prefix
-                else:
-                    ducklake_layers[alias] = layer_id
-
-            # Load temp layers from parquet files
-            for alias, temp_uuid in temp_layers.items():
-                parquet_path = self._find_temp_parquet(temp_uuid)
-                if not parquet_path:
-                    return {
-                        "success": False,
-                        "columns": [],
-                        "rows": [],
-                        "error": f"Temp layer {alias} not found (may have been cleaned up). "
-                        f"Re-run the workflow to regenerate.",
-                    }
-                try:
-                    con.execute(
-                        f'CREATE VIEW "{alias}" AS '
-                        f"SELECT * FROM read_parquet('{parquet_path}')"
-                    )
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "columns": [],
-                        "rows": [],
-                        "error": f"Failed to load temp layer {alias}: {e}",
-                    }
-
-            # Attach DuckLake catalog in read-only mode (via ducklake_manager)
-            # instead of copying entire datasets into memory
-            if ducklake_layers:
-                try:
-                    ducklake_manager.attach_catalog(con)
-                except Exception as e:
-                    return {
-                        "success": False,
-                        "columns": [],
-                        "rows": [],
-                        "error": f"Failed to attach DuckLake catalog: {e}",
-                    }
+        created_views: list[str] = []
+        with preview_ducklake_manager.connection() as con:
+            try:
+                # Load temp layers from parquet files
+                for alias, temp_uuid in temp_layers.items():
+                    parquet_path = self._find_temp_parquet(temp_uuid)
+                    if not parquet_path:
+                        return {
+                            "success": False,
+                            "columns": [],
+                            "rows": [],
+                            "error": f"Temp layer {alias} not found (may have been cleaned up). "
+                            f"Re-run the workflow to regenerate.",
+                        }
+                    try:
+                        self._create_alias_view(
+                            con,
+                            alias,
+                            f"SELECT * FROM read_parquet('{parquet_path}')",
+                            filter_expr,
+                        )
+                        created_views.append(alias)
+                    except Exception as e:
+                        return {
+                            "success": False,
+                            "columns": [],
+                            "rows": [],
+                            "error": f"Failed to load temp layer {alias}: {e}",
+                        }
 
                 for alias, layer_id in ducklake_layers.items():
-                    # Resolve layer to DuckLake table name
                     try:
                         norm_id = normalize_layer_id(layer_id)
                         schema_name = get_schema_for_layer(norm_id)
@@ -691,12 +760,14 @@ class AnalyticsService:
                             "error": f"Layer {alias} ({layer_id}): {e}",
                         }
 
-                    # Create a view alias pointing to the DuckLake table
                     try:
-                        con.execute(
-                            f'CREATE VIEW "{alias}" AS '
-                            f"SELECT * FROM {full_table}"
+                        self._create_alias_view(
+                            con,
+                            alias,
+                            f"SELECT * FROM {full_table}",
+                            filter_expr,
                         )
+                        created_views.append(alias)
                     except Exception as e:
                         return {
                             "success": False,
@@ -705,74 +776,74 @@ class AnalyticsService:
                             "error": f"Failed to load layer {alias}: {e}",
                         }
 
-            # Get column info first (DESCRIBE doesn't affect data cursor)
-            columns: list[dict[str, str]] = []
-            describe = con.execute(
-                f"DESCRIBE SELECT * FROM ({sql_query}) _preview LIMIT 0"
-            )
-            for row in describe.fetchall():
-                columns.append({"name": row[0], "type": row[1]})
+                # Execute the query with limit+1 to detect whether more rows exist
+                # without a full COUNT(*) scan (which would hold the shared lock
+                # for the entire table scan duration and block other analytics queries).
+                fetch_limit = max(int(limit), 1)
+                limited_sql = (
+                    f"SELECT * FROM ({sql_query}) _preview "
+                    f"LIMIT {fetch_limit + 1} OFFSET {max(int(offset), 0)}"
+                )
+                rows_data = con.execute(limited_sql).fetchall()
 
-            # Compute total count for pagination/infinite scrolling
-            total_count = con.execute(
-                f"SELECT COUNT(*) FROM ({sql_query}) _preview"
-            ).fetchone()[0]
+                # Derive column names from the result cursor
+                description = con.description or []
+                columns: list[dict[str, str]] = [
+                    {"name": col[0], "type": str(col[1]) if col[1] else "VARCHAR"}
+                    for col in description
+                ]
 
-            # Execute the query with limit/offset
-            limited_sql = (
-                f"SELECT * FROM ({sql_query}) _preview "
-                f"LIMIT {max(int(limit), 1)} OFFSET {max(int(offset), 0)}"
-            )
-            rows_data = con.execute(limited_sql).fetchall()
-            col_names = [c["name"] for c in columns]
-            rows: list[dict[str, Any]] = []
-            for row_tuple in rows_data:
-                values: dict[str, Any] = {}
-                for i, val in enumerate(row_tuple):
-                    col_name = col_names[i] if i < len(col_names) else f"col_{i}"
-                    if hasattr(val, "wkt"):
-                        values[col_name] = val.wkt
-                    elif val is None:
-                        values[col_name] = None
-                    else:
-                        try:
-                            values[col_name] = (
-                                val
-                                if isinstance(val, (str, int, float, bool))
-                                else str(val)
-                            )
-                        except Exception:
-                            values[col_name] = str(val)
-                rows.append({"values": values})
+                has_more = len(rows_data) > fetch_limit
+                rows_data = rows_data[:fetch_limit]
 
-            return {
-                "success": True,
-                "columns": columns,
-                "rows": rows,
-                "total_count": total_count,
-            }
+                col_names = [c["name"] for c in columns]
+                rows: list[dict[str, Any]] = []
+                for row_tuple in rows_data:
+                    values: dict[str, Any] = {}
+                    for i, val in enumerate(row_tuple):
+                        col_name = col_names[i] if i < len(col_names) else f"col_{i}"
+                        if hasattr(val, "wkt"):
+                            values[col_name] = val.wkt
+                        elif val is None:
+                            values[col_name] = None
+                        else:
+                            try:
+                                values[col_name] = (
+                                    val
+                                    if isinstance(val, (str, int, float, bool))
+                                    else str(val)
+                                )
+                            except Exception:
+                                values[col_name] = str(val)
+                    rows.append({"values": values})
 
-        except duckdb.Error as e:
-            return {"success": False, "columns": [], "rows": [], "error": str(e)}
-        except Exception as e:
-            logger.exception("Error previewing SQL")
-            return {"success": False, "columns": [], "rows": [], "error": str(e)}
-        finally:
-            # Explicitly DETACH DuckLake before closing to ensure the extension
-            # cleans up its internal PostgreSQL connection, libpq buffers, and
-            # SSL contexts. Without this, con.close() may not fully release
-            # extension-internal memory, causing slow leaks in long-running services.
-            if ducklake_layers:
-                try:
-                    con.execute("DETACH lake")
-                except Exception:
-                    pass
-            con.close()
-            # Force Python GC to trigger C++ destructors for DuckDB/extension
-            # objects that may hold memory outside Python's allocator
-            import gc
+                return {
+                    "success": True,
+                    "columns": columns,
+                    "rows": rows,
+                    "total_count": None,
+                    "has_more": has_more,
+                }
 
-            gc.collect()
+            except duckdb.Error as e:
+                return {"success": False, "columns": [], "rows": [], "error": str(e)}
+            except Exception as e:
+                logger.exception("Error previewing SQL")
+                return {"success": False, "columns": [], "rows": [], "error": str(e)}
+            finally:
+                for alias in created_views:
+                    try:
+                        con.execute(f'DROP VIEW IF EXISTS "{alias}"')
+                    except Exception:
+                        pass
+                    try:
+                        con.execute(f'DROP VIEW IF EXISTS "_src_{alias}"')
+                    except Exception:
+                        pass
+                    try:
+                        con.execute(f'DROP TABLE IF EXISTS "_filt_{alias}"')
+                    except Exception:
+                        pass
 
 
 # Singleton instance

@@ -108,6 +108,26 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
     tempLayerProperties: {},
   });
 
+  // Reset local execution state when the active workflow changes.
+  // The hook instance is reused across workflow switches (WorkflowsLayout doesn't remount it),
+  // so without this reset the new workflow would inherit the previous workflow's isExecuting/jobId
+  // and appear to be running. The reconnection effect below then picks up any job that legitimately
+  // belongs to the new workflowId.
+  useEffect(() => {
+    reconnectedRef.current = null;
+    processedJobIdsRef.current.clear();
+    setState({
+      isExecuting: false,
+      jobId: null,
+      error: null,
+      nodeStatuses: {},
+      nodeExecutionInfo: {},
+      tempLayerIds: {},
+      exportedLayerIds: {},
+      tempLayerProperties: {},
+    });
+  }, [workflowId]);
+
   /**
    * Reconnect to a running workflow job on mount/navigation.
    * After refresh or switching workflows, the local state is empty but there may be
@@ -122,12 +142,16 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
     // Don't reconnect to the same workflow twice (prevents loops)
     if (reconnectedRef.current === workflowId) return;
 
-    // Find an active workflow_runner job for this specific workflow
+    // Find an active workflow_runner job for this specific workflow.
+    // Skip jobs we've already processed (e.g. after a user-initiated cancel)
+    // to avoid re-picking up a job whose cancellation hasn't propagated to
+    // Windmill's /jobs list yet.
     const activeJob = jobs.jobs.find(
       (j) =>
         j.processID === "workflow_runner" &&
         (j.status === "running" || j.status === "accepted") &&
-        (j.inputs as Record<string, unknown>)?.workflow_id === workflowId
+        (j.inputs as Record<string, unknown>)?.workflow_id === workflowId &&
+        !processedJobIdsRef.current.has(j.jobID)
     );
 
     if (!activeJob) return;
@@ -546,11 +570,19 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
    */
   const cancel = useCallback(async () => {
     if (!state.jobId) return;
+    const cancelledJobId = state.jobId;
 
     try {
-      await dismissJob(state.jobId);
+      await dismissJob(cancelledJobId);
 
-      // Update state to show cancelled
+      // Mark this job as processed so the status watcher skips its "failed"
+      // branch when the next poll returns the cancellation — prevents a
+      // duplicate "Workflow failed: cancelled" toast on top of the
+      // "Workflow cancelled" one shown below.
+      processedJobIdsRef.current.add(cancelledJobId);
+
+      // Update state to show cancelled. Clearing jobId also stops the watcher
+      // from re-processing this job on subsequent polls.
       setState((s) => {
         const newStatuses = { ...s.nodeStatuses };
         Object.entries(newStatuses).forEach(([nodeId, status]) => {
@@ -562,16 +594,20 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
         return {
           ...s,
           isExecuting: false,
+          jobId: null,
           error: "Workflow cancelled",
           nodeStatuses: newStatuses,
         };
       });
 
       // Remove from running jobs
-      dispatch(setRunningJobIds(runningJobIdsRef.current.filter((id) => id !== state.jobId)));
+      dispatch(setRunningJobIds(runningJobIdsRef.current.filter((id) => id !== cancelledJobId)));
 
-      // Allow reconnection if the same workflow is run again
-      reconnectedRef.current = null;
+      // Mark reconnection as "handled" for this workflow so the reconnection
+      // effect doesn't pick the still-"running" job back up while Windmill's
+      // async cancellation propagates. The ref is cleared automatically when
+      // the user switches workflows (see reset-on-workflowId effect).
+      reconnectedRef.current = workflowId ?? null;
 
       toast.dismiss();
       toast.warning(t("workflow_cancelled"));

@@ -1,14 +1,17 @@
 
 export const basicLayout = {
   settings: {
-    basemap: true,
-    measure: false,
+    control_positions: {
+      "top-left": ["location", "measure"],
+      "top-right": [],
+      "bottom-left": [],
+      "bottom-right": ["zoom_controls", "basemap", "fullscreen"],
+    },
+    allowed_basemaps: null,
     toolbar: true,
-    location: true,
-    scalebar: true,
-    fullscreen: true,
-    zoom_controls: true,
-    find_my_location: false,
+    project_info_content: "",
+    language: "auto",
+    font_family: "Mulish, sans-serif",
   },
   interface: [
     {

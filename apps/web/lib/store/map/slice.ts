@@ -54,6 +54,15 @@ export type TemporaryFilter = {
   filter: object;
   // Additional layers to apply the same filter values to (with different column names)
   additional_targets?: TemporaryFilterTarget[];
+  // When true, this filter is NOT applied to the source layer's tiles (keeps all features visible/clickable)
+  excludeFromSourceLayer?: boolean;
+};
+
+export type ClickedFeatureForFilter = {
+  layerProjectId: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  properties: Record<string, any>;
+  timestamp: number;
 };
 
 export type MapMode = "data" | "builder" | "reports" | "workflows" | "public";
@@ -85,12 +94,17 @@ export interface MapState {
   currentZoom: number | undefined;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   temporaryFilters: TemporaryFilter[]; // Temporary filters for the map,
+  clickedFeatureForFilter: ClickedFeatureForFilter | undefined;
   collapsedPanels: Record<string, boolean>;
   // Measurement state
   activeMeasureTool: MeasureToolType | undefined;
   measurements: Measurement[];
   isMeasuring: boolean;
   selectedMeasurementId: string | undefined;
+  measureSnapEnabled: boolean;
+  isDataPanelOpen: boolean;
+  dataPanelLayerId: number | null;
+  dataPanelHeight: number;
   reportCanvasZoom: number;
 }
 
@@ -114,11 +128,16 @@ const initialState = {
   geocoderResult: null,
   selectedBuilderItem: undefined,
   temporaryFilters: [] as TemporaryFilter[],
+  clickedFeatureForFilter: undefined,
   collapsedPanels: {},
   activeMeasureTool: undefined,
   measurements: [] as Measurement[],
   isMeasuring: false,
   selectedMeasurementId: undefined,
+  measureSnapEnabled: false,
+  isDataPanelOpen: false,
+  dataPanelLayerId: null,
+  dataPanelHeight: 0,
   reportCanvasZoom: 1,
 } as MapState;
 
@@ -199,6 +218,12 @@ const mapSlice = createSlice({
       if (action.payload === "data") {
         state.selectedBuilderItem = undefined;
       }
+      // Clean up data panel when leaving data mode
+      if (action.payload !== "data") {
+        state.isDataPanelOpen = false;
+        state.dataPanelHeight = 0;
+        state.dataPanelLayerId = null;
+      }
     },
     setUserLocation: (state, action: PayloadAction<MapState["userLocation"]>) => {
       state.userLocation = action.payload;
@@ -224,6 +249,9 @@ const mapSlice = createSlice({
     },
     removeTemporaryFilter: (state, action: PayloadAction<string>) => {
       state.temporaryFilters = state.temporaryFilters.filter((f) => f.id !== action.payload);
+    },
+    setClickedFeatureForFilter: (state, action: PayloadAction<ClickedFeatureForFilter | undefined>) => {
+      state.clickedFeatureForFilter = action.payload;
     },
     setCollapsedPanels: (state, action: PayloadAction<Record<string, boolean>>) => {
       state.collapsedPanels = {
@@ -262,6 +290,22 @@ const mapSlice = createSlice({
     setSelectedMeasurementId: (state, action: PayloadAction<string | undefined>) => {
       state.selectedMeasurementId = action.payload;
     },
+    setMeasureSnapEnabled: (state, action: PayloadAction<boolean>) => {
+      state.measureSnapEnabled = action.payload;
+    },
+    setIsDataPanelOpen: (state, action: PayloadAction<boolean>) => {
+      state.isDataPanelOpen = action.payload;
+      if (!action.payload) {
+        state.dataPanelHeight = 0;
+        state.dataPanelLayerId = null;
+      }
+    },
+    setDataPanelLayerId: (state, action: PayloadAction<number | null>) => {
+      state.dataPanelLayerId = action.payload;
+    },
+    setDataPanelHeight: (state, action: PayloadAction<number>) => {
+      state.dataPanelHeight = action.payload;
+    },
     setReportCanvasZoom: (state, action: PayloadAction<number>) => {
       state.reportCanvasZoom = action.payload;
     },
@@ -291,6 +335,7 @@ export const {
   addTemporaryFilter,
   updateTemporaryFilter,
   removeTemporaryFilter,
+  setClickedFeatureForFilter,
   setCollapsedPanels,
   setActiveMeasureTool,
   addMeasurement,
@@ -299,6 +344,10 @@ export const {
   clearMeasurements,
   setIsMeasuring,
   setSelectedMeasurementId,
+  setMeasureSnapEnabled,
+  setIsDataPanelOpen,
+  setDataPanelLayerId,
+  setDataPanelHeight,
   setReportCanvasZoom,
 } = mapSlice.actions;
 

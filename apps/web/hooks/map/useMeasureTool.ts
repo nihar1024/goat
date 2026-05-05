@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useMeasure } from "@/lib/providers/MeasureProvider";
-import type { MeasureToolType, Measurement } from "@/lib/store/map/slice";
+import { setMeasureSnapEnabled, type MeasureToolType, type Measurement } from "@/lib/store/map/slice";
 import type { UnitPreference } from "@/lib/utils/measurementUnits";
 
 import { useRealtimeMeasurements } from "@/hooks/map/useRealtimeMeasurements";
-import { useAppSelector } from "@/hooks/store/ContextHooks";
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 export interface UseMeasureToolReturn {
   // State
@@ -17,6 +17,7 @@ export interface UseMeasureToolReturn {
   measurements: Measurement[];
   realtimeMeasurements: Measurement[];
   selectedMeasurementId: string | undefined;
+  isSnapEnabled: boolean;
 
   // Handlers
   handleMeasureToggle: (open: boolean) => void;
@@ -27,6 +28,7 @@ export interface UseMeasureToolReturn {
   setMeasurementUnitSystem: (measurementId: string, unitSystem: UnitPreference) => void;
   deactivateTool: () => void;
   zoomToMeasurement: (measurementId: string) => void;
+  toggleSnap: () => void;
 }
 
 /**
@@ -49,9 +51,15 @@ export function useMeasureTool(): UseMeasureToolReturn {
     zoomToMeasurement,
   } = useMeasure();
 
+  const dispatch = useAppDispatch();
   const measurements = useAppSelector((state) => state.map.measurements);
   const realtimeMeasurements = useRealtimeMeasurements();
   const selectedMeasurementId = useAppSelector((state) => state.map.selectedMeasurementId);
+  const isSnapEnabled = useAppSelector((state) => state.map.measureSnapEnabled);
+
+  const toggleSnap = useCallback(() => {
+    dispatch(setMeasureSnapEnabled(!isSnapEnabled));
+  }, [dispatch, isSnapEnabled]);
 
   // Local state for menu open
   const [measureOpen, setMeasureOpen] = useState(false);
@@ -106,6 +114,7 @@ export function useMeasureTool(): UseMeasureToolReturn {
     measurements,
     realtimeMeasurements,
     selectedMeasurementId,
+    isSnapEnabled,
 
     // Handlers
     handleMeasureToggle,
@@ -116,6 +125,7 @@ export function useMeasureTool(): UseMeasureToolReturn {
     setMeasurementUnitSystem,
     deactivateTool,
     zoomToMeasurement,
+    toggleSnap,
   };
 }
 

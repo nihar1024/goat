@@ -1,13 +1,20 @@
 import { createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 
+import type { FeatureLayerProperties } from "@/lib/validations/layer";
 import type { ProjectLayer, ProjectLayerGroup } from "@/lib/validations/project";
+
+export interface StyleClipboard {
+  sourceLayerName: string;
+  properties: FeatureLayerProperties;
+}
 
 export interface LayerState {
   activeLayerId: number | null;
   selectedLayerIds: number[];
   projectLayers: ProjectLayer[];
   projectLayerGroups: ProjectLayerGroup[];
+  styleClipboard: StyleClipboard | null;
 }
 
 const initialState = {
@@ -15,6 +22,7 @@ const initialState = {
   selectedLayerIds: [],
   projectLayers: [],
   projectLayerGroups: [],
+  styleClipboard: null,
 } as LayerState;
 
 const layerSlice = createSlice({
@@ -73,6 +81,12 @@ const layerSlice = createSlice({
     removeProjectLayerGroup: (state, action: PayloadAction<number>) => {
       state.projectLayerGroups = state.projectLayerGroups.filter((group) => group.id !== action.payload);
     },
+    setStyleClipboard: (state, action: PayloadAction<StyleClipboard>) => {
+      state.styleClipboard = action.payload;
+    },
+    clearStyleClipboard: (state) => {
+      state.styleClipboard = null;
+    },
   },
 });
 
@@ -87,6 +101,8 @@ export const {
   updateProjectLayerGroup,
   addProjectLayerGroup,
   removeProjectLayerGroup,
+  setStyleClipboard,
+  clearStyleClipboard,
 } = layerSlice.actions;
 
 export const layerReducer = layerSlice.reducer;

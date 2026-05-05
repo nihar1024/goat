@@ -59,6 +59,7 @@ export const TableDataWidget = ({
   const mode = config?.setup?.mode ?? tableModeTypes.Values.records;
   const isGroupedMode = mode === tableModeTypes.Values.grouped;
   const stickyHeaderEnabled = (config?.options?.sticky_header ?? true) === true;
+  const headerColor = config?.options?.header_color;
 
   const secondaryGroupByColumn = config?.setup?.group_by_secondary_column_name;
   const hasSecondaryGroup = isGroupedMode && !!secondaryGroupByColumn;
@@ -96,6 +97,7 @@ export const TableDataWidget = ({
   const [columnEditFormat, setColumnEditFormat] = useState<FormatNumberTypes | undefined>(undefined);
   const [columnEditIsNumeric, setColumnEditIsNumeric] = useState(false);
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
+  const [interactiveSort, setInteractiveSort] = useState<{ column: string; direction: "asc" | "desc" } | null>(null);
 
   const recordsScrollRef = useRef<HTMLDivElement | null>(null);
   const groupedScrollRef = useRef<HTMLDivElement | null>(null);
@@ -131,6 +133,10 @@ export const TableDataWidget = ({
   useEffect(() => {
     setGroupedVisibleCount(rowsShownSetting);
   }, [rowsShownSetting]);
+
+  useEffect(() => {
+    setInteractiveSort(null);
+  }, [config?.setup?.layer_project_id, config?.setup?.query_mode, mode]);
 
   const selectedLayer = useMemo(() => {
     return projectLayers.find((layer) => layer.id === config?.setup?.layer_project_id);
@@ -218,12 +224,12 @@ export const TableDataWidget = ({
       typeof configuredSortBy === "string" &&
       (configuredSortBy === "grouped_value" || configuredSortBy.startsWith("metric_"));
 
-    const defaultSortField = !isGroupedOnlySortKey && configuredSortBy ? configuredSortBy : visibleFields[0]?.name;
+    const activeSortColumn =
+      interactiveSort?.column ?? (!isGroupedOnlySortKey && configuredSortBy ? configuredSortBy : visibleFields[0]?.name);
+    const activeSortDirection = interactiveSort?.direction ?? config?.options?.sorting ?? "desc";
 
-    if (defaultSortField) {
-      const sortingDirection = config?.options?.sorting ?? "desc";
-      const sortDirectionPrefix = sortingDirection === "desc" ? "-" : "";
-      params.sortby = `${sortDirectionPrefix}${defaultSortField}`;
+    if (activeSortColumn) {
+      params.sortby = `${activeSortDirection === "desc" ? "-" : ""}${activeSortColumn}`;
     }
 
     return params;
@@ -236,6 +242,7 @@ export const TableDataWidget = ({
     cqlFilter,
     config?.options?.sort_by,
     config?.options?.sorting,
+    interactiveSort,
     visibleFields,
     isRecordsColumnsConfigured,
   ]);
@@ -247,10 +254,10 @@ export const TableDataWidget = ({
   } = useDatasetCollectionItems(recordsLayerId || "", recordsQueryParams);
 
   const recordsQuerySignature = useMemo(() => {
-    const sortBy = config?.options?.sort_by || "";
-    const sorting = config?.options?.sorting || "desc";
+    const sortBy = interactiveSort?.column ?? config?.options?.sort_by ?? "";
+    const sorting = interactiveSort?.direction ?? config?.options?.sorting ?? "desc";
     return `${recordsLayerId || ""}|${rowsPerPage}|${sortBy}|${sorting}|${isGroupedMode}|${isSqlMode}|${cqlFilter || ""}`;
-  }, [config?.options?.sort_by, config?.options?.sorting, isGroupedMode, isSqlMode, cqlFilter, recordsLayerId, rowsPerPage]);
+  }, [config?.options?.sort_by, config?.options?.sorting, interactiveSort, isGroupedMode, isSqlMode, cqlFilter, recordsLayerId, rowsPerPage]);
 
   useEffect(() => {
     setRecordsPage(0);
@@ -417,8 +424,8 @@ export const TableDataWidget = ({
   ]);
 
   const sqlQuerySignature = useMemo(() => {
-    return `${recordsLayerId || ""}|${config?.setup?.sql_query || ""}|${rowsPerPage}|${isSqlMode}`;
-  }, [config?.setup?.sql_query, isSqlMode, recordsLayerId, rowsPerPage]);
+    return `${recordsLayerId || ""}|${config?.setup?.sql_query || ""}|${rowsPerPage}|${isSqlMode}|${cqlFilter || ""}`;
+  }, [config?.setup?.sql_query, isSqlMode, recordsLayerId, rowsPerPage, cqlFilter]);
 
   useEffect(() => {
     setSqlPage(0);
@@ -462,6 +469,7 @@ export const TableDataWidget = ({
           layers: { [sqlAlias]: recordsLayerId },
           limit: rowsPerPage,
           offset: pageOffset,
+          filter_expr: cqlFilter ?? null,
         });
 
         if (isCancelled) return;
@@ -471,12 +479,7 @@ export const TableDataWidget = ({
         const incomingRows = (result.rows || []).map((row) => row.values || {});
         setSqlRows((previous) => (sqlPage === 0 ? incomingRows : [...previous, ...incomingRows]));
 
-        if (typeof result.total_count === "number" && Number.isFinite(result.total_count)) {
-          const loadedCount = pageOffset + incomingRows.length;
-          setSqlHasMore(loadedCount < result.total_count);
-        } else {
-          setSqlHasMore(incomingRows.length >= rowsPerPage);
-        }
+        setSqlHasMore(result.has_more ?? incomingRows.length >= rowsPerPage);
       } catch (error) {
         if (!isCancelled) {
           setSqlRows([]);
@@ -571,10 +574,11 @@ export const TableDataWidget = ({
     const items = groupedRows;
     const sortByRaw = config?.options?.sort_by;
     const sortBy =
-      sortByRaw === "grouped_value" || sortByRaw === "grouped_secondary_value"
+      interactiveSort?.column ??
+      (sortByRaw === "grouped_value" || sortByRaw === "grouped_secondary_value"
         ? sortByRaw
-        : sortByRaw || "metric_0";
-    const sorting = config?.options?.sorting ?? "desc";
+        : sortByRaw || "metric_0");
+    const sorting = interactiveSort?.direction ?? config?.options?.sorting ?? "desc";
 
     return [...items].sort((left, right) => {
       const direction = sorting === "asc" ? 1 : -1;
@@ -600,12 +604,20 @@ export const TableDataWidget = ({
       const rightMetric = right.metrics[Number.isNaN(metricIndex) ? 0 : metricIndex] ?? 0;
       return (leftMetric - rightMetric) * direction;
     });
-  }, [groupedRows, config?.options?.sort_by, config?.options?.sorting, i18n.language]);
+  }, [groupedRows, config?.options?.sort_by, config?.options?.sorting, interactiveSort, i18n.language]);
 
   useEffect(() => {
     // Grouped rows are already fully fetched; render the full list to keep both table views consistent.
     setGroupedVisibleCount(sortedGroupedRows.length);
   }, [sortedGroupedRows.length]);
+
+  const handleInteractiveSortClick = useCallback((columnKey: string) => {
+    setInteractiveSort((prev) => {
+      if (!prev || prev.column !== columnKey) return { column: columnKey, direction: "asc" };
+      if (prev.direction === "asc") return { column: columnKey, direction: "desc" };
+      return null;
+    });
+  }, []);
 
   const toggleParent = useCallback((parentValue: string) => {
     setExpandedParents((prev) => {
@@ -733,6 +745,23 @@ export const TableDataWidget = ({
 
     return totals;
   }, [config?.options?.show_totals, sqlNumericColumnNames, sqlRows]);
+
+  const sortedSqlRows = useMemo(() => {
+    if (!interactiveSort || isSqlCollapsibleMode) return sqlRows;
+    const { column, direction } = interactiveSort;
+    const dirMul = direction === "asc" ? 1 : -1;
+    return [...sqlRows].sort((a, b) => {
+      const aVal = a[column];
+      const bVal = b[column];
+      const aNull = aVal === null || aVal === undefined;
+      const bNull = bVal === null || bVal === undefined;
+      if (aNull && bNull) return 0;
+      if (aNull) return 1;
+      if (bNull) return -1;
+      if (typeof aVal === "number" && typeof bVal === "number") return (aVal - bVal) * dirMul;
+      return String(aVal).localeCompare(String(bVal), undefined, { numeric: true, sensitivity: "base" }) * dirMul;
+    });
+  }, [sqlRows, interactiveSort, isSqlCollapsibleMode]);
 
   const isRecordsConfigured = !!recordsLayerId && isRecordsColumnsConfigured;
   const isGroupedConfigured = !!layerId && tableMetrics.length > 0;
@@ -1591,7 +1620,10 @@ export const TableDataWidget = ({
             <IconButton
               className="column-edit-btn"
               size="small"
-              onClick={(event) => beginColumnEdit(event.currentTarget, headerKey, label, isNumeric)}
+              onClick={(event) => {
+                event.stopPropagation();
+                beginColumnEdit(event.currentTarget, headerKey, label, isNumeric);
+              }}
               sx={{
                 opacity: 0,
                 transition: "opacity 0.15s",
@@ -1634,6 +1666,7 @@ export const TableDataWidget = ({
               displayData={displayRecordsData}
               fields={visibleFields}
               stickyHeaderEnabled={stickyHeaderEnabled}
+              headerColor={headerColor}
               headerLabelMap={recordColumnLabelMap}
               getColumnWidth={recordsColWidth}
               formatCellValueForColumn={formatRecordCell}
@@ -1646,6 +1679,9 @@ export const TableDataWidget = ({
                   ? undefined
                   : (event, fieldName) => startColumnResize(event, "records", fieldName)
               }
+              onColumnSortClick={handleInteractiveSortClick}
+              sortColumn={interactiveSort?.column}
+              sortDirection={interactiveSort?.direction}
             />
             <div ref={recordsSentinelRef} style={{ height: 1 }} />
           </Box>
@@ -1668,6 +1704,7 @@ export const TableDataWidget = ({
               areFieldsLoading={false}
               fields={[]}
               stickyHeaderEnabled={stickyHeaderEnabled}
+              headerColor={headerColor}
               tableColumns={groupedTableColumns}
               tableRows={groupedTableRows}
               totalsRow={groupedTotalsRow}
@@ -1687,6 +1724,9 @@ export const TableDataWidget = ({
                   ? undefined
                   : (event, columnKey) => startColumnResize(event, "grouped", columnKey)
               }
+              onColumnSortClick={handleInteractiveSortClick}
+              sortColumn={interactiveSort?.column}
+              sortDirection={interactiveSort?.direction}
               {...(isCollapsibleMode && {
                 onRowClick: (row) => {
                   if (row._isParent) {
@@ -1728,8 +1768,9 @@ export const TableDataWidget = ({
               areFieldsLoading={false}
               fields={[]}
               stickyHeaderEnabled={stickyHeaderEnabled}
+              headerColor={headerColor}
               tableColumns={isSqlCollapsibleMode ? sqlCollapsibleColumns : sqlTableColumns}
-              tableRows={isSqlCollapsibleMode ? sqlCollapsibleRows : sqlRows}
+              tableRows={isSqlCollapsibleMode ? sqlCollapsibleRows : sortedSqlRows}
               formatCellValueForColumn={isSqlCollapsibleMode ? formatSqlCellCollapsible : formatSqlCell}
               emptyMessage={
                 <Typography variant="body2" color="text.secondary">
@@ -1746,6 +1787,9 @@ export const TableDataWidget = ({
                   ? undefined
                   : (event, columnKey) => startColumnResize(event, "sql", columnKey)
               }
+              onColumnSortClick={isSqlCollapsibleMode ? undefined : handleInteractiveSortClick}
+              sortColumn={isSqlCollapsibleMode ? undefined : interactiveSort?.column}
+              sortDirection={isSqlCollapsibleMode ? undefined : interactiveSort?.direction}
               {...(isSqlCollapsibleMode && {
                 onRowClick: (row) => {
                   if (row._isParent && sqlGroupPrimaryColumn) {

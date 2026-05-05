@@ -1,4 +1,4 @@
-import { Box, Fade, Popper } from "@mui/material";
+import { Box, ClickAwayListener, Fade, Popper } from "@mui/material";
 
 import { rgbToHex } from "@/lib/utils/helpers";
 
@@ -10,6 +10,7 @@ export function SingleColorPopper(props: {
   editingItem: ColorItem | null;
   anchorEl: HTMLElement | null;
   onInputHexChange: (item: ColorItem) => void;
+  onClose?: () => void;
 }) {
   return (
     <Popper
@@ -29,18 +30,22 @@ export function SingleColorPopper(props: {
       {({ TransitionProps }) => (
         <Fade {...TransitionProps}>
           <Box sx={{ py: 3, bgcolor: "background.paper", borderRadius: 1 }}>
-            {props.editingItem && (
-              <SingleColorSelector
-                selectedColor={props.editingItem?.color || "#000000"}
-                onSelectColor={(color) => {
-                  if (props.editingItem)
-                    props.onInputHexChange({
-                      ...props.editingItem,
-                      color: rgbToHex(color),
-                    });
-                }}
-              />
-            )}
+            <ClickAwayListener onClickAway={() => props.onClose?.()}>
+              <Box>
+                {props.editingItem && (
+                  <SingleColorSelector
+                    selectedColor={props.editingItem?.color || "#000000"}
+                    onSelectColor={(color) => {
+                      if (props.editingItem)
+                        props.onInputHexChange({
+                          ...props.editingItem,
+                          color: rgbToHex(color),
+                        });
+                    }}
+                  />
+                )}
+              </Box>
+            </ClickAwayListener>
           </Box>
         </Fade>
       )}

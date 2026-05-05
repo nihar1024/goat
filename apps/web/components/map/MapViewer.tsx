@@ -10,10 +10,9 @@ import type { ViewStateChangeEvent } from "react-map-gl/maplibre";
 import { v4 } from "uuid";
 
 import { PATTERN_IMAGES } from "@/lib/constants/pattern-images";
-import { setCurrentZoom, setHighlightedFeature, setPopupInfo } from "@/lib/store/map/slice";
+import { setClickedFeatureForFilter, setCurrentZoom, setHighlightedFeature, setPopupInfo } from "@/lib/store/map/slice";
 import { addOrUpdateMarkerImages, addPatternImages } from "@/lib/transformers/map-image";
 import { applyMapLanguage } from "@/hooks/map/MapHooks";
-import { formatNumber } from "@/lib/utils/format-number";
 import createPulsingDot from "@/lib/utils/map/pulsing-dot-image";
 import type { FormatNumberTypes } from "@/lib/validations/common";
 import type { LayerInteractionFieldListContent } from "@/lib/validations/layer";
@@ -28,12 +27,15 @@ import type { ScenarioFeatures } from "@/lib/validations/scenario";
 
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
+import { useFeatureEditor } from "@/hooks/map/useFeatureEditor";
 import GeocoderLayer from "@/components/map/GeocoderLayer";
 import Layers from "@/components/map/Layers";
 import ScenarioLayer from "@/components/map/ScenarioLayer";
 import ToolboxLayers from "@/components/map/ToolboxLayers";
 import UserLocationLayer from "@/components/map/UserLocationLayer";
 import DrawControl from "@/components/map/controls/Draw";
+import FeatureEditToolbar from "@/components/map/controls/FeatureEditToolbar";
+import ConfirmModal from "@/components/modals/Confirm";
 import { MapPopoverInfo } from "@/components/map/controls/LayerInfo";
 import MapPopoverEditor from "@/components/map/controls/PopoverEditor";
 import { MeasureLabels } from "@/components/map/controls/measure";
@@ -52,7 +54,7 @@ interface MapProps {
     };
   };
   maxExtent?: [number, number, number, number];
-  mapStyle: string;
+  mapStyle: string | maplibregl.StyleSpecification;
   layers: ProjectLayer[] | Layer[];
   scenarioFeatures?: ScenarioFeatures;
   onMove?: ((e: ViewStateChangeEvent) => void | undefined) | undefined;
@@ -84,27 +86,40 @@ const MapViewer: React.FC<MapProps> = ({
   containerSx,
   isEditor,
 }) => {
+  const { t, i18n } = useTranslation("common");
   const theme = useTheme();
-  const { i18n } = useTranslation("common");
   const dispatch = useAppDispatch();
   const isGetInfoActive = useAppSelector((state) => state.map.isMapGetInfoActive);
   const mapCursor = useAppSelector((state) => state.map.mapCursor);
   const highlightedFeature = useAppSelector((state) => state.map.highlightedFeature);
   const popupInfo = useAppSelector((state) => state.map.popupInfo);
   const popupEditor = useAppSelector((state) => state.map.popupEditor);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
 
   const _selectedScenarioEditLayer = useAppSelector((state) => state.map.selectedScenarioLayer);
   const selectedScenarioEditLayer = useMemo(() => {
     return layers?.find((layer) => layer.id === _selectedScenarioEditLayer?.value);
   }, [_selectedScenarioEditLayer, layers]);
 
-  const interactiveLayerIds = useMemo(() => layers?.map((layer) => layer.id.toString()), [layers]);
+  const featureEditorHandlers = useFeatureEditor(mapRef);
+
+  const pendingFeaturesExist = useAppSelector(
+    (state) => Object.keys(state.featureEditor.pendingFeatures).length > 0
+  );
+  const interactiveLayerIds = useMemo(() => {
+    const ids = layers?.map((layer) => layer.id.toString()) || [];
+    if (pendingFeaturesExist) {
+      ids.push("pending-features-fill", "pending-features-line", "pending-features-circle", "pending-features-symbol");
+    }
+    return ids;
+  }, [layers, pendingFeaturesExist]);
 
   const hiddenSystemProperties = useMemo(
     () =>
       new Set([
         "layer_id",
         "id",
+        "_rowid",
         "feature_id",
         "h3_3",
         "h3_6",
@@ -133,6 +148,8 @@ const MapViewer: React.FC<MapProps> = ({
 
   const handleMapClick = (e: MapLayerMouseEvent) => {
     const { features } = e;
+    // Track whether the popup block already highlighted a feature
+    let didHighlight = false;
 
     if (features && features.length > 0 && isGetInfoActive) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -158,6 +175,7 @@ const MapViewer: React.FC<MapProps> = ({
 
       if (interactiveFeature && interactiveLayer) {
         dispatch(setHighlightedFeature(interactiveFeature));
+        didHighlight = true;
 
         const layerName = interactiveLayer.name;
         let lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
@@ -169,36 +187,48 @@ const MapViewer: React.FC<MapProps> = ({
           (content) => content.type === layerInteractionContentType.Enum.field_list
         ) as LayerInteractionFieldListContent[] | undefined;
 
-        const propertyLabels = interactionFieldLists?.reduce(
-          (acc, content) => {
-            content.attributes.forEach((attr) => {
-              const displayName = attr.label || attr.name;
-              const rawValue = interactiveFeature.properties[attr.name];
-              let displayValue = rawValue != null ? String(rawValue) : "";
-              if (attr.type === "number" && rawValue != null && !isNaN(Number(rawValue))) {
-                const formatted = attr.format
-                  ? formatNumber(Number(rawValue), attr.format as FormatNumberTypes, i18n.language)
-                  : String(rawValue);
-                displayValue = `${attr.prefix || ""}${formatted}${attr.suffix || ""}`;
-              }
-              acc[displayName] = displayValue;
-            });
-            return acc;
-          },
-          {} as Record<string, string>
-        );
+        // Build field list metadata (labels, order, decorators) from all field_list
+        // interaction contents. Raw values stay keyed by column name so that
+        // LayerInfo can apply kind-aware formatting (e.g. m² → ha for area fields).
+        const fieldLabels: Record<string, string> = {};
+        const fieldOrder: string[] = [];
+        const fieldDecorators: Record<string, { prefix?: string; suffix?: string; format?: FormatNumberTypes }> = {};
+        interactionFieldLists?.forEach((content) => {
+          content.attributes.forEach((attr) => {
+            if (fieldOrder.includes(attr.name)) return; // first definition wins
+            fieldOrder.push(attr.name);
+            fieldLabels[attr.name] = attr.label || attr.name;
+            if (attr.format || attr.prefix || attr.suffix) {
+              fieldDecorators[attr.name] = {
+                format: attr.format as FormatNumberTypes | undefined,
+                prefix: attr.prefix,
+                suffix: attr.suffix,
+              };
+            }
+          });
+        });
+        const hasFieldList = fieldOrder.length > 0;
 
-        const properties =
-          propertyLabels && Object.keys(propertyLabels).length > 0
-            ? propertyLabels
-            : interactiveFeature.properties;
+        // When a field list is configured, filter to the listed columns (raw values).
+        // Otherwise, pass all feature properties.
+        const rawProperties = hasFieldList
+          ? fieldOrder.reduce(
+              (acc, name) => {
+                if (!isSystemPropertyKey(name)) {
+                  acc[name] = interactiveFeature.properties[name];
+                }
+                return acc;
+              },
+              {} as Record<string, unknown>
+            )
+          : interactiveFeature.properties;
 
         const jsonProperties = {};
         const primitiveProperties = {};
-        if (properties) {
-          for (const key in properties) {
+        if (rawProperties) {
+          for (const key in rawProperties) {
             if (!isSystemPropertyKey(key)) {
-              const value = properties[key];
+              const value = rawProperties[key];
               try {
                 // Type assertion to satisfy JSON.parse
                 const parsedValue = JSON.parse(value as string);
@@ -219,6 +249,19 @@ const MapViewer: React.FC<MapProps> = ({
             properties: primitiveProperties,
             jsonProperties: jsonProperties,
             title: layerName ?? "",
+            // ProjectLayer.id is the project-layer-link id, not the
+            // underlying dataset id. queryables expects the dataset id,
+            // which lives on `.layer_id` for ProjectLayers and on `.id`
+            // for plain Layers. Prefer `layer_id` when present.
+            layerId: (
+              (interactiveLayer as { layer_id?: string }).layer_id ??
+              interactiveLayer.id
+            )?.toString(),
+            ...(hasFieldList && {
+              fieldLabels,
+              fieldOrder,
+              ...(Object.keys(fieldDecorators).length > 0 && { fieldDecorators }),
+            }),
             onClose: handlePopoverClose,
           })
         );
@@ -231,6 +274,28 @@ const MapViewer: React.FC<MapProps> = ({
       // No features clicked or get info tool is not active.
       dispatch(setHighlightedFeature(undefined));
       dispatch(setPopupInfo(undefined));
+    }
+
+    // Click-to-filter: dispatch clicked feature independently of popup interaction settings.
+    // This finds the topmost feature from ANY layer (regardless of interaction type).
+    if (features && features.length > 0 && (mapMode === "builder" || mapMode === "public")) {
+      for (const feature of features) {
+        const matchedLayer = layers?.find((l) => l.id.toString() === feature.layer.id);
+        if (matchedLayer) {
+          // Only highlight if the popup block didn't already handle it
+          if (!didHighlight) {
+            dispatch(setHighlightedFeature(feature));
+          }
+          dispatch(
+            setClickedFeatureForFilter({
+              layerProjectId: matchedLayer.id as number,
+              properties: feature.properties,
+              timestamp: Date.now(),
+            })
+          );
+          break;
+        }
+      }
     }
 
     if (onClick) {
@@ -343,6 +408,7 @@ const MapViewer: React.FC<MapProps> = ({
     <>
       <Box
         sx={{
+          position: "relative",
           width: "100%",
           ".maplibregl-ctrl .maplibregl-ctrl-logo": {
             display: "none",
@@ -423,6 +489,33 @@ const MapViewer: React.FC<MapProps> = ({
             />
           )}
         </Map>
+        <FeatureEditToolbar
+          onSave={featureEditorHandlers.handleSave}
+          onDiscard={featureEditorHandlers.handleDiscardRequest}
+          onStopEditing={featureEditorHandlers.handleStopEditingRequest}
+          onUndo={featureEditorHandlers.handleUndo}
+          onRedo={featureEditorHandlers.handleRedo}
+          hasUndo={featureEditorHandlers.hasUndo}
+          hasRedo={featureEditorHandlers.hasRedo}
+        />
+        <ConfirmModal
+          open={featureEditorHandlers.discardConfirmOpen}
+          title={t("discard_edits")}
+          body={t("discard_edits_confirmation")}
+          closeText={t("cancel")}
+          confirmText={t("discard_edits")}
+          onClose={featureEditorHandlers.handleDiscardCancel}
+          onConfirm={featureEditorHandlers.handleDiscardConfirm}
+        />
+        <ConfirmModal
+          open={featureEditorHandlers.stopConfirmOpen}
+          title={t("stop_editing")}
+          body={t("discard_edits_confirmation")}
+          closeText={t("cancel")}
+          confirmText={t("stop_editing")}
+          onClose={featureEditorHandlers.handleStopCancel}
+          onConfirm={featureEditorHandlers.handleStopConfirm}
+        />
         {children}
       </Box>
     </>

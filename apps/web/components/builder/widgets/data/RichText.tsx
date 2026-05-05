@@ -220,7 +220,7 @@ const RichTextPreview = ({ html }: { html: string }) => {
             boxSizing: "border-box",
           },
         }}
-        dangerouslySetInnerHTML={{ __html: html || "<p></p>" }}
+        dangerouslySetInnerHTML={{ __html: html || "<p><br></p>" }}
       />
       {viewPopover && (
         <InfoChipViewPopover
@@ -477,7 +477,7 @@ const RichTextEditable = ({
       ref={containerRef}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      sx={{ height: "100%", width: "100%", minHeight: 60, cursor: isEditMode ? "text" : "default" }}>
+      sx={{ height: "100%", width: "100%", cursor: isEditMode ? "text" : "default" }}>
       {/* Toolbar rendered via Portal to escape overflow:hidden */}
       {toolbarOpen && (
         <Portal>

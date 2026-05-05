@@ -121,7 +121,7 @@ export function Measure(props: MeasureProps) {
                     backgroundColor: theme.palette.background.paper,
                     marginTop: theme.spacing(1),
                     marginBottom: theme.spacing(1),
-                    color: props.open ? theme.palette.primary.main : theme.palette.text.secondary,
+                    color: props.open ? theme.palette.primary.main : theme.palette.action.active,
                     "&:hover": {
                       backgroundColor: theme.palette.background.default,
                     },

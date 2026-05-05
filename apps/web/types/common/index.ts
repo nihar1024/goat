@@ -17,7 +17,10 @@ export enum ContentActions {
 
 export enum MapLayerActions {
   CHART = "chart",
+  COPY_STYLE = "copyStyle",
   DUPLICATE = "duplicate",
+  EDIT_FEATURES = "editFeatures",
+  PASTE_STYLE = "pasteStyle",
   RENAME = "rename",
   ZOOM_TO = "zoomTo",
   PROPERTIES = "properties",
@@ -62,4 +65,5 @@ export enum AddLayerSourceType {
   DatasourceUpload,
   DataSourceExternal,
   CatalogExplorer,
+  CreateEmptyLayer,
 }

@@ -33,16 +33,12 @@ package = false
 [tool.uv.sources]
 core = { workspace = true }
 geoapi = { workspace = true }
-routing = { workspace = true }
-accounts = { workspace = true }
 goatlib = { workspace = true }
 processes = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "apps/geoapi",
-    "apps/routing",
-    "apps/accounts",
     "apps/core",
     "apps/processes",
     "packages/python/goatlib",
@@ -68,7 +64,7 @@ per-file-ignores = { "*/__init__.py" = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = ["--import-mode=importlib", "--log-cli-level=INFO"]
-pythonpath = ["apps/core", "apps/geoapi", "apps/routing", "apps/accounts"]
+pythonpath = ["apps/core", "apps/geoapi", "apps/accounts"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*", "*Tests"]
 python_functions = ["test_*"]

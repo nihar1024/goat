@@ -1,10 +1,12 @@
 import type { MapGeoJSONFeature } from "react-map-gl/maplibre";
 
 import { rgbToHex } from "@/lib/utils/helpers";
+import { resolveLineDashArray } from "@/lib/transformers/lineStyle";
 import type {
   FeatureLayerLineProperties,
   FeatureLayerPointProperties,
   Layer,
+  LayerClassBreaks,
   TextLabelSchemaData,
 } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
@@ -42,6 +44,8 @@ export function getMapboxStyleColor(data: ProjectLayer | Layer, type: "color" | 
   const fieldName = data.properties[`${type}_field`]?.name;
   const colorScale = data.properties[`${type}_scale`];
   const colorMaps = data.properties[`${type}_range`]?.color_map;
+  const rawNoData = data.properties[`${type}_no_data`] as string | undefined;
+  const noDataColor = rawNoData === "transparent" ? "rgba(0,0,0,0)" : rawNoData;
   if (colorMaps && fieldName && Array.isArray(colorMaps) && colorScale === "ordinal") {
     const valuesAndColors = [] as string[];
     const seenValues = new Set<string>();
@@ -64,7 +68,11 @@ export function getMapboxStyleColor(data: ProjectLayer | Layer, type: "color" | 
     }
     // Use to-string to ensure string comparison — MapLibre match only supports
     // integer numeric labels, so string matching is needed for float/decimal values.
-    return ["match", ["to-string", ["get", fieldName]], ...valuesAndColors, "#AAAAAA"];
+    const matchExpr = ["match", ["to-string", ["get", fieldName]], ...valuesAndColors, "#AAAAAA"];
+    if (noDataColor) {
+      return ["case", ["==", ["get", fieldName], null], noDataColor, matchExpr];
+    }
+    return matchExpr;
   }
 
   if (
@@ -103,6 +111,9 @@ export function getMapboxStyleColor(data: ProjectLayer | Layer, type: "color" | 
       }
     });
     const config = ["step", ["get", fieldName], ...colorSteps];
+    if (noDataColor) {
+      return ["case", ["==", ["get", fieldName], null], noDataColor, config];
+    }
     return config;
   }
   const breakValues = data.properties[`${type}_scale_breaks`];
@@ -133,6 +144,9 @@ export function getMapboxStyleColor(data: ProjectLayer | Layer, type: "color" | 
     })
     .flat();
   const config = ["step", ["get", fieldName], ...colorSteps];
+  if (noDataColor) {
+    return ["case", ["==", ["get", fieldName], null], noDataColor, config];
+  }
   return config;
 }
 
@@ -163,6 +177,50 @@ export function getMapboxStyleMarker(data: ProjectLayer | Layer) {
   return marker;
 }
 
+export function getMapboxStyleSize(
+  data: ProjectLayer | Layer,
+  type: "radius" | "stroke_width" | "marker_size",
+): number | unknown[] {
+  const properties = data.properties;
+  const fieldName = properties[`${type}_field`]?.name as string | undefined;
+  const range = properties[`${type}_range`] as number[] | undefined;
+  const scale = properties[`${type}_scale`] as string | undefined;
+  const staticValue = properties[type] as number | undefined;
+
+  const isMarker = type === "marker_size";
+  const fallback = isMarker
+    ? (staticValue ?? 100) / 200
+    : staticValue ?? (type === "radius" ? 5 : 1);
+
+  if (!fieldName) return fallback;
+
+  // Ordinal: categorical field → fixed size per unique value
+  if (scale === "ordinal") {
+    const ordinalMap = properties[`${type}_ordinal_map`] as [string, number][] | undefined;
+    if (!ordinalMap?.length) return fallback;
+    const matchArgs = ordinalMap.flatMap(([val, sz]) => [val, isMarker ? sz / 200 : sz]);
+    return ["match", ["to-string", ["get", fieldName]], ...matchArgs, fallback];
+  }
+
+  const breaks = properties[`${type}_scale_breaks`] as LayerClassBreaks | undefined;
+  if (!range || range.length < 2 || !breaks?.breaks?.length) return fallback;
+
+  const N = breaks.breaks.length + 1; // N classes = (N-1) break points + 1
+  const sizeMin = isMarker ? range[0] / 200 : range[0];
+  const sizeMax = isMarker ? range[1] / 200 : range[1];
+
+  // Distribute N sizes evenly between sizeMin and sizeMax
+  const sizes = Array.from({ length: N }, (_, i) =>
+    N === 1 ? sizeMin : sizeMin + (sizeMax - sizeMin) * (i / (N - 1))
+  );
+
+  // Build step expression: default (first class size), then [breakpoint, size] pairs
+  const stepArgs: unknown[] = [sizes[0]];
+  breaks.breaks.forEach((breakVal, i) => stepArgs.push(breakVal, sizes[i + 1]));
+
+  return ["step", ["get", fieldName], ...stepArgs];
+}
+
 export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
   const type = data.feature_layer_geometry_type;
   if (type === "point") {
@@ -175,9 +233,9 @@ export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
       paint: {
         "circle-color": getMapboxStyleColor(data, "color"),
         "circle-opacity": pointProperties.filled ? pointProperties.opacity : 0,
-        "circle-radius": pointProperties.radius || 5,
+        "circle-radius": getMapboxStyleSize(data, "radius"),
         "circle-stroke-color": getMapboxStyleColor(data, "stroke_color"),
-        "circle-stroke-width": pointProperties.stroked ? pointProperties.stroke_width || 1 : 0,
+        "circle-stroke-width": pointProperties.stroked ? getMapboxStyleSize(data, "stroke_width") : 0,
       },
     };
   } else if (type === "polygon") {
@@ -197,16 +255,31 @@ export function transformToMapboxLayerStyleSpec(data: ProjectLayer | Layer) {
   } else if (type === "line") {
     const lineProperties = data.properties as FeatureLayerLineProperties;
 
+    const pattern = lineProperties.stroke_pattern ?? "solid";
+    const density = lineProperties.stroke_dash_density ?? "normal";
+    const dashArray = resolveLineDashArray(pattern, density);
+
+    const cap = lineProperties.stroke_cap;
+    const join = lineProperties.stroke_join;
+
+    const layout: Record<string, unknown> = {
+      visibility: data.properties.visibility ? "visible" : "none",
+    };
+    // Only emit when non-default to keep output byte-identical for legacy layers.
+    if (cap && cap !== "butt") layout["line-cap"] = cap;
+    if (join && join !== "miter") layout["line-join"] = join;
+
+    const paint: Record<string, unknown> = {
+      "line-color": getMapboxStyleColor(data, "stroke_color"),
+      "line-opacity": lineProperties.opacity,
+      "line-width": getMapboxStyleSize(data, "stroke_width"),
+    };
+    if (dashArray) paint["line-dasharray"] = dashArray;
+
     return {
       type: "line",
-      layout: {
-        visibility: data.properties.visibility ? "visible" : "none",
-      },
-      paint: {
-        "line-color": getMapboxStyleColor(data, "stroke_color"),
-        "line-opacity": lineProperties.opacity,
-        "line-width": lineProperties.stroke_width || 1,
-      },
+      layout,
+      paint,
     };
   } else {
     throw new Error(`Invalid type: ${type}`);
@@ -220,9 +293,8 @@ export function getSymbolStyleSpec(data: TextLabelSchemaData | undefined, layer:
   const textPaint = {};
   if (layer.properties["custom_marker"]) {
     const pointProperties = layer.properties as FeatureLayerPointProperties;
-    const markerSize = pointProperties.marker_size ?? 100;
     iconLayout["icon-image"] = getMapboxStyleMarker(layer);
-    iconLayout["icon-size"] = markerSize / 200;
+    iconLayout["icon-size"] = getMapboxStyleSize(layer, "marker_size");
     iconLayout["icon-allow-overlap"] = pointProperties.marker_allow_overlap || false;
     iconLayout["icon-anchor"] = pointProperties.marker_anchor || "center";
     iconLayout["icon-offset"] = pointProperties.marker_offset || [0, 0];
@@ -272,10 +344,9 @@ export function getHightlightStyleSpec(highlightFeature: MapGeoJSONFeature) {
       if (highlightFeature.layer.type === "symbol") {
         radius = 5;
       } else {
-        radius =
-          ((highlightFeature.layer.paint?.["circle-radius"] as number) < 8
-            ? 8
-            : highlightFeature.layer.paint?.["circle-radius"]) + strokeWidth;
+        const rawRadius = highlightFeature.layer.paint?.["circle-radius"];
+        const numRadius = typeof rawRadius === "number" ? rawRadius : 8;
+        radius = (numRadius < 8 ? 8 : numRadius) + (typeof strokeWidth === "number" ? strokeWidth : 0);
       }
 
       paint = {
@@ -296,12 +367,18 @@ export function getHightlightStyleSpec(highlightFeature: MapGeoJSONFeature) {
       return null;
   }
 
+  // Use MVT feature ID (rowid+1) when available, fall back to properties.id for legacy tiles
+  const mvtId = highlightFeature.id;
+  const propsId = highlightFeature.properties?.id;
+  const filter = mvtId != null
+    ? ["==", ["id"], mvtId]
+    : propsId != null
+      ? ["any", ["==", ["get", "id"], propsId], ["==", ["to-string", ["get", "id"]], String(propsId)]]
+      : undefined;
   return {
     type,
     paint,
-    ...(highlightFeature.properties?.id && {
-      filter: ["in", "id", highlightFeature.properties.id],
-    }),
+    ...(filter && { filter }),
   };
 }
 

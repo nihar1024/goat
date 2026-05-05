@@ -17,7 +17,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
@@ -29,8 +29,12 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 // ----------------------------------------------------------------------
 // Redux
 import { useProject, useProjectScenarioFeatures } from "@/lib/api/projects";
+import { useUserProfile } from "@/lib/api/users";
+import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
+import { startEditing } from "@/lib/store/featureEditor/slice";
+import { emitInteractionEvent } from "@/lib/store/interaction/slice";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
-import { setActiveRightPanel } from "@/lib/store/map/slice";
+import { setActiveRightPanel, setDataPanelLayerId, setIsDataPanelOpen } from "@/lib/store/map/slice";
 import { rgbToHex } from "@/lib/utils/helpers";
 import { zoomToLayer, zoomToProjectLayer } from "@/lib/utils/map/navigate";
 // API & Store
@@ -55,6 +59,7 @@ import CatalogExplorerModal from "@/components/modals/CatalogExplorer";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
 import DatasetExternalModal from "@/components/modals/DatasetExternal";
+import CreateLayerModal from "@/components/modals/CreateLayer";
 import DatasetUploadModal from "@/components/modals/DatasetUpload";
 import MapLayerChartModal from "@/components/modals/MapLayerChart";
 import ProjectLayerDeleteModal from "@/components/modals/ProjectLayerDelete";
@@ -68,6 +73,7 @@ import { LayerIcon } from "./legend/LayerIcon";
 import { MaskedImageIcon } from "@/components/map/panels/style/other/MaskedImageIcon";
 import { LayerLegendPanel } from "./legend/LayerLegend";
 import { getLegendColorMap, getLegendMarkerMap } from "@/lib/utils/map/legend";
+import MarkdownPopupDialog from "@/components/builder/widgets/common/MarkdownPopupDialog";
 
 // Extended tree item interface to include project layer data
 interface ProjectTreeItem extends BaseTreeItem {
@@ -95,6 +101,7 @@ export const AddLayerButton = ({
     { type: AddLayerSourceType.DatasourceUpload, icon: ICON_NAME.UPLOAD, label: t("dataset_upload") },
     { type: AddLayerSourceType.DataSourceExternal, icon: ICON_NAME.LINK, label: t("dataset_external") },
     { type: AddLayerSourceType.CatalogExplorer, icon: ICON_NAME.GLOBE, label: t("catalog_explorer") },
+    { type: AddLayerSourceType.CreateEmptyLayer, icon: ICON_NAME.PLUS, label: t("create_layer") },
   ];
   return (
     <>
@@ -137,6 +144,9 @@ export const AddLayerButton = ({
       )}
       {addSourceType === AddLayerSourceType.CatalogExplorer && (
         <CatalogExplorerModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
+      )}
+      {addSourceType === AddLayerSourceType.CreateEmptyLayer && (
+        <CreateLayerModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
       )}
     </>
   );
@@ -303,8 +313,29 @@ const castNodeToProjectLayer = (node: ProjectLayerTreeNode): ProjectLayer => {
 };
 
 // Helper function to filter menu options for view mode
-const filterMenuForViewMode = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
-  const excludedActions = [ContentActions.DELETE, MapLayerActions.RENAME, MapLayerActions.DUPLICATE];
+const filterMenuForViewMode = (
+  menuOptions: PopperMenuItem[],
+  allowedActions?: { style?: boolean },
+): PopperMenuItem[] => {
+  const excludedActions: string[] = [
+    ContentActions.DELETE,
+    MapLayerActions.RENAME,
+    MapLayerActions.DUPLICATE,
+    MapLayerActions.EDIT_FEATURES,
+  ];
+  // Only remove the Style action when the widget has not explicitly allowed it.
+  // allowedActions.style === true means the dashboard builder configured this
+  // layer-tree widget to expose styling to public/view-mode users.
+  if (allowedActions?.style !== true) {
+    excludedActions.push(MapLayerActions.STYLE);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
+};
+
+// Catalogue layers cannot be renamed, duplicated, or have features edited
+const filterMenuForCatalogLayer = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
+  const excludedActions = [MapLayerActions.RENAME, MapLayerActions.DUPLICATE, MapLayerActions.EDIT_FEATURES];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
 };
@@ -343,6 +374,12 @@ interface ProjectLayerTreeProps {
   hideLegendHeading?: boolean;
   /** Custom group icons keyed by group ID */
   groupIcons?: Record<string, { url: string; source?: string }>;
+  /** Whether to dim layers that are outside the current zoom range (default: true for backward compat) */
+  dimOutOfZoom?: boolean;
+  /** Content rendered inside the scroll container, above the tree (e.g. a "show all" toggle row) */
+  headerContent?: React.ReactNode;
+  /** Per-group info text (keyed by group ID string) shown as an ⓘ button on the group row */
+  groupInfo?: Record<string, string>;
 }
 
 export const ProjectLayerTree = ({
@@ -365,6 +402,9 @@ export const ProjectLayerTree = ({
   downloadableLayers,
   hideLegendHeading,
   groupIcons,
+  dimOutOfZoom = true,
+  headerContent,
+  groupInfo,
 }: ProjectLayerTreeProps) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -372,20 +412,24 @@ export const ProjectLayerTree = ({
   const mapRef = useRef(map);
   mapRef.current = map;
   const dispatch = useAppDispatch();
-  // Only subscribe to currentZoom in view mode to avoid re-renders during map interaction in edit mode
-  const currentZoom = useAppSelector((state) => (viewMode === "view" ? state.map.currentZoom : undefined));
+  const { userProfile } = useUserProfile();
+  // Only subscribe to currentZoom when dimming is enabled and in view mode
+  const currentZoom = useAppSelector((state) => (dimOutOfZoom && viewMode === "view" ? state.map.currentZoom : undefined));
 
   const [items, setItems] = useState<ProjectTreeItem[]>([]);
+  const itemsRef = useRef<ProjectTreeItem[]>([]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
   const [groupModal, setGroupModal] = useState<{
     open: boolean;
     mode: "create" | "rename" | "delete";
     group?: ProjectLayerTreeNode;
   }>({ open: false, mode: "create" });
+  const [groupInfoDialogId, setGroupInfoDialogId] = useState<number | null>(null);
 
   const activeLayerId = useAppSelector((state) => state.layers.activeLayerId);
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const selectedLayerIds = useAppSelector((state) => state.layers.selectedLayerIds || []);
-
+  const mapMode = useAppSelector((state) => state.map.mapMode);
   const {
     getLayerMoreMenuOptions,
     openMoreMenu,
@@ -440,6 +484,7 @@ export const ProjectLayerTree = ({
         properties: layer.properties,
         query: layer.query,
         other_properties: layer.other_properties,
+        user_id: layer.user_id,
       });
     });
 
@@ -447,7 +492,27 @@ export const ProjectLayerTree = ({
   }, [projectLayers, projectLayerGroups]);
 
   useEffect(() => {
-    if (treeData) setItems(formatApiDataForDnd(treeData));
+    if (treeData) {
+      setItems((prevItems) => {
+        const newItems = formatApiDataForDnd(treeData);
+        if (prevItems.length === 0) return newItems;
+        // For items that already existed, preserve their collapsed state.
+        // Newly appearing layer items (e.g. inside a group that was just toggled visible)
+        // are expanded so their legends are immediately visible.
+        const prevById = new Map(prevItems.map((item) => [item.id, item]));
+        return newItems.map((item) => {
+          const prev = prevById.get(item.id);
+          if (prev) {
+            return { ...item, collapsed: prev.collapsed };
+          }
+          // New layer items: expand legend so attribute-based styling is shown
+          if (!item.isGroup) {
+            return { ...item, collapsed: false };
+          }
+          return item;
+        });
+      });
+    }
   }, [treeData]);
 
   const treeSelectedIds = useMemo(() => {
@@ -463,58 +528,66 @@ export const ProjectLayerTree = ({
 
   // --- Handlers ---
 
-  const handleVisibilityToggle = async (node: ProjectLayerTreeNode, e: React.MouseEvent) => {
+  const handleVisibilityToggle = useCallback(async (node: ProjectLayerTreeNode, e: React.MouseEvent) => {
     e.stopPropagation();
 
     const currentVisibility = node.properties?.visibility ?? true;
+    const newVisibility = !currentVisibility;
 
-    // Update local UI state optimistically - create deep copies to avoid read-only errors
-    const newItems = items.map((i) => {
+    // Compute updated items from the current snapshot (via ref to avoid stale closure)
+    const newItems = itemsRef.current.map((i) => {
       if (i.data.id === node.id && i.data.type === node.type) {
-        const newVisibility = !currentVisibility;
-        const updatedData = {
-          ...i.data,
-          properties: {
-            ...i.data.properties,
-            visibility: newVisibility,
-          },
-        };
         return {
           ...i,
-          data: updatedData,
-          // Collapse legend when hiding, expand when showing
+          data: {
+            ...i.data,
+            properties: { ...i.data.properties, visibility: newVisibility },
+          },
           collapsed: !newVisibility,
         };
       }
       return i;
     });
+
     setItems(newItems);
 
+    // Emit interaction events based on visibility toggle
+    if (node.type === "layer") {
+      dispatch(emitInteractionEvent({
+        type: "visibility_changed",
+        sourceId: node.id,
+        value: newVisibility,
+      }));
+    }
+    // When turning a group ON, activate it (switch tab). Turning OFF is just hiding.
+    if (node.type === "group" && newVisibility) {
+      dispatch(emitInteractionEvent({ type: "group_activated", sourceId: node.id }));
+    }
+
     try {
-      // Create update payload for this visibility change
       const updatePayload = formatDndDataForApi(newItems);
       if (onTreeUpdate) {
         await onTreeUpdate(updatePayload);
       }
     } catch (err) {
-      // Revert local state on error
-      setItems(items);
+      // Revert to the snapshot captured before the optimistic update
+      setItems(itemsRef.current);
       toast.error(t("error_updating_visibility"));
       console.error("Error in handleVisibilityToggle:", err);
     }
-  };
+  }, [dispatch, onTreeUpdate, t]);
 
-  const handleProperties = (layer: ProjectLayer) => {
+  const handleProperties = useCallback((layer: ProjectLayer) => {
     dispatch(setSelectedLayers([layer.id]));
     dispatch(setActiveRightPanel(MapSidebarItemID.PROPERTIES));
-  };
+  }, [dispatch]);
 
-  const handleStyle = (layer: ProjectLayer) => {
+  const handleStyle = useCallback((layer: ProjectLayer) => {
     dispatch(setSelectedLayers([layer.id]));
     dispatch(setActiveRightPanel(MapSidebarItemID.STYLE));
-  };
+  }, [dispatch]);
 
-  const handleDuplicate = async (layer: ProjectLayer) => {
+  const handleDuplicate = useCallback(async (layer: ProjectLayer) => {
     try {
       if (onLayerDuplicate) {
         await onLayerDuplicate(layer.layer_id);
@@ -522,7 +595,7 @@ export const ProjectLayerTree = ({
     } catch (error) {
       toast.error(t("error_duplicating_layer"));
     }
-  };
+  }, [onLayerDuplicate, t]);
 
   const handleNodeClick = (compositeIds: string[]) => {
     const realIds = compositeIds
@@ -531,9 +604,28 @@ export const ProjectLayerTree = ({
         return item?.data?.id;
       })
       .filter((id) => id !== undefined);
+
+    // Emit interaction event for group activation (works in all modes)
+    if (realIds.length === 1) {
+      const clickedItem = items.find((i) => i.id === compositeIds[0]);
+      if (clickedItem?.data?.type === "group") {
+        dispatch(emitInteractionEvent({ type: "group_activated", sourceId: realIds[0] }));
+        // Groups should not be selected or open panels — only emit the interaction event
+        return;
+      }
+    }
+
+    // In view mode, only emit interaction events — don't change selection or panels
+    if (!isEditMode) return;
+
     dispatch(setSelectedLayers(realIds));
 
-    if (isEditMode && realIds.length > 0) {
+    // Always sync data panel layer — if the panel is closed, this is a no-op
+    if (realIds.length === 1) {
+      dispatch(setDataPanelLayerId(realIds[0]));
+    }
+
+    if (realIds.length > 0) {
       // Get the first selected layer to determine default panel
       const firstSelectedItem = items.find((i) => {
         const node = i.data;
@@ -580,11 +672,13 @@ export const ProjectLayerTree = ({
   };
 
   // --- ROW ACTIONS ---
-  const RenderRowActions = ({ item }: { item: ProjectTreeItem }) => {
+  // Defined as a useCallback (not a nested component) so its reference stays stable
+  // across re-renders that don't change relevant deps. A nested component definition
+  // would get a new identity on every render, causing React to unmount/remount the
+  // PopperMenu and reset its open state — closing the three-dots menu unexpectedly.
+  const renderRowActions = useCallback((item: ProjectTreeItem) => {
     const node = item.data as ProjectLayerTreeNode;
     const nodeVisibility = node.properties?.visibility ?? true;
-    const [anchorEl] = useState<null | HTMLElement>(null);
-    const isOpen = Boolean(anchorEl);
 
     // Prepare Menu Options
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -612,30 +706,51 @@ export const ProjectLayerTree = ({
       menuOptions = getLayerMoreMenuOptions(
         (node.layer_type as "table" | "feature" | "raster") || "feature",
         !!node.query,
-        false
+        !!node.in_catalog,
+        false,
+        node.user_id === userProfile?.id,
+        isEditMode,
       );
     }
 
     // Filter menu options based on view mode
     if (viewMode === "view") {
-      menuOptions = filterMenuForViewMode(menuOptions);
+      menuOptions = filterMenuForViewMode(menuOptions, allowedActions);
+    }
+
+    // Catalogue layers cannot be renamed, duplicated, or have features edited
+    if (node.in_catalog) {
+      menuOptions = filterMenuForCatalogLayer(menuOptions);
+    }
+
+    // Edit features only available in data (map) mode
+    if (mapMode !== "data") {
+      menuOptions = menuOptions.filter((opt) => opt.id !== MapLayerActions.EDIT_FEATURES);
+    }
+
+    // Edit features only allowed for layers under 100MB
+    if (node.type === "layer" && node.layer_id) {
+      const layerSize = projectLayers.find((l) => l.layer_id === node.layer_id)?.size;
+      if (layerSize && layerSize > MAX_EDITABLE_LAYER_SIZE) {
+        menuOptions = menuOptions.filter((opt) => opt.id !== MapLayerActions.EDIT_FEATURES);
+      }
     }
 
     // Filter menu options based on allowedActions
     if (allowedActions) {
-      menuOptions = menuOptions.filter((item) => {
-        if (item.id === MapLayerActions.STYLE && allowedActions.style === false) return false;
-        if (item.id === ContentActions.TABLE && allowedActions.viewData === false) return false;
-        if (item.id === MapLayerActions.PROPERTIES && allowedActions.properties === false) return false;
-        if (item.id === MapLayerActions.ZOOM_TO && allowedActions.zoomTo === false) return false;
+      menuOptions = menuOptions.filter((opt) => {
+        if (opt.id === MapLayerActions.STYLE && allowedActions.style === false) return false;
+        if (opt.id === ContentActions.TABLE && allowedActions.viewData === false) return false;
+        if (opt.id === MapLayerActions.PROPERTIES && allowedActions.properties === false) return false;
+        if (opt.id === MapLayerActions.ZOOM_TO && allowedActions.zoomTo === false) return false;
         return true;
       });
     }
 
     // Filter download action based on downloadableLayers
     if (downloadableLayers && node.type === "layer") {
-      menuOptions = menuOptions.filter((item) => {
-        if (item.id === ContentActions.DOWNLOAD) {
+      menuOptions = menuOptions.filter((opt) => {
+        if (opt.id === ContentActions.DOWNLOAD) {
           return downloadableLayers.includes(node.id);
         }
         return true;
@@ -649,9 +764,7 @@ export const ProjectLayerTree = ({
       <Stack
         direction="row"
         alignItems="center"
-        spacing={1}
-        // Class for parent CSS to keep opacity 1 when menu open
-        className={isOpen ? "menu-open" : ""}>
+        spacing={1}>
         {/* Filter Badge - Only show in edit mode */}
         {isEditMode && node.type === "layer" && hasFilter && (
           <Tooltip
@@ -727,7 +840,14 @@ export const ProjectLayerTree = ({
                             if (opt.id === MapLayerActions.PROPERTIES) handleProperties(target);
                             else if (opt.id === MapLayerActions.STYLE) handleStyle(target);
                             else if (opt.id === MapLayerActions.DUPLICATE) handleDuplicate(target);
-                            else openMoreMenu(opt, target);
+                            else if (opt.id === ContentActions.TABLE) {
+                              if (mapMode === "data") {
+                                dispatch(setDataPanelLayerId(target.id));
+                                dispatch(setIsDataPanelOpen(true));
+                              } else {
+                                openMoreMenu(opt, target);
+                              }
+                            } else openMoreMenu(opt, target);
                           }
                         };
                         await handleAction();
@@ -770,6 +890,18 @@ export const ProjectLayerTree = ({
                     handleStyle(target);
                   } else if (menuItem.id === MapLayerActions.DUPLICATE) {
                     handleDuplicate(target);
+                  } else if (menuItem.id === MapLayerActions.EDIT_FEATURES) {
+                    dispatch(startEditing({
+                      layerId: target.layer_id,
+                      geometryType: target.feature_layer_geometry_type ?? null,
+                    }));
+                  } else if (menuItem.id === ContentActions.TABLE) {
+                    if (mapMode === "data") {
+                      dispatch(setDataPanelLayerId(target.id));
+                      dispatch(setIsDataPanelOpen(true));
+                    } else {
+                      openMoreMenu(menuItem, target);
+                    }
                   } else {
                     openMoreMenu(menuItem, target);
                   }
@@ -786,6 +918,18 @@ export const ProjectLayerTree = ({
               }}
             />
           )
+        )}
+
+        {/* Group info ⓘ button */}
+        {node.type === "group" && groupInfo?.[String(node.id)] && (
+          <Tooltip title={t("properties")} placement="top">
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); setGroupInfoDialogId(node.id); }}
+              sx={{ p: 0.25 }}>
+              <Icon iconName={ICON_NAME.CIRCLEINFO} style={{ fontSize: "15px" }} />
+            </IconButton>
+          </Tooltip>
         )}
 
         {/* Visibility toggle - very right when position is "right" */}
@@ -819,7 +963,19 @@ export const ProjectLayerTree = ({
         )}
       </Stack>
     );
-  };
+  }, [
+    t,
+    getLayerMoreMenuOptions, openMoreMenu,
+    handleVisibilityToggle, handleProperties, handleStyle, handleDuplicate,
+    setGroupModal, setGroupInfoDialogId,
+    mapRef,
+    viewMode, hideActions, toggleStyle, togglePosition, moreOptionsStyle,
+    allowedActions, downloadableLayers, projectLayers,
+    scenarioCountByLayer, isEditMode, groupInfo,
+    mapMode, userProfile,
+    dispatch,
+    activeLayerId, activeRightPanel,
+  ]);
 
   // --- ICONS & LEGEND ---
   const itemsWithIcons = useMemo(() => {
@@ -851,12 +1007,12 @@ export const ProjectLayerTree = ({
               imageUrl={customIcon.url}
               dimension="16px"
               applyMask={customIcon.source === "library"}
-              imgColor={theme.palette.text.secondary}
+              imgColor={theme.palette.action.active}
             />
           ) : (
             <Icon
               iconName={ICON_NAME.LAYERS}
-              style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+              style={{ fontSize: "1rem", color: theme.palette.action.active }}
             />
           ),
           isVisible: nodeVisibility,
@@ -879,7 +1035,7 @@ export const ProjectLayerTree = ({
         iconNode = (
           <Icon
             iconName={ICON_NAME.TABLE}
-            style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+            style={{ fontSize: "1rem", color: theme.palette.action.active }}
           />
         );
       }
@@ -889,7 +1045,7 @@ export const ProjectLayerTree = ({
           <Icon
             iconName={ICON_NAME.IMAGE}
             fontSize="small"
-            style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+            style={{ fontSize: "1rem", color: theme.palette.action.active }}
           />
         );
 
@@ -935,7 +1091,7 @@ export const ProjectLayerTree = ({
             iconNode = (
               <Icon
                 iconName={ICON_NAME.LOCATION_MARKER}
-                style={{ fontSize: "1rem", color: theme.palette.text.secondary }}
+                style={{ fontSize: "1rem", color: theme.palette.action.active }}
               />
             );
           } else {
@@ -1024,6 +1180,38 @@ export const ProjectLayerTree = ({
     });
   }, [items, theme, currentZoom, viewMode, hideLegendHeading, groupIcons]);
 
+  const renderPrefix = useCallback(togglePosition === "left" ? (item: ProjectTreeItem) => {
+    const node = item.data as ProjectLayerTreeNode;
+    if (hideActions || node.layer_type === "table") return null;
+    const nodeVisibility = node.properties?.visibility ?? true;
+    return (
+      <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center" }}>
+        {toggleStyle === "checkbox" ? (
+          <Checkbox
+            size="small"
+            checked={nodeVisibility}
+            onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
+            sx={{ p: 0.25 }}
+          />
+        ) : toggleStyle === "switch" ? (
+          <Switch
+            size="small"
+            checked={nodeVisibility}
+            onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
+            sx={{ transform: "scale(0.75)", mx: -0.5 }}
+          />
+        ) : (
+          <IconButton size="small" onClick={(e) => handleVisibilityToggle(node, e)} sx={{ p: 0.25 }}>
+            <Icon
+              iconName={!nodeVisibility ? ICON_NAME.EYE_SLASH : ICON_NAME.EYE}
+              style={{ fontSize: "15px" }}
+            />
+          </IconButton>
+        )}
+      </Box>
+    );
+  } : () => null, [togglePosition, hideActions, toggleStyle, handleVisibilityToggle]);
+
   // --- RENDER ---
   if (isLoading && items.length === 0) {
     return <Box sx={{ p: 2, color: "text.secondary" }}>Loading layers...</Box>;
@@ -1034,7 +1222,7 @@ export const ProjectLayerTree = ({
   }
 
   return (
-    <Box sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <Box sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", pointerEvents: "all" }}>
       {/* 1. Header */}
       {isEditMode && (
         <Box
@@ -1121,48 +1309,22 @@ export const ProjectLayerTree = ({
 
       {/* 3. Tree */}
       <Box sx={{ flexGrow: 1, overflowY: "auto", overflowX: "hidden", px: 1, pt: 1 }}>
+        {headerContent}
         <DraggableTreeView
           items={itemsWithIcons}
           onItemsChange={(newItems) => {
+            // Always update local state so expand/collapse arrows work in view mode.
+            // Persist to the API only in edit mode.
             setItems(newItems);
+            if (!isEditMode) return;
             if (onTreeUpdate) {
               const updatePayload = formatDndDataForApi(newItems);
               onTreeUpdate(updatePayload);
             }
           }}
-          renderActions={(item) => <RenderRowActions item={item} />}
-          renderPrefix={togglePosition === "left" ? (item) => {
-            const node = item.data as ProjectLayerTreeNode;
-            if (hideActions || node.layer_type === "table") return null;
-            const nodeVisibility = node.properties?.visibility ?? true;
-            return (
-              <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center" }}>
-                {toggleStyle === "checkbox" ? (
-                  <Checkbox
-                    size="small"
-                    checked={nodeVisibility}
-                    onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-                    sx={{ p: 0.25 }}
-                  />
-                ) : toggleStyle === "switch" ? (
-                  <Switch
-                    size="small"
-                    checked={nodeVisibility}
-                    onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-                    sx={{ transform: "scale(0.75)", mx: -0.5 }}
-                  />
-                ) : (
-                  <IconButton size="small" onClick={(e) => handleVisibilityToggle(node, e)} sx={{ p: 0.25 }}>
-                    <Icon
-                      iconName={!nodeVisibility ? ICON_NAME.EYE_SLASH : ICON_NAME.EYE}
-                      style={{ fontSize: "15px" }}
-                    />
-                  </IconButton>
-                )}
-              </Box>
-            );
-          } : undefined}
-          enableSelection={isEditMode}
+          renderActions={renderRowActions}
+          renderPrefix={togglePosition === "left" ? renderPrefix : undefined}
+          enableSelection
           selectedIds={treeSelectedIds}
           onSelect={handleNodeClick}
           onExternalDragStart={
@@ -1179,6 +1341,14 @@ export const ProjectLayerTree = ({
           sx={{ width: "100%" }}
         />
       </Box>
+      {groupInfoDialogId !== null && groupInfo?.[String(groupInfoDialogId)] && (
+        <MarkdownPopupDialog
+          open
+          onClose={() => setGroupInfoDialogId(null)}
+          title={projectLayerGroups.find((g) => g.id === groupInfoDialogId)?.name ?? ""}
+          content={groupInfo[String(groupInfoDialogId)]}
+        />
+      )}
     </Box>
   );
 };

@@ -1,12 +1,17 @@
-import { Box, Divider, Stack, Typography } from "@mui/material";
-import { useCallback, useMemo, useState } from "react";
+import { Box, Button, CircularProgress, Divider, Stack, Tooltip, Typography } from "@mui/material";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
+import { toast } from "react-toastify";
 
-import { getLayerClassBreaks, getLayerUniqueValues } from "@/lib/api/layers";
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
+import { getLayerClassBreaks, getLayerUniqueValues, updateBaseLayerProperties } from "@/lib/api/layers";
 import { updateProjectLayer } from "@/lib/api/projects";
+import { setStyleClipboard } from "@/lib/store/layer/slice";
 import { COLOR_RANGES } from "@/lib/constants/color";
 import {
+  type ClassBreaks,
   type ColorMap,
   type FeatureLayerProperties,
   type LayerUniqueValues,
@@ -17,14 +22,17 @@ import type { ProjectLayer } from "@/lib/validations/project";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
 import { useActiveLayer, useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
-
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import AccordionWrapper from "@/components/common/AccordionWrapper";
+import FormLabelHelper from "@/components/common/FormLabelHelper";
 import SectionHeader from "@/components/map/panels/common/SectionHeader";
+import SliderInput from "@/components/map/panels/common/SliderInput";
 import ColorOptions from "@/components/map/panels/style/color/ColorOptions";
 import GeneralOptions from "@/components/map/panels/style/general/GeneralOptions";
 import InteractionOptions from "@/components/map/panels/style/interaction/InteractionOptions";
 import LabelOptions from "@/components/map/panels/style/label/LabelOptions";
 import { LegendOptions } from "@/components/map/panels/style/legend/LegendOptions";
+import LineStyleSection from "@/components/map/panels/style/line/LineStyleSection";
 import MarkerOptions from "@/components/map/panels/style/marker/MarkerOptions";
 import Settings from "@/components/map/panels/style/settings/Settings";
 
@@ -38,8 +46,12 @@ enum LayerStylePanels {
 const LayerStylePanel = ({ projectId }: { projectId: string }) => {
   const { t } = useTranslation("common");
   const { map } = useMap();
+  const dispatch = useAppDispatch();
+  const styleClipboard = useAppSelector((state) => state.layers.styleClipboard);
 
   const [expanded, setExpanded] = useState<LayerStylePanels | false>(LayerStylePanels.STYLE);
+  const [isDefaultSaved, setIsDefaultSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAccordionChange =
     (panel: LayerStylePanels) => (_event: React.SyntheticEvent, isExpanded: boolean) => {
@@ -129,6 +141,75 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
     [activeLayer, createColorMapFromClassBreaks, layerProperties]
   );
 
+  const updateSizeClassificationBreaks = useCallback(
+    async (
+      updateType: "radius" | "stroke_width" | "marker_size",
+      newStyle: FeatureLayerProperties,
+    ) => {
+      if (!activeLayer) return;
+      const fieldName = newStyle[`${updateType}_field`]?.name;
+      if (!fieldName) {
+        newStyle[`${updateType}_scale_breaks`] = undefined;
+        newStyle[`${updateType}_ordinal_map`] = undefined;
+        return;
+      }
+      const numSteps = (newStyle[`${updateType}_num_steps`] as number) ?? 5;
+      const scale = (newStyle[`${updateType}_scale`] as ClassBreaks) ?? classBreaks.Enum.quantile;
+      const oldFieldName = layerProperties[`${updateType}_field`]?.name;
+
+      // Custom breaks: user edits break values directly — never auto-fetch
+      if (scale === classBreaks.Enum.custom_breaks) {
+        if (!newStyle[`${updateType}_scale_breaks`]) {
+          // Initialize from existing breaks or fetch once with equal_interval
+          const existing = layerProperties[`${updateType}_scale_breaks`];
+          if (existing) {
+            newStyle[`${updateType}_scale_breaks`] = existing;
+          } else {
+            try {
+              const breaks = await getLayerClassBreaks(activeLayer.layer_id, classBreaks.Enum.equal_interval, fieldName, numSteps - 1);
+              if (breaks) newStyle[`${updateType}_scale_breaks`] = breaks;
+            } catch (e) {
+              console.warn(`Failed to initialize custom size breaks:`, e);
+            }
+          }
+        }
+        return;
+      }
+
+      // Ordinal: categorical → fixed size per unique value
+      if (scale === classBreaks.Enum.ordinal) {
+        const hasMap = !!newStyle[`${updateType}_ordinal_map`];
+        // If the map is already set and the field hasn't changed, keep user edits untouched
+        if (hasMap && fieldName === oldFieldName) return;
+        // Otherwise (re)initialize: first-time, field changed, or scale just switched to ordinal
+        try {
+          const uniqueValues = await getLayerUniqueValues(activeLayer.layer_id, fieldName, 20);
+          const defaultSize = (newStyle[`${updateType}_range`] as number[] | undefined)?.[0] ?? 5;
+          newStyle[`${updateType}_ordinal_map`] = uniqueValues.items.map(
+            ({ value }: { value: string }) => [value, defaultSize] as [string, number]
+          );
+        } catch (e) {
+          console.warn(`Failed to fetch unique values for ordinal size:`, e);
+        }
+        return;
+      }
+
+      // Standard classification (quantile / equal_interval / std_dev / heads_and_tails)
+      // Clear stale ordinal map so re-selecting ordinal later fetches fresh values
+      newStyle[`${updateType}_ordinal_map`] = undefined;
+      const oldScale = layerProperties[`${updateType}_scale`];
+      const oldNumSteps = layerProperties[`${updateType}_num_steps`];
+      if (fieldName === oldFieldName && scale === oldScale && numSteps === oldNumSteps && newStyle[`${updateType}_scale_breaks`]) return;
+      try {
+        const breaks = await getLayerClassBreaks(activeLayer.layer_id, scale, fieldName, numSteps - 1);
+        if (breaks) newStyle[`${updateType}_scale_breaks`] = breaks;
+      } catch (e) {
+        console.warn(`Failed to fetch size breaks for field "${fieldName}":`, e);
+      }
+    },
+    [activeLayer, layerProperties],
+  );
+
   const updateOrdinalValues = useCallback(
     async (updateType: "color" | "stroke_color" | "marker", newStyle: FeatureLayerProperties) => {
       if (!activeLayer) return;
@@ -157,26 +238,20 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
         });
         newStyle[`${updateType}_mapping`] = markerMap;
       } else if (updateType !== "marker") {
-        if (
-          (newStyle[`${updateType}_scale`] === "ordinal" &&
-            newStyle[`${updateType}_range`]?.name !== layerProperties[`${updateType}_range`]?.name) ||
-          !newStyle[`${updateType}_range`]?.color_map ||
-          oldFieldName !== newFieldName
-        ) {
-          const currentRange = newStyle[`${updateType}_range`];
-          // Request more unique values than colors to get the actual count
-          // Then limit to the smaller of: unique values found OR available colors
+        const existingColorMap = layerProperties[`${updateType}_range`]?.color_map;
+        const fieldChanged = oldFieldName !== newFieldName;
+        const currentRange = newStyle[`${updateType}_range`];
+
+        if (!existingColorMap?.length || fieldChanged) {
+          // Fetch unique values: first time setup or the attribute field changed
           const uniqueValues = await getLayerUniqueValues(
             activeLayer.layer_id,
             newStyle[`${updateType}_field`]?.name as string,
-            100 // Request up to 100 to get actual unique count
+            100
           );
 
-          // Use the actual unique values count, capped by a reasonable max
           const actualCount = Math.min(uniqueValues.items.length, 12);
 
-          // Try to find a palette with the exact number of colors needed
-          // First, look for a palette with the same category and type and correct step count
           let matchingPalette = COLOR_RANGES.find(
             (range) =>
               range.colors.length === actualCount &&
@@ -184,19 +259,16 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
               range.type === currentRange?.type
           );
 
-          // If no exact category+type match found, try matching only on type (still respecting palette semantics)
           if (!matchingPalette && currentRange?.type) {
             matchingPalette = COLOR_RANGES.find(
               (range) => range.colors.length === actualCount && range.type === currentRange.type
             );
           }
 
-          // As a last resort, if no type information is available, find any palette with the correct number of colors
           if (!matchingPalette && !currentRange?.type) {
             matchingPalette = COLOR_RANGES.find((range) => range.colors.length === actualCount);
           }
 
-          // Use the matching palette colors, or fall back to slicing current colors
           const colors = matchingPalette?.colors || currentRange?.colors?.slice(0, actualCount) || [];
 
           const colorMap = [] as ColorMap;
@@ -204,13 +276,22 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
             colorMap.push([[item.value], colors[index]]);
           });
           newStyle[`${updateType}_range`].color_map = colorMap;
-          // Update the colors array to match the selected palette
           newStyle[`${updateType}_range`].colors = colors;
-          // Update palette metadata if we found a matching one
           if (matchingPalette) {
             newStyle[`${updateType}_range`].name = matchingPalette.name;
             newStyle[`${updateType}_range`].category = matchingPalette.category;
             newStyle[`${updateType}_range`].type = matchingPalette.type;
+          }
+        } else {
+          // Palette changed but the attribute field and its values are unchanged —
+          // remap colors onto the existing value assignments without hitting the API.
+          const newColors = currentRange?.colors ?? [];
+          const entryCount = Math.min(existingColorMap.length, newColors.length);
+          if (entryCount > 0) {
+            newStyle[`${updateType}_range`].color_map = existingColorMap
+              .slice(0, entryCount)
+              .map(([values], index) => [values, newColors[index]] as ColorMap[number]);
+            newStyle[`${updateType}_range`].colors = newColors.slice(0, entryCount);
           }
         }
       }
@@ -236,6 +317,7 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
   );
 
   const markerExists = useMemo(() => {
+    if (!layerProperties) return false;
     return (
       layerProperties["custom_marker"] &&
       (layerProperties["marker"]?.name ||
@@ -248,9 +330,80 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
   const [collapseStrokeWidthOptions, setCollapseStrokeWidthOptions] = useState(true);
   const [collapsedMarkerIconOptions, setCollapsedMarkerIconOptions] = useState(true);
   const [collapseRadiusOptions, setCollapseRadiusOptions] = useState(true);
+  const [rasterOpacity, setRasterOpacity] = useState(layerProperties?.opacity ?? 1);
+
+  useEffect(() => {
+    setRasterOpacity(layerProperties?.opacity ?? 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayer?.id]);
+
+  useEffect(() => {
+    setIsDefaultSaved(false);
+  }, [activeLayer?.id]);
+
+  const handleCopyStyle = () => {
+    if (!activeLayer || !activeLayer.properties) return;
+    dispatch(setStyleClipboard({
+      sourceLayerName: activeLayer.name,
+      properties: activeLayer.properties as FeatureLayerProperties,
+    }));
+  };
+
+  const handlePasteStyle = async () => {
+    if (!activeLayer || !styleClipboard) return;
+    await updateLayerStyle(styleClipboard.properties);
+  };
+
+  const handleSetDefault = async () => {
+    if (!activeLayer || !activeLayer.properties || !activeLayer.layer_id) return;
+    setIsSaving(true);
+    try {
+      await updateBaseLayerProperties(
+        activeLayer.layer_id,
+        activeLayer.properties as Record<string, unknown>
+      );
+      setIsDefaultSaved(true);
+      toast.success(t("style_saved_as_dataset_default_success"));
+    } catch (e) {
+      console.error("Failed to set default style:", e);
+      toast.error(t("style_saved_as_dataset_default_error"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!activeLayer || !layerProperties) return null;
 
   return (
     <>
+      <Stack direction="row" spacing={1} sx={{ px: 2, py: 2, borderBottom: "1px solid", borderColor: "divider" }}>
+        <Tooltip title={t("copy_style")} placement="bottom">
+          <span style={{ display: "flex" }}>
+            <Button variant="outlined" size="small" sx={{ minWidth: 36, width: 36, height: 36, px: 0 }} onClick={handleCopyStyle}>
+              <Icon iconName={ICON_NAME.COPY} style={{ fontSize: 16 }} />
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={styleClipboard ? `${t("paste_style")} (${styleClipboard.sourceLayerName})` : t("paste_style")} placement="bottom">
+          <span style={{ display: "flex" }}>
+            <Button variant="outlined" size="small" sx={{ minWidth: 36, width: 36, height: 36, px: 0 }} disabled={!styleClipboard} onClick={handlePasteStyle}>
+              <Icon iconName={ICON_NAME.SLIDERS} style={{ fontSize: 16 }} />
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={t("set_as_default_style")} placement="bottom">
+          <span style={{ display: "flex" }}>
+            <Button
+              variant={isDefaultSaved ? "contained" : "outlined"}
+              size="small"
+              sx={{ minWidth: 36, width: 36, height: 36, px: 0 }}
+              disabled={isSaving}
+              onClick={handleSetDefault}>
+              {isSaving ? <CircularProgress size={16} color="inherit" /> : <Icon iconName={ICON_NAME.STAR} style={{ fontSize: 16 }} />}
+            </Button>
+          </span>
+        </Tooltip>
+      </Stack>
       <Box
         sx={{
           display: "flex",
@@ -268,6 +421,26 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
         )}
       </Box>
       <Divider sx={{ mb: 0 }} />
+      {activeLayer?.type === "raster" && (
+        <Box sx={{ p: 2 }}>
+          <FormLabelHelper label={t("opacity")} color="inherit" />
+          <Box sx={{ px: 1 }}>
+            <SliderInput
+              value={rasterOpacity}
+              isRange={false}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(value) => setRasterOpacity(value as number)}
+              onChangeCommitted={(value) => {
+                const newStyle = JSON.parse(JSON.stringify(layerProperties)) || {};
+                newStyle.opacity = value as number;
+                updateLayerStyle(newStyle);
+              }}
+            />
+          </Box>
+        </Box>
+      )}
       {activeLayer?.type === "feature" && (
         <>
           <AccordionWrapper
@@ -387,7 +560,6 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                               label={t("stroke_width")}
                               collapsed={collapseStrokeWidthOptions}
                               setCollapsed={setCollapseStrokeWidthOptions}
-                              disableAdvanceOptions={true}
                             />
 
                             <Settings
@@ -395,7 +567,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                               layerStyle={layerProperties}
                               active={!!layerProperties.stroked}
                               collapsed={collapseStrokeWidthOptions}
-                              onStyleChange={(newStyle: FeatureLayerProperties) => {
+                              onStyleChange={async (newStyle: FeatureLayerProperties) => {
+                                await updateSizeClassificationBreaks("stroke_width", newStyle);
                                 updateLayerStyle(newStyle);
                               }}
                               layerFields={layerFields}
@@ -403,6 +576,13 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                             />
                           </>
                         )}
+
+                      {activeLayer.feature_layer_geometry_type === "line" && (
+                        <LineStyleSection
+                          layerProperties={layerProperties}
+                          onStyleChange={(newStyle) => updateLayerStyle(newStyle)}
+                        />
+                      )}
 
                       {/* {MARKER ICON} */}
                       {activeLayer.feature_layer_geometry_type &&
@@ -448,15 +628,15 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                                   label={t("marker_settings")}
                                   collapsed={collapseRadiusOptions}
                                   setCollapsed={setCollapseRadiusOptions}
-                                  disableAdvanceOptions={true}
                                 />
                                 <Settings
                                   type="marker_size"
                                   layerStyle={layerProperties}
                                   active={markerExists}
                                   collapsed={collapseRadiusOptions}
-                                  onStyleChange={(newStyle: FeatureLayerProperties) => {
+                                  onStyleChange={async (newStyle: FeatureLayerProperties) => {
                                     if (!map) return;
+                                    await updateSizeClassificationBreaks("marker_size", newStyle);
                                     updateLayerStyle(newStyle);
                                   }}
                                   layerFields={layerFields}
@@ -472,9 +652,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                                   active={true}
                                   alwaysActive={true}
                                   label={t("point_settings")}
-                                  collapsed={collapseStrokeWidthOptions}
-                                  setCollapsed={setCollapseStrokeWidthOptions}
-                                  disableAdvanceOptions={true}
+                                  collapsed={collapseRadiusOptions}
+                                  setCollapsed={setCollapseRadiusOptions}
                                 />
 
                                 <Settings
@@ -482,7 +661,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                                   layerStyle={layerProperties}
                                   active={true}
                                   collapsed={collapseRadiusOptions}
-                                  onStyleChange={(newStyle: FeatureLayerProperties) => {
+                                  onStyleChange={async (newStyle: FeatureLayerProperties) => {
+                                    await updateSizeClassificationBreaks("radius", newStyle);
                                     updateLayerStyle(newStyle);
                                   }}
                                   layerFields={layerFields}

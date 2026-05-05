@@ -13,13 +13,17 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 from fastapi_pagination import Page
 from fastapi_pagination import Params as PaginationParams
-from pydantic import UUID4
-from sqlalchemy import select
+from pydantic import UUID4, BaseModel
+from sqlalchemy import select, text
 from sqlmodel import update
 
+from core.core.config import settings
 from core.crud.crud_layer_project import layer_project as crud_layer_project
 from core.crud.crud_layer_project_group import (
     layer_project_group as crud_layer_project_group,
+)
+from core.crud.crud_organization_domain import (
+    organization_domain as crud_organization_domain,
 )
 from core.crud.crud_project import project as crud_project
 from core.crud.crud_project_copy import copy_project as copy_project_fn
@@ -29,8 +33,11 @@ from core.db.models._link_model import (
     LayerProjectGroup,
     LayerProjectLink,
     UserProjectLink,
+    UserTeamLink,
 )
-from core.db.models.project import Project
+from core.db.models.user import User
+from core.db.models.organization_domain import CertStatus
+from core.db.models.project import Project, ProjectPublic
 from core.db.models.scenario import Scenario
 from core.db.session import AsyncSession
 from core.deps.auth import auth_z
@@ -90,11 +97,24 @@ async def create_project(
     """This will create an empty project with a default initial view state. The project does not contains layers."""
 
     # Create project
-    return await crud_project.create(
+    project = await crud_project.create(
         async_session=async_session,
         project_in=Project(**project_in.model_dump(exclude_none=True), user_id=user_id),
         initial_view_state=project_in.initial_view_state,
     )
+
+    # Grant the creator project-owner access in accounts.project_user so auth_z can resolve it
+    await async_session.execute(
+        text(
+            f"INSERT INTO {settings.ACCOUNTS_SCHEMA}.project_user (project_id, user_id, role_id) "
+            f"SELECT :project_id, :user_id, r.id FROM {settings.ACCOUNTS_SCHEMA}.role r "
+            f"WHERE r.name = 'project-owner' ON CONFLICT DO NOTHING"
+        ),
+        {"project_id": str(project.id), "user_id": str(user_id)},
+    )
+    await async_session.commit()
+
+    return project
 
 
 @router.get(
@@ -122,7 +142,96 @@ async def read_project(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
-    return IProjectRead(**project.model_dump())
+
+    # Populate owned_by from the project owner
+    owner = await async_session.get(User, project.user_id)
+    owned_by = (
+        {
+            "id": str(owner.id),
+            "firstname": owner.firstname,
+            "lastname": owner.lastname,
+            "avatar": owner.avatar,
+        }
+        if owner
+        else None
+    )
+
+    # Get current user's role, checking all grant paths (user, team, org, folder).
+    # The query returns the most permissive role across all paths.
+    role_result = await async_session.execute(
+        text(
+            f"""
+            SELECT role_name FROM (
+                -- 1. Project owner (user_id matches project owner)
+                SELECT 'project-owner' AS role_name, 1 AS priority
+                FROM customer.project p
+                WHERE p.id = :pid AND p.user_id = :uid
+
+                UNION ALL
+
+                -- 2. Direct user grant
+                SELECT r.name, 2
+                FROM {settings.ACCOUNTS_SCHEMA}.project_user pu
+                JOIN {settings.ACCOUNTS_SCHEMA}.role r ON r.id = pu.role_id
+                WHERE pu.project_id = :pid AND pu.user_id = :uid
+
+                UNION ALL
+
+                -- 3. Team grant
+                SELECT r.name, 3
+                FROM {settings.ACCOUNTS_SCHEMA}.project_team pt
+                JOIN {settings.ACCOUNTS_SCHEMA}.user_team ut ON ut.team_id = pt.team_id
+                JOIN {settings.ACCOUNTS_SCHEMA}.role r ON r.id = pt.role_id
+                WHERE pt.project_id = :pid AND ut.user_id = :uid
+
+                UNION ALL
+
+                -- 4. Organisation grant
+                SELECT r.name, 4
+                FROM {settings.ACCOUNTS_SCHEMA}.project_organization po
+                JOIN {settings.ACCOUNTS_SCHEMA}.role r ON r.id = po.role_id
+                JOIN {settings.ACCOUNTS_SCHEMA}.user u ON u.organization_id = po.organization_id
+                WHERE po.project_id = :pid AND u.id = :uid
+
+                UNION ALL
+
+                -- 5. Folder grant (team or org)
+                SELECT
+                    CASE rg.role_name
+                        WHEN 'folder-editor' THEN 'project-editor'
+                        WHEN 'folder-viewer' THEN 'project-viewer'
+                        ELSE NULL
+                    END,
+                    5
+                FROM customer.project p
+                JOIN (
+                    SELECT rg2.resource_id, r2.name AS role_name
+                    FROM {settings.ACCOUNTS_SCHEMA}.resource_grant rg2
+                    JOIN {settings.ACCOUNTS_SCHEMA}.role r2 ON r2.id = rg2.role_id
+                    WHERE rg2.resource_type = 'folder'
+                      AND (
+                          (rg2.grantee_type = 'team' AND EXISTS (
+                              SELECT 1 FROM {settings.ACCOUNTS_SCHEMA}.user_team ut2
+                              WHERE ut2.team_id = rg2.grantee_id AND ut2.user_id = :uid
+                          ))
+                          OR (rg2.grantee_type = 'organization' AND EXISTS (
+                              SELECT 1 FROM {settings.ACCOUNTS_SCHEMA}.user u2
+                              WHERE u2.id = :uid AND u2.organization_id = rg2.grantee_id
+                          ))
+                      )
+                ) rg ON rg.resource_id = p.folder_id
+                WHERE p.id = :pid AND p.folder_id IS NOT NULL
+            ) sub
+            WHERE role_name IS NOT NULL
+            ORDER BY priority ASC
+            LIMIT 1
+            """
+        ),
+        {"pid": str(project_id), "uid": str(user_id)},
+    )
+    my_role = role_result.scalars().first()
+
+    return IProjectRead(**project.model_dump(), owned_by=owned_by, my_role=my_role)
 
 
 @router.get(
@@ -162,6 +271,14 @@ async def read_projects(
 ) -> Page[IProjectRead]:
     """Retrieve a list of projects."""
 
+    # Resolve the user's team memberships and organization for folder-grant checks
+    team_ids_result = await async_session.execute(
+        select(UserTeamLink.team_id).where(UserTeamLink.user_id == user_id)
+    )
+    team_ids = [row[0] for row in team_ids_result.all()]
+    user_obj = await async_session.get(User, user_id)
+    user_organization_id = user_obj.organization_id if user_obj else None
+
     projects = await crud_project.get_projects(
         async_session=async_session,
         user_id=user_id,
@@ -172,6 +289,8 @@ async def read_projects(
         order=order,
         team_id=team_id,
         organization_id=organization_id,
+        team_ids=team_ids,
+        user_organization_id=user_organization_id,
     )
 
     return projects
@@ -252,18 +371,28 @@ async def read_project_initial_view_state(
 ) -> InitialViewState:
     """Retrieve initial view state of a project by its ID."""
 
-    # Get initial view state
     user_projects = await crud_user_project.get_by_multi_keys(
         async_session, keys={"user_id": user_id, "project_id": project_id}
     )
-    if not user_projects:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found or user has no access to this project",
-        )
-    user_project = user_projects[0]
-    assert type(user_project) is UserProjectLink
-    return InitialViewState(**user_project.initial_view_state)
+    if user_projects:
+        user_project = user_projects[0]
+        assert type(user_project) is UserProjectLink
+        return InitialViewState(**user_project.initial_view_state)
+
+    # Shared-folder user: no personal row yet — fall back to the owner's view state.
+    project = await crud_project.get(async_session, id=project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    owner_projects = await crud_user_project.get_by_multi_keys(
+        async_session, keys={"user_id": project.user_id, "project_id": project_id}
+    )
+    if owner_projects:
+        return InitialViewState(**owner_projects[0].initial_view_state)
+
+    raise HTTPException(
+        status_code=404,
+        detail="Project not found or user has no access to this project",
+    )
 
 
 @router.put(
@@ -923,6 +1052,83 @@ async def unpublish_project(
 
 
 ##############################################
+### Custom domain assignment endpoints
+##############################################
+
+
+class AssignCustomDomainPayload(BaseModel):
+    """Body of POST /project/{project_id}/public/custom-domain."""
+
+    domain_id: UUID4
+
+
+@router.post(
+    "/{project_id}/public/custom-domain",
+    summary="Assign a custom domain to a published project",
+    dependencies=[Depends(auth_z)],
+)
+async def assign_custom_domain(
+    project_id: str,
+    payload: AssignCustomDomainPayload,
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> ProjectPublicRead:
+    """Bind an active custom domain to a published project."""
+    result = await async_session.execute(
+        select(ProjectPublic).where(ProjectPublic.project_id == UUID(project_id))
+    )
+    project_public = result.scalar_one_or_none()
+    if project_public is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project is not published",
+        )
+
+    domain = await crud_organization_domain.get(async_session, id=payload.domain_id)
+    if not domain:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="domain not found",
+        )
+    if domain.cert_status != CertStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="domain must be active before assignment",
+        )
+
+    project_public.custom_domain_id = payload.domain_id
+    await async_session.commit()
+    await async_session.refresh(project_public)
+    return ProjectPublicRead(**project_public.model_dump())
+
+
+@router.delete(
+    "/{project_id}/public/custom-domain",
+    summary="Unassign the custom domain from a published project",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(auth_z)],
+)
+async def unassign_custom_domain(
+    project_id: str,
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> None:
+    """Clear the custom-domain assignment from a published project."""
+    result = await async_session.execute(
+        select(ProjectPublic).where(ProjectPublic.project_id == UUID(project_id))
+    )
+    project_public = result.scalar_one_or_none()
+    if project_public is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project is not published",
+        )
+
+    project_public.custom_domain_id = None
+    await async_session.commit()
+
+
+##############################################
 ### Layer Group Endpoints
 ##############################################
 
@@ -973,6 +1179,7 @@ async def create_layer_group(
     summary="Update a layer group",
     response_model=ILayerProjectGroupRead,
     status_code=200,
+    dependencies=[Depends(auth_z)],
 )
 async def update_layer_group(
     async_session: AsyncSession = Depends(get_db),
@@ -990,7 +1197,10 @@ async def update_layer_group(
 
 
 @router.delete(
-    "/{project_id}/group/{group_id}", summary="Delete a layer group", status_code=204
+    "/{project_id}/group/{group_id}",
+    summary="Delete a layer group",
+    status_code=204,
+    dependencies=[Depends(auth_z)],
 )
 async def delete_layer_group(
     async_session: AsyncSession = Depends(get_db),
@@ -1018,6 +1228,7 @@ async def delete_layer_group(
     "/{project_id}/layer-tree",
     summary="Update layer tree structure (Reorder/Reparent)",
     status_code=204,
+    dependencies=[Depends(auth_z)],
 )
 async def update_project_layer_tree(
     project_id: UUID4 = Path(..., description="The Project ID"),

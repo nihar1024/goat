@@ -9,6 +9,8 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
@@ -17,21 +19,36 @@ import {
   Menu,
   MenuItem,
   MenuList,
+  Select,
   Stack,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material";
 import { formatDistance } from "date-fns";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import { Loading } from "@p4b/ui/components/Loading";
 
 import { useDateFnsLocale } from "@/i18n/utils";
 
+import {
+  assignDomainToProject,
+  unassignDomainFromProject,
+  useOrganizationDomains,
+} from "@/lib/api/customDomains";
+import {
+  FOLDERS_API_BASE_URL,
+  deleteFolderGrant,
+  shareFolderGrant,
+  useFolderGrants,
+} from "@/lib/api/folders";
 import { LAYERS_API_BASE_URL } from "@/lib/api/layers";
 import {
   PROJECTS_API_BASE_URL,
@@ -44,6 +61,7 @@ import { useTeams } from "@/lib/api/teams";
 import { useOrganization } from "@/lib/api/users";
 import { ACCOUNTS_DISABLED } from "@/lib/constants";
 import { type Layer, layerShareRoleEnum } from "@/lib/validations/layer";
+import { type Folder, folderShareRoleEnum } from "@/lib/validations/folder";
 import { type Project, projectShareRoleEnum } from "@/lib/validations/project";
 
 import CopyField from "@/components/common/CopyField";
@@ -52,8 +70,8 @@ import { CustomTabPanel, a11yProps } from "@/components/common/CustomTabPanel";
 interface ShareProps {
   open: boolean;
   onClose?: () => void;
-  type: "layer" | "project";
-  content: Layer | Project;
+  type: "layer" | "project" | "folder";
+  content: Layer | Project | Folder;
 }
 
 interface Item {
@@ -61,19 +79,21 @@ interface Item {
   name: string;
   avatar: string;
   role: string;
+  inheritedRole?: string;
 }
 
 interface ShareWithItemsTabProps {
   items: Item[];
   roleOptions: string[];
   onRoleChange: (id: string, role: string) => void;
+  disableInherited?: boolean;
 }
 
 interface ShareWithPublicTabProps {
   project: Project;
 }
 
-const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOptions, onRoleChange }) => {
+const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOptions, onRoleChange, disableInherited = false }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const open = Boolean(anchorEl);
@@ -118,16 +138,31 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
                 sx={{
                   display: "flex",
                   alignItems: "center",
+                  gap: 1,
                 }}>
+                {item.inheritedRole && (
+                  <Tooltip
+                    title={
+                      disableInherited
+                        ? t("access_via_folder_disable_hint")
+                        : t("access_via_folder")
+                    }
+                    placement="top">
+                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                      {t("via_folder")}
+                    </Typography>
+                  </Tooltip>
+                )}
                 <Button
                   variant="text"
                   sx={{ borderRadius: "4px" }}
                   size="small"
                   color="secondary"
+                  disabled={disableInherited && Boolean(item.inheritedRole)}
                   onClick={(event) => handleClick(event, item.id)}
                   endIcon={<KeyboardArrowDownIcon color="inherit" />}>
                   <Typography variant="body2" fontWeight="bold" color="inherit">
-                    {item.role ? getRoleTranslation(item.role) : t("no_access")}
+                    {item.role ? getRoleTranslation(item.role) : item.inheritedRole ? getRoleTranslation(item.inheritedRole) : t("no_access")}
                   </Typography>
                 </Button>
               </ListItemSecondaryAction>
@@ -165,12 +200,71 @@ const ShareWithItemsTab: React.FC<ShareWithItemsTabProps> = ({ items, roleOption
 const ShareWithPublicTab: React.FC<ShareWithPublicTabProps> = ({ project }) => {
   const { t } = useTranslation("common");
   const { sharedProject, isLoading, mutate } = usePublicProject(project.id);
+  const { organization } = useOrganization();
+  const { domains: orgDomains, mutate: mutateOrgDomains } = useOrganizationDomains(
+    organization?.id
+  );
   const [isPublishing, setIsPublishing] = useState(false);
   const [isUnpublishing, setIsUnpublishing] = useState(false);
+  const [isCustomUrlBusy, setIsCustomUrlBusy] = useState(false);
   const dateLocale = useDateFnsLocale();
   const baseUrl = window.location.origin;
   const publicUrl = `${baseUrl}/map/public/${project.id}`;
   const embedCode = `<iframe src="${publicUrl}" width="100%" height="600" frameborder="0" style="max-width: 100%; border: 1px solid #EAEAEA; border-radius: 4px;"></iframe>`;
+
+  const assignedDomainId = sharedProject?.custom_domain_id ?? null;
+  // Domains the user can pick:
+  //   - cert is active (so it can actually serve traffic), AND
+  //   - not already taken by a different project (the backend rejects
+  //     double-assignment, so let's not surface options that error out).
+  // The currently-assigned domain is always included so we can render its
+  // option even if its cert later regresses (otherwise MUI warns about an
+  // out-of-range value).
+  const selectableDomains = useMemo(() => {
+    const all = orgDomains ?? [];
+    return all.filter((d) => {
+      if (d.id === assignedDomainId) return true;
+      if (d.cert_status !== "active") return false;
+      const takenByOther =
+        d.assigned_project_id != null && d.assigned_project_id !== project.id;
+      return !takenByOther;
+    });
+  }, [orgDomains, assignedDomainId, project.id]);
+  const showCustomUrl =
+    Boolean(sharedProject) &&
+    (selectableDomains.some((d) => d.id !== assignedDomainId) ||
+      assignedDomainId !== null);
+
+  const handleCustomUrlChange = async (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
+    setIsCustomUrlBusy(true);
+    try {
+      if (value === "" || value === "__none__") {
+        await unassignDomainFromProject(project.id);
+        toast.success(
+          t("share_custom_url_unassign_success", "Custom URL removed")
+        );
+      } else {
+        await assignDomainToProject(project.id, value);
+        const picked = selectableDomains.find((d) => d.id === value);
+        toast.success(
+          t("share_custom_url_assign_success", "Custom URL set to {{domain}}", {
+            domain: picked?.base_domain ?? "",
+          })
+        );
+      }
+      await mutate();
+      await mutateOrgDomains();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("error_updating_share_access");
+      toast.error(message);
+    } finally {
+      setIsCustomUrlBusy(false);
+    }
+  };
 
   const handlePublish = async () => {
     try {
@@ -286,6 +380,75 @@ const ShareWithPublicTab: React.FC<ShareWithPublicTabProps> = ({ project }) => {
                 <Typography variant="body1">{t("embed_code")}</Typography>
                 <CopyField value={embedCode} copyText="Copy Code" copiedText="Copied Code" />
               </Stack>
+
+              {/* Custom URL (white-label custom domains).
+                  Only renders when the org has at least one active domain;
+                  the section is intentionally hidden otherwise to avoid
+                  surfacing an empty dropdown for orgs that don't use the
+                  feature. */}
+              {showCustomUrl && (
+                <Stack spacing={1}>
+                  <Typography variant="body1">
+                    {t("share_custom_url_label", "Custom URL")}
+                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <FormControl fullWidth size="small">
+                      <Select
+                        value={assignedDomainId ?? ""}
+                        displayEmpty
+                        disabled={isCustomUrlBusy}
+                        onChange={handleCustomUrlChange}
+                        renderValue={(selected) => {
+                          if (!selected) {
+                            return (
+                              <Typography variant="body2" color="text.secondary">
+                                {t(
+                                  "share_custom_url_placeholder",
+                                  "Choose a domain…"
+                                )}
+                              </Typography>
+                            );
+                          }
+                          const picked = selectableDomains.find(
+                            (d) => d.id === selected
+                          );
+                          return picked?.base_domain ?? "";
+                        }}>
+                        {selectableDomains.map((domain) => (
+                          <MenuItem key={domain.id} value={domain.id}>
+                            {domain.base_domain}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    {assignedDomainId && (
+                      <Tooltip
+                        title={t("share_custom_url_none", "Remove custom URL")}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled={isCustomUrlBusy}
+                            onClick={() =>
+                              handleCustomUrlChange({
+                                target: { value: "__none__" },
+                              } as SelectChangeEvent<string>)
+                            }
+                            aria-label={t(
+                              "share_custom_url_none",
+                              "Remove custom URL"
+                            )}>
+                            <Icon
+                              iconName={ICON_NAME.XCLOSE}
+                              htmlColor="inherit"
+                              style={{ fontSize: 16 }}
+                            />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                  </Stack>
+                </Stack>
+              )}
             </>
           )}
         </Stack>
@@ -300,18 +463,47 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
   const [value, setValue] = useState(0);
   const { organization: organization } = useOrganization();
   const { teams: teamsList } = useTeams();
-  const [sharedWith, setSharedWith] = useState(() => {
-    const { teams = [], organizations = [] } = content.shared_with || {};
-    const mapToIdAndRole = (item) => ({
-      id: item.id,
-      role: item.role,
-    });
 
+  const sharedWithContent = "shared_with" in content ? content.shared_with : undefined;
+  const [sharedWith, setSharedWith] = useState(() => {
+    const { teams = [], organizations = [] } = sharedWithContent || {};
+    const mapToIdAndRole = (item) => ({ id: item.id, role: item.role });
     return {
       teams: teams.map(mapToIdAndRole),
       organizations: organizations.map(mapToIdAndRole),
     };
   });
+
+  // For folders: fetch grants and sync into sharedWith once on open
+  const { data: folderGrants } = useFolderGrants(
+    type === "folder" && open ? content.id : null
+  );
+
+  // For layers and projects: fetch the folder's grants to show inherited access read-only
+  const itemFolderId =
+    type === "layer"
+      ? (content as Layer).folder_id
+      : type === "project"
+        ? (content as Project).folder_id
+        : null;
+  const { data: layerFolderGrants, error: layerFolderGrantsError } = useFolderGrants(
+    (type === "layer" || type === "project") && open && itemFolderId ? itemFolderId : null
+  );
+  const grantsLoaded = useRef(false);
+  useEffect(() => {
+    if (type === "folder" && folderGrants && !grantsLoaded.current) {
+      setSharedWith({
+        teams: folderGrants.grants
+          .filter((g) => g.grantee_type === "team")
+          .map((g) => ({ id: g.grantee_id, role: g.role })),
+        organizations: folderGrants.grants
+          .filter((g) => g.grantee_type === "organization")
+          .map((g) => ({ id: g.grantee_id, role: g.role })),
+      });
+      grantsLoaded.current = true;
+    }
+  }, [type, folderGrants]);
+
   const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
@@ -338,6 +530,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
 
   const handleOnClose = () => {
     setIsBusy(false);
+    grantsLoaded.current = false;
     onClose && onClose();
   };
 
@@ -346,16 +539,20 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       return [];
     }
     const sharedWitthOrg = sharedWith?.organizations;
+    const inheritedOrgRole = layerFolderGrants?.grants.find(
+      (g) => g.grantee_type === "organization" && g.grantee_id === organization.id
+    )?.role;
     const accessLevels = [
       {
         id: organization.id,
         name: organization.name,
         avatar: organization.avatar as string,
         role: sharedWitthOrg?.find((org) => org.id === organization.id)?.role || "",
+        inheritedRole: inheritedOrgRole,
       },
     ];
     return accessLevels;
-  }, [organization, sharedWith]);
+  }, [organization, sharedWith, layerFolderGrants]);
 
   const teamsAccessLevel: Item[] = useMemo(() => {
     if (!teamsList) {
@@ -367,16 +564,17 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       name: team.name,
       avatar: team.avatar as string,
       role: sharedWithTeams?.find((t) => t.id === team.id)?.role || "",
+      inheritedRole: layerFolderGrants?.grants.find(
+        (g) => g.grantee_type === "team" && g.grantee_id === team.id
+      )?.role,
     }));
     return accessLevels;
-  }, [teamsList, sharedWith]);
+  }, [teamsList, sharedWith, layerFolderGrants]);
 
   const roleOptions = useMemo(() => {
-    if (type === "layer") {
-      return [...layerShareRoleEnum.options, ""] as string[];
-    } else if (type === "project") {
-      return [...projectShareRoleEnum.options, ""] as string[];
-    }
+    if (type === "layer") return [...layerShareRoleEnum.options, ""] as string[];
+    if (type === "project") return [...projectShareRoleEnum.options, ""] as string[];
+    if (type === "folder") return [...folderShareRoleEnum.options, ""] as string[];
     return [];
   }, [type]);
 
@@ -389,6 +587,38 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       } else if (type === "layer") {
         await shareLayer(content.id, sharedWith);
         mutate((key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL);
+      } else if (type === "folder") {
+        const oldGrants = folderGrants?.grants ?? [];
+        const newTeams = (sharedWith.teams ?? []).filter((t) => t.role !== "");
+        const newOrgs = (sharedWith.organizations ?? []).filter((o) => o.role !== "");
+        const newTeamIds = new Set(newTeams.map((t) => t.id));
+        const newOrgIds = new Set(newOrgs.map((o) => o.id));
+        for (const team of newTeams) {
+          await shareFolderGrant(content.id, {
+            grantee_type: "team",
+            grantee_id: team.id,
+            role: team.role as "folder-viewer" | "folder-editor",
+          });
+        }
+        for (const org of newOrgs) {
+          await shareFolderGrant(content.id, {
+            grantee_type: "organization",
+            grantee_id: org.id,
+            role: org.role as "folder-viewer" | "folder-editor",
+          });
+        }
+        for (const grant of oldGrants) {
+          if (grant.grantee_type === "team" && !newTeamIds.has(grant.grantee_id)) {
+            await deleteFolderGrant(content.id, "team", grant.grantee_id);
+          } else if (grant.grantee_type === "organization" && !newOrgIds.has(grant.grantee_id)) {
+            await deleteFolderGrant(content.id, "organization", grant.grantee_id);
+          }
+        }
+        mutate(
+          (key) =>
+            (typeof key === "string" && key.startsWith(FOLDERS_API_BASE_URL)) ||
+            (Array.isArray(key) && typeof key[0] === "string" && key[0].startsWith(FOLDERS_API_BASE_URL))
+        );
       }
       toast.success(t("share_access_updated_successfully"));
     } catch {
@@ -424,10 +654,18 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
     });
   };
   const handleOrganizationRoleChange = (id: string, role: string) => {
+    if (type === "folder" && role !== "") {
+      // Clear all team grants when org is granted
+      setSharedWith((prev) => ({ ...prev, teams: [] }));
+    }
     handleRoleChange("organizations", id, role);
   };
 
   const handleTeamRoleChange = (id: string, role: string) => {
+    if (type === "folder" && role !== "") {
+      // Clear org grant when a team is granted
+      setSharedWith((prev) => ({ ...prev, organizations: [] }));
+    }
     handleRoleChange("teams", id, role);
   };
 
@@ -461,7 +699,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
           <Trans
             i18nKey="common:manage_share_access_for_content"
             values={{
-              content_type: type === "layer" ? t("layer") : t("project"),
+              content_type: type === "layer" ? t("layer") : type === "project" ? t("project") : t("folder_label"),
               content_name: content.name,
             }}
           />
@@ -484,18 +722,44 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                   value={value}
                   index={tabItems.findIndex((tab) => tab.value === item.value)}>
                   {item.value === "organization" && (
-                    <ShareWithItemsTab
-                      items={organizationsAccessLevel}
-                      roleOptions={roleOptions}
-                      onRoleChange={handleOrganizationRoleChange}
-                    />
+                    <>
+                      {type === "folder" && sharedWith.teams.length > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
+                          {t("folder_share_conflict_warning")}
+                        </Typography>
+                      )}
+                      {(type === "layer" || type === "project") && layerFolderGrantsError && itemFolderId && (
+                        <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
+                          {t("folder_access_may_apply")}
+                        </Typography>
+                      )}
+                      <ShareWithItemsTab
+                        items={organizationsAccessLevel}
+                        roleOptions={roleOptions}
+                        onRoleChange={handleOrganizationRoleChange}
+                        disableInherited={type === "layer" || type === "project"}
+                      />
+                    </>
                   )}
                   {item.value === "teams" && (
-                    <ShareWithItemsTab
-                      items={teamsAccessLevel}
-                      roleOptions={roleOptions}
-                      onRoleChange={handleTeamRoleChange}
-                    />
+                    <>
+                      {type === "folder" && sharedWith.organizations.length > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
+                          {t("folder_share_conflict_warning")}
+                        </Typography>
+                      )}
+                      {(type === "layer" || type === "project") && layerFolderGrantsError && itemFolderId && (
+                        <Typography variant="caption" color="text.secondary" sx={{ px: 2, pt: 1, display: "block" }}>
+                          {t("folder_access_may_apply")}
+                        </Typography>
+                      )}
+                      <ShareWithItemsTab
+                        items={teamsAccessLevel}
+                        roleOptions={roleOptions}
+                        onRoleChange={handleTeamRoleChange}
+                        disableInherited={type === "layer" || type === "project"}
+                      />
+                    </>
                   )}
                   {item.value === "public" && type === "project" && (
                     <ShareWithPublicTab project={content as Project} />

@@ -1,10 +1,14 @@
 import { Box } from "@mui/material";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 } from "uuid";
 
+import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { MAPBOX_TOKEN } from "@/lib/constants";
-import { setSelectedLayers } from "@/lib/store/layer/slice";
+import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
+import { setSelectedLayers, updateProjectLayer } from "@/lib/store/layer/slice";
+import { useInteractionDispatcher } from "@/hooks/map/useInteractionDispatcher";
+import type { InteractionRule } from "@/lib/validations/interaction";
 import {
   removeTemporaryFilter,
   setActiveRightPanel,
@@ -12,9 +16,11 @@ import {
   setGeocoderResult,
   setSelectedBuilderItem,
 } from "@/lib/store/map/slice";
-import type { BuilderWidgetSchema } from "@/lib/validations/project";
+import type { BuilderWidgetSchema, CustomBasemap } from "@/lib/validations/project";
 import {
   type BuilderPanelSchema,
+  type ControlKey,
+  type CornerKey,
   type Project,
   type ProjectLayer,
   type ProjectLayerGroup,
@@ -26,6 +32,7 @@ import { MapSidebarItemID } from "@/types/map/common";
 import { useDashboardFont } from "@/hooks/dashboard/useDashboardFont";
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
+import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
 import { useMeasureTool } from "@/hooks/map/useMeasureTool";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -37,6 +44,7 @@ import { FloatingPanel } from "@/components/common/FloatingPanel";
 import Header from "@/components/header/Header";
 import AttributionControl from "@/components/map/controls/Attribution";
 import { BasemapSelector } from "@/components/map/controls/BasemapSelector";
+import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDialog";
 import { Fullscren } from "@/components/map/controls/Fullscreen";
 import Geocoder from "@/components/map/controls/Geocoder";
 import Scalebar from "@/components/map/controls/Scalebar";
@@ -51,8 +59,9 @@ export interface PublicProjectLayoutProps {
   project?: Project;
   projectLayers?: ProjectLayer[];
   projectLayerGroups?: ProjectLayerGroup[];
+  // Accepts (key, value, refresh?) or (partial, refresh?) — see handleProjectUpdate in app/map/[projectId]/page.tsx.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onProjectUpdate?: (key: string, value: any, refresh?: boolean) => void;
+  onProjectUpdate?: (keyOrPartial: any, valueOrRefresh?: any, refresh?: boolean) => void;
   // add property isEditing to the interface
   viewOnly?: boolean;
 }
@@ -87,11 +96,65 @@ const PublicProjectLayout = ({
   const measureTool = useMeasureTool();
 
   const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
+  const editable = mapMode !== "public";
+  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
+    useCustomBasemapMutations(project, onProjectUpdate);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomBasemap | null>(null);
   const temporaryFilters = useAppSelector((state) => state.map.temporaryFilters);
   const selectedPanel = useAppSelector((state) => state.map.selectedBuilderItem) as BuilderPanelSchema;
   const collapsedPanels = useAppSelector((state) => state.map.collapsedPanels);
   const builderConfig = project?.builder_config;
   const panels = useMemo(() => builderConfig?.interface ?? [], [builderConfig]);
+
+  // Interaction dispatcher
+  const interactionRules = useMemo(
+    () => (builderConfig?.interactions ?? []) as InteractionRule[],
+    [builderConfig]
+  );
+
+  // SWR cache for editor mode (skipped in viewOnly to avoid an unnecessary fetch)
+  const { mutate: mutateProjectLayers } = useFilteredProjectLayers(
+    viewOnly ? "" : (project?.id ?? "")
+  );
+
+  const handleVisibilitySync = useCallback(
+    (layerId: number, visible: boolean) => {
+      const layer = projectLayers.find((l) => l.id === layerId);
+      if (!layer) return;
+      const currentVisibility = layer.properties?.visibility ?? true;
+      if (currentVisibility === visible) return;
+      // Update Redux (used by public view + map renderer)
+      dispatch(
+        updateProjectLayer({
+          id: layerId,
+          changes: {
+            properties: { ...layer.properties, visibility: visible },
+          },
+        })
+      );
+      // Update SWR cache (used by editor preview's layer tree)
+      if (!viewOnly) {
+        mutateProjectLayers(
+          (current) =>
+            current?.map((l) =>
+              l.id === layerId
+                ? { ...l, properties: { ...l.properties, visibility: visible } }
+                : l
+            ),
+          false
+        );
+      }
+    },
+    [projectLayers, dispatch, mutateProjectLayers, viewOnly]
+  );
+
+  useInteractionDispatcher({
+    rules: interactionRules,
+    onVisibilitySync: handleVisibilitySync,
+  });
+
   const COLLAPSED_SIZE = 40; // Should match the collapsedSize in Container component
 
   // Initialize collapsed state from panel config once per project load.
@@ -344,8 +407,8 @@ const PublicProjectLayout = ({
     }
 
     const builderConfig = {
+      ...project?.builder_config,
       interface: newPanels,
-      settings: { ...project?.builder_config?.settings },
     };
 
     onProjectUpdate?.("builder_config", builderConfig);
@@ -365,8 +428,8 @@ const PublicProjectLayout = ({
       return panel;
     });
     const builderConfig = {
+      ...project?.builder_config,
       interface: updatedPanels,
-      settings: { ...project?.builder_config?.settings },
     };
     onProjectUpdate?.("builder_config", builderConfig);
     dispatch(setSelectedBuilderItem(undefined));
@@ -392,8 +455,8 @@ const PublicProjectLayout = ({
       return panel;
     });
     const builderConfig = {
+      ...project?.builder_config,
       interface: updatedPanels,
-      settings: { ...project?.builder_config?.settings },
     };
     onProjectUpdate?.("builder_config", builderConfig);
     dispatch(setSelectedBuilderItem(updatedWidget));
@@ -414,8 +477,8 @@ const PublicProjectLayout = ({
         const newPanel = _newPanel.data;
         const updatedPanels = [...panels, newPanel];
         const builderConfig = {
+          ...project?.builder_config,
           interface: updatedPanels,
-          settings: { ...project?.builder_config?.settings },
         };
         await onProjectUpdate?.("builder_config", builderConfig);
       } else {
@@ -454,6 +517,102 @@ const PublicProjectLayout = ({
       },
     };
   }, [getOccupiedSpace]);
+
+  const controlsByCorner = useMemo(() => {
+    const positions = builderConfig?.settings?.control_positions as Record<CornerKey, ControlKey[]> | undefined;
+    return positions ?? {
+      "top-left": ["location", "measure"] as ControlKey[],
+      "top-right": [] as ControlKey[],
+      "bottom-left": [] as ControlKey[],
+      "bottom-right": ["zoom_controls", "basemap", "fullscreen"] as ControlKey[],
+    };
+  }, [builderConfig]);
+
+  const allowedStyles = useMemo(() => {
+    const allowed = builderConfig?.settings.allowed_basemaps;
+    if (!allowed) return translatedBaseMaps;
+    return translatedBaseMaps.filter((b) => b.source === "custom" || allowed.includes(b.value));
+  }, [builderConfig, translatedBaseMaps]);
+
+  const renderControl = useCallback(
+    (key: ControlKey): React.ReactNode => {
+      switch (key) {
+        case "location":
+          return (
+            <Geocoder
+              key="location"
+              accessToken={MAPBOX_TOKEN}
+              placeholder={t("enter_an_address")}
+              tooltip={t("search")}
+              onSelect={(result) => {
+                dispatch(setGeocoderResult(result));
+              }}
+            />
+          );
+        case "measure":
+          return <MeasureButton key="measure" {...measureTool} />;
+        case "zoom_controls":
+          return <Zoom key="zoom_controls" tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />;
+        case "basemap":
+          return allowedStyles.length > 0 ? (
+            <BasemapSelector
+              key="basemap"
+              styles={allowedStyles}
+              active={activeBasemap.value}
+              editable={editable}
+              basemapChange={async (basemap) => {
+                await onProjectUpdate?.("basemap", basemap);
+              }}
+              onAdd={() => {
+                setEditing(null);
+                setDialogOpen(true);
+              }}
+              onEdit={(id) => {
+                const target =
+                  (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
+                    (c) => c.id === id
+                  ) ?? null;
+                setEditing(target);
+                setDialogOpen(true);
+              }}
+            />
+          ) : null;
+        case "fullscreen":
+          return <Fullscren key="fullscreen" tooltipOpen={t("fullscreen")} tooltipExit={t("exit_fullscreen")} />;
+        case "find_my_location":
+          return <UserLocation key="find_my_location" tooltip={t("find_location")} />;
+        case "project_info":
+          return project ? (
+            <ProjectInfo
+              key="project_info"
+              project={project}
+              viewOnly={viewOnly}
+              onProjectUpdate={onProjectUpdate}
+            />
+          ) : null;
+        default:
+          return null;
+      }
+    },
+    [
+      t,
+      measureTool,
+      allowedStyles,
+      activeBasemap,
+      dispatch,
+      onProjectUpdate,
+      project,
+      viewOnly,
+      editable,
+    ]
+  );
+
+  const cornerSxMap: Record<CornerKey, object> = {
+    "top-left": { ...controlPositions.topLeft },
+    "top-right": { ...controlPositions.topRight },
+    "bottom-left": { ...controlPositions.bottomLeft },
+    "bottom-right": { ...controlPositions.bottomRight },
+  };
 
   return (
     <Box sx={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", fontFamily: dashboardFont }}>
@@ -523,42 +682,8 @@ const PublicProjectLayout = ({
             </Box>
           )}
 
-          {/* Top-Left Controls */}
-          {builderConfig?.settings.location && (
-            <Box
-              sx={{
-                position: "absolute",
-                ...controlPositions.topLeft,
-                m: 2,
-                zIndex: 2,
-                transition: "all 0.3s",
-              }}>
-              <Geocoder
-                accessToken={MAPBOX_TOKEN}
-                placeholder={t("enter_an_address")}
-                tooltip={t("search")}
-                onSelect={(result) => {
-                  dispatch(setGeocoderResult(result));
-                }}
-              />
-              {builderConfig?.settings.measure && <MeasureButton {...measureTool} />}
-            </Box>
-          )}
-          {/* Top-Right Controls  */}
-          <Box
-            sx={{
-              position: "absolute",
-              ...controlPositions.topRight,
-              m: 2,
-              zIndex: 2,
-              transition: "all 0.3s",
-            }}>
-            {project && builderConfig?.settings?.project_info && (
-              <ProjectInfo project={project} viewOnly={viewOnly} onProjectUpdate={onProjectUpdate} />
-            )}
-          </Box>
           {/* Right Floating Panel - Measure Results and Layer Settings */}
-          {(builderConfig?.settings.measure || activeRightComponent) && (
+          {Object.values(builderConfig?.settings?.control_positions ?? {}).some((arr) => (arr as ControlKey[]).includes("measure")) || activeRightComponent ? (
             <Box
               sx={{
                 position: "absolute",
@@ -574,7 +699,9 @@ const PublicProjectLayout = ({
                 gap: 2,
               }}>
               {/* Measurement Results Panel */}
-              {builderConfig?.settings.measure && <MeasureResultsPanel {...measureTool} />}
+              {Object.values(builderConfig?.settings?.control_positions ?? {}).some((arr) => (arr as ControlKey[]).includes("measure")) && (
+                <MeasureResultsPanel {...measureTool} />
+              )}
               {/* Layer Settings Panel */}
               {activeRightComponent && (
                 <FloatingPanel
@@ -598,51 +725,77 @@ const PublicProjectLayout = ({
                 </FloatingPanel>
               )}
             </Box>
-          )}
+          ) : null}
 
-          {/* Bottom-Right Controls */}
+          {/* Bottom-right always renders because it permanently contains AttributionControl */}
           <Box
             sx={{
               position: "absolute",
-              ...controlPositions.bottomRight,
+              ...cornerSxMap["bottom-right"],
               m: 2,
               zIndex: 2,
               transition: "all 0.3s",
             }}>
-            {builderConfig?.settings.zoom_controls && (
-              <Zoom tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />
-            )}
-            {builderConfig?.settings.fullscreen && (
-              <Fullscren tooltipOpen={t("fullscreen")} tooltipExit={t("exit_fullscreen")} />
-            )}
-            {builderConfig?.settings.find_my_location && <UserLocation tooltip={t("find_location")} />}
-            {builderConfig?.settings.basemap && (
-              <BasemapSelector
-                styles={translatedBaseMaps}
-                active={activeBasemap.value}
-                basemapChange={async (basemap) => {
-                  await onProjectUpdate?.("basemap", basemap);
-                }}
-              />
-            )}
+            {controlsByCorner["bottom-right"].map(renderControl)}
             <AttributionControl />
           </Box>
-          {/* Bottom-Left Controls */}
-          {builderConfig?.settings.scalebar && (
+
+          {/* Scalebar — bottom-left is reserved exclusively for the scalebar */}
+          {builderConfig?.settings?.scalebar !== false && (
             <Box
               sx={{
                 position: "absolute",
-                ...controlPositions.bottomLeft,
-                zIndex: 2,
+                bottom: getOccupiedSpace.bottom,
+                left: getOccupiedSpace.left,
                 m: 2,
+                zIndex: 2,
                 pointerEvents: "none",
                 transition: "all 0.3s",
               }}>
               <Scalebar />
             </Box>
           )}
+
+          {/* Other corners only render when at least one control is assigned.
+              bottom-left is reserved for the scalebar. */}
+          {(["top-left", "top-right"] as CornerKey[]).map((corner) => {
+            const controls = controlsByCorner[corner];
+            if (controls.length === 0) return null;
+            return (
+              <Box
+                key={corner}
+                sx={{
+                  position: "absolute",
+                  ...cornerSxMap[corner],
+                  m: 2,
+                  zIndex: 2,
+                  transition: "all 0.3s",
+                }}>
+                {controls.map(renderControl)}
+              </Box>
+            );
+          })}
         </Box>
       </Box>
+      <CustomBasemapDialog
+        open={dialogOpen}
+        initial={editing}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={async (payload) => {
+          if (editing) {
+            await editCustomBasemap(editing.id, payload);
+          } else {
+            await addCustomBasemap(payload, /* selectAfterAdd */ true);
+          }
+        }}
+        onDelete={
+          editing
+            ? async () => {
+                await deleteCustomBasemap(editing.id, DEFAULT_BASEMAP);
+              }
+            : undefined
+        }
+      />
     </Box>
   );
 };

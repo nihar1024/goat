@@ -1,6 +1,10 @@
 # MCP config (contains tokens)
 .mcp.json
 
+# Superpowers brainstorm sessions
+.superpowers/
+docs/superpowers/
+
 # Playwright
 test-results/
 
@@ -75,8 +79,13 @@ storybook-static
 cache
 
 # Submodules
-.gitmodules
 apps/accounts
+
+# Git worktrees
+.worktrees/
+
+# Local nigiri builds (SDK is fetched automatically during cmake build)
+packages/cpp/nigiri/
 
 apps/core/data/*
 python_modules/

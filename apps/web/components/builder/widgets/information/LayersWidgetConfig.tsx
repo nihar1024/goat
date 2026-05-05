@@ -1,3 +1,4 @@
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   Box,
   Checkbox,
@@ -6,6 +7,7 @@ import {
   Popover,
   Stack,
   Switch,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -70,6 +72,15 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
   const excludedLayers: number[] = opts.excluded_layers ?? [];
   const legendHiddenLayers: number[] = opts.legend_hidden_layers ?? [];
   const downloadableLayers: number[] = opts.downloadable_layers ?? [];
+  const groupInfo = config.setup?.group_info ?? {};
+
+  const handleGroupInfoChange = useCallback(
+    (groupId: number, value: string) => {
+      const updated = { ...groupInfo, [String(groupId)]: value };
+      handleSetupChange("group_info", updated);
+    },
+    [groupInfo, handleSetupChange]
+  );
 
   const toggleLayerExclusion = useCallback(
     (layerId: number) => {
@@ -213,6 +224,11 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
                     <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }} noWrap>
                       {group.name}
                     </Typography>
+                    <GroupInfoButton
+                      groupName={group.name}
+                      value={groupInfo[String(group.id)] ?? ""}
+                      onChange={(value) => handleGroupInfoChange(group.id, value)}
+                    />
                   </Stack>
                   {/* Layers in group */}
                   {groupLayers.map((l) => (
@@ -291,6 +307,11 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
                     label={<Typography variant="body2">{t("show_group_icons")}</Typography>}
                     sx={{ ml: 0 }}
                   />
+                  <FormControlLabel
+                    control={<Checkbox checked={options.show_all_toggle ?? true} onChange={(e) => handleOptionChange("show_all_toggle", e.target.checked)} size="small" />}
+                    label={<Typography variant="body2">{t("show_all_toggle")}</Typography>}
+                    sx={{ ml: 0 }}
+                  />
                 </>
               )}
               <FormControlLabel
@@ -339,6 +360,62 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
         }
       />
     </Stack>
+  );
+};
+
+/** Inline popover for editing a group's info text */
+const GroupInfoButton = ({
+  groupName,
+  value,
+  onChange,
+}: {
+  groupName: string;
+  value: string;
+  onChange: (value: string) => void;
+}) => {
+  const { t } = useTranslation("common");
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const hasContent = value.trim().length > 0;
+
+  return (
+    <>
+      <Tooltip title={hasContent ? t("edit_group_info") : t("add_group_info")} placement="top">
+        <IconButton
+          size="small"
+          onClick={(e) => setAnchorEl(anchorEl ? null : e.currentTarget)}
+          sx={{
+            p: 0.25,
+            color: hasContent ? "primary.main" : "text.disabled",
+            "&:hover": { bgcolor: hasContent ? "primary.light" : "action.hover", opacity: 0.85 },
+          }}>
+          <InfoOutlinedIcon sx={{ fontSize: 14 }} />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{ paper: { sx: { p: 1.5, width: 260 } } }}>
+        <Typography variant="caption" fontWeight="bold" color="text.secondary" sx={{ display: "block", mb: 0.75 }}>
+          {groupName}
+        </Typography>
+        <TextField
+          size="small"
+          fullWidth
+          multiline
+          minRows={3}
+          placeholder={t("group_info_placeholder")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoFocus
+        />
+        <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.75 }}>
+          {t("markdown_supported_hint")}
+        </Typography>
+      </Popover>
+    </>
   );
 };
 

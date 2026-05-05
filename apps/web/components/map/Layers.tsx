@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { setColorFunction } from "@geomatico/maplibre-cog-protocol";
 import React, { useEffect, useMemo, useRef } from "react";
 import type { FilterSpecification } from "maplibre-gl";
@@ -11,9 +12,18 @@ import {
   getSymbolStyleSpec,
   transformToMapboxLayerStyleSpec,
 } from "@/lib/transformers/layer";
+import { addOrUpdateMarkerImages } from "@/lib/transformers/map-image";
+import { transformToLineDecorationLayers } from "@/lib/transformers/lineStyle";
 import { generateCOGColorFunction } from "@/lib/utils/map/cog-styling";
 import { getLayerKey } from "@/lib/utils/map/layer";
-import type { FeatureLayerProperties, Layer, RasterLayerProperties } from "@/lib/validations/layer";
+import { registerSpriteImages } from "@/lib/utils/map/registerSpriteImages";
+import type {
+  FeatureLayerLineProperties,
+  FeatureLayerPointProperties,
+  FeatureLayerProperties,
+  Layer,
+  RasterLayerProperties,
+} from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
 import { type ScenarioFeatures, scenarioEditTypeEnum } from "@/lib/validations/scenario";
 
@@ -24,17 +34,56 @@ interface LayersProps {
   selectedScenarioLayer?: ProjectLayer | null;
   highlightFeature?: MapGeoJSONFeature | null;
   scenarioFeatures?: ScenarioFeatures | null;
+  /**
+   * Atlas-driven filter applied client-side to the matching layer's MapLibre
+   * filter. Lets the report renderer restrict the coverage layer to the
+   * current atlas page's feature without changing the tile URL (which would
+   * trigger setTiles() and refetch the entire tile cache on every page).
+   */
+  atlasFilter?: { layerId: number; featureId: string | number };
 }
 
 const Layers = (props: LayersProps) => {
   const { current: mapRef } = useMap();
   const temporaryFilters = useAppSelector((state) => state.map.temporaryFilters);
   const mapMode = useAppSelector((state) => state.map.mapMode);
+  const pendingFeatures = useAppSelector((state) => state.featureEditor.pendingFeatures);
+  const editLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
+
+  // Get editing layer to copy its style to the overlay
+  const editingLayer = useMemo(() => {
+    if (!editLayerId || !props.layers) return null;
+    return props.layers.find((l) => (l as ProjectLayer).layer_id === editLayerId) as ProjectLayer | undefined;
+  }, [editLayerId, props.layers]);
+
+  // Build list of feature IDs to hide from the tile layer (features being edited)
+  const editExcludeIds = useMemo(() => {
+    return Object.values(pendingFeatures)
+      .filter((f) => f.action === "update" || f.action === "delete")
+      .map((f) => f.id);
+  }, [pendingFeatures]);
+
+  // Build GeoJSON FeatureCollection from pending features for overlay rendering
+  const pendingGeoJSON = useMemo(() => {
+    const features = Object.values(pendingFeatures)
+      .filter((f) => f.geometry !== null && f.committed && f.action !== "delete" && !f.drawFeatureId)
+      .map((f) => ({
+        type: "Feature" as const,
+        id: f.id,
+        geometry: f.geometry!,
+        properties: { ...f.properties, _pending: true, _pendingId: f.id },
+      }));
+    return { type: "FeatureCollection" as const, features };
+  }, [pendingFeatures]);
+
+  // Exclude CustomLayerInterface from LayerProps since our layers are always standard style layers.
+  // This avoids TS errors when spreading the style spec onto <MapLayer> with minzoom/maxzoom.
+  type StandardLayerProps = Exclude<LayerProps, { type: "custom" }>;
 
   const splitLayerFilter = (style: LayerProps) => {
-    const styleWithFilter = style as LayerProps & { filter?: unknown };
+    const styleWithFilter = style as any & { filter?: unknown };
     const { filter, ...layerStyleSpec } = styleWithFilter;
-    return { filter, layerStyleSpec: layerStyleSpec as LayerProps };
+    return { filter, layerStyleSpec: layerStyleSpec as StandardLayerProps };
   };
 
   const getMapLayerFilter = (filter: unknown): FilterSpecification | undefined => {
@@ -83,8 +132,9 @@ const Layers = (props: LayersProps) => {
 
     if (mapMode !== "data" && temporaryFilters.length > 0) {
       // Primary layer filters (filter.layer_id matches this layer)
+      // Skip filters with excludeFromSourceLayer (used by click-to-filter to keep features clickable)
       const primaryFilters = temporaryFilters
-        .filter((filter) => filter.layer_id === layer.id)
+        .filter((filter) => filter.layer_id === layer.id && !filter.excludeFromSourceLayer)
         .map((filter) => filter.filter);
 
       // Additional target filters (from multi-layer attribute filtering)
@@ -108,7 +158,11 @@ const Layers = (props: LayersProps) => {
     return extendedFilter;
   };
 
-  const getFeatureTileUrl = (layer: ProjectLayer | Layer, label = false) => {
+  const getFeatureTileUrl = (
+    layer: ProjectLayer | Layer,
+    label = false,
+    decoration: "start" | "end" | "start_and_end" | "center" | null = null,
+  ) => {
     const extendedQuery = getLayerQueryFilter(layer);
     const parts: string[] = [];
 
@@ -118,9 +172,26 @@ const Layers = (props: LayersProps) => {
     if (label) {
       parts.push("label=true");
     }
+    if (decoration) {
+      parts.push(`decoration=${decoration}`);
+    }
+    // Force dynamic tiles when editing — bypasses old PMTiles that lack MVT feature IDs
+    const layerId = layer["layer_id"] || layer["id"];
+    if (editLayerId && editLayerId === layerId) {
+      parts.push("dynamic=true");
+    }
+    // Cache-busting: if layer was updated within the last hour, append a version
+    // param so the browser doesn't serve stale cached tiles after schema changes
+    const updatedAt = layer["updated_at"];
+    if (updatedAt) {
+      const updatedMs = new Date(updatedAt).getTime();
+      const ageMs = Date.now() - updatedMs;
+      if (ageMs < 3600_000) {
+        parts.push(`v=${Math.floor(updatedMs / 1000)}`);
+      }
+    }
 
     const query = parts.length > 0 ? `?${parts.join("&")}` : "";
-    const layerId = layer["layer_id"] || layer["id"];
     return `${GEOAPI_BASE_URL}/collections/${layerId}/tiles/WebMercatorQuad/{z}/{x}/{y}${query}`;
   };
   const { useDataLayers, systemLayers } = useMemo(() => {
@@ -137,6 +208,67 @@ const Layers = (props: LayersProps) => {
     });
     return { useDataLayers: dataLayers, systemLayers: sysLayers };
   }, [props.layers]);
+
+  // Ensure marker images are loaded for custom marker layers.
+  // Icons are initially loaded in handleMapLoad, but layers toggled on later
+  // need their images loaded on demand (otherwise MapLibre silently skips them).
+  useEffect(() => {
+    if (!mapRef || !props.layers?.length) return;
+    const map = mapRef.getMap();
+
+    const loadMissingMarkerImages = () => {
+      props.layers?.forEach((layer) => {
+        if (
+          layer.type === "feature" &&
+          layer.feature_layer_geometry_type === "point" &&
+          layer.properties?.["custom_marker"]
+        ) {
+          const pointProperties = layer.properties as FeatureLayerPointProperties;
+          const markers = [pointProperties.marker];
+          pointProperties.marker_mapping?.forEach((markerMap) => {
+            if (markerMap && markerMap[1]) markers.push(markerMap[1]);
+          });
+          const hasMissing = markers.some(
+            (marker) => marker && marker.name && !map.hasImage(`${layer.id}-${marker.name}`)
+          );
+          if (hasMissing) {
+            addOrUpdateMarkerImages(layer.id, pointProperties, mapRef);
+          }
+        }
+      });
+    };
+
+    if (map.isStyleLoaded()) {
+      loadMissingMarkerImages();
+    } else {
+      map.once("styledata", loadMissingMarkerImages);
+      return () => {
+        map.off("styledata", loadMissingMarkerImages);
+      };
+    }
+  }, [props.layers, mapRef]);
+
+  // Register decoration sprites (e.g. the arrow used for line decorations).
+  // SDF icons let `icon-color` tint per-layer. Re-register on style reloads
+  // because basemap changes wipe registered images.
+  useEffect(() => {
+    if (!mapRef) return;
+    const map = mapRef.getMap();
+
+    const register = () => {
+      void registerSpriteImages(map);
+    };
+    if (map.isStyleLoaded()) {
+      register();
+    } else {
+      map.once("load", register);
+    }
+    map.on("styledata", register);
+    return () => {
+      map.off("load", register);
+      map.off("styledata", register);
+    };
+  }, [mapRef]);
 
   // Render in reverse order for correct initial stacking (MapLibre stacks bottom-to-top).
   // Reordering is handled imperatively via map.moveLayer() to avoid cross-Source timing
@@ -189,6 +321,7 @@ const Layers = (props: LayersProps) => {
     }
   }, [useDataLayers, mapRef]);
 
+
   return (
     <>
       {reversedDataLayers.length
@@ -196,7 +329,7 @@ const Layers = (props: LayersProps) => {
             (() => {
               if (layer.type === "feature") {
                 const { filter: layerFilter, layerStyleSpec } = splitLayerFilter(
-                  transformToMapboxLayerStyleSpec(layer) as LayerProps
+                  transformToMapboxLayerStyleSpec(layer) as any
                 );
                 const mapLayerFilter = getMapLayerFilter(layerFilter);
                 const { filter: strokeFilter, layerStyleSpec: strokeStyleSpec } = splitLayerFilter(
@@ -210,12 +343,12 @@ const Layers = (props: LayersProps) => {
                         layer.properties?.visibility &&
                         (layer.properties as FeatureLayerProperties)?.stroked,
                     },
-                  }) as LayerProps
+                  }) as any
                 );
                 const mapStrokeFilter = getMapLayerFilter(strokeFilter);
 
                 const { filter: labelFilter, layerStyleSpec: labelStyleSpec } = splitLayerFilter(
-                  getSymbolStyleSpec((layer.properties as FeatureLayerProperties)?.text_label, layer) as LayerProps
+                  getSymbolStyleSpec((layer.properties as FeatureLayerProperties)?.text_label, layer) as any
                 );
                 const mapLabelFilter = getMapLayerFilter(labelFilter);
 
@@ -223,11 +356,59 @@ const Layers = (props: LayersProps) => {
                   layer.feature_layer_geometry_type === "polygon" &&
                   !!(layer.properties as FeatureLayerProperties)?.text_label;
 
+                // Build exclusion filter for features being edited on this layer
+                const isEditingThisLayer = editLayerId === (layer as ProjectLayer).layer_id;
+                const mergeEditExclusion = (baseFilter: FilterSpecification | undefined): FilterSpecification | undefined => {
+                  if (!isEditingThisLayer || editExcludeIds.length === 0) return baseFilter;
+                  // Exclude by MVT feature ID (rowid+1). IDs are always numeric.
+                  const numericIds = editExcludeIds.map(Number);
+                  const excludeFilter: FilterSpecification = [
+                    "!",
+                    ["in", ["id"], ["literal", numericIds]],
+                  ];
+                  if (baseFilter) {
+                    return ["all", baseFilter, excludeFilter] as FilterSpecification;
+                  }
+                  return excludeFilter;
+                };
+
+                // Atlas filter: restrict the coverage layer to the current
+                // atlas page's feature. Uses MVT feature ID (rowid+1) to match
+                // the existing convention. Applied client-side so the tile URL
+                // is unchanged across page navigation.
+                const isAtlasCoverageLayer =
+                  props.atlasFilter !== undefined && props.atlasFilter.layerId === layer.id;
+                const mergeAtlasFilter = (
+                  baseFilter: FilterSpecification | undefined,
+                ): FilterSpecification | undefined => {
+                  if (!isAtlasCoverageLayer) return baseFilter;
+                  const featureId = Number(props.atlasFilter!.featureId);
+                  const atlasFilter: FilterSpecification = ["==", ["id"], featureId];
+                  if (baseFilter) {
+                    return ["all", baseFilter, atlasFilter] as FilterSpecification;
+                  }
+                  return atlasFilter;
+                };
+
+                const composeFilters = (
+                  baseFilter: FilterSpecification | undefined,
+                ): FilterSpecification | undefined =>
+                  mergeAtlasFilter(mergeEditExclusion(baseFilter));
+
+                const linePlacement =
+                  layer.feature_layer_geometry_type === "line"
+                    ? ((layer.properties as FeatureLayerLineProperties)?.decoration_placement ?? "repeat")
+                    : "repeat";
+                const decorationParam =
+                  linePlacement !== "repeat"
+                    ? (linePlacement as "start" | "end" | "start_and_end" | "center")
+                    : null;
+
                 return (
                   <Source
-                    key={layer.id}
+                    key={`${layer.id}-${layer.updated_at || ""}`}
                     type="vector"
-                    tiles={[getFeatureTileUrl(layer, needsLabel)]}
+                    tiles={[getFeatureTileUrl(layer, needsLabel, decorationParam)]}
                     maxzoom={14}>
                     {!layer.properties?.["custom_marker"] && (
                       <MapLayer
@@ -235,19 +416,33 @@ const Layers = (props: LayersProps) => {
                         minzoom={layer.properties.min_zoom || 0}
                         maxzoom={layer.properties.max_zoom || 24}
                         id={layer.id.toString()}
-                        {...layerStyleSpec}
-                        {...(mapLayerFilter ? { filter: mapLayerFilter } : {})}
+                        {...(layerStyleSpec as any)}
+                        {...(composeFilters(mapLayerFilter) ? { filter: composeFilters(mapLayerFilter) } : {})}
                         source-layer="default"
                       />
                     )}
+                    {layer.feature_layer_geometry_type === "line" &&
+                      transformToLineDecorationLayers(layer).map((decoSpec) => (
+                        <MapLayer
+                          key={`${decoSpec.id}-${layer.updated_at || ""}`}
+                          id={decoSpec.id}
+                          minzoom={layer.properties.min_zoom || 0}
+                          maxzoom={layer.properties.max_zoom || 24}
+                          type="symbol"
+                          layout={decoSpec.layout as any}
+                          paint={decoSpec.paint as any}
+                          {...(composeFilters(mapLayerFilter) ? { filter: composeFilters(mapLayerFilter) } : {})}
+                          source-layer={decoSpec.sourceLayer}
+                        />
+                      ))}
                     {layer.feature_layer_geometry_type === "polygon" && (
                       <MapLayer
                         key={`stroke-${layer.id.toString()}`}
                         id={`stroke-${layer.id.toString()}`}
                         minzoom={layer.properties.min_zoom || 0}
                         maxzoom={layer.properties.max_zoom || 24}
-                        {...strokeStyleSpec}
-                        {...(mapStrokeFilter ? { filter: mapStrokeFilter } : {})}
+                        {...(strokeStyleSpec as any)}
+                        {...(composeFilters(mapStrokeFilter) ? { filter: composeFilters(mapStrokeFilter) } : {})}
                         source-layer="default"
                       />
                     )}
@@ -267,19 +462,21 @@ const Layers = (props: LayersProps) => {
                         }
                         minzoom={layer.properties.min_zoom || 0}
                         maxzoom={layer.properties.max_zoom || 24}
-                        {...labelStyleSpec}
-                        {...(mapLabelFilter ? { filter: mapLabelFilter } : {})}
+                        {...(labelStyleSpec as any)}
+                        {...(layer.properties?.["custom_marker"] || layer.feature_layer_geometry_type === "polygon"
+                          ? (composeFilters(mapLabelFilter) ? { filter: composeFilters(mapLabelFilter) } : {})
+                          : (mapLabelFilter ? { filter: mapLabelFilter } : {})
+                        )}
                       />
                     )}
 
                     {/* HighlightLayer */}
                     {props.highlightFeature &&
-                      props.highlightFeature.properties?.id &&
                       props.highlightFeature.layer.id === layer.id.toString() && (
                         <MapLayer
                           id={`highlight-${layer.id}`}
                           source-layer="default"
-                          {...(getHightlightStyleSpec(props.highlightFeature) as LayerProps)}
+                          {...(getHightlightStyleSpec(props.highlightFeature) as any)}
                         />
                       )}
                   </Source>
@@ -335,12 +532,12 @@ const Layers = (props: LayersProps) => {
             props.selectedScenarioLayer?.id === layer.id ? (
               (() => {
                 const { filter: layerFilter, layerStyleSpec } = splitLayerFilter(
-                  transformToMapboxLayerStyleSpec(layer) as LayerProps
+                  transformToMapboxLayerStyleSpec(layer) as any
                 );
                 const mapLayerFilter = getMapLayerFilter(layerFilter);
                 return (
               <Source
-                key={layer.id}
+                key={`${layer.id}-${layer.updated_at || ""}`}
                 type="vector"
                 tiles={[getFeatureTileUrl(layer)]}
                 minzoom={14}
@@ -348,7 +545,7 @@ const Layers = (props: LayersProps) => {
                 <MapLayer
                   key={getLayerKey(layer)}
                   id={layer.id.toString()}
-                  {...layerStyleSpec}
+                  {...(layerStyleSpec as any)}
                   {...(mapLayerFilter ? { filter: mapLayerFilter } : {})}
                   source-layer="default"
                   minzoom={14}
@@ -360,6 +557,91 @@ const Layers = (props: LayersProps) => {
             ) : null
           )
         : null}
+      {/* Pending features overlay — uses editing layer's original style */}
+      {editLayerId && editingLayer && pendingGeoJSON.features.length > 0 && (() => {
+        const layerStyle = transformToMapboxLayerStyleSpec(editingLayer) as any & { paint?: Record<string, unknown> };
+        const geomType = editingLayer.feature_layer_geometry_type;
+        const isCustomMarker = !!editingLayer.properties?.["custom_marker"];
+        const symbolStyle = isCustomMarker
+          ? getSymbolStyleSpec(undefined, editingLayer) as any & { layout?: Record<string, unknown>; paint?: Record<string, unknown> }
+          : null;
+
+        return (
+          <Source key="pending-features" type="geojson" data={pendingGeoJSON}>
+            {geomType === "polygon" && layerStyle.type === "fill" && (
+              <MapLayer
+                id="pending-features-fill"
+                type="fill"
+                paint={layerStyle.paint as Record<string, unknown>}
+                filter={["==", "$type", "Polygon"]}
+              />
+            )}
+            {(geomType === "line" || geomType === "polygon") && (
+              <MapLayer
+                id="pending-features-line"
+                type="line"
+                paint={{
+                  "line-color": "#ef4444",
+                  "line-dasharray": [3, 2],
+                  "line-width": 2,
+                }}
+                filter={["any", ["==", "$type", "LineString"], ["==", "$type", "Polygon"]]}
+              />
+            )}
+            {geomType === "point" && isCustomMarker && symbolStyle && (
+              <MapLayer
+                id="pending-features-ring"
+                type="circle"
+                paint={{
+                  "circle-radius": Math.max(12, Math.round(((editingLayer.properties as Record<string, unknown>)?.marker_size as number ?? 100) / 200 * 16) + 4),
+                  "circle-color": "transparent",
+                  "circle-stroke-color": "#ef4444",
+                  "circle-stroke-width": 2,
+                }}
+                filter={["==", "$type", "Point"]}
+              />
+            )}
+            {geomType === "point" && isCustomMarker && symbolStyle && (
+              <MapLayer
+                id="pending-features-symbol"
+                type="symbol"
+                layout={{
+                  ...symbolStyle.layout,
+                  visibility: "visible",
+                  "icon-allow-overlap": true,
+                }}
+                paint={symbolStyle.paint as Record<string, unknown>}
+                filter={["==", "$type", "Point"]}
+              />
+            )}
+            {geomType === "point" && !isCustomMarker && layerStyle.type === "circle" && (
+              <MapLayer
+                id="pending-features-circle"
+                type="circle"
+                paint={layerStyle.paint as Record<string, unknown>}
+                filter={["==", "$type", "Point"]}
+              />
+            )}
+            {/* Fallbacks if style type doesn't match */}
+            {geomType === "polygon" && layerStyle.type !== "fill" && (
+              <MapLayer
+                id="pending-features-fill"
+                type="fill"
+                paint={{ "fill-color": "#ef4444", "fill-opacity": 0.15 }}
+                filter={["==", "$type", "Polygon"]}
+              />
+            )}
+            {geomType === "point" && !isCustomMarker && layerStyle.type !== "circle" && (
+              <MapLayer
+                id="pending-features-circle"
+                type="circle"
+                paint={{ "circle-radius": 6, "circle-color": "#ef4444", "circle-stroke-width": 2, "circle-stroke-color": "#fff" }}
+                filter={["==", "$type", "Point"]}
+              />
+            )}
+          </Source>
+        );
+      })()}
     </>
   );
 };

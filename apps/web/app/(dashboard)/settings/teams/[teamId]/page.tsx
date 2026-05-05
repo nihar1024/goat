@@ -133,6 +133,7 @@ function TeamProfile({ team }: { team: Team }) {
 
             <TextField
               InputProps={{ readOnly: !isTeamOwner }}
+              InputLabelProps={{ shrink: true }}
               helperText={errors.description ? errors.description?.message : ""}
               label={t("team_description")}
               id="description"

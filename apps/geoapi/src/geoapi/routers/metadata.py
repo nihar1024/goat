@@ -1,9 +1,13 @@
 """Metadata router for OGC API collection and conformance endpoints."""
 
+from typing import Any, cast
+from uuid import UUID
+
+import asyncpg
 from fastapi import APIRouter, HTTPException, Request
 
 from geoapi.config import settings
-from geoapi.dependencies import LayerInfoDep
+from geoapi.dependencies import LayerInfo, LayerInfoDep
 from geoapi.models import (
     Collection,
     Conformance,
@@ -13,9 +17,53 @@ from geoapi.models import (
     Queryables,
     SpatialExtent,
 )
+from geoapi.services.computed_columns import fetch_field_config
 from geoapi.services.layer_service import layer_service
 
 router = APIRouter(tags=["Metadata"])
+
+
+def _kind_from_json_type(json_type: str) -> str:
+    """Infer the field kind from the JSON-schema type for columns without explicit metadata."""
+    if json_type in ("number", "integer"):
+        return "number"
+    return "string"
+
+
+async def _load_field_config(layer_info: LayerInfo) -> dict[str, Any]:
+    """Fetch the layer's field_config JSONB from PG.
+
+    Returns an empty dict if no PG pool is initialised (dev/test path).
+    Genuine connection errors propagate so the caller fails the request.
+    """
+    pool = layer_service._pool
+    if not pool:
+        return {}
+    async with pool.acquire() as conn:
+        return await fetch_field_config(
+            cast("asyncpg.Connection[asyncpg.Record]", conn),
+            UUID(layer_info.layer_id),
+        )
+
+
+def _apply_field_config_to_properties(
+    properties: dict[str, dict[str, Any]],
+    field_config: dict[str, Any],
+) -> None:
+    """Augment each property entry with kind, is_computed, and display_config.
+
+    Mutates *properties* in-place. Skips geometry entries (those that have
+    a ``$ref`` key instead of a ``type`` key).
+    """
+    for name, prop in properties.items():
+        if "$ref" in prop:
+            # Geometry reference entry — no field-config augmentation needed.
+            continue
+        entry = field_config.get(name, {})
+        json_type = prop.get("type", "string")
+        prop["kind"] = entry.get("kind") or _kind_from_json_type(json_type)
+        prop["is_computed"] = entry.get("is_computed", False)
+        prop["display_config"] = entry.get("display_config", {})
 
 
 # OGC conformance classes
@@ -204,7 +252,7 @@ async def get_queryables(
     collection_id = layer_info.layer_id
 
     # Build properties from column info, excluding hidden fields
-    properties = {}
+    properties: dict[str, dict[str, Any]] = {}
     for col in metadata.columns:
         col_name = col["name"]
         # Skip hidden fields (e.g., bbox columns)
@@ -217,6 +265,10 @@ async def get_queryables(
                 "name": col_name,
                 "type": col["json_type"],
             }
+
+    # Augment each property with field-config metadata (kind, is_computed, display_config).
+    field_config = await _load_field_config(layer_info)
+    _apply_field_config_to_properties(properties, field_config)
 
     return Queryables(
         title=collection_id,

@@ -56,7 +56,14 @@ class CatchmentAreaType(StrEnum):
 
     polygon = "polygon"
     network = "network"
-    rectangular_grid = "rectangular_grid"
+    hexagonal_grid = "hexagonal_grid"
+
+
+class CatchmentAreaOutputFormat(StrEnum):
+    """Output file format for catchment results."""
+
+    geojson = "geojson"
+    parquet = "parquet"
 
 
 class CatchmentAreaRoutingMode(StrEnum):
@@ -75,6 +82,14 @@ class Weekday(StrEnum):
     weekday = "weekday"
     saturday = "saturday"
     sunday = "sunday"
+
+
+# Weekday labels for i18n (maps enum values to translation keys)
+WEEKDAY_LABELS: dict[str, str] = {
+    "weekday": "enums.weekday.weekday",
+    "saturday": "enums.weekday.saturday",
+    "sunday": "enums.weekday.sunday",
+}
 
 
 # Icon mapping for routing modes (matches @p4b/ui ICON_NAME values)
@@ -123,6 +138,8 @@ PT_MODE_LABELS: dict[str, str] = {
 CATCHMENT_AREA_TYPE_LABELS: dict[str, str] = {
     "polygon": "enums.catchment_area_type.polygon",
     "network": "enums.catchment_area_type.network",
+    "hexagonal_grid": "enums.catchment_area_type.hexagonal_grid",
+    # Backward-compatible alias for older clients.
     "rectangular_grid": "enums.catchment_area_type.rectangular_grid",
 }
 
@@ -592,6 +609,14 @@ class CatchmentAreaToolParams(BaseModel):
             hidden=True,  # Internal field, auto-populated
         ),
     )
+    output_format: CatchmentAreaOutputFormat = Field(
+        default=CatchmentAreaOutputFormat.parquet,
+        description="Output format for catchment results",
+        json_schema_extra=ui_field(
+            section="output",
+            field_order=2,
+        ),
+    )
 
     # === Routing Service Configuration (internal) ===
     routing_url: str = Field(
@@ -632,6 +657,14 @@ class CatchmentAreaToolParams(BaseModel):
             hidden=True,  # Advanced setting
         ),
     )
+
+    @field_validator("catchment_area_type", mode="before")
+    @classmethod
+    def normalize_catchment_area_type(cls, value: Any) -> Any:
+        """Map legacy rectangular_grid input to hexagonal_grid."""
+        if value == "rectangular_grid":
+            return CatchmentAreaType.hexagonal_grid
+        return value
 
     @model_validator(mode="after")
     def validate_pt_settings(self: Self) -> Self:

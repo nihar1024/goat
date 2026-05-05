@@ -10,6 +10,8 @@ import { distance } from "@turf/distance";
 import greatCircle from "@turf/great-circle";
 import { point } from "@turf/helpers";
 
+import { applySnapToEvent } from "../utils/snap";
+
 const Constants = MapboxDraw.constants;
 const DrawLineString = MapboxDraw.modes.draw_line_string;
 
@@ -150,6 +152,26 @@ GreatCircleMode.onSetup = function (this: any, opts: any) {
     state.line.properties[GREAT_CIRCLE_PROPERTY] = true;
   }
   return state;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _origGreatCircleClickAnywhere = (DrawLineString as any).clickAnywhere;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(GreatCircleMode as any).clickAnywhere = function (this: any, state: any, rawEvent: any) {
+  const { event } = applySnapToEvent(this.map, rawEvent);
+  if (typeof _origGreatCircleClickAnywhere === "function") {
+    return _origGreatCircleClickAnywhere.call(this, state, event);
+  }
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _origGreatCircleMouseMove = (DrawLineString as any).onMouseMove;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(GreatCircleMode as any).onMouseMove = function (this: any, state: any, rawEvent: any) {
+  const { event } = applySnapToEvent(this.map, rawEvent);
+  if (typeof _origGreatCircleMouseMove === "function") {
+    return _origGreatCircleMouseMove.call(this, state, event);
+  }
 };
 
 GreatCircleMode.toDisplayFeatures = function (

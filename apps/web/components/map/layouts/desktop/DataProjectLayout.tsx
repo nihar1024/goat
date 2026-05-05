@@ -1,5 +1,5 @@
 import { Box, Stack } from "@mui/material";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
@@ -14,22 +14,28 @@ import {
   useProjectLayerGroups,
   useProjectLayers,
 } from "@/lib/api/projects";
+import { useFolders } from "@/lib/api/folders";
 import { MAPBOX_TOKEN, SYSTEM_LAYERS_IDS } from "@/lib/constants";
+import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setGeocoderResult } from "@/lib/store/map/slice";
+import { DATA_PANEL_HEIGHT_VAR } from "@/components/map/panels/DataPanel";
 import { FeatureName } from "@/lib/validations/organization";
-import type { Project, ProjectLayerTreeUpdate } from "@/lib/validations/project";
+import type { CustomBasemap, Project, ProjectLayerTreeUpdate } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
 import { useBasemap } from "@/hooks/map/MapHooks";
+import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
 import { useMeasureTool } from "@/hooks/map/useMeasureTool";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { FloatingPanel } from "@/components/common/FloatingPanel";
+import FeatureEditPanel from "@/components/map/panels/FeatureEditPanel";
 import AttributionControl from "@/components/map/controls/Attribution";
 import { BasemapSelector } from "@/components/map/controls/BasemapSelector";
+import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDialog";
 import { Fullscren } from "@/components/map/controls/Fullscreen";
 import Geocoder from "@/components/map/controls/Geocoder";
 import Scalebar from "@/components/map/controls/Scalebar";
@@ -49,8 +55,9 @@ const GAP_SIZE = 16;
 interface DataProjectLayoutProps {
   project: Project;
   isPublic?: boolean;
+  // Accepts (key, value, refresh?) or (partial, refresh?) — see handleProjectUpdate in app/map/[projectId]/page.tsx.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onProjectUpdate?: (key: string, value: any, refresh?: boolean) => void;
+  onProjectUpdate?: (keyOrPartial: any, valueOrRefresh?: any, refresh?: boolean) => void;
 }
 
 const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps) => {
@@ -72,8 +79,41 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   }, [allProjectLayers]);
 
   const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+
+  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
+    useCustomBasemapMutations(project, onProjectUpdate);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<CustomBasemap | null>(null);
+
   const activeRight = useAppSelector((state) => state.map.activeRightPanel);
-  const { isAppFeatureEnabled } = useAuthZ();
+  const featureEditorActive = useAppSelector((state) => state.featureEditor.activeLayerId);
+  const featureEditorMode = useAppSelector((state) => state.featureEditor.mode);
+  const featureEditorActiveFeature = useAppSelector((state) => state.featureEditor.activeFeatureId);
+  const showFeatureEditPanel = featureEditorActive && (featureEditorMode === "draw" || !!featureEditorActiveFeature);
+  // Panel height is read via CSS variable --data-panel-height for real-time updates
+  const isDataPanelOpen = useAppSelector((state) => state.map.isDataPanelOpen);
+  const mapMode = useAppSelector((state) => state.map.mapMode);
+  const dataPanelVisible = mapMode === "data" && isDataPanelOpen;
+  const { isOrgEditor, isAppFeatureEnabled } = useAuthZ();
+  const { folders } = useFolders({});
+  const projectFolder = useMemo(
+    () => (project.folder_id && folders ? folders.find((f) => f.id === project.folder_id) : undefined),
+    [folders, project.folder_id]
+  );
+  const isProjectEditor = useMemo(() => {
+    // my_role from the single GET endpoint is authoritative when present
+    if (project.my_role) {
+      return project.my_role === "project-owner" || project.my_role === "project-editor";
+    }
+    // Folder grant fallback (e.g. shared via folder, not individual project share)
+    if (projectFolder) {
+      if (projectFolder.is_owned) return true;
+      if (projectFolder.role === "folder-editor") return true;
+      if (projectFolder.role === "folder-viewer") return false;
+    }
+    return isOrgEditor;
+  }, [project.my_role, projectFolder, isOrgEditor]);
 
   // 1. Redux Global Selection
   // Assume array of IDs (number/string)
@@ -247,7 +287,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
         sx={{
           position: "absolute",
           top: toolbarHeight + 10,
-          height: `calc(100% - ${toolbarHeight + 20}px)`,
+          height: `calc(100% - ${toolbarHeight + 20}px - var(${DATA_PANEL_HEIGHT_VAR}, 0px))`,
           left: 10,
           zIndex: (theme) => theme.zIndex.drawer + 1,
           pointerEvents: "none",
@@ -261,8 +301,9 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
             alignContent: "flex-start",
             rowGap: 4,
             columnGap: 2,
+            overflow: "hidden",
           }}>
-          <FloatingPanel width={panelWidth}>
+          <FloatingPanel width={panelWidth} maxHeight="100%">
             <ProjectLayerTree
               projectId={projectId}
               projectLayers={projectLayers || []}
@@ -273,7 +314,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               onCreateGroup={handleCreateGroup}
               onUpdateGroup={handleUpdateGroup}
               onDeleteGroup={handleDeleteGroup}
-              viewMode="edit"
+              viewMode={isProjectEditor ? "edit" : "view"}
             />
           </FloatingPanel>
           <Box sx={{ marginTop: "auto" }}>
@@ -294,8 +335,8 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               dispatch(setGeocoderResult(result));
             }}
           />
-          <ToolboxCtrl onToggle={handleToolboxToggle} open={activeRight === MapSidebarItemID.TOOLBOX} />
-          <ScenarioCtrl onToggle={handleScenarioToggle} open={activeRight === MapSidebarItemID.SCENARIO} />
+          {isProjectEditor && <ToolboxCtrl onToggle={handleToolboxToggle} open={activeRight === MapSidebarItemID.TOOLBOX} />}
+          {isProjectEditor && <ScenarioCtrl onToggle={handleScenarioToggle} open={activeRight === MapSidebarItemID.SCENARIO} />}
           <MeasureButton {...measureTool} />
         </Box>
       </Box>
@@ -306,39 +347,42 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
         sx={{
           position: "absolute",
           top: toolbarHeight + 10,
-          height: `calc(100% - ${toolbarHeight + 10}px)`,
-          right: 10,
+          height: `calc(100% - ${toolbarHeight + 20}px - var(${DATA_PANEL_HEIGHT_VAR}, 0px))`,
+          right: dataPanelVisible && activeRightComponent ? `${panelWidth + GAP_SIZE + 10}px` : 10,
           zIndex: (theme) => theme.zIndex.drawer + 1,
           pointerEvents: "none",
           alignItems: "flex-end",
         }}>
-        <Stack
-          direction="row"
-          spacing={2}
-          sx={{
-            alignItems: "flex-start",
-            flex: 1,
-            minHeight: 0,
-            overflow: "hidden",
-          }}>
-          {/* Measurement Results Panel - to the left of active right panel */}
-          <MeasureResultsPanel {...measureTool} />
-          {activeRightComponent && (
-            <FloatingPanel width={panelWidth} maxHeight="100%" fillHeight>
-              {activeRightComponent}
-            </FloatingPanel>
-          )}
-        </Stack>
-
+        {!dataPanelVisible && (
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              alignItems: "flex-start",
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
+            }}>
+            <MeasureResultsPanel {...measureTool} />
+            {showFeatureEditPanel && (
+              <FloatingPanel width={320} maxHeight="100%" fillHeight>
+                <FeatureEditPanel />
+              </FloatingPanel>
+            )}
+            {activeRightComponent && (
+              <FloatingPanel width={panelWidth} maxHeight="100%" fillHeight>
+                {activeRightComponent}
+              </FloatingPanel>
+            )}
+          </Stack>
+        )}
         <Stack
           direction="column"
           alignItems="flex-end"
           sx={{
-            mt: 2,
+            mt: dataPanelVisible ? "auto" : 2,
+            flexShrink: 0,
             pointerEvents: "none",
-            width: "max-content",
-            maxWidth: "none",
-            whiteSpace: "nowrap",
           }}>
           <Stack direction="column" alignItems="flex-end" sx={{ mb: 1 }}>
             <Zoom tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />
@@ -346,14 +390,72 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
             <BasemapSelector
               styles={translatedBaseMaps}
               active={activeBasemap.value}
+              editable
               basemapChange={async (basemap) => {
                 await onProjectUpdate?.("basemap", basemap);
+              }}
+              onAdd={() => {
+                setEditing(null);
+                setDialogOpen(true);
+              }}
+              onEdit={(id) => {
+                const target =
+                  (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
+                    (c) => c.id === id
+                  ) ?? null;
+                setEditing(target);
+                setDialogOpen(true);
               }}
             />
           </Stack>
           <AttributionControl />
         </Stack>
       </Stack>
+      {/* Right panel + measure results — rendered separately when data panel is open so controls can be to the left */}
+      {dataPanelVisible && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: toolbarHeight + 10,
+            height: `calc(100% - ${toolbarHeight + 20}px - var(${DATA_PANEL_HEIGHT_VAR}, 0px))`,
+            right: 10,
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            pointerEvents: "none",
+          }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start", height: "100%", overflow: "hidden" }}>
+            <MeasureResultsPanel {...measureTool} />
+            {showFeatureEditPanel && (
+              <FloatingPanel width={320} maxHeight="100%" fillHeight>
+                <FeatureEditPanel />
+              </FloatingPanel>
+            )}
+            {activeRightComponent && (
+              <FloatingPanel width={panelWidth} maxHeight="100%" fillHeight>
+                {activeRightComponent}
+              </FloatingPanel>
+            )}
+          </Stack>
+        </Box>
+      )}
+      <CustomBasemapDialog
+        open={dialogOpen}
+        initial={editing}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={async (payload) => {
+          if (editing) {
+            await editCustomBasemap(editing.id, payload);
+          } else {
+            await addCustomBasemap(payload, /* selectAfterAdd */ true);
+          }
+        }}
+        onDelete={
+          editing
+            ? async () => {
+                await deleteCustomBasemap(editing.id, DEFAULT_BASEMAP);
+              }
+            : undefined
+        }
+      />
     </>
   );
 };

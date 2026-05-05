@@ -35,6 +35,8 @@ export interface TileCard {
   onMoreMenuSelect?: (menuItem: PopperMenuItem, contentItem: Project | Layer) => void;
   enableActions?: boolean;
   selected?: Project | Layer;
+  roleChip?: { icon: ICON_NAME; tooltip: string };
+  sharedChip?: { icon: ICON_NAME; tooltip: string };
 }
 
 export interface ActiveCard {
@@ -123,22 +125,6 @@ const TileCard = (props: TileCard) => {
     </>
   );
 
-  const createdAtText = (
-    <>
-      {item?.created_at && (
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ pb: 0 }}>
-          <Tooltip title={t("created")} placement="top" arrow>
-            <Typography variant="caption" noWrap>
-              {formatDistance(new Date(item.created_at), new Date(), {
-                addSuffix: true,
-                locale: dateLocale,
-              })}
-            </Typography>
-          </Tooltip>
-        </Stack>
-      )}
-    </>
-  );
 
   const cardTitle = (
     <>
@@ -167,16 +153,40 @@ const TileCard = (props: TileCard) => {
     </>
   );
 
+  const roleChipEl = props.roleChip ? (
+    <Tooltip title={props.roleChip.tooltip} placement="top" arrow>
+      <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Icon
+          iconName={props.roleChip.icon}
+          style={{ fontSize: 11, color: theme.palette.text.secondary }}
+        />
+      </Box>
+    </Tooltip>
+  ) : null;
+
+  const sharedChipEl = props.sharedChip ? (
+    <Tooltip title={props.sharedChip.tooltip} placement="top" arrow>
+      <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Icon
+          iconName={props.sharedChip.icon}
+          style={{ fontSize: 11, color: theme.palette.text.secondary }}
+        />
+      </Box>
+    </Tooltip>
+  ) : null;
+
   const gridContent = (
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: theme.spacing(2) }}>
         {cardTitle}
-        {enableActions && moreMenu}
+        {enableActions && !!props.moreMenuOptions?.length && moreMenu}
       </Stack>
       {/* Created by info  */}
       <Stack direction="row" alignItems="center" spacing={2} sx={{ pb: 0 }}>
         {ownedBy}
         {updatedAtText}
+        {roleChipEl}
+        {sharedChipEl}
       </Stack>
       {/* Tags */}
       <Box sx={{ mt: theme.spacing(2) }} display="flex-start">
@@ -314,7 +324,9 @@ const TileCard = (props: TileCard) => {
                 <Grid item xs={1} sm={2} md={1}>
                   <Box
                     sx={{
-                      display: { xs: "none", sm: "block" },
+                      display: { xs: "none", sm: "flex" },
+                      alignItems: "center",
+                      gap: 1,
                     }}>
                     {ownedBy}
                   </Box>
@@ -322,25 +334,17 @@ const TileCard = (props: TileCard) => {
                 <Grid
                   item
                   sm={4}
-                  md={2}
+                  md={4}
                   sx={{
                     display: { xs: "none", sm: "block" },
                   }}>
-                  <Box sx={{ px: 1, pb: 0 }} display="flex-start">
+                  <Box sx={{ px: 1, pb: 0, display: "flex", alignItems: "center", gap: 1 }}>
                     {updatedAtText}
+                    {roleChipEl}
+                    {sharedChipEl}
                   </Box>
                 </Grid>
-                <Grid
-                  item
-                  md={2}
-                  sx={{
-                    display: { xs: "none", md: "block" },
-                  }}>
-                  <Box sx={{ px: 1, pb: 0 }} display="flex-start">
-                    {createdAtText}
-                  </Box>
-                </Grid>
-                {enableActions && (
+                {enableActions && !!props.moreMenuOptions?.length && (
                   <Grid item sm={1}>
                     <Box display="flex" justifyContent="flex-end">
                       {moreMenu}

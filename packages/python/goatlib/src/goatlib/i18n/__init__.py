@@ -356,6 +356,12 @@ def _resolve_property(
                     resolved_labels[enum_value] = label_key_path
             x_ui["enum_labels"] = resolved_labels
 
+        # Resolve group_label if it's a dot-separated translation key path
+        if "group_label" in x_ui:
+            translated = translator.resolve_key(x_ui["group_label"])
+            if translated:
+                x_ui["group_label"] = translated
+
         # Resolve default value based on language if widget_options contains default_XX
         if "widget_options" in x_ui:
             lang_key = f"default_{translator.language}"

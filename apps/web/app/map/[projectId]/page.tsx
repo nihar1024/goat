@@ -4,6 +4,7 @@ import type { DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Box, Stack, debounce, useTheme } from "@mui/material";
+import { ThemeProvider } from "@mui/material/styles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,6 +13,7 @@ import { MapProvider } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
 import { v4 } from "uuid";
 
+import { useFolders } from "@/lib/api/folders";
 import {
   updateProject,
   updateProjectInitialViewState,
@@ -31,6 +33,7 @@ import { type BuilderWidgetSchema, builderWidgetSchema, projectSchema } from "@/
 import { widgetSchemaMap } from "@/lib/validations/widget";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
+import { useBrandedTheme } from "@/hooks/dashboard/useBrandedTheme";
 import { useJobStatus } from "@/hooks/jobs/JobStatus";
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
@@ -43,6 +46,7 @@ import Header from "@/components/header/Header";
 import MapViewer from "@/components/map/MapViewer";
 import DataProjectLayout from "@/components/map/layouts/desktop/DataProjectLayout";
 import PublicProjectLayout from "@/components/map/layouts/desktop/PublicProjectLayout";
+import DataPanel from "@/components/map/panels/DataPanel";
 import { ReportsLayout } from "@/components/reports";
 import WorkflowsLayout from "@/components/workflows/WorkflowsLayout";
 
@@ -94,6 +98,11 @@ export default function MapPage({ params: { projectId } }) {
       return undefined;
     }
   }, [_project]);
+
+  const primaryColor = project?.builder_config?.settings?.primary_color;
+  const iconColor = project?.builder_config?.settings?.icon_color;
+  const fontColor = project?.builder_config?.settings?.font_color;
+  const brandedTheme = useBrandedTheme(primaryColor, iconColor, fontColor);
 
   // Order layers using tree-aware DFS traversal so the map rendering order
   // matches the visual tree order (layers inside a group inherit the group's position).
@@ -171,9 +180,25 @@ export default function MapPage({ params: { projectId } }) {
     return allProjectLayersIncludingTables || [];
   }, [allProjectLayersIncludingTables]);
 
-  const { activeBasemap } = useBasemap(project);
+  const { activeBasemap, mapStyle } = useBasemap(project);
 
-  const { isProjectEditor, isLoading: isAuthZLoading } = useAuthZ();
+  const { isOrgEditor, isLoading: isAuthZLoading } = useAuthZ();
+  const { folders, isLoading: isFoldersLoading } = useFolders({});
+  const projectFolder = useMemo(
+    () => (project?.folder_id && folders ? folders.find((f) => f.id === project.folder_id) : undefined),
+    [folders, project?.folder_id]
+  );
+  const isProjectEditor = useMemo(() => {
+    if (project?.my_role) {
+      return project.my_role === "project-owner" || project.my_role === "project-editor";
+    }
+    if (projectFolder) {
+      if (projectFolder.is_owned) return true;
+      if (projectFolder.role === "folder-editor") return true;
+      if (projectFolder.role === "folder-viewer") return false;
+    }
+    return isOrgEditor;
+  }, [project?.my_role, projectFolder, isOrgEditor]);
 
   const { scenarioFeatures } = useProjectScenarioFeatures(projectId, project?.active_scenario_id);
   const isLoading = useMemo(
@@ -182,13 +207,15 @@ export default function MapPage({ params: { projectId } }) {
       isInitialViewLoading ||
       areProjectLayersLoading ||
       areProjectLayerGroupsLoading ||
-      isAuthZLoading,
+      isAuthZLoading ||
+      isFoldersLoading,
     [
       isProjectLoading,
       isInitialViewLoading,
       areProjectLayersLoading,
       areProjectLayerGroupsLoading,
       isAuthZLoading,
+      isFoldersLoading,
     ]
   );
 
@@ -238,7 +265,7 @@ export default function MapPage({ params: { projectId } }) {
     // Couldn't find an event that catches the basemap change
     const debouncedHandleMapLoad = debounce(handleMapLoad, 200);
     debouncedHandleMapLoad();
-  }, [activeBasemap.url, handleMapLoad, mapMode]);
+  }, [activeBasemap, handleMapLoad, mapMode]);
 
   useJobStatus(() => {
     mutateProjectLayers();
@@ -252,12 +279,28 @@ export default function MapPage({ params: { projectId } }) {
   const selectedBuilderItem = useAppSelector((state) => state.map.selectedBuilderItem);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleProjectUpdate = async (key: string, value: any, refresh = false) => {
+  // Accepts either (key, value, refresh?) or (partial, refresh?). The latter
+  // form patches multiple project fields atomically (used for the basemap
+  // create+select flow so the new entry is in the array AND selected in one
+  // SWR mutation, avoiding a stale-snapshot race between two awaited calls).
+  const handleProjectUpdate = async (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    keyOrPartial: string | Record<string, any>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    valueOrRefresh?: any,
+    refresh = false
+  ) => {
+    const partial =
+      typeof keyOrPartial === "string"
+        ? { [keyOrPartial]: valueOrRefresh }
+        : keyOrPartial;
+    const refreshFlag =
+      typeof keyOrPartial === "string" ? refresh : valueOrRefresh ?? false;
     try {
       const projectToUpdate = JSON.parse(JSON.stringify(project));
-      projectToUpdate[key] = value;
-      mutateProject(projectToUpdate, refresh);
-      await updateProject(projectId, { [key]: value });
+      Object.assign(projectToUpdate, partial);
+      mutateProject(projectToUpdate, refreshFlag);
+      await updateProject(projectId, partial);
     } catch (error) {
       toast.error(t("error_updating_project"));
       mutateProject();
@@ -473,6 +516,7 @@ export default function MapPage({ params: { projectId } }) {
                   mapHeader={true}
                   project={project}
                   onProjectUpdate={handleProjectUpdate}
+                  viewOnly={!isProjectEditor}
                 />
                 <Box
                   sx={{
@@ -491,7 +535,10 @@ export default function MapPage({ params: { projectId } }) {
                     onDragEnd={handleDragEnd}
                     autoScroll>
                     {mapMode === "data" && (
-                      <DataProjectLayout project={project} onProjectUpdate={handleProjectUpdate} />
+                      <DataProjectLayout
+                        project={project}
+                        onProjectUpdate={handleProjectUpdate}
+                      />
                     )}
                     {mapMode === "reports" && (
                       <ReportsLayout
@@ -511,48 +558,66 @@ export default function MapPage({ params: { projectId } }) {
                     {mapMode !== "reports" && mapMode !== "workflows" && (
                       <Box
                         sx={{
+                          display: "flex",
+                          flexDirection: "column",
                           padding: mapMode === "builder" ? "20px" : "0",
                           width: "100%",
                           height: "100%",
                           position: "relative",
                         }}>
+                        <Box sx={{ flex: 1, minHeight: 0, position: "relative" }}>
+                          <MapViewer
+                            containerSx={{ zIndex: 0 }}
+                            layers={projectLayers}
+                            mapRef={mapRef}
+                            scenarioFeatures={scenarioFeatures}
+                            maxExtent={project?.max_extent || undefined}
+                            initialViewState={{
+                              zoom: initialView?.zoom ?? 3,
+                              latitude: initialView?.latitude ?? 48.13,
+                              longitude: initialView?.longitude ?? 11.57,
+                              pitch: initialView?.pitch ?? 0,
+                              bearing: initialView?.bearing ?? 0,
+                              fitBoundsOptions: {
+                                minZoom: initialView?.min_zoom ?? 0,
+                                maxZoom: initialView?.max_zoom ?? 24,
+                              },
+                            }}
+                            mapStyle={mapStyle}
+                            {...(isProjectEditor ? { onMoveEnd: updateViewState } : {})}
+                            isEditor={isProjectEditor}
+                          />
+                          <DataPanel projectLayers={allProjectLayersIncludingTables} isEditor={isProjectEditor} />
+                        </Box>
                         {mapMode === "builder" && (
                           <Box
                             sx={{
                               position: "absolute",
                               inset: "20px",
+                              zIndex: 1,
+                              pointerEvents: "none",
                             }}>
-                            <PublicProjectLayout
-                              projectLayers={widgetProjectLayers}
-                              project={project}
-                              onProjectUpdate={handleProjectUpdate}
-                            />
+                            <ThemeProvider theme={brandedTheme}>
+                              <Box sx={{ color: "text.primary", height: "100%", width: "100%" }}>
+                                <PublicProjectLayout
+                                  projectLayers={widgetProjectLayers}
+                                  projectLayerGroups={projectLayerGroups}
+                                  project={project}
+                                  onProjectUpdate={handleProjectUpdate}
+                                />
+                              </Box>
+                            </ThemeProvider>
                           </Box>
                         )}
-                        <MapViewer
-                          layers={projectLayers}
-                          mapRef={mapRef}
-                          scenarioFeatures={scenarioFeatures}
-                          maxExtent={project?.max_extent || undefined}
-                          initialViewState={{
-                            zoom: initialView?.zoom ?? 3,
-                            latitude: initialView?.latitude ?? 48.13,
-                            longitude: initialView?.longitude ?? 11.57,
-                            pitch: initialView?.pitch ?? 0,
-                            bearing: initialView?.bearing ?? 0,
-                            fitBoundsOptions: {
-                              minZoom: initialView?.min_zoom ?? 0,
-                              maxZoom: initialView?.max_zoom ?? 24,
-                            },
-                          }}
-                          mapStyle={activeBasemap?.url}
-                          {...(isProjectEditor ? { onMoveEnd: updateViewState } : {})}
-                          isEditor={isProjectEditor}
-                        />
                       </Box>
                     )}
                     {mapMode === "builder" && (
-                      <BuilderConfigPanel project={project} onProjectUpdate={handleProjectUpdate} />
+                      <BuilderConfigPanel
+                        project={project}
+                        onProjectUpdate={handleProjectUpdate}
+                        projectLayers={allProjectLayersIncludingTables}
+                        projectLayerGroups={projectLayerGroups}
+                      />
                     )}
 
                     {mapMode === "builder" && (

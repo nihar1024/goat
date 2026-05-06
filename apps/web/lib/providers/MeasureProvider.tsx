@@ -8,10 +8,12 @@ import distance from "@turf/distance";
 import { point } from "@turf/helpers";
 import length from "@turf/length";
 import type { MapMouseEvent } from "maplibre-gl";
-import React, { type ReactNode, createContext, useCallback, useContext, useEffect, useRef } from "react";
+import React, { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 import { v4 as uuidv4 } from "uuid";
+
+import { findSnapTarget, setSnapConfig } from "@p4b/draw";
 
 import {
   type MeasureToolType,
@@ -56,16 +58,169 @@ interface MeasureContextType {
 
 const MeasureContext = createContext<MeasureContextType | undefined>(undefined);
 
+const SNAP_INDICATOR_SOURCE_ID = "__measure-snap-indicator";
+const SNAP_INDICATOR_LAYER_ID = "__measure-snap-indicator-layer";
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+
+// Project layers are added to the map style at numeric ids ("123") with
+// optional "stroke-123" / "text-label-123" / "highlight-123" variants.
+// Basemap and internal (gl-draw-*, __measure-*) layers don't match this.
+const PROJECT_LAYER_ID_RE = /^(?:stroke-|text-label-|highlight-)?\d+$/;
+
 export const MeasureProvider = ({ children }: { children: ReactNode }) => {
   const { map } = useMap();
   const { drawControl } = useDraw();
   const dispatch = useAppDispatch();
   const activeTool = useAppSelector((state) => state.map.activeMeasureTool);
   const measurements = useAppSelector((state) => state.map.measurements);
+  const snapEnabled = useAppSelector((state) => state.map.measureSnapEnabled);
   const activeToolRef = useRef(activeTool);
   const measurementsRef = useRef(measurements);
   const { i18n } = useTranslation();
   const locale = i18n.language || "en-US";
+
+  // Candidate map style layer ids: derived directly from the rendered map
+  // style by filtering against PROJECT_LAYER_ID_RE.
+  const [candidateSnapLayerIds, setCandidateSnapLayerIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+
+    const refresh = () => {
+      const layers = m.getStyle()?.layers ?? [];
+      const ids: string[] = [];
+      for (const l of layers) {
+        if (PROJECT_LAYER_ID_RE.test(l.id)) ids.push(l.id);
+      }
+      setCandidateSnapLayerIds((prev) => {
+        if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
+        return ids;
+      });
+    };
+
+    refresh();
+    m.on("styledata", refresh);
+    return () => {
+      m.off("styledata", refresh);
+    };
+  }, [map]);
+
+  // Push snap config into @p4b/draw.
+  useEffect(() => {
+    setSnapConfig({
+      enabled: snapEnabled,
+      layerIds: candidateSnapLayerIds,
+      toleranceInPx: 12,
+    });
+  }, [candidateSnapLayerIds, snapEnabled]);
+
+  // Reset snap config when the provider unmounts so other parts of the app
+  // (or a different map instance) don't inherit stale state.
+  useEffect(() => {
+    return () => {
+      setSnapConfig({ enabled: false, layerIds: [] });
+    };
+  }, []);
+
+  // Snap indicator source/layer — a small ring at the snap target.
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+
+    const ensure = () => {
+      try {
+        if (!m.getSource(SNAP_INDICATOR_SOURCE_ID)) {
+          m.addSource(SNAP_INDICATOR_SOURCE_ID, {
+            type: "geojson",
+            data: EMPTY_FC,
+          });
+        }
+        if (!m.getLayer(SNAP_INDICATOR_LAYER_ID)) {
+          m.addLayer({
+            id: SNAP_INDICATOR_LAYER_ID,
+            type: "circle",
+            source: SNAP_INDICATOR_SOURCE_ID,
+            paint: {
+              "circle-radius": 8,
+              "circle-color": "rgba(239, 68, 68, 0.25)",
+              "circle-stroke-color": "#ef4444",
+              "circle-stroke-width": 2,
+            },
+          });
+        }
+        // Keep the indicator on top — but only when it isn't already there.
+        // moveLayer fires styledata synchronously, so calling it
+        // unconditionally inside the styledata listener recurses forever.
+        const styleLayers = m.getStyle()?.layers ?? [];
+        const lastId = styleLayers[styleLayers.length - 1]?.id;
+        if (lastId !== SNAP_INDICATOR_LAYER_ID) {
+          m.moveLayer(SNAP_INDICATOR_LAYER_ID);
+        }
+      } catch {
+        // styledata can fire mid-transition; ignore and rely on the next tick
+      }
+    };
+
+    if (m.isStyleLoaded()) ensure();
+    m.on("styledata", ensure);
+    return () => {
+      m.off("styledata", ensure);
+      try {
+        if (m.getLayer(SNAP_INDICATOR_LAYER_ID)) m.removeLayer(SNAP_INDICATOR_LAYER_ID);
+        if (m.getSource(SNAP_INDICATOR_SOURCE_ID)) m.removeSource(SNAP_INDICATOR_SOURCE_ID);
+      } catch {
+        // best-effort cleanup
+      }
+    };
+  }, [map]);
+
+  // Live snap indicator: while a measurement tool is active and snap is
+  // enabled, follow the cursor and show a marker at the candidate snap point.
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+
+    const clearIndicator = () => {
+      const source = m.getSource(SNAP_INDICATOR_SOURCE_ID) as
+        | { setData: (d: GeoJSON.FeatureCollection) => void }
+        | undefined;
+      source?.setData(EMPTY_FC);
+    };
+
+    if (!activeTool || !snapEnabled) {
+      clearIndicator();
+      return;
+    }
+
+    const onMove = (e: MapMouseEvent) => {
+      const target = findSnapTarget(m, e.point);
+      const source = m.getSource(SNAP_INDICATOR_SOURCE_ID) as
+        | { setData: (d: GeoJSON.FeatureCollection) => void }
+        | undefined;
+      if (!source) return;
+      if (target) {
+        source.setData({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [target.lng, target.lat] },
+              properties: {},
+            },
+          ],
+        });
+      } else {
+        source.setData(EMPTY_FC);
+      }
+    };
+
+    m.on("mousemove", onMove);
+    return () => {
+      m.off("mousemove", onMove);
+      clearIndicator();
+    };
+  }, [map, activeTool, snapEnabled]);
 
   // Keep ref in sync with state
   useEffect(() => {

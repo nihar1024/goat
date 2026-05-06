@@ -13,9 +13,12 @@ import {
   transformToMapboxLayerStyleSpec,
 } from "@/lib/transformers/layer";
 import { addOrUpdateMarkerImages } from "@/lib/transformers/map-image";
+import { transformToLineDecorationLayers } from "@/lib/transformers/lineStyle";
 import { generateCOGColorFunction } from "@/lib/utils/map/cog-styling";
 import { getLayerKey } from "@/lib/utils/map/layer";
+import { registerSpriteImages } from "@/lib/utils/map/registerSpriteImages";
 import type {
+  FeatureLayerLineProperties,
   FeatureLayerPointProperties,
   FeatureLayerProperties,
   Layer,
@@ -155,7 +158,11 @@ const Layers = (props: LayersProps) => {
     return extendedFilter;
   };
 
-  const getFeatureTileUrl = (layer: ProjectLayer | Layer, label = false) => {
+  const getFeatureTileUrl = (
+    layer: ProjectLayer | Layer,
+    label = false,
+    decoration: "start" | "end" | "start_and_end" | "center" | null = null,
+  ) => {
     const extendedQuery = getLayerQueryFilter(layer);
     const parts: string[] = [];
 
@@ -164,6 +171,9 @@ const Layers = (props: LayersProps) => {
     }
     if (label) {
       parts.push("label=true");
+    }
+    if (decoration) {
+      parts.push(`decoration=${decoration}`);
     }
     // Force dynamic tiles when editing — bypasses old PMTiles that lack MVT feature IDs
     const layerId = layer["layer_id"] || layer["id"];
@@ -237,6 +247,28 @@ const Layers = (props: LayersProps) => {
       };
     }
   }, [props.layers, mapRef]);
+
+  // Register decoration sprites (e.g. the arrow used for line decorations).
+  // SDF icons let `icon-color` tint per-layer. Re-register on style reloads
+  // because basemap changes wipe registered images.
+  useEffect(() => {
+    if (!mapRef) return;
+    const map = mapRef.getMap();
+
+    const register = () => {
+      void registerSpriteImages(map);
+    };
+    if (map.isStyleLoaded()) {
+      register();
+    } else {
+      map.once("load", register);
+    }
+    map.on("styledata", register);
+    return () => {
+      map.off("load", register);
+      map.off("styledata", register);
+    };
+  }, [mapRef]);
 
   // Render in reverse order for correct initial stacking (MapLibre stacks bottom-to-top).
   // Reordering is handled imperatively via map.moveLayer() to avoid cross-Source timing
@@ -363,11 +395,20 @@ const Layers = (props: LayersProps) => {
                 ): FilterSpecification | undefined =>
                   mergeAtlasFilter(mergeEditExclusion(baseFilter));
 
+                const linePlacement =
+                  layer.feature_layer_geometry_type === "line"
+                    ? ((layer.properties as FeatureLayerLineProperties)?.decoration_placement ?? "repeat")
+                    : "repeat";
+                const decorationParam =
+                  linePlacement !== "repeat"
+                    ? (linePlacement as "start" | "end" | "start_and_end" | "center")
+                    : null;
+
                 return (
                   <Source
                     key={`${layer.id}-${layer.updated_at || ""}`}
                     type="vector"
-                    tiles={[getFeatureTileUrl(layer, needsLabel)]}
+                    tiles={[getFeatureTileUrl(layer, needsLabel, decorationParam)]}
                     maxzoom={14}>
                     {!layer.properties?.["custom_marker"] && (
                       <MapLayer
@@ -380,6 +421,20 @@ const Layers = (props: LayersProps) => {
                         source-layer="default"
                       />
                     )}
+                    {layer.feature_layer_geometry_type === "line" &&
+                      transformToLineDecorationLayers(layer).map((decoSpec) => (
+                        <MapLayer
+                          key={`${decoSpec.id}-${layer.updated_at || ""}`}
+                          id={decoSpec.id}
+                          minzoom={layer.properties.min_zoom || 0}
+                          maxzoom={layer.properties.max_zoom || 24}
+                          type="symbol"
+                          layout={decoSpec.layout as any}
+                          paint={decoSpec.paint as any}
+                          {...(composeFilters(mapLayerFilter) ? { filter: composeFilters(mapLayerFilter) } : {})}
+                          source-layer={decoSpec.sourceLayer}
+                        />
+                      ))}
                     {layer.feature_layer_geometry_type === "polygon" && (
                       <MapLayer
                         key={`stroke-${layer.id.toString()}`}
@@ -456,6 +511,7 @@ const Layers = (props: LayersProps) => {
                       }}
                       paint={{
                         "raster-opacity": rasterProperties?.opacity || 1.0,
+                        "raster-resampling": rasterProperties?.resampling ?? "nearest",
                         ...(rasterProperties?.style?.style_type === "image" && {
                           "raster-brightness-min": rasterProperties.style.brightness_min ?? 0,
                           "raster-brightness-max": rasterProperties.style.brightness_max ?? 1,

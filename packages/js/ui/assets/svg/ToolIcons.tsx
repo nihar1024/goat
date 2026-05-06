@@ -230,7 +230,7 @@ export const OevGueteklassenIcon = (props: SvgIconProps) => (
 );
 
 export const TravelCostMatrixIcon = (props: SvgIconProps) => (
-  <SvgIcon viewBox="0 0 48 44" {...props}>
+  <SvgIcon viewBox="0 0 44 44" {...props}>
     {/* Origin points (left column) */}
     <circle cx="8" cy="12" r="3.5" fill="var(--icon-color-1, #666666)"/>
     <circle cx="8" cy="24" r="3.5" fill="var(--icon-color-1, #666666)"/>
@@ -246,9 +246,6 @@ export const TravelCostMatrixIcon = (props: SvgIconProps) => (
     <line x1="11.5" y1="24" x2="28.5" y2="36" stroke="var(--icon-color-4, #E3E3E3)" strokeWidth="1.2"/>
     <line x1="11.5" y1="36" x2="28.5" y2="24" stroke="var(--icon-color-4, #E3E3E3)" strokeWidth="1.2"/>
     <line x1="11.5" y1="36" x2="28.5" y2="36" stroke="var(--icon-color-2, #999999)" strokeWidth="1.2"/>
-    {/* Beta badge */}
-    <rect x="23" y="0" width="24" height="12" rx="5" fill="var(--icon-color-1, #666666)"/>
-    <text x="35" y="9" textAnchor="middle" fill="var(--icon-color-4, #E3E3E3)" fontSize="7.5" fontWeight="700" fontFamily="Arial, sans-serif">Beta</text>
   </SvgIcon>
 );
 
@@ -377,7 +374,7 @@ export const toolIconMap: Record<TOOL_ICON_NAME, React.FC<SvgIconProps>> = {
   [TOOL_ICON_NAME.AGGREGATE_POLYGON]: AggregatePolygonsIcon,
   [TOOL_ICON_NAME.BUFFER]: BufferIcon,
   [TOOL_ICON_NAME.CATCHMENT_AREA]: CatchmentAreaIcon,
-  [TOOL_ICON_NAME.CATCHMENT_AREA_V2]: CatchmentAreaV2Icon,
+  [TOOL_ICON_NAME.CATCHMENT_AREA_V2]: CatchmentAreaIcon,
   [TOOL_ICON_NAME.CENTROID]: CentroidIcon,
   [TOOL_ICON_NAME.CLIP]: ClipIcon,
   [TOOL_ICON_NAME.SPATIAL_CLUSTERING]: SpatialClusteringIcon,

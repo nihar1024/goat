@@ -170,6 +170,12 @@ class OriginDestinationToolParams(
     # =========================================================================
     # Result Layer Naming Section
     # =========================================================================
+    # Hide the generic result_layer_name from ToolInputBase
+    result_layer_name: str | None = Field(
+        default=None,
+        json_schema_extra=ui_field(section="result", hidden=True),
+    )
+
     lines_layer_name: str | None = Field(
         default=get_default_layer_name("origin_destination_lines", "en"),
         description="Custom name for the OD lines layer.",
@@ -338,7 +344,7 @@ class OriginDestinationToolRunner(BaseToolRunner[OriginDestinationToolParams]):
             "stroked": True,
             "stroke_width": 2,
             "stroke_width_range": [1, 10],
-            "stroke_width_scale": "linear",
+            "stroke_width_scale": "quantile",
             "color": [252, 141, 89],  # Orange as base
             "stroke_color": [252, 141, 89],  # Orange as base stroke
         }
@@ -369,6 +375,11 @@ class OriginDestinationToolRunner(BaseToolRunner[OriginDestinationToolParams]):
                 "category": "sequential",
             },
             "stroke_color_scale_breaks": breaks_info,
+            "stroke_width_field": {
+                "name": weight_column,
+                "type": "number",
+            },
+            "stroke_width_scale_breaks": breaks_info,
         }
 
     def get_point_weight_style(

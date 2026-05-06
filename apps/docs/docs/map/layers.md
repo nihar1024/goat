@@ -29,6 +29,7 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 - Integrate **datasets from your data explorer or the catalog explorer**
 - Upload new **datasets from your local device** (GeoPackage, GeoJSON, Shapefile, KML, CSV, or XLSX). 
 - Add external layers by inserting the **url of the external source** (WFS, WMS, WMTS, XYZ Tiles, or COG).
+- **Create a new empty layer** directly in your project.
 
 
 
@@ -41,7 +42,7 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Select if you like to integrate a dataset using the: <code>Data Explorer</code>, <code>Dataset Upload</code>, <code>Dataset External</code> or <code>Catalog Explorer</code> to <strong>choose your data source</strong>.</div>
+  <div class="content">Select if you like to integrate a dataset using the: <code>Dataset Explorer</code>, <code>Dataset Upload</code>, <code>Dataset External</code>, <code>Catalog Explorer</code>, or <code>Create Layer</code> to <strong>choose your data source</strong>.</div>
 </div>
 
 <Tabs>
@@ -80,26 +81,7 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 
 
   </TabItem>
-  <TabItem value="Catalog Explorer" label="Catalog Explorer" className="tabItemBox">
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Browse <code>GOAT Dataset Catalog</code> to <strong>explore available datasets</strong>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Select the Dataset you want to <strong>import</strong>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Click on <code>+ Add Layer</code> to <strong>add the selected dataset</strong>.</div>
-</div>
-
-
- </TabItem>
-  <TabItem value="Dataset External" label="Dataset External" default className="tabItemBox">
+  <TabItem value="Dataset External" label="Dataset External" className="tabItemBox">
   
 <div class="step">
   <div class="step-number">3</div>
@@ -131,6 +113,33 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
     </TabItem>
   </Tabs>
 </TabItem>
+  <TabItem value="Catalog Explorer" label="Catalog Explorer" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Browse <code>GOAT Dataset Catalog</code> to <strong>explore available datasets</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Select the Dataset you want to <strong>import</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Click on <code>+ Add Layer</code> to <strong>add the selected dataset</strong>.</div>
+</div>
+
+
+ </TabItem>
+  <TabItem value="Create Layer" label="Create Layer" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Create a new empty layer directly in your project. Enter a <strong>layer name</strong>, select the <strong>geometry type</strong> (<code>Point</code>, <code>Line</code>, <code>Polygon</code>, or <code>Table</code>), and define your <strong>fields</strong>. For full details, see <a href="./layer_editing">Layer Editing</a>.</div>
+</div>
+
+  </TabItem>
 </Tabs>
 
 :::tip tip
@@ -194,3 +203,32 @@ Want to change the design of your layers? See [Layer Style](../category/style).
 Only want to visualize parts of your dataset? See [Filter](./filter). 
 
 :::
+
+### Edit Features
+
+Use <code>Edit features</code> from the layer's <code>more options</code> menu to update feature data directly on the map.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Click <code>Edit features</code> in the layer options to <strong>start editing mode</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Click a feature on the map to <strong>open its attributes</strong> in the right-side panel.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Update the values you want to change in the <code>Feature attributes</code> panel.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Click <code>Done</code> to confirm the feature edit.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Click <code>Save</code> to apply all pending changes, or <code>Discard</code> to cancel them.</div>
+</div>

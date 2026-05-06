@@ -796,6 +796,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
 
             # Detect geometry column from parquet schema
             cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')").fetchall()
+            column_names = {c[0] for c in cols}
             geom_col = next(
                 (c[0] for c in cols if "GEOMETRY" in c[1].upper() or c[0] in ("geom", "geometry")),
                 None,
@@ -803,7 +804,18 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
             if not geom_col:
                 raise RuntimeError(f"No geometry column found in {parquet_path}")
 
-            id_select = f'CAST("{id_column}" AS VARCHAR)'
+            # Validate id_column against the parquet schema so the f-string SQL
+            # below can't be coerced into running attacker-controlled DuckDB.
+            if id_column not in column_names:
+                raise ValueError(
+                    f"Column '{id_column}' does not exist in the layer. "
+                    f"Available columns: {sorted(column_names)}"
+                )
+
+            # NULLs in the chosen id column are kept as empty strings so the
+            # matrix still computes for those rows (Pydantic list[str] would
+            # otherwise reject None and the f-string SQL would emit 'None').
+            id_select = f'COALESCE(CAST("{id_column}" AS VARCHAR), \'\')'
 
             result = con.execute(f"""
                 SELECT
@@ -832,13 +844,18 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         try:
             con.execute("INSTALL spatial; LOAD spatial;")
 
-            # Build origin/destination value lists
+            # Build origin/destination value lists. SQL string literals double
+            # any embedded single quote, so labels like "O'Brien" don't break
+            # the VALUES clause.
+            def _quote(s: str) -> str:
+                return "'" + s.replace("'", "''") + "'"
+
             o_values = ",".join(
-                f"('{o_id}', {lat}, {lon})"
+                f"({_quote(o_id)}, {lat}, {lon})"
                 for o_id, lat, lon in zip(origin_ids, origin_lats, origin_lons)
             )
             d_values = ",".join(
-                f"('{d_id}', {lat}, {lon})"
+                f"({_quote(d_id)}, {lat}, {lon})"
                 for d_id, lat, lon in zip(dest_ids, dest_lats, dest_lons)
             )
 
@@ -933,6 +950,19 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         dest_lats, dest_lons, dest_ids = self._extract_coordinates_from_parquet(
             dest_parquet, id_column=params.destination_id_column)
 
+        # Reject empty inputs before they trigger downstream crashes
+        # (`min()` on empty list, `(VALUES )` in flight-distance SQL, etc.)
+        if not origin_lats:
+            raise ValueError(
+                "Origin layer has no valid point geometries. "
+                "Check that the layer contains points and that geometries are not all null."
+            )
+        if not dest_lats:
+            raise ValueError(
+                "Destination layer has no valid point geometries. "
+                "Check that the layer contains points and that geometries are not all null."
+            )
+
         # Validate matrix size
         n_combos = len(origin_lats) * len(dest_lats)
         if n_combos > 10_000:
@@ -963,9 +993,9 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         # Validate max extent for routed modes.
         if params.routing_mode != RoutingMode.flight_distance:
             max_reach_m = {
-                RoutingMode.walking: 50_000,
-                RoutingMode.bicycle: 50_000,
-                RoutingMode.pedelec: 50_000,
+                RoutingMode.walking: 100_000,
+                RoutingMode.bicycle: 100_000,
+                RoutingMode.pedelec: 100_000,
                 RoutingMode.car: 300_000,
                 RoutingMode.pt: 300_000,
             }.get(params.routing_mode, 300_000)

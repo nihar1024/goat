@@ -1,4 +1,4 @@
-import { Box, Button, FormControl, Link, MenuItem, Select, Stack, Switch, Typography } from "@mui/material";
+import { Box, Button, FormControl, Link, MenuItem, Select, Stack, Switch, TextField, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,6 +14,7 @@ import { DEFAULT_CONTROL_POSITIONS, DEFAULT_FAVICON_URL, builderConfigSchema } f
 
 import InteractionsModal, { InteractionsEntryButton } from "@/components/builder/InteractionsModal";
 import MapControlsLayout from "@/components/builder/MapControlsLayout";
+import SocialPreviewImagePicker from "@/components/builder/SocialPreviewImagePicker";
 import SettingsGroupHeader from "@/components/builder/widgets/common/SettingsGroupHeader";
 import ConfirmModal from "@/components/modals/Confirm";
 import Selector from "@/components/map/panels/common/Selector";
@@ -288,6 +289,50 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
               }}
             />
 
+          </Stack>
+        </Box>
+        {/* ── Social sharing ── */}
+        <Box sx={{ mb: 6 }}>
+          <SettingsGroupHeader label={t("social_sharing")} />
+          <Stack spacing={2}>
+            <Typography variant="caption" color="text.secondary">
+              {t("social_sharing_description")}
+            </Typography>
+            <SocialPreviewImagePicker
+              label={t("social_preview_image")}
+              imageUrl={settings?.og_image_url as string | undefined}
+              helperText={t("social_preview_image_helper")}
+              onChange={(url) => onChange("og_image_url", url)}
+            />
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {t("meta_description")}
+                </Typography>
+                {!!settings?.meta_description && (
+                  <Link
+                    component="button"
+                    variant="caption"
+                    underline="always"
+                    onClick={() => onChange("meta_description", undefined)}
+                    sx={{ cursor: "pointer" }}>
+                    {t("reset")}
+                  </Link>
+                )}
+              </Stack>
+              <TextField
+                size="small"
+                fullWidth
+                multiline
+                rows={3}
+                value={(settings?.meta_description as string) ?? ""}
+                onChange={(e) =>
+                  onChange("meta_description", e.target.value ? e.target.value.slice(0, 300) : undefined)
+                }
+                placeholder={t("meta_description_placeholder")}
+                helperText={`${((settings?.meta_description as string) ?? "").length} / 300 — ${t("meta_description_helper")}`}
+              />
+            </Box>
           </Stack>
         </Box>
         {/* ── General ── */}

@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # Datensätze
 
-Die **Datensätze**-Seite ist Ihr Datenmanagement-Hub, wo Sie alle Ihre räumlichen und nicht-räumlichen **Daten** in GOAT **hochladen**, organisieren und teilen können. Dieser zentrale **Workspace** bietet eine organisierte Ansicht Ihrer **Datensätze**, kategorisiert in **Persönliche Datensätze**, **Team-Datensätze** und **Organisationsweite geteilte Datensätze**. Hier können Sie:
+Die Datensätze-Seite ist Ihr **Datenmanagement-Hub, wo Sie alle Ihre räumlichen und nicht-räumlichen Daten in GOAT hochladen, organisieren und teilen können**. Dieser zentrale Workspace bietet eine organisierte Ansicht Ihrer Datensätze, kategorisiert in Persönliche Datensätze, Team-Datensätze und Organisationsweite geteilte Datensätze. Hier können Sie:
 
 - **Neue Datensätze hinzufügen**
 - **Datensätze filtern und organisieren** für bessere Datenstruktur und -verwaltung
@@ -16,11 +16,11 @@ Die **Datensätze**-Seite ist Ihr Datenmanagement-Hub, wo Sie alle Ihre räumlic
 
 ## Datensätze hinzufügen
 
-Sie können **Datensätze** auf zwei Arten zu GOAT hinzufügen: durch **Hochladen** von Dateien von Ihrem Computer oder durch Verbindung zu externen Datenquellen.
+Sie können Datensätze auf zwei Arten zu GOAT hinzufügen: durch Hochladen von Dateien von Ihrem Computer oder durch Verbindung zu externen Datenquellen.
 
 ### Daten hochladen
 
-GOAT unterstützt mehrere Dateiformate zum **Hochladen**: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, **Parquet** und **COG**-Dateien.
+GOAT unterstützt mehrere Dateiformate zum Hochladen: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, **Parquet** und **COG**-Dateien.
 
 <div class="step">
   <div class="step-number">1</div>
@@ -40,18 +40,18 @@ GOAT unterstützt mehrere Dateiformate zum **Hochladen**: **GeoPackage**, **GeoJ
 <div class="step">
   <div class="step-number">4</div>
   <div class="content">
-    <p>Konfigurieren Sie Ihren **Datensatz**:</p>
+    <p>Konfigurieren Sie Ihren Datensatz:</p>
     <ul> 
-      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren **Datensatz** organisieren möchten</li>
-      <li><strong>Name</strong> - Geben Sie Ihrem **Datensatz** einen beschreibenden Namen</li>
-      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über den Inhalt und Zweck Ihres **Datensatzes** hinzu</li>
+      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren Datensatz organisieren möchten</li>
+      <li><strong>Name</strong> - Geben Sie Ihrem Datensatz einen beschreibenden Namen</li>
+      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über den Inhalt und Zweck Ihres Datensatzes hinzu</li>
     </ul>
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Klicken Sie auf <code>Hochladen</code>, um den **Datensatz** zu Ihrem **Workspace** hinzuzufügen.</div>
+  <div class="content">Klicken Sie auf <code>Hochladen</code>, um den Datensatz zu Ihrem Workspace hinzuzufügen.</div>
 </div>
 
 ### Externe Datenquellen
@@ -81,10 +81,10 @@ Verbinden Sie sich mit externen Datendiensten einschließlich **Web Feature Serv
 <div class="step">
   <div class="step-number">5</div>
   <div class="content">
-  <p>Konfigurieren Sie Ihren **Datensatz**:</p>
+  <p>Konfigurieren Sie Ihren Datensatz:</p>
     <ul>
-      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren **Datensatz** organisieren möchten</li>
-      <li><strong>Name</strong> - Geben Sie Ihrem **Datensatz** einen beschreibenden Namen</li>
+      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren Datensatz organisieren möchten</li>
+      <li><strong>Name</strong> - Geben Sie Ihrem Datensatz einen beschreibenden Namen</li>
       <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über die externe Datenquelle hinzu</li>
     </ul>
   </div>
@@ -92,11 +92,11 @@ Verbinden Sie sich mit externen Datendiensten einschließlich **Web Feature Serv
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Überprüfen Sie Ihre Konfiguration und klicken Sie auf <code>Speichern</code>, um den externen **Datensatz** hinzuzufügen.</div>
+  <div class="content">Überprüfen Sie Ihre Konfiguration und klicken Sie auf <code>Speichern</code>, um den externen Datensatz hinzuzufügen.</div>
 </div>
 
 :::tip Alternative Upload-Methode
-Sie können **Datensätze** auch direkt während der Arbeit in der [Karte](../map/layers) Oberfläche **hochladen** für die sofortige Verwendung in Ihren **Projekten**.
+Sie können Datensätze auch direkt während der Arbeit in der [Karte](../map/layers) Oberfläche hochladen für die sofortige Verwendung in Ihren Projekten.
 :::
 
 
@@ -104,14 +104,14 @@ Sie können **Datensätze** auch direkt während der Arbeit in der [Karte](../ma
 
 ### Nach Datensatz-Typ filtern
 
-Filtern Sie Ihre **Datensätze** einfach nach [Datensatz-Typ](../data/dataset_types "Was sind die Datensatz-Typen?"), um genau das zu finden, was Sie brauchen. Verfügbare Filter umfassen:
+Filtern Sie Ihre Datensätze einfach nach [Datensatz-Typ](../data/dataset_types "Was sind die Datensatz-Typen?"), um genau das zu finden, was Sie brauchen. Verfügbare Filter umfassen:
 
-- **Features** - Räumliche **Datensätze** mit Punkten, Linien oder Polygonen
-- **Tabellen** - Nicht-räumliche tabellarische **Daten**
-- **Externe Bilder** - Raster-**Daten** aus externen Quellen  
+- **Features** - Räumliche Datensätze mit Punkten, Linien oder Polygonen
+- **Tabellen** - Nicht-räumliche tabellarische Daten
+- **Externe Bilder** - Rasterdaten aus externen Quellen
 - **Externe Vektor-Kacheln** - Vektor-Kacheln aus externen Diensten
 
-Klicken Sie auf das Filter-Symbol <img src={require('/img/icons/filter.png').default} alt="Filter-Symbol" style={{ maxHeight: "20px", maxWidth: "20px"}}/>, um Ihren gewünschten **Datensatz**-Typ auszuwählen.
+Klicken Sie auf das Filter-Symbol <img src={require('/img/icons/filter.png').default} alt="Filter-Symbol" style={{ maxHeight: "20px", maxWidth: "20px"}}/>, um Ihren gewünschten Datensatz-Typ auszuwählen.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/workspace/datasets/dataset_filter.gif').default} alt="Datensätze-Filterung im Workspace von GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
@@ -119,7 +119,7 @@ Klicken Sie auf das Filter-Symbol <img src={require('/img/icons/filter.png').def
 
 ### Ordner erstellen und verwalten
 
-Organisieren Sie Ihre **Datensätze** in Ordnern für bessere Struktur und einfachere Navigation.
+Organisieren Sie Ihre Datensätze in Ordnern für bessere Struktur und einfachere Navigation.
 
 **Um einen neuen Ordner zu erstellen:**
 
@@ -144,16 +144,26 @@ Organisieren Sie Ihre **Datensätze** in Ordnern für bessere Struktur und einfa
 
 <p></p>
 
+**Um einen Ordner umzubenennen, zu teilen oder zu löschen:**
+
+Klicken Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Symbol neben einem Ordner:
+
+- <code>Umbenennen</code> — Ordnernamen ändern
+- <code>Teilen</code> — Den Dialog <strong>Zugriff verwalten</strong> öffnen, um den Zugriff nach <strong>Organisation</strong> oder pro <strong>Team</strong> zu vergeben. Zugriffsebene festlegen und auf <code>Speichern</code> klicken.
+- <code>Löschen</code> — Ordner entfernen
+
+<p></p>
+
 **Um Datensätze in Ordner zu verschieben:**
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Klicken Sie auf die drei Punkte <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px"}}/> neben Ihrem **Datensatz**</div>
+  <div class="content">Klicken Sie auf die drei Punkte <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px"}}/> neben Ihrem Datensatz</div>
 </div>
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Wählen Sie <code>In Ordner verschieben</code> aus dem Menü</div>
+  <div class="content">Wählen Sie <code>In den Ordner verschieben</code> aus dem Menü</div>
 </div>
 
 <div class="step">
@@ -167,13 +177,14 @@ Organisieren Sie Ihre **Datensätze** in Ordnern für bessere Struktur und einfa
 
 ## Datensatz-Verwaltung
 
-Greifen Sie auf umfassende **Datensatz**-Verwaltungsoptionen über das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü neben jedem **Datensatz** zu. Verfügbare Aktionen umfassen:
+Greifen Sie auf umfassende Datensatz-Verwaltungsoptionen über das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü neben jedem Datensatz zu. Verfügbare Aktionen umfassen:
 
-- **Info anzeigen/bearbeiten** - Zugriff und Änderung von **Datensatz**-Metadaten
-- **In Ordner verschieben** - Ihre **Datensatz**-Struktur neu organisieren  
-- **Herunterladen** - **Datensätze** auf Ihr lokales Gerät exportieren
-- **Teilen** - Zusammenarbeiten durch Teilen mit Teammitgliedern oder Organisation
-- **Löschen** - **Datensätze** entfernen, die Sie nicht mehr benötigen
+- <code>Metadaten bearbeiten</code> - Zugriff und Änderung von Datensatz-Metadaten
+- <code>In den Ordner verschieben</code> - Datensatz-Speicherort neu organisieren
+- <code>Herunterladen</code> - Datensätze auf Ihr lokales Gerät exportieren
+- <code>Aktualisieren</code> - Datensatz mit neuen Daten aktualisieren
+- <code>Teilen</code> - Zusammenarbeiten durch Teilen mit Teammitgliedern oder Organisation
+- <code>Löschen</code> - Datensätze entfernen, die Sie nicht mehr benötigen
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/workspace/datasets/managing_datasets.png').default} alt="Datensatz-Verwaltungsoptionen" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
@@ -181,17 +192,13 @@ Greifen Sie auf umfassende **Datensatz**-Verwaltungsoptionen über das <img src=
 
 #### Datensatz-Metadaten und Vorschau
 
-Zeigen Sie detaillierte Informationen über Ihre **Datensätze** an, um deren Inhalt und Struktur besser zu verstehen. Greifen Sie auf zwei Arten auf Metadaten zu:
-
-- Klicken Sie auf **Info** aus dem <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü 
-- Klicken Sie direkt auf den **Datensatz**-Namen
+Zeigen Sie detaillierte Informationen über Ihre Datensätze an, um deren Inhalt und Struktur besser zu verstehen. Klicken Sie direkt auf den Datensatz-Namen, um die Metadaten-Ansicht zu öffnen.
 
 Die Metadaten-Ansicht bietet:
 
-- **Daten-Zusammenfassung** - Übersicht über **Datensatz**-Eigenschaften und Statistiken
-- **Attributtabelle** - Detaillierte Ansicht aller Datenfelder und Werte  
-- **Karten-Vorschau** - Räumliche Visualisierung mit interaktiver Legende
-- **Bearbeitungsoptionen** - **Datensatz**-Name, Beschreibung und andere Eigenschaften ändern
+- <code>Zusammenfassung</code> - Übersicht über Datensatz-Eigenschaften und Statistiken
+- <code>Daten</code> - Detaillierte Ansicht aller Datenfelder und Werte
+- <code>Karte</code> - Räumliche Visualisierung mit interaktiver Legende
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/workspace/datasets/metadata.gif').default} alt="Metadaten der Datensätze im Workspace von GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>

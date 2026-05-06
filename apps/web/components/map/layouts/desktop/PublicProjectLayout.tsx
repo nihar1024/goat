@@ -535,7 +535,8 @@ const PublicProjectLayout = ({
   }, [builderConfig, translatedBaseMaps]);
 
   const renderControl = useCallback(
-    (key: ControlKey): React.ReactNode => {
+    (key: ControlKey, corner: CornerKey): React.ReactNode => {
+      const isRightCorner = corner === "top-right" || corner === "bottom-right";
       switch (key) {
         case "location":
           return (
@@ -550,7 +551,13 @@ const PublicProjectLayout = ({
             />
           );
         case "measure":
-          return <MeasureButton key="measure" {...measureTool} />;
+          return (
+            <MeasureButton
+              key="measure"
+              {...measureTool}
+              placement={isRightCorner ? "left" : "right"}
+            />
+          );
         case "zoom_controls":
           return <Zoom key="zoom_controls" tooltipZoomIn={t("zoom_in")} tooltipZoomOut={t("zoom_out")} />;
         case "basemap":
@@ -736,7 +743,7 @@ const PublicProjectLayout = ({
               zIndex: 2,
               transition: "all 0.3s",
             }}>
-            {controlsByCorner["bottom-right"].map(renderControl)}
+            {controlsByCorner["bottom-right"].map((c) => renderControl(c, "bottom-right"))}
             <AttributionControl />
           </Box>
 
@@ -771,7 +778,7 @@ const PublicProjectLayout = ({
                   zIndex: 2,
                   transition: "all 0.3s",
                 }}>
-                {controls.map(renderControl)}
+                {controls.map((c) => renderControl(c, corner))}
               </Box>
             );
           })}

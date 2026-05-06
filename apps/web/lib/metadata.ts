@@ -89,5 +89,6 @@ export function getLocalizedMetadata(
     robots: {
       index: robotsIndex,
     },
+    icons: { icon: "/favicon.ico" },
   };
 }

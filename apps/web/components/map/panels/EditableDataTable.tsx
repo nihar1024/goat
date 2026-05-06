@@ -20,7 +20,6 @@ import {
   Badge,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Divider,
   IconButton,
@@ -683,12 +682,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
               }
             }}
             sx={{ textTransform: "none", whiteSpace: "nowrap" }}>
-            {isEditing ? t("stop_editing") : (
-              <>
-                {t("edit_features")}
-                <Chip label="Beta" size="small" sx={{ ml: 1, height: 18, fontSize: "0.65rem", fontWeight: 600 }} />
-              </>
-            )}
+            {isEditing ? t("stop_editing") : t("edit_features")}
           </Button>
         )}
 

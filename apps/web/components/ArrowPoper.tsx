@@ -17,6 +17,10 @@ interface Props {
   disablePortal?: boolean;
   isClickAwayEnabled?: boolean;
   popperStyle?: React.CSSProperties;
+  // Auto-flip placement when the popper would overflow the viewport
+  // (e.g. a "right"-placed menu near the right edge flips to "left").
+  // Off by default to preserve fixed-placement behavior for existing callers.
+  enableFlip?: boolean;
 }
 
 const Popper = styled(MuiPopper, {
@@ -115,6 +119,7 @@ export function ArrowPopper({
   children,
   isClickAwayEnabled = true,
   popperStyle,
+  enableFlip = false,
 }: Props) {
   const [arrowRef, setArrowRef] = useState<HTMLElement | null>(null);
   const [childNode, setChildNode] = useState<HTMLElement | null>(null);
@@ -132,7 +137,7 @@ export function ArrowPopper({
         modifiers={[
           {
             name: "flip",
-            enabled: false,
+            enabled: enableFlip,
             options: {
               altBoundary: true,
               rootBoundary: "viewport",

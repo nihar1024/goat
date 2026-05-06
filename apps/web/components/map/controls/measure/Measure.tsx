@@ -24,6 +24,9 @@ export const MEASURE_TOOL_ICONS: Record<MeasureToolType, ICON_NAME> = {
 type MeasureProps = {
   open?: boolean;
   activeTool?: MeasureToolType;
+  // Side the tool menu opens toward. Set to "left" when the button sits on
+  // the right edge of the viewport so the menu doesn't open into a side panel.
+  placement?: "left" | "right";
   onToggle?: (measureOpen: boolean) => void;
   onSelectTool?: (tool: MeasureToolType) => void;
 };
@@ -101,7 +104,9 @@ export function Measure(props: MeasureProps) {
           <PopperMenu
             menuItems={measureTools}
             selectedItem={selectedTool}
-            placement="right"
+            placement={props.placement ?? "right"}
+            disablePortal={false}
+            enableFlip
             onSelect={(item) => {
               props.onSelectTool?.(item.id as MeasureToolType);
             }}

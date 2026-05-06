@@ -10,7 +10,7 @@ Der **Daten-Katalog** ist Ihr Zugang zur Erkundung von Plan4Betters umfassender 
 - **Durchsuchen und filtern** nach Schlüsselwort, räumlicher Ausdehnung und **Datensatz**-Attributen
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workspace/catalog/catalog_general.png').default} alt="Daten-Katalog" style={{ maxHeight: "700px", maxWidth: "800px"}}/>
+  <img src={require('/img/workspace/catalog/catalog_general_de.webp').default} alt="Daten-Katalog" style={{ maxHeight: "auto", maxWidth: "100%"}}/>
 </div>
 
 ## Den Katalog erkunden

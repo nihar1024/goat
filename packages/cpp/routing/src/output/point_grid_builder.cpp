@@ -184,8 +184,8 @@ int64_t materialize_point_grid_features_table(ReachabilityField const &field,
                 double gx = chunk->GetValue(1, row).GetValue<double>();
                 double gy = chunk->GetValue(2, row).GetValue<double>();
 
-                auto [idx, dist] = tree.nearest({gx, gy});
-                if (idx < 0 || !std::isfinite(dist) || dist > snap_dist)
+                auto [idx, dist] = tree.nearest_within({gx, gy}, snap_dist);
+                if (idx < 0)
                     continue;
 
                 double base_cost = points[idx].cost;

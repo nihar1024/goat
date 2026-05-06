@@ -966,7 +966,7 @@
       "description": "Calculate area statistics for polygon features"
     },
     "catchment_area": {
-      "title": "Catchment Area",
+      "title": "Catchment Area (Legacy)",
       "description": "Catchment Areas show how far people can travel within a set travel time or distance from one or more selected points.",
       "docs_path": "toolbox/accessibility_indicators/catchments"
     },
@@ -991,11 +991,11 @@
       "description": "Aggregates features that have the same values for specified attributes. Optionally computes statistics for numeric fields."
     },
     "catchment_area_v2": {
-      "title": "Catchment Area v2 (Beta)",
+      "title": "Catchment Area",
       "description": "Catchment areas show how far people can travel within a set travel time or distance from one or more selected points."
     },
     "travel_cost_matrix": {
-      "title": "Travel Cost Matrix (Beta)",
+      "title": "Travel Cost Matrix",
       "description": "Compute travel times and distances between origin and destination point layers."
     }
   },

@@ -44,6 +44,7 @@ export interface MeasureToolProps {
   measurements: Measurement[];
   realtimeMeasurements: Measurement[];
   selectedMeasurementId: string | undefined;
+  isSnapEnabled: boolean;
   handleMeasureToggle: (open: boolean) => void;
   handleMeasureToolSelect: (tool: MeasureToolType) => void;
   handleMeasureClose: () => void;
@@ -52,6 +53,7 @@ export interface MeasureToolProps {
   setMeasurementUnitSystem: (measurementId: string, unitSystem: UnitPreference) => void;
   deactivateTool: () => void;
   zoomToMeasurement: (measurementId: string) => void;
+  toggleSnap: () => void;
 }
 
 /**
@@ -62,14 +64,16 @@ export function MeasureButton({
   activeMeasureTool,
   handleMeasureToggle,
   handleMeasureToolSelect,
+  placement,
 }: Pick<
   MeasureToolProps,
   "isMeasureActive" | "activeMeasureTool" | "handleMeasureToggle" | "handleMeasureToolSelect"
->) {
+> & { placement?: "left" | "right" }) {
   return (
     <Measure
       open={isMeasureActive}
       activeTool={activeMeasureTool}
+      placement={placement}
       onToggle={handleMeasureToggle}
       onSelectTool={handleMeasureToolSelect}
     />
@@ -85,12 +89,14 @@ export function MeasureResultsPanel({
   realtimeMeasurements,
   activeMeasureTool,
   selectedMeasurementId,
+  isSnapEnabled,
   handleMeasureClose,
   selectMeasurement,
   deleteMeasurement,
   setMeasurementUnitSystem,
   deactivateTool,
   zoomToMeasurement,
+  toggleSnap,
 }: Pick<
   MeasureToolProps,
   | "measureOpen"
@@ -98,12 +104,14 @@ export function MeasureResultsPanel({
   | "realtimeMeasurements"
   | "activeMeasureTool"
   | "selectedMeasurementId"
+  | "isSnapEnabled"
   | "handleMeasureClose"
   | "selectMeasurement"
   | "deleteMeasurement"
   | "setMeasurementUnitSystem"
   | "deactivateTool"
   | "zoomToMeasurement"
+  | "toggleSnap"
 >) {
   // Only show if menu is open or there are measurements
   if (!measureOpen && measurements.length === 0) {
@@ -115,12 +123,14 @@ export function MeasureResultsPanel({
       measurements={realtimeMeasurements}
       activeTool={activeMeasureTool}
       selectedMeasurementId={selectedMeasurementId}
+      isSnapEnabled={isSnapEnabled}
       onClose={handleMeasureClose}
       onSelectMeasurement={selectMeasurement}
       onDeleteMeasurement={deleteMeasurement}
       onChangeUnitSystem={setMeasurementUnitSystem}
       onDeactivateTool={deactivateTool}
       onZoomToMeasurement={zoomToMeasurement}
+      onToggleSnap={toggleSnap}
     />
   );
 }

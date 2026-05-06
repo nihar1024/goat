@@ -4,6 +4,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
   Box,
+  Button,
   ButtonBase,
   Divider,
   IconButton,
@@ -12,6 +13,7 @@ import {
   Menu,
   MenuItem,
   Stack,
+  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -33,24 +35,28 @@ export type MeasurementResultsProps = {
   measurements: Measurement[];
   activeTool?: string;
   selectedMeasurementId?: string;
+  isSnapEnabled?: boolean;
   onClose?: () => void;
   onSelectMeasurement?: (measurementId: string) => void;
   onDeleteMeasurement?: (measurementId: string) => void;
   onChangeUnitSystem?: (measurementId: string, unitSystem: UnitPreference) => void;
   onDeactivateTool?: () => void;
   onZoomToMeasurement?: (measurementId: string) => void;
+  onToggleSnap?: () => void;
 };
 
 export function MeasurementResults({
   measurements,
   activeTool,
   selectedMeasurementId,
+  isSnapEnabled,
   onClose,
   onSelectMeasurement,
   onDeleteMeasurement,
   onChangeUnitSystem,
   onDeactivateTool,
   onZoomToMeasurement,
+  onToggleSnap,
 }: MeasurementResultsProps) {
   const theme = useTheme();
   const { t } = useTranslation("common");
@@ -262,6 +268,33 @@ export function MeasurementResults({
             </IconButton>
           )}
         </Stack>
+
+        {/* Settings toolbar (snap, save-as-dataset, …) */}
+        {onToggleSnap && (
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              pb: 1,
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            }}>
+            <Tooltip
+              title={t("measure_snap_to_layers", { defaultValue: "Snap to layers" })}
+              arrow
+              placement="bottom">
+              <span style={{ display: "flex" }}>
+                <Button
+                  variant={isSnapEnabled ? "contained" : "outlined"}
+                  size="small"
+                  sx={{ minWidth: 36, width: 36, height: 36, px: 0 }}
+                  onClick={onToggleSnap}
+                  aria-pressed={isSnapEnabled}>
+                  <Icon iconName={ICON_NAME.BULLSEYE} style={{ fontSize: 16 }} />
+                </Button>
+              </span>
+            </Tooltip>
+          </Stack>
+        )}
 
         {/* Active Tool Info */}
         {activeTool && (

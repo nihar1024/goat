@@ -1,6 +1,6 @@
 {
   "label": "Layer Design",
-  "position": 3,
+  "position": 4,
   "link": {
     "type": "generated-index",
     "description": "It can be changed how all the added layers behave and appear on the map. There are several tools helping you to create unique-looking maps."

@@ -86,3 +86,11 @@ Access additional project options by clicking the <img src={require('/img/icons/
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/workspace/projects/options.webp').default} alt="Project management options" style={{ maxHeight: "auto", maxWidth: "100%"}}/>
 </div>
+
+## Managing Folders
+
+Click the <img src={require('/img/icons/3dots.png').default} alt="Options" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>More Options</code> icon next to any folder to manage it:
+
+- <code>Rename</code> — Change the folder name
+- <code>Share</code> — Share the folder with your <strong>Organization</strong> or individual <strong>Teams</strong>. Set the access level in the <strong>Manage access</strong> dialog and click <code>Save</code>.
+- <code>Delete</code> — Remove the folder

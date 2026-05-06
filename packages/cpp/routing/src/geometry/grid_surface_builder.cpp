@@ -234,8 +234,11 @@ CostGrid build_cost_grid(ReachabilityField const &field,
             double gx = min_x + (col + 0.5) * step_x;
             double gy = max_y - (row + 0.5) * step_y;
 
-            auto [idx, dist] = tree.nearest({gx, gy});
-            if (idx < 0 || !std::isfinite(dist) || dist > kMaxSnapDist)
+            // Radius-bounded search: cells far from any sample (empty space
+            // between disjoint multi-point catchments) reject in O(log n)
+            // instead of full-tree O(n) traversal.
+            auto [idx, dist] = tree.nearest_within({gx, gy}, kMaxSnapDist);
+            if (idx < 0)
                 continue;
 
             double base_cost = points[idx].cost;

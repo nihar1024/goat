@@ -9,6 +9,7 @@ import { circle } from "@turf/circle";
 import { distance } from "@turf/distance";
 import { point } from "@turf/helpers";
 
+import { applySnapToEvent } from "../utils/snap";
 import { DrawHistory } from "./draw-history";
 import { GREAT_CIRCLE_PROPERTY, generateGreatCirclePath } from "./great-circle";
 
@@ -90,12 +91,23 @@ const LineStringMode: typeof DrawLineString = { ...DrawLineString };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (LineStringMode as any).clickAnywhere = function (this: any, state: any, e: any) {
+  const { event } = applySnapToEvent(this.map, e);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (DrawLineString as any).clickAnywhere.call(this, state, e);
+  (DrawLineString as any).clickAnywhere.call(this, state, event);
   const coords = state.line.coordinates;
   if (coords && coords.length >= 2) {
     const v = coords[coords.length - 2];
     if (v) state._drawHistory.pushVertex([v[0], v[1]] as [number, number]);
+  }
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _origLineMouseMove = (DrawLineString as any).onMouseMove;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(LineStringMode as any).onMouseMove = function (this: any, state: any, e: any) {
+  const { event } = applySnapToEvent(this.map, e);
+  if (typeof _origLineMouseMove === "function") {
+    return _origLineMouseMove.call(this, state, event);
   }
 };
 

@@ -7,141 +7,80 @@ import TabItem from '@theme/TabItem';
 
 # Catchment Area
 
-:::info A newer version of this tool is available
-See **[Catchment Area V2](./catchments_v2)** for additional features including custom step sizes, point grid output, and extended public transport options.
-:::
-
-Catchment Areas show **how far people can travel within a certain travel time or distance, using one or more transport modes.**
-
 <div style={{ display: 'flex', justifyContent: 'center' }}>
 <iframe width="674" height="378" src="https://www.youtube.com/embed/_clsR386b9w?si=ZInxlY_TjYiEda23" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 </div>
 
+Catchment Area shows **how far people can travel within a certain travel time or distance, using one or more transport modes** — with extended output shapes, custom step sizes, and additional public transport settings.
+
 ## 1. Explanation
 
-Based on specified starting point(s), maximum travel time or distance, and transport mode(s), **Catchment Areas visualize accessibility extent using real-world data.** This provides insights into transport network quality, density, and extensiveness.
+Catchment Area includes the following features:
 
-The catchment area can be intersected with spatial datasets, such as population data, to assess reachable amenities and identify accessibility coverage for inhabitants.
+**For all routing modes:**
 
-import MapViewer from '@site/src/components/MapViewer';
+- **Custom step sizes** — define each isochrone step independently (e.g., 5, 10, 20, 30 minutes) instead of using equally-spaced intervals.
+- **Point Grid output shape** — a new result geometry option that represents the catchment as a grid of individual points, each showing its exact travel cost value.
 
-:::info 
+**For Public Transport only:**
+
+- **Maximum number of transfers** — limit how many PT connections a trip can include.
+- **Access and egress mode** — configure how users travel to and from PT stations (walking, cycling, or car).
+
+Based on specified starting point(s), maximum travel time or distance, and transport mode(s), the tool **visualizes accessibility using real-world routing networks**. The resulting isochrones can be intersected with spatial datasets — such as population or amenity data — to assess coverage and identify accessibility gaps.
+
+:::info
 Catchment Area computation is available in specific regions.
 
-When selecting a <code>Routing type</code>, GOAT displays a map overlay showing coverage.
-For <code>Walk</code>, <code>Bicycle</code>, <code>Pedelec</code>, and <code>Car</code>: over 30 European countries are supported.
-For <code>Public Transport</code>: Germany is supported.
-
-<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', flexWrap: "nowrap", maxWidth: '100%', padding: '0 20px' }}>
-  <div style={{ flex: '1', maxWidth: 'none', minWidth: '0' }}>
-    <MapViewer
-        geojsonUrls={[
-          "https://assets.plan4better.de/other/geofence/geofence_street.geojson"
-        ]}
-        styleOptions={{
-          fillColor: "#808080",
-          outlineColor: "#808080",
-          fillOpacity: 0.8
-        }}
-        legendItems={[
-          { label: "Coverage for Walk, Bicycle, Pedelec & Car", color: "#ffffff" }
-        ]}
-    />
-  </div>
-  <div style={{ flex: '1', maxWidth: 'none', minWidth: '0' }}>
-    <MapViewer
-        geojsonUrls={[
-          "https://assets.plan4better.de/other/geofence/geofence_gtfs.geojson"
-        ]}
-        styleOptions={{
-          fillColor: "#808080",
-          outlineColor: "#808080",
-          fillOpacity: 0.8
-        }}
-        legendItems={[
-          { label: "Coverage for Public Transport", color: "#ffffff" }
-        ]}
-    />
-  </div>
-</div>
-
-<br />
+When selecting a `Routing type`, GOAT displays a map overlay showing coverage.
+For `Walk`, `Bicycle`, `Pedelec`, and `Car`: **over 30 European countries** are supported.
+For `Public Transport`: Germany is supported.
 
 If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll discuss further options.
 :::
 
 ## 2. Example use cases
 
-- Which amenities are reachable within a 15-minute walk?
-- How many inhabitants have access to supermarkets within 10 minutes by bicycle?
-- What share of the population has a general practitioner within 500m?
-- How do workplace catchment areas compare between car and public transport? How many employees live within these areas? 
-- How well are kindergartens distributed citywide? Which districts have accessibility deficits?
+- Which amenities are reachable within a 5, 10, and 20-minute walk? (Using custom step sizes to reflect planning standards.)
+- How does limiting PT connections to one transfer change the catchment area compared to unlimited transfers?
+- Which areas are reachable by bicycle within 5 minutes, 15 minutes, and 30 minutes from a new cycling hub?
+- How do workplace catchment areas compare between car and public transport when cyclists can access PT stations?
+- What share of the population has a general practitioner within 500m on foot?
 
-
-## 3. How to use the indicator?
+## 3. How to use the tool?
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Click on <code>Toolbox</code> <img src={require('/img/icons/toolbox.png').default} alt="Options" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> .</div>
+  <div class="content">Click on <code>Toolbox</code> <img src={require('/img/icons/toolbox.png').default} alt="Toolbox" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> . Under <code>Accessibility Indicators</code>, click on <code>Catchment Area</code>.</div>
 </div>
+
+### Routing & Configuration
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Under <code>Accessibility Indicators</code>, click on <code>Catchment Area</code>.</div>
+  <div class="content">Select the <code>Routing Type</code> and configure the parameters for your chosen mode following the steps below.</div>
 </div>
-
-### Routing
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Select the <code>Routing Type</code> for your catchment area calculation.</div>
-</div>
-
-### Configuration
 
 <Tabs>
 <TabItem value="walk" label="Walk" default className="tabItemBox">
 
 **Considers all paths accessible by foot.**
 
-  <div class="step">
-    <div class="step-number">4</div>
-    <div class="content">Choose whether to calculate the catchment area <strong>based on time or distance</strong>.</div>
-  </div>
-
-  <Tabs>
-  <TabItem value="time" label="Time" default className="tabItemBox">
-
-  #### Time
-
-  <div class="step">
-    <div class="step-number">5</div>
-    <div class="content">Configure <code>Travel time limit</code>, <code>Travel speed</code>, and <code>Number of breaks</code>.</div>
-  </div>
-
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/walk_config_time.png').default} alt="walking-time configurations" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Choose whether to calculate the catchment area based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit. If choosing <code>Time</code>, you can also configure the <code>Speed</code>.</div>
+</div>
 
 :::tip Hint
 
 For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
 
 :::
-  </TabItem>
-  
-  <TabItem value="distance" label="Distance" default className="tabItemBox">
 
-  #### Distance
-
-  <div class="step">
-    <div class="step-number">5</div>
-    <div class="content">Set the configurations for <code>Travel distance</code> and <code> Number of breaks</code>.</div>
-  </div>
-
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/walk_config_distance.png').default} alt="walking-distance configurations" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
-  
-  </TabItem>
-  </Tabs>
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
+</div>
 </TabItem>
 
 <TabItem value="cycling" label="Bicycle/Pedelec" className="tabItemBox">
@@ -149,116 +88,53 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 **Considers all bicycle-accessible paths.** This routing mode accounts for surface, smoothness, and slope while computing accessibility. For Pedelec, slopes have lower impedance than standard bicycles.
 
 <div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Choose whether to calculate the catchment area <strong>based on time or distance</strong>.</div>
+  <div class="step-number">3</div>
+  <div class="content">Choose whether to calculate the catchment area based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit. If choosing <code>Time</code>, you can also configure the <code>Speed</code>.</div>
 </div>
 
-  <Tabs>
-  <TabItem value="time" label="Time" default className="tabItemBox">
-
-  #### Time
-
-  <div class="step">
-    <div class="step-number">5</div>
-    <div class="content">Set the configurations for <code>Travel time limit</code>, <code>Travel speed</code>, and <code> Number of breaks</code>.</div>
-  </div>
-
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/walk_config_time.png').default} alt="walking-time configurations" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
-
 :::tip Hint
 
 For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
 
 :::
-
-  </TabItem>
-  
-  <TabItem value="distance" label="Distance" default className="tabItemBox">
-
-  #### Distance
-
-  <div class="step">
-    <div class="step-number">5</div>
-    <div class="content">Set the configurations for <code>Travel distance</code> and <code> Number of breaks</code>.</div>
-  </div>
-
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/walk_config_distance.png').default} alt="walking-distance configurations" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
-
-  </TabItem>
-
-  </Tabs>
-
-  </TabItem>
-
-  <TabItem value="car" label="Car" className="tabItemBox">
-
- **Considers all car-accessible paths.** This routing mode accounts for speed limits and one-way restrictions while computing accessibility.
-
-  <div class="step">
-    <div class="step-number">4</div>
-    <div class="content">Choose whether to calculate the catchment area <strong> based on time or distance</strong>.</div>
-  </div>
-
-  <Tabs>
-  <TabItem value="time" label="Time" default className="tabItemBox">
-
-  #### Time
-
-  <div class="step">
-    <div class="step-number">5</div>
-    <div class="content">Set the configurations for <code>Travel time limit</code> and <code> Number of breaks</code>.</div>
-  </div>
-
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/walk_config_time.png').default} alt="travel-time configurations" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
-
-:::tip Hint
-
-For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
-
-:::
-
-  </TabItem>
-  <TabItem value="distance" label="Distance" default className="tabItemBox">
-
-#### Distance
 
 <div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Set the configurations for <code>Travel distance</code> and <code> Number of breaks</code>.</div>
+  <div class="step-number">4</div>
+  <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
 </div>
 
-<img src={require('/img/toolbox/accessibility_indicators/catchments/walk_config_distance.png').default} alt="travel-distance configurations" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
+</TabItem>
 
-  </TabItem>
-</Tabs>
+<TabItem value="car" label="Car" className="tabItemBox">
 
-  </TabItem>
-  <TabItem value="public transport" label="Public Transport (PT)" className="tabItemBox">
+**Considers all car-accessible paths.** This routing mode accounts for speed limits and one-way restrictions while computing accessibility.
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Choose whether to calculate the catchment area based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit. If choosing <code>Time</code>, you can also configure the <code>Speed</code>.</div>
+</div>
+
+:::tip Hint
+
+For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
+
+:::
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
+</div>
+
+</TabItem>
+
+<TabItem value="public transport" label="Public Transport (PT)" className="tabItemBox">
 
 **Considers all locations accessible by public transport, including inter-modal transfers and station access.**
 
 <div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Select the <code>Public transport modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular.</div>
+  <div class="step-number">3</div>
+  <div class="content">Select the <code>Public transport modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular, and configure the <code>Travel time limit</code> in minutes.</div>
 </div>
-
-<div>
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/pt_type.png').default} alt="Public Transport Modes in GOAT" style={{ maxHeight: "400px", maxWidth: "400px", objectFit: "cover"}}/>
-</div>
-
-<br />
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content"> 
-  <p>
-  Configure the following parameters: <code>Travel time limit</code>, <code>Number of breaks</code>, <code>Day</code>, and <code>Start Time</code> and <code>End Time</code>.
-    </p>
-  </div>
-</div>
-
-<img src={require('/img/toolbox/accessibility_indicators/catchments/pt_config.png').default} alt="Public Transport Configurations" style={{ maxHeight: "400px", maxWidth: "400px"}}/>
-
 
 :::tip Hint
 
@@ -266,85 +142,96 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 
 :::
 
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
+</div>
 
-  </TabItem>
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Select the <code>Day</code>, <code>Start Time</code>, and <code>End Time</code> for the analysis time window.</div>
+</div>
 
+</TabItem>
 </Tabs>
 
-
-### Advanced Configuration
-
-  By default, catchment areas are calculated as polygons. To adjust this, use the advanced configurations.
-
-  <div class="step">
-    <div class="step-number">6</div>
-    <div class="content">Click on <code>Advanced Configurations</code> <img src={require('/img/icons/options.png').default} alt="Options Icon" style={{ maxHeight: "25px", maxWidth: "25px", objectFit: "cover"}}/> button. Here you can select the <code>Catchment area shape</code>. You can choose between <b>Polygon</b>, <b>Network</b> and <b>Rectangular Grid</b>.</div>
-  </div>
+### Advanced Options
 
 <Tabs>
-  <TabItem value="Polygon" label="Polygon" default className="tabItemBox">
+<TabItem value="non-pt" label="Walk / Bicycle / Pedelec / Car" default className="tabItemBox">
 
-- It is a **geometric representation** of the catchments.
-- **Easy-to-understand** visualization
-- **One polygon per step**
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Optionally, click on <code>Advanced Options</code> to set the <code>Steps style</code>.</div>
+</div>
 
-<img src={require('/img/toolbox/accessibility_indicators/catchments/pt_polygon.png').default} alt="Catchment Area Shape (Polygon) Public Transport in GOAT" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
+#### Steps style
 
-You can choose <code>Polygon Difference</code> **enabled** which creates an "incremental" polygons for each step. On the other hand, **disabled** creates "full" polygons including all previous steps.
+Choose how the isochrone steps are displayed:
 
-  </TabItem>
-  <TabItem value="Network" label="Network" className="tabItemBox">
+- **Separate steps** — each step shows only the area reachable *between* that step and the previous one.
+- **Cumulative steps** — each step shows the *full area reachable up to* that travel cost.
 
-- It is a **street-level representation** of the catchments.
-- Enables **easy correlation to actual streets** and their accessibility within the catchment area.
-- **Fine-grained detail** compared to the other catchment types.
+<p></p>
 
-<img src={require('/img/toolbox/accessibility_indicators/catchments/pt_network.png').default} alt="Catchment Area Shape (Network) Public Transport in GOAT" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
+</TabItem>
 
-  </TabItem>
-  <TabItem value="Rectangular Grid" label="Rectangular Grid" className="tabItemBox">
+<TabItem value="pt-advanced" label="Public Transport (PT)" className="tabItemBox">
 
-- It is a **grid cell-based** representation of the catchments.
-- Appears **similar to a “heatmap” visualization**, however, differs conceptually & computationally (this represents egress from a specified origin to various other locations while heatmaps represent access from various locations to a specified destination).
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Optionally, click on <code>Advanced Options</code> to configure the <code>Steps style</code>, <code>Maximum Transfers</code>, <code>Access mode</code>, and <code>Egress mode</code>.</div>
+</div>
 
-<img src={require('/img/toolbox/accessibility_indicators/catchments/pt_grid.png').default} alt="Catchment Area Shape (Grid) Public Transport in GOAT" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
+#### Steps style
 
-  </TabItem>
+Choose how the isochrone steps are displayed:
+
+- **Separate steps** — each step shows only the area reachable *between* that step and the previous one.
+- **Cumulative steps** — each step shows the *full area reachable up to* that travel cost.
+
+#### Maximum Transfers
+
+Set the `Maximum transfers` to limit how many PT connections are allowed per trip. For example, setting it to `1` means only trips with at most one transfer are included — direct connections and one-change journeys.
+
+#### Access & Egress Mode
+
+Configure how users travel **to** and **from** PT stations:
+
+- **Access mode** — Transport mode to reach the PT station (Walk, Bicycle, Car).
+- **Egress mode** — Transport mode from the PT station to the destination (Walk, Bicycle, Car).
+
+For each mode, configure the **maximum travel time or distance** and the **travel speed**. For example, you can model a cyclist who rides at 15 km/h for up to 10 minutes to reach a train station.
+
+<p></p>
+
+</TabItem>
 </Tabs>
 
 ### Starting Points
 
 <div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Select the <code>Starting point method</code>: <code>Select on map</code> and <b>click on the map to place starting point(s)</b>. Or <code>Select from layer</code> and <b>choose a Point layer</b> containing your desired starting point(s). All features in the layer will be used as starting points.</div>
+</div>
+
+
+### Scenario (Optional)
+
+<div class="step">
   <div class="step-number">7</div>
-  <div class="content">Select the <code>Starting point method</code>: <code>Select on map</code> or <code>Select from layer</code>.</div>
+  <div class="content">Optionally, expand the <code>Scenario</code> section and select a scenario to apply network modifications (e.g., new roads or paths) to the routing calculation.</div>
 </div>
 
-<Tabs>
-  <TabItem value="Select on Map" label="Select on Map" default className="tabItemBox">
+:::tip Hint
+
+Scenarios let you model infrastructure changes and immediately see how they affect accessibility. See [Scenarios](../../Scenarios/Scenarios.md) to learn how to create and edit scenarios.
+
+:::
 
 <div class="step">
   <div class="step-number">8</div>
-  <div class="content">Choose <code>Select on map</code>. Click on the map to select starting point(s). You can add multiple starting points.</div>
-</div>
-
-
-  </TabItem>
-  <TabItem value="Select From Layer" label="Select From Layer" className="tabItemBox">
-
-
- <div class="step">
-  <div class="step-number">8</div>
-  <div class="content">Click on <code>Select from layer</code>. Choose the <code>Point layer</code> containing your desired starting point(s).</div>
-</div>
-
-
-  </TabItem>
-</Tabs>
-
-
-<div class="step">
-  <div class="step-number">9</div>
-  <div class="content">Click on <code>Run</code>. This starts the catchment area calculation from the selected starting point(s).</div>
+  <div class="content">Click on <code>Run</code> to start the calculation.</div>
 </div>
 
 :::tip Hint
@@ -355,37 +242,42 @@ Calculation time varies by settings. Check the [status bar](../../workspace/home
 
 ### Results
 
-Once calculation finishes, the resulting layers are added to the map. The **"Catchment Area"** layer contains the calculated catchments. If starting points were created by map clicking, they're saved in the **"Starting Points"** layer.
+Once the calculation finishes, the resulting layer(s) are added to the map:
 
-Click on a catchment polygon to view details. The **travel_cost** attribute shows travel distance or time based on your calculation unit: **time in minutes** or **distance in meters**.
+- **Catchment Area** — the calculated isochrones in the selected shape (polygon, network, hexagonal grid, or point grid). Click any feature to inspect the **travel_cost** attribute, which shows travel time (minutes) or distance (meters) depending on your configuration.
+- **Starting Points** — a point layer with the selected starting locations (only created when starting points were placed on the map, not when using a pre-existing layer).
 
-<div style={{ display: 'flex', justifyContent: 'center' }}>
-<img src={require('/img/toolbox/accessibility_indicators/catchments/catchment_calculation.gif').default} alt="Catchment Area Calculation Result in GOAT" style={{ maxHeight: "auto", maxWidth: "80%"}}/>
-</div>
+The result layer is automatically styled with a color scale ranging from the shortest to the longest travel cost step.
 
 ## 4. Technical details
 
-**Catchment areas are isolines connecting points reachable from starting point(s) within a time interval (*isochrones*) or distance (*isodistance*)**. The calculation uses the appropriate transport networks for routing based on the selected travel mode.
+**Catchment areas are isolines connecting points reachable from starting point(s) within a time interval (*isochrones*) or distance (*isodistance*)**. The calculation uses the appropriate transport network for the selected routing mode.
 
-Catchment areas are dynamically created in the frontend from a travel time/distance grid, enabling fast creation with different intervals on-demand.
+### Starting point limits
 
-:::tip Hint
+| Routing mode | Maximum starting points |
+| --- | --- |
+| Walk / Bicycle / Pedelec | 1,000 |
+| Car | 50 |
+| Public Transport | 5 |
 
-For further insights into the Routing algorithm, visit [Routing](../../category/routing).
+### Visualization
 
-:::
+The catchment shape is derived from the routing grid using the [Marching Squares contour line algorithm](https://en.wikipedia.org/wiki/Marching_squares), a computer graphics algorithm generating 2D contour lines from rectangular value arrays ([de Queiroz Neto et al. 2016](#6-references)). This transforms the routing grid from a 2D array into smooth polygon contours for visualization and spatial analysis.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <img src={require('/img/toolbox/accessibility_indicators/catchments/wiki.png').default} alt="Marching Squares illustration" style={{ maxHeight: "400px", maxWidth: "400px", objectFit: "contain"}}/>
+</div>
 
 ### Scientific background
 
-Catchments are *contour-based measures* (also *cumulative opportunities*), valued for their **easily interpretable results** ([Geurs and van Eck 2001](#6-references); [Albacete 2016](#6-references)). However, they don't distinguish between different travel times within the **cut-off range** ([Bertolini, le Clercq, and Kapoen 2005](#6-references)), unlike [heatmaps](../accessibility_indicators/closest_average.md).
+Catchments are *contour-based measures* (also *cumulative opportunities*), valued for their interpretable results ([Geurs and van Eck 2001](#6-references); [Albacete 2016](#6-references)). They do not distinguish between different travel times within the cut-off range ([Bertolini, le Clercq, and Kapoen 2005](#6-references)), unlike [heatmap-based accessibility indicators](./closest_average.md).
 
-### Visualization 
+:::tip Hint
 
-The catchment shape derives from the routing grid using the [Marching square contour line algorithm](https://en.wikipedia.org/wiki/Marching_squares), a computer graphics algorithm generating 2D contour lines from rectangular value arrays ([de Queiroz Neto et al. 2016](#6-references)). This transforms the grid from a 2D array to a shape for visualization or analysis. 
+For further insights into the routing algorithm, visit [Routing](../../category/routing).
 
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/toolbox/accessibility_indicators/catchments/wiki.png').default} width="1000px" alt="marching square" style={{ width: "1000px", height: "400px", maxHeight: "400px", maxWidth: "400px", objectFit: "contain"}}/>
-</div> 
+:::
 
 ## 5. Further readings
 
@@ -393,20 +285,16 @@ Further insights into catchment calculation and scientific background: [this pub
 
 ## 6. References
 
-Albacete, Xavier. 2016. “Evaluation and Improvements of Contour-Based Accessibility Measures.” url: https://dspace.uef.fi/bitstream/handle/123456789/16857/urn_isbn_978-952-61-2103-1.pdf?sequence=1&isAllowed=y 
+Albacete, Xavier. 2016. "Evaluation and Improvements of Contour-Based Accessibility Measures." url: https://dspace.uef.fi/bitstream/handle/123456789/16857/urn_isbn_978-952-61-2103-1.pdf
 
-Bertolini, Luca, F. le Clercq, and L. Kapoen. 2005. “Sustainable Accessibility: A Conceptual Framework to Integrate Transport and Land Use Plan-Making. Two Test-Applications in the Netherlands and a Reflection on the Way Forward.” Transport Policy 12 (3): 207–20. https://doi.org/10.1016/j.tranpol.2005.01.006.
+Bertolini, Luca, F. le Clercq, and L. Kapoen. 2005. "Sustainable Accessibility: A Conceptual Framework to Integrate Transport and Land Use Plan-Making." Transport Policy 12 (3): 207–20. https://doi.org/10.1016/j.tranpol.2005.01.006
 
-J. F. de Queiroz Neto, E. M. d. Santos, and C. A. Vidal. “MSKDE - Using
-Marching Squares to Quickly Make High Quality Crime Hotspot Maps”. en.
-In: 2016 29th SIBGRAPI Conference on Graphics, Patterns and Images (SIBGRAPI).
-Sao Paulo, Brazil: IEEE, Oct. 2016, pp. 305–312. isbn: 978-1-5090-3568-7. doi:
-10.1109/SIBGRAPI.2016.049. url: https://ieeexplore.ieee.org/document/7813048
+J. F. de Queiroz Neto, E. M. d. Santos, and C. A. Vidal. "MSKDE - Using Marching Squares to Quickly Make High Quality Crime Hotspot Maps". en. In: 2016 29th SIBGRAPI Conference on Graphics, Patterns and Images (SIBGRAPI). Sao Paulo, Brazil: IEEE, Oct. 2016, pp. 305–312. isbn: 978-1-5090-3568-7. doi: 10.1109/SIBGRAPI.2016.049. url: https://ieeexplore.ieee.org/document/7813048
 
 https://fr.wikipedia.org/wiki/Marching_squares#/media/Fichier:Marching_Squares_Isoline.svg
 
-Majk Shkurti, "Spatio-temporal public transport accessibility analysis and benchmarking in an interactive WebGIS", Sep 2022. url: https://www.researchgate.net/publication/365790691_Spatio-temporal_public_transport_accessibility_analysis_and_benchmarking_in_an_interactive_WebGIS 
+Majk Shkurti, "Spatio-temporal public transport accessibility analysis and benchmarking in an interactive WebGIS", Sep 2022. url: https://www.researchgate.net/publication/365790691_Spatio-temporal_public_transport_accessibility_analysis_and_benchmarking_in_an_interactive_WebGIS
 
 Matthew Wigginton Conway, Andrew Byrd, Marco Van Der Linden. "Evidence-Based Transit and Land Use Sketch Planning Using Interactive Accessibility Methods on Combined Schedule and Headway-Based Networks", 2017. url: https://journals.sagepub.com/doi/10.3141/2653-06
 
-Geurs, Karst T., and Ritsema van Eck. 2001. “Accessibility Measures: Review and Applications.” RIVM Report 408505 006. url: https://rivm.openrepository.com/handle/10029/259808
+Geurs, Karst T., and Ritsema van Eck. 2001. "Accessibility Measures: Review and Applications." RIVM Report 408505 006. url: https://rivm.openrepository.com/handle/10029/259808

@@ -59,6 +59,10 @@ Die räumlichen Operationen Werkzeugleiste auf der rechten Seite der Kartenoberf
 
 ### Kartennavigation
 
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <img src={require('/img/map/interface/map_navigation_de.webp').default} alt="Kartennavigation" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+</div>
+
 - <img src={require('/img/icons/magnifying-glass.png').default} alt="Adressen- und Koordinatensuche" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Such-Button</code>: <strong>Suchen Sie nach Adressen</strong> oder Koordinaten, um schnell zu einem bestimmten Ort auf der Karte zu navigieren.
 
 - <img src={require('/img/icons/plus.png').default} alt="Hineinzoomen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Hineinzoomen</code>
@@ -67,9 +71,9 @@ Die räumlichen Operationen Werkzeugleiste auf der rechten Seite der Kartenoberf
   
 - <img src={require('/img/icons/fullscreen.png').default} alt="Vollbild" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Vollbild</code>
 
-- <img src={require('/img/icons/map.png').default} alt="Grundkarte" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Grundkarte</code>: <strong>Wählen Sie zwischen</strong> den verfügbaren Grundkartenoptionen.
+- <img src={require('/img/icons/map.png').default} alt="Grundkarte" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Grundkarte</code>: <strong>Wählen Sie zwischen</strong> den verfügbaren Grundkartenoptionen. Klicken Sie auf <code>+ Neue Basemap hinzufügen</code> am unteren Rand des Panels, um eine eigene Grundkarte hinzuzufügen. Wählen Sie im Tab <code>Basemap</code> den Typ (<code>Vektor</code> oder <code>Raster</code>), geben Sie die <strong>Basemap-URL</strong>, einen <strong>Titel</strong> und optional eine Beschreibung und Vorschaubild-URL ein. Alternativ können Sie im Tab <code>Einfarbig</code> eine Volltonfarbe als Kartenhintergrund festlegen. Klicken Sie auf <code>Basemap hinzufügen</code>, um zu speichern.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/map/interface/map_navigation_de.webp').default} alt="aktuelle Datensätze" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
-</div> 
+  <img src={require('/img/map/basemap/add_basemap_de.webp').default} alt="Eigene Grundkarte in GOAT hinzufügen" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
+</div>
 

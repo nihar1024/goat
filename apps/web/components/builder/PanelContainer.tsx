@@ -485,10 +485,11 @@ export const Container: React.FC<ContainerProps> = ({
                 overflow: "hidden",
                 zIndex: 1,
               }}>
-              <Typography
-                variant="body2"
-                fontWeight="bold"
-                sx={{
+              <Box
+                sx={(theme) => ({
+                  fontSize: theme.typography.body2.fontSize,
+                  fontWeight: 700,
+                  lineHeight: theme.typography.body2.lineHeight,
                   ...(panel.orientation === "vertical" && {
                     transform: panel.position === "left" ? "rotate(-90deg)" : "rotate(90deg)",
                   }),
@@ -502,9 +503,30 @@ export const Container: React.FC<ContainerProps> = ({
                     maxWidth: "80%",
                   }),
                   userSelect: "none",
-                }}>
-                {panel.config.options.collapsed_label}
-              </Typography>
+                  "& p": { margin: 0, display: "inline" },
+                  "& a": { color: theme.palette.primary.main, textDecoration: "underline" },
+                  "& .info-chip": {
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 14,
+                    height: 14,
+                    borderRadius: "50%",
+                    border: `1.5px solid ${theme.palette.grey[500]}`,
+                    backgroundColor: "transparent",
+                    color: theme.palette.grey[500],
+                    fontSize: 9,
+                    fontWeight: 700,
+                    fontStyle: "normal",
+                    fontFamily: "serif",
+                    lineHeight: 1,
+                    verticalAlign: "middle",
+                    marginInline: "2px",
+                    boxSizing: "border-box",
+                  },
+                })}
+                dangerouslySetInnerHTML={{ __html: panel.config.options.collapsed_label }}
+              />
             </Box>
           )}
         </Stack>

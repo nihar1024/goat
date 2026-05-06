@@ -73,7 +73,7 @@ import { LayerIcon } from "./legend/LayerIcon";
 import { MaskedImageIcon } from "@/components/map/panels/style/other/MaskedImageIcon";
 import { LayerLegendPanel } from "./legend/LayerLegend";
 import { getLegendColorMap, getLegendMarkerMap } from "@/lib/utils/map/legend";
-import MarkdownPopupDialog from "@/components/builder/widgets/common/MarkdownPopupDialog";
+import PopupContentRenderer from "@/components/builder/widgets/common/PopupContentRenderer";
 
 // Extended tree item interface to include project layer data
 interface ProjectTreeItem extends BaseTreeItem {
@@ -424,7 +424,7 @@ export const ProjectLayerTree = ({
     mode: "create" | "rename" | "delete";
     group?: ProjectLayerTreeNode;
   }>({ open: false, mode: "create" });
-  const [groupInfoDialogId, setGroupInfoDialogId] = useState<number | null>(null);
+  const [groupInfoDialog, setGroupInfoDialog] = useState<{ id: number; anchorEl: HTMLElement } | null>(null);
 
   const activeLayerId = useAppSelector((state) => state.layers.activeLayerId);
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
@@ -925,7 +925,7 @@ export const ProjectLayerTree = ({
           <Tooltip title={t("properties")} placement="top">
             <IconButton
               size="small"
-              onClick={(e) => { e.stopPropagation(); setGroupInfoDialogId(node.id); }}
+              onClick={(e) => { e.stopPropagation(); setGroupInfoDialog({ id: node.id, anchorEl: e.currentTarget as HTMLElement }); }}
               sx={{ p: 0.25 }}>
               <Icon iconName={ICON_NAME.CIRCLEINFO} style={{ fontSize: "15px" }} />
             </IconButton>
@@ -967,7 +967,7 @@ export const ProjectLayerTree = ({
     t,
     getLayerMoreMenuOptions, openMoreMenu,
     handleVisibilityToggle, handleProperties, handleStyle, handleDuplicate,
-    setGroupModal, setGroupInfoDialogId,
+    setGroupModal, setGroupInfoDialog,
     mapRef,
     viewMode, hideActions, toggleStyle, togglePosition, moreOptionsStyle,
     allowedActions, downloadableLayers, projectLayers,
@@ -1341,12 +1341,15 @@ export const ProjectLayerTree = ({
           sx={{ width: "100%" }}
         />
       </Box>
-      {groupInfoDialogId !== null && groupInfo?.[String(groupInfoDialogId)] && (
-        <MarkdownPopupDialog
+      {groupInfoDialog !== null && groupInfo?.[String(groupInfoDialog.id)] && (
+        <PopupContentRenderer
           open
-          onClose={() => setGroupInfoDialogId(null)}
-          title={projectLayerGroups.find((g) => g.id === groupInfoDialogId)?.name ?? ""}
-          content={groupInfo[String(groupInfoDialogId)]}
+          onClose={() => setGroupInfoDialog(null)}
+          popup_type="dialog"
+          placement="auto"
+          anchorEl={groupInfoDialog.anchorEl}
+          title={projectLayerGroups.find((g) => g.id === groupInfoDialog.id)?.name ?? ""}
+          content={groupInfo[String(groupInfoDialog.id)]}
         />
       )}
     </Box>

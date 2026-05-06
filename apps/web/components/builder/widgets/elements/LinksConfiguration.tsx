@@ -18,12 +18,12 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
-import type { LinksElementSchema } from "@/lib/validations/widget";
+import type { LinksElementSchema, LinksItemSchema } from "@/lib/validations/widget";
 import { linksSeparatorTypes } from "@/lib/validations/widget";
 
 import type { SelectorItem } from "@/types/map/common";
@@ -32,37 +32,63 @@ import SectionHeader from "@/components/map/panels/common/SectionHeader";
 import SectionOptions from "@/components/map/panels/common/SectionOptions";
 import Selector from "@/components/map/panels/common/Selector";
 import TextFieldInput from "@/components/map/panels/common/TextFieldInput";
+import LinkPopupEditDialog from "@/components/builder/widgets/elements/LinkPopupEditDialog";
+import type { LinkPopupValues } from "@/components/builder/widgets/elements/LinkPopupEditDialog";
 
 interface LinksConfigurationProps {
   config: LinksElementSchema;
   onChange: (config: LinksElementSchema) => void;
 }
 
+interface PopupConfigButtonProps {
+  link: LinksItemSchema;
+  onChange: (values: LinkPopupValues) => void;
+}
+
+const PopupConfigButton = ({ link, onChange }: PopupConfigButtonProps) => {
+  const { t } = useTranslation("common");
+  const [editOpen, setEditOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="outlined" onClick={() => setEditOpen(true)}>
+        {t("configure_popup", { defaultValue: "Configure popup" })}
+      </Button>
+      <LinkPopupEditDialog
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSave={onChange}
+        contextLabel={link.label}
+        initial={{
+          popup_content: link.popup_content,
+          popup_type: link.popup_type,
+          popup_placement: link.popup_placement,
+          popup_size: link.popup_size,
+        }}
+      />
+    </>
+  );
+};
+
 interface SortableLinkItemProps {
   id: string;
   index: number;
-  label: string;
-  url: string;
-  linkType: "url" | "popup";
-  popupContent: string;
+  link: LinksItemSchema;
   onLabelChange: (index: number, value: string) => void;
   onUrlChange: (index: number, value: string) => void;
   onLinkTypeChange: (index: number, value: "url" | "popup") => void;
-  onPopupContentChange: (index: number, value: string) => void;
+  onPopupChange: (index: number, values: LinkPopupValues) => void;
   onDelete: (index: number) => void;
 }
 
 const SortableLinkItem = ({
   id,
   index,
-  label,
-  url,
-  linkType,
-  popupContent,
+  link,
   onLabelChange,
   onUrlChange,
   onLinkTypeChange,
-  onPopupContentChange,
+  onPopupChange,
   onDelete,
 }: SortableLinkItemProps) => {
   const theme = useTheme();
@@ -73,6 +99,8 @@ const SortableLinkItem = ({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const linkType = (link.link_type as "url" | "popup") ?? "url";
 
   return (
     <Box
@@ -126,25 +154,20 @@ const SortableLinkItem = ({
           size="small"
           fullWidth
           placeholder={t("link_label")}
-          value={label}
+          value={link.label}
           onChange={(e) => onLabelChange(index, e.target.value)}
         />
         {linkType === "popup" ? (
-          <TextField
-            size="small"
-            fullWidth
-            multiline
-            minRows={3}
-            placeholder={t("popup_content_placeholder")}
-            value={popupContent}
-            onChange={(e) => onPopupContentChange(index, e.target.value)}
+          <PopupConfigButton
+            link={link}
+            onChange={(values) => onPopupChange(index, values)}
           />
         ) : (
           <TextField
             size="small"
             fullWidth
             placeholder="https://..."
-            value={url}
+            value={link.url ?? ""}
             onChange={(e) => onUrlChange(index, e.target.value)}
           />
         )}
@@ -206,10 +229,10 @@ const LinksConfiguration = ({ config, onChange }: LinksConfigurationProps) => {
     [links, handleSetupChange]
   );
 
-  const handlePopupContentChange = useCallback(
-    (index: number, popup_content: string) => {
+  const handlePopupChange = useCallback(
+    (index: number, values: LinkPopupValues) => {
       const updated = [...links];
-      updated[index] = { ...updated[index], popup_content };
+      updated[index] = { ...updated[index], ...values };
       handleSetupChange("links", updated);
     },
     [links, handleSetupChange]
@@ -224,7 +247,18 @@ const LinksConfiguration = ({ config, onChange }: LinksConfigurationProps) => {
   );
 
   const handleAddLink = useCallback(() => {
-    handleSetupChange("links", [...links, { label: "", url: "", link_type: "url" as const, popup_content: "" }]);
+    handleSetupChange("links", [
+      ...links,
+      {
+        label: "",
+        url: "",
+        link_type: "url" as const,
+        popup_content: "",
+        popup_type: "popover" as const,
+        popup_placement: "auto" as const,
+        popup_size: "md" as const,
+      },
+    ]);
   }, [links, handleSetupChange]);
 
   const handleDragEnd = useCallback(
@@ -313,14 +347,11 @@ const LinksConfiguration = ({ config, onChange }: LinksConfigurationProps) => {
                       key={`link-${index}`}
                       id={`link-${index}`}
                       index={index}
-                      label={link.label}
-                      url={link.url ?? ""}
-                      linkType={(link.link_type as "url" | "popup") ?? "url"}
-                      popupContent={link.popup_content ?? ""}
+                      link={link}
                       onLabelChange={handleLinkLabelChange}
                       onUrlChange={handleLinkUrlChange}
                       onLinkTypeChange={handleLinkTypeChange}
-                      onPopupContentChange={handlePopupContentChange}
+                      onPopupChange={handlePopupChange}
                       onDelete={handleDeleteLink}
                     />
                   ))}

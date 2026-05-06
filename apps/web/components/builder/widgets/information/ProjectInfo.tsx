@@ -1,16 +1,30 @@
-import { TabContext, TabPanel } from "@mui/lab";
-import { Divider, Fab, Tab, TextField, Tooltip, useTheme } from "@mui/material";
-import Tabs from "@mui/material/Tabs";
-import React, { useEffect, useState } from "react";
+import CloseIcon from "@mui/icons-material/Close";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Fab,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
+  useTheme,
+} from "@mui/material";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import type { Project } from "@/lib/validations/project";
+import type { PopupPlacement, PopupSize, PopupType } from "@/lib/validations/widget";
 
-import { ProjectMetadataEdit, ProjectMetadataView } from "@/components/dashboard/project/Metadata";
-import ViewModal from "@/components/modals/View";
+import MarkdownContentEditor from "@/components/builder/widgets/common/MarkdownContentEditor";
+import PopupContentRenderer from "@/components/builder/widgets/common/PopupContentRenderer";
+import PopupSettingsControls from "@/components/builder/widgets/common/PopupSettingsControls";
 
 interface ProjectInfoProps {
   project: Project;
@@ -22,113 +36,121 @@ export function ProjectInfo({ project, viewOnly, onProjectUpdate }: ProjectInfoP
   const { t } = useTranslation("common");
   const builderConfig = project?.builder_config;
   const theme = useTheme();
-  const [value, setValue] = useState("info");
   const [open, setOpen] = useState(false);
+  const fabRef = useRef<HTMLButtonElement | null>(null);
 
-  const infoContent = project?.builder_config?.settings?.project_info_content || "";
+  const settings = builderConfig?.settings;
+  const infoContent = settings?.project_info_content || "";
+  const popupType = (settings?.project_info_popup_type as PopupType) ?? "dialog";
+  const popupPlacement = (settings?.project_info_popup_placement as PopupPlacement) ?? "auto";
+  const popupSize = (settings?.project_info_popup_size as PopupSize) ?? "md";
   const hasInfo = infoContent.trim().length > 0;
-  const shouldSkipTabs = viewOnly && !hasInfo;
 
-  const handleChange = (_event: React.SyntheticEvent, newValue: string) => {
-    setValue(newValue);
-  };
+  const onClose = () => setOpen(false);
 
-  const onClose = () => {
-    setOpen(false);
-  };
-
-  // Open modal only on first visit
+  // Open the popup automatically on first visit (viewer-only)
   useEffect(() => {
     if (!project?.id) return;
     const key = `project_info_seen_${project.id}`;
     const seen = localStorage.getItem(key);
-
-    if (!seen && viewOnly) {
+    if (!seen && viewOnly && hasInfo) {
       setOpen(true);
       localStorage.setItem(key, "true");
     }
-  }, [project?.id, viewOnly]);
+  }, [project?.id, viewOnly, hasInfo]);
 
+  const updateSetting = (key: string, val: unknown) => {
+    if (!onProjectUpdate || !builderConfig) return;
+    onProjectUpdate("builder_config", {
+      ...builderConfig,
+      settings: { ...builderConfig.settings, [key]: val },
+    });
+  };
+
+  const fab = (
+    <Tooltip title={t("info")} arrow placement="left">
+      <Fab
+        ref={fabRef}
+        onClick={() => setOpen(true)}
+        size="small"
+        sx={{
+          backgroundColor: theme.palette.background.paper,
+          marginBottom: theme.spacing(1),
+          pointerEvents: "all",
+          color: theme.palette.action.active,
+          "&:hover": { backgroundColor: theme.palette.background.default },
+        }}>
+        <Icon iconName={ICON_NAME.INFO} htmlColor="inherit" fontSize="small" />
+      </Fab>
+    </Tooltip>
+  );
+
+  // Public/viewer mode: render via PopupContentRenderer using configured type.
+  if (viewOnly) {
+    if (!hasInfo) return null;
+    return (
+      <>
+        {fab}
+        {open && (
+          <PopupContentRenderer
+            open
+            onClose={onClose}
+            popup_type={popupType}
+            placement={popupPlacement}
+            size={popupSize}
+            anchorEl={fabRef.current}
+            title={project.name}
+            content={infoContent}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Builder/edit mode: same dialog shell as InfoChipEditDialog and
+  // LinkPopupEditDialog.
   return (
     <>
-      <ViewModal title={project.name} open={!!open} onClose={onClose} closeText={t("close")}>
-        {shouldSkipTabs ? (
-          // --- VIEW ONLY + NO INFO → Only Metadata ---
-          <ProjectMetadataView project={project} />
-        ) : (
-          // --- NORMAL CASE → Show Tabs ---
-          <TabContext value={value}>
-            <Tabs variant="fullWidth" value={value} onChange={handleChange}>
-              <Tab value="info" label={t("info")} />
-              <Tab value="metadata" label={t("metadata.title")} />
-            </Tabs>
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pr: 6, display: "flex", alignItems: "center", gap: 1 }}>
+          <InfoOutlinedIcon sx={{ fontSize: 20, color: "primary.main", opacity: 0.85 }} />
+          <Typography variant="h6" sx={{ flex: 1 }}>
+            {t("edit_popup_content")}
+          </Typography>
+          <IconButton size="small" onClick={onClose} sx={{ position: "absolute", right: 12, top: 12 }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack spacing={2}>
+            <PopupSettingsControls
+              popupType={popupType}
+              placement={popupPlacement}
+              size={popupSize}
+              onPopupTypeChange={(v) => updateSetting("project_info_popup_type", v)}
+              onPlacementChange={(v) => updateSetting("project_info_popup_placement", v)}
+              onSizeChange={(v) => updateSetting("project_info_popup_size", v)}
+            />
+            <Box>
+              <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.5, display: "block" }}>
+                {t("info_text", { defaultValue: "Info text" })}
+              </Typography>
+              <MarkdownContentEditor
+                value={infoContent}
+                onChange={(v) => updateSetting("project_info_content", v)}
+                plainText={popupType === "tooltip"}
+              />
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={onClose} variant="contained" size="small">
+            {t("done", { defaultValue: "Done" })}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-            <Divider sx={{ mt: 0 }} />
-
-            <TabPanel value="info">
-              {viewOnly ? (
-                <ReactMarkdown
-                  components={{
-                    img: ({ node: _, ...props }) => {
-                      const hasSize =
-                        props.width !== undefined ||
-                        props.height !== undefined ||
-                        (props.style && (props.style.width || props.style.height));
-                      const style = hasSize ? props.style : { width: "100%" };
-                      // eslint-disable-next-line jsx-a11y/alt-text
-                      return <img {...props} style={style} />;
-                    },
-                    a: ({ node: _, href, children, ...props }) => (
-                      <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-                        {children}
-                      </a>
-                    ),
-                  }}>
-                  {infoContent}
-                </ReactMarkdown>
-              ) : (
-                <TextField
-                  fullWidth
-                  placeholder={t("info_placeholder")}
-                  multiline
-                  rows={10}
-                  value={infoContent}
-                  onChange={(e) => {
-                    builderConfig.settings.project_info_content = e.target.value;
-                    onProjectUpdate && onProjectUpdate("builder_config", builderConfig);
-                  }}
-                />
-              )}
-            </TabPanel>
-
-            <TabPanel value="metadata">
-              {viewOnly ? (
-                <ProjectMetadataView project={project} />
-              ) : (
-                <ProjectMetadataEdit project={project} onChange={onProjectUpdate} />
-              )}
-            </TabPanel>
-          </TabContext>
-        )}
-      </ViewModal>
-
-      {/* Floating FAB */}
-      <Tooltip title={t("info")} arrow placement="left">
-        <Fab
-          onClick={() => setOpen(true)}
-          size="small"
-          sx={{
-            backgroundColor: theme.palette.background.paper,
-            marginBottom: theme.spacing(1),
-            pointerEvents: "all",
-            color: theme.palette.action.active,
-            "&:hover": {
-              backgroundColor: theme.palette.background.default,
-            },
-          }}>
-          <Icon iconName={ICON_NAME.INFO} htmlColor="inherit" fontSize="small" />
-        </Fab>
-      </Tooltip>
+      {fab}
     </>
   );
 }

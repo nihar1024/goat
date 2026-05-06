@@ -1,4 +1,4 @@
-import { Button, Checkbox, FormControlLabel, Stack, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, FormControlLabel, Stack, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +9,7 @@ import type { BuilderPanelSchema } from "@/lib/validations/project";
 
 import type { SelectorItem } from "@/types/map/common";
 
+import RichTextEditor from "@/components/builder/widgets/common/RichTextEditor";
 import WidgetColorPicker from "@/components/builder/widgets/common/WidgetColorPicker";
 import FormLabelHelper from "@/components/common/FormLabelHelper";
 import SectionHeader from "@/components/map/panels/common/SectionHeader";
@@ -262,17 +263,40 @@ const PanelConfiguration = ({ panel, onDelete, onChange }: PanelContainerProps) 
               false
             )}
             {collapsible && (
-              <TextField
-                size="small"
-                label={t("collapsed_label")}
-                placeholder={t("collapsed_label_placeholder")}
-                value={collapsedLabel}
-                onChange={(e) => setCollapsedLabel(e.target.value)}
-                onBlur={(e) => updateConfig("options.collapsed_label", e.target.value)}
-                inputProps={{ maxLength: 40 }}
-                sx={{ mt: 1 }}
-                fullWidth
-              />
+              <Box sx={{ mt: 1 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  fontWeight={600}
+                  sx={{ mb: 0.5, display: "block" }}>
+                  {t("collapsed_label")}
+                </Typography>
+                <Box
+                  sx={(theme) => ({
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.5,
+                    minHeight: 32,
+                    "&:focus-within": {
+                      borderColor: theme.palette.primary.main,
+                      boxShadow: `0 0 0 2px ${theme.palette.primary.main}1A`,
+                    },
+                  })}>
+                  <RichTextEditor
+                    value={collapsedLabel}
+                    onChange={(html) => {
+                      setCollapsedLabel(html);
+                      updateConfig("options.collapsed_label", html);
+                    }}
+                    alwaysEdit
+                    singleLine
+                    placeholder={t("collapsed_label_placeholder")}
+                    sx={{ fontSize: "0.875rem" }}
+                  />
+                </Box>
+              </Box>
             )}
           </Stack>
         </ConfigSection>

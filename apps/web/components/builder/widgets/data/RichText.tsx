@@ -479,26 +479,13 @@ const RichTextEditable = ({
             selected={false}
             onClick={() => {
               editor.chain().focus().insertInfoChip().run();
-              // After insert, the cursor is right after the chip — the chip
-              // lives at selection.from - 1. Read its infoId, then on the
-              // next tick (after ProseMirror renders the new node) dispatch
-              // a click on the chip's DOM. RichTextEditor's click handler
-              // looks up the chip by data-info-id and opens the edit dialog.
+              // After insert the cursor sits just past the chip, so the chip
+              // is at cursor - 1. Select the chip node so RichTextEditor's
+              // selectionUpdate listener opens the edit dialog.
               const chipPos = editor.state.selection.from - 1;
-              const insertedNode = editor.state.doc.nodeAt(chipPos);
-              const infoId =
-                insertedNode?.type.name === "infoChip"
-                  ? (insertedNode.attrs.infoId as string | undefined)
-                  : undefined;
-              if (!infoId) return;
-              setTimeout(() => {
-                const chipEl = editor.view.dom.querySelector(
-                  `.info-chip[data-info-id="${infoId}"]`
-                );
-                if (chipEl instanceof HTMLElement) {
-                  chipEl.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-                }
-              }, 0);
+              const inserted = editor.state.doc.nodeAt(chipPos);
+              if (inserted?.type.name !== "infoChip") return;
+              editor.chain().focus().setNodeSelection(chipPos).run();
             }}
           />
         </Stack>

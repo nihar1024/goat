@@ -26,13 +26,17 @@ interface InfoChipEditDialogProps {
   editor: Editor;
   open: boolean;
   onClose: () => void;
+  /** Called after the chip's attrs are committed. Lets the host editor flush
+   *  any debounced persistence so the new HTML reaches the parent immediately
+   *  instead of after the typing-debounce delay. */
+  onPersist?: () => void;
 }
 
 /**
  * Centered dialog for editing an info chip — type, placement, markdown text, URL all in one view.
  * Replaces the older popover-then-dialog flow.
  */
-export const InfoChipEditDialog = ({ editor, open, onClose }: InfoChipEditDialogProps) => {
+export const InfoChipEditDialog = ({ editor, open, onClose, onPersist }: InfoChipEditDialogProps) => {
   const { t } = useTranslation("common");
 
   // Snapshot the chip's position when the dialog opens. The editor selection can
@@ -69,26 +73,31 @@ export const InfoChipEditDialog = ({ editor, open, onClose }: InfoChipEditDialog
   // re-renders that interrupt typing in the textarea.
   const handleClose = useCallback(() => {
     if (chipPos !== null) {
+      let didApply = false;
       editor
         .chain()
-        .command(({ tr, state }) => {
+        .command(({ tr, state, dispatch }) => {
           const node = state.doc.nodeAt(chipPos);
           if (!node || node.type.name !== "infoChip") return false;
-          tr.setNodeMarkup(chipPos, undefined, {
-            ...node.attrs,
-            text,
-            url,
-            title,
-            popup_type: popupType,
-            placement,
-            size,
-          });
+          if (dispatch) {
+            tr.setNodeMarkup(chipPos, undefined, {
+              ...node.attrs,
+              text,
+              url,
+              title,
+              popup_type: popupType,
+              placement,
+              size,
+            });
+            didApply = true;
+          }
           return true;
         })
         .run();
+      if (didApply) onPersist?.();
     }
     onClose();
-  }, [editor, chipPos, text, url, title, popupType, placement, size, onClose]);
+  }, [editor, chipPos, text, url, title, popupType, placement, size, onClose, onPersist]);
 
   // Render only when the dialog has captured a chip position. Don't re-check
   // editor.state — the selection may have moved off the chip mid-edit, but the

@@ -8,6 +8,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { NodeSelection } from "@tiptap/pm/state";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -273,6 +274,17 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
         setLinkAnchorEl(null);
         return;
       }
+      // Flush any pending edits BEFORE flipping isEditMode false.
+      // The persist callback (editor.on("update", ...)) is debounced, so
+      // value (the prop) lags behind editor.getHTML() between the last
+      // change and the debounce timeout. If we let isEditMode flip first,
+      // the external-value-sync effect below sees value !== currentHtml
+      // and overwrites the editor's content with the stale value — which
+      // wipes out chips that were just inserted, etc.
+      if (onChange) {
+        const html = editor.getHTML();
+        if (html !== (value || "")) onChange(html);
+      }
       setIsEditMode(false);
       setLinkAnchorEl(null);
     };
@@ -282,7 +294,7 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
       editor.off("focus", handleFocus);
       editor.off("blur", handleBlur);
     };
-  }, [editor, shouldKeepEditingRef, alwaysEdit]);
+  }, [editor, shouldKeepEditingRef, alwaysEdit, onChange, value]);
 
   // Lifecycle hook for widget-specific behavior (e.g., extra event listeners)
   useEffect(() => {
@@ -291,18 +303,32 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
     return cleanup ?? undefined;
   }, [editor, isEditMode, onEditor]);
 
-  // Info chip click in edit mode → open the chip edit dialog. Only attaches
-  // if the InfoChip extension is loaded in this editor instance.
+  // Info chip handling. Two paths funnel into one place:
+  //   - Toolbar [i] insert: caller runs insertInfoChip + setNodeSelection on the
+  //     new chip.
+  //   - User click on an existing chip: a click handler on editor.view.dom
+  //     finds the chip's pos (via data-info-id or posAtCoords) and calls
+  //     setNodeSelection.
+  // Both cause selection to become a NodeSelection on the infoChip; the
+  // selectionUpdate listener below opens the dialog. Going through the editor
+  // state (not a DOM dispatch) avoids races with React rerenders, ProseMirror's
+  // own click handling, and synthetic-event quirks.
   useEffect(() => {
     if (!editor || !isEditMode) return;
     const hasInfoChip = !!editor.extensionManager.extensions.find(
       (ext) => ext.name === "infoChip"
     );
     if (!hasInfoChip) return;
-    const editorEl = editor.view.dom;
+
+    const handleSelectionUpdate = () => {
+      const { selection } = editor.state;
+      if (selection instanceof NodeSelection && selection.node.type.name === "infoChip") {
+        setInfoChipDialogOpen(true);
+      }
+    };
+    editor.on("selectionUpdate", handleSelectionUpdate);
+
     const findChipPos = (chipEl: HTMLElement, event: MouseEvent): number | null => {
-      // Strategy 1: match by data-info-id (works for chips inserted by current
-      // code, where every chip has a unique infoId attr).
       const infoId = chipEl.getAttribute("data-info-id");
       if (infoId) {
         let found: number | null = null;
@@ -316,11 +342,8 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
         });
         if (found !== null) return found;
       }
-      // Strategy 2: posAtCoords from the click position. Robust for legacy
-      // chips that may be missing infoId.
       const coords = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
       if (coords) {
-        // Try the position itself, then one to the left (atom node "inside").
         for (const p of [coords.pos, coords.pos - 1]) {
           if (p < 0) continue;
           const node = editor.state.doc.nodeAt(p);
@@ -329,7 +352,8 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
       }
       return null;
     };
-    const handler = (event: MouseEvent) => {
+    const editorEl = editor.view.dom;
+    const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       const chipEl = target.closest(".info-chip") as HTMLElement | null;
       if (!chipEl) return;
@@ -337,11 +361,26 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
       event.stopPropagation();
       const chipPos = findChipPos(chipEl, event);
       if (chipPos === null) return;
+      // setNodeSelection triggers selectionUpdate → handler opens the dialog.
+      // If the selection happens to already match (clicking the same chip
+      // that's already selected), force-open as a fallback.
+      const before = editor.state.selection;
       editor.chain().focus().setNodeSelection(chipPos).run();
-      setInfoChipDialogOpen(true);
+      const after = editor.state.selection;
+      if (
+        before instanceof NodeSelection &&
+        after instanceof NodeSelection &&
+        before.from === after.from
+      ) {
+        setInfoChipDialogOpen(true);
+      }
     };
-    editorEl.addEventListener("click", handler);
-    return () => editorEl.removeEventListener("click", handler);
+    editorEl.addEventListener("click", handleClick);
+
+    return () => {
+      editor.off("selectionUpdate", handleSelectionUpdate);
+      editorEl.removeEventListener("click", handleClick);
+    };
   }, [editor, isEditMode]);
 
   // Track toolbar position above the editor — only update when the container
@@ -489,15 +528,13 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
             selected={false}
             onClick={() => {
               e.chain().focus().insertInfoChip().run();
-              // The chip is inserted at the current selection; cursor is
-              // just past it, so the chip is at cursor - 1. Select the chip
-              // node so InfoChipEditDialog can read its attrs from the
-              // current selection, then open the dialog.
+              // After insert the cursor is just past the chip, so the chip
+              // is at cursor - 1. Select it so the selectionUpdate listener
+              // opens the edit dialog.
               const chipPos = e.state.selection.from - 1;
               const inserted = e.state.doc.nodeAt(chipPos);
               if (inserted?.type.name !== "infoChip") return;
-              e.chain().setNodeSelection(chipPos).run();
-              setInfoChipDialogOpen(true);
+              e.chain().focus().setNodeSelection(chipPos).run();
             }}
           />
         </Stack>
@@ -651,6 +688,7 @@ function RichTextEditor<TState extends BaseToolbarState = BaseToolbarState>({
           editor={editor}
           open={infoChipDialogOpen}
           onClose={() => setInfoChipDialogOpen(false)}
+          onPersist={() => onChange?.(editor.getHTML())}
         />
       )}
     </Box>

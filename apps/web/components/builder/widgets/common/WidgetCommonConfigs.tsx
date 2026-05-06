@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Autocomplete, Button, Checkbox, Chip, Divider, FormControlLabel, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
+import { Autocomplete, Box, Button, Checkbox, Chip, Divider, FormControlLabel, Paper, Stack, TextField, Typography, useTheme } from "@mui/material";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +29,7 @@ import useLayerFields from "@/hooks/map/CommonHooks";
 import { useLayerByGeomType, useLayerDatasetId } from "@/hooks/map/ToolsHooks";
 
 import CollapsibleConfigCard from "@/components/builder/widgets/common/CollapsibleConfigCard";
+import RichTextEditor from "@/components/builder/widgets/common/RichTextEditor";
 import WidgetColorPicker from "@/components/builder/widgets/common/WidgetColorPicker";
 import CategoryColorConfig from "@/components/builder/widgets/data/CategoryColorConfig";
 import CategoryOrderConfig from "@/components/builder/widgets/data/CategoryOrderConfig";
@@ -122,101 +123,123 @@ export const NumberFormatSelector = ({
 export const WidgetInfo = ({ sectionLabel, config, onChange }: WidgetConfigProps) => {
   const { t } = useTranslation("common");
   const schema = widgetSchemaMap[config.type];
-  const hasTitleDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "setup.title");
-  }, [schema]);
-
-  const hasDescriptionDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "options.description");
-  }, [schema]);
-
-  const hasAltTextDef = useMemo(() => {
-    return hasNestedSchemaPath(schema, "setup.alt");
-  }, [schema]);
+  const hasTitleDef = useMemo(() => hasNestedSchemaPath(schema, "setup.title"), [schema]);
+  const hasDescriptionDef = useMemo(() => hasNestedSchemaPath(schema, "options.description"), [schema]);
+  const hasAltTextDef = useMemo(() => hasNestedSchemaPath(schema, "setup.alt"), [schema]);
 
   const handleConfigChange = useCallback(
     (parentKey: "setup" | "options", propertyKey: string, value: string) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const currentParent = (config as any)[parentKey] || {};
-      const updatedParent = {
-        ...currentParent,
-        [propertyKey]: value,
-      };
       onChange({
         ...config,
-        [parentKey]: updatedParent,
+        [parentKey]: { ...currentParent, [propertyKey]: value },
       } as WidgetConfigSchema);
     },
     [config, onChange]
   );
 
-  const hasInfo = useMemo(() => {
-    return hasTitleDef || hasDescriptionDef || hasAltTextDef;
-  }, [hasTitleDef, hasDescriptionDef, hasAltTextDef]);
+  if (!hasTitleDef && !hasDescriptionDef && !hasAltTextDef) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const title = (config.setup as any)?.title ?? "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const description = (config as any)?.options?.description ?? "";
 
   return (
     <>
-      {hasInfo && (
-        <>
-          <SectionHeader
-            active
-            alwaysActive
-            label={sectionLabel ?? t("info")}
-            icon={ICON_NAME.CIRCLEINFO}
-            disableAdvanceOptions
-          />
-          <SectionOptions
-            active
-            baseOptions={
-              <>
-                {hasTitleDef && (
-                  <TextFieldInput
-                    type="text"
-                    label={t("title")}
+      <SectionHeader
+        active
+        alwaysActive
+        label={sectionLabel ?? t("info")}
+        icon={ICON_NAME.CIRCLEINFO}
+        disableAdvanceOptions
+      />
+      <SectionOptions
+        active
+        baseOptions={
+          <Stack spacing={1.5}>
+            {hasTitleDef && (
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  fontWeight={600}
+                  sx={{ mb: 0.5, display: "block" }}>
+                  {t("title")}
+                </Typography>
+                <Box
+                  sx={(theme) => ({
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.5,
+                    minHeight: 32,
+                    "&:focus-within": {
+                      borderColor: theme.palette.primary.main,
+                      boxShadow: `0 0 0 2px ${theme.palette.primary.main}1A`,
+                    },
+                  })}>
+                  <RichTextEditor
+                    value={title}
+                    onChange={(html) => handleConfigChange("setup", "title", html)}
+                    alwaysEdit
+                    singleLine
                     placeholder={t("add_widget_title")}
-                    clearable={false}
-                    // Safely access title, using 'as any' for now to match context
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    value={(config.setup as any)?.title || ""}
-                    onChange={(value: string) => {
-                      handleConfigChange("setup", "title", value);
-                    }}
+                    sx={{ fontSize: "0.875rem" }}
                   />
-                )}
-                {hasDescriptionDef && (
-                  <TextFieldInput
-                    type="text"
-                    label={t("description")}
+                </Box>
+              </Box>
+            )}
+            {hasDescriptionDef && (
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  fontWeight={600}
+                  sx={{ mb: 0.5, display: "block" }}>
+                  {t("description")}
+                </Typography>
+                <Box
+                  sx={(theme) => ({
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.5,
+                    minHeight: 80,
+                    "&:focus-within": {
+                      borderColor: theme.palette.primary.main,
+                      boxShadow: `0 0 0 2px ${theme.palette.primary.main}1A`,
+                    },
+                  })}>
+                  <RichTextEditor
+                    value={description}
+                    onChange={(html) => handleConfigChange("options", "description", html)}
+                    alwaysEdit
                     placeholder={t("add_widget_description")}
-                    multiline
-                    clearable={false}
-                    // Safely access description, using 'as any' for now to match context
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    value={(config as any)?.options?.description || ""}
-                    onChange={(value: string) => {
-                      handleConfigChange("options", "description", value);
-                    }}
+                    sx={{ fontSize: "0.875rem" }}
                   />
-                )}
-                {hasAltTextDef && (
-                  <TextFieldInput
-                    type="text"
-                    label={t("alternative_text")}
-                    placeholder={t("add_image_alternative_text")}
-                    clearable={false}
-                    // Safely access alt text, using 'as any' for now to match context
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    value={(config as any)?.setup?.alt || ""}
-                    onChange={(value: string) => {
-                      handleConfigChange("setup", "alt", value);
-                    }}
-                  />
-                )}
-              </>
-            }
-          />
-        </>
-      )}
+                </Box>
+              </Box>
+            )}
+            {hasAltTextDef && (
+              <TextFieldInput
+                type="text"
+                label={t("alternative_text")}
+                placeholder={t("add_image_alternative_text")}
+                clearable={false}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                value={(config as any)?.setup?.alt || ""}
+                onChange={(value: string) => {
+                  handleConfigChange("setup", "alt", value);
+                }}
+              />
+            )}
+          </Stack>
+        }
+      />
     </>
   );
 };

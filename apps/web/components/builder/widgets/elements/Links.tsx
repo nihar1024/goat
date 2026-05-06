@@ -1,11 +1,18 @@
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { Box, Divider, Link, Stack, Typography } from "@mui/material";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import type { LinksElementSchema } from "@/lib/validations/widget";
 
-import MarkdownPopupDialog from "@/components/builder/widgets/common/MarkdownPopupDialog";
+import PopupContentRenderer from "@/components/builder/widgets/common/PopupContentRenderer";
+import { emitPopupOpen, onPopupOpenElsewhere } from "@/components/builder/widgets/common/popupCoordinator";
+
+interface OpenPopupState {
+  openId: number;
+  index: number;
+  anchorEl: HTMLElement;
+}
 
 const LinksElementWidget = ({ config }: { config: LinksElementSchema }) => {
   const { setup, options } = config;
@@ -14,11 +21,21 @@ const LinksElementWidget = ({ config }: { config: LinksElementSchema }) => {
   const openInNewTab = options?.open_in_new_tab ?? true;
   const copyrightText = options?.secondary_text;
   const separator = options?.separator ?? "vertical_line";
-  const [openPopupIndex, setOpenPopupIndex] = useState<number | null>(null);
+  const [openPopup, setOpenPopup] = useState<OpenPopupState | null>(null);
+
+  // Close our popup if any other popup-host opens one.
+  useEffect(() => {
+    return onPopupOpenElsewhere(
+      () => openPopup?.openId ?? null,
+      () => setOpenPopup(null)
+    );
+  }, [openPopup?.openId]);
 
   if (links.length === 0 && !copyrightText) {
     return null;
   }
+
+  const activeLink = openPopup !== null ? links[openPopup.index] : null;
 
   return (
     <Box sx={{ width: "100%" }}>
@@ -50,7 +67,15 @@ const LinksElementWidget = ({ config }: { config: LinksElementSchema }) => {
                 variant="body2"
                 color="text.secondary"
                 underline="hover"
-                onClick={() => setOpenPopupIndex(index)}
+                onClick={(e) => {
+                  const openId = Date.now();
+                  setOpenPopup({
+                    openId,
+                    index,
+                    anchorEl: e.currentTarget as HTMLElement,
+                  });
+                  emitPopupOpen(openId);
+                }}
                 sx={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -100,16 +125,18 @@ const LinksElementWidget = ({ config }: { config: LinksElementSchema }) => {
         </Typography>
       )}
 
-      {links.map((link, index) =>
-        link.link_type === "popup" && link.popup_content ? (
-          <MarkdownPopupDialog
-            key={index}
-            open={openPopupIndex === index}
-            onClose={() => setOpenPopupIndex(null)}
-            title={link.label}
-            content={link.popup_content}
-          />
-        ) : null
+      {activeLink && activeLink.popup_content && openPopup && (
+        <PopupContentRenderer
+          key={openPopup.openId}
+          open
+          onClose={() => setOpenPopup(null)}
+          popup_type={activeLink.popup_type ?? "popover"}
+          placement={activeLink.popup_placement ?? "auto"}
+          size={activeLink.popup_size ?? "md"}
+          anchorEl={openPopup.anchorEl}
+          title={activeLink.label}
+          content={activeLink.popup_content}
+        />
       )}
     </Box>
   );

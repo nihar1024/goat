@@ -1,9 +1,11 @@
-import { Box, Typography } from "@mui/material";
+import { Box } from "@mui/material";
 
 import type { ProjectLayer, ProjectLayerGroup } from "@/lib/validations/project";
 import type { WidgetInformationConfig } from "@/lib/validations/widget";
 import { informationTypes } from "@/lib/validations/widget";
 
+import WidgetDescription from "@/components/builder/widgets/common/WidgetDescription";
+import WidgetTitle from "@/components/builder/widgets/common/WidgetTitle";
 import { LayerInformationWidget } from "@/components/builder/widgets/information/Layers";
 
 interface WidgetInformationProps {
@@ -23,11 +25,7 @@ const WidgetInformation: React.FC<WidgetInformationProps> = ({
 }) => {
   return (
     <Box>
-      {config.setup?.title && (
-        <Typography variant="body1" fontWeight="bold" align="left" gutterBottom>
-          {config.setup?.title}
-        </Typography>
-      )}
+      <WidgetTitle title={config.setup?.title} />
       {config.type === informationTypes.Values.layers && (
         <LayerInformationWidget
           widgetId={widgetId}
@@ -37,11 +35,7 @@ const WidgetInformation: React.FC<WidgetInformationProps> = ({
           viewOnly={viewOnly}
         />
       )}
-      {config.options?.description && (
-        <Typography variant="body2" align="left" sx={{ mt: 1 }}>
-          {config.options.description}
-        </Typography>
-      )}
+      <WidgetDescription description={config.options?.description} sx={{ mt: 1 }} />
     </Box>
   );
 };

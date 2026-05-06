@@ -18,6 +18,16 @@ export const widgetTypes = z.enum([
   ...elementTypes.options,
 ]);
 
+// Popup display configuration shared by InfoChip, Links, ProjectInfo.
+// Title-info popups are now embedded inline as info chips inside the rich
+// text title, so no separate widget-level option is needed.
+export const popupTypes = z.enum(["tooltip", "popover", "dialog"]);
+export const popupPlacements = z.enum(["top", "bottom", "left", "right", "auto"]);
+export const popupSizes = z.enum(["sm", "md", "lg"]);
+export type PopupType = z.infer<typeof popupTypes>;
+export type PopupPlacement = z.infer<typeof popupPlacements>;
+export type PopupSize = z.infer<typeof popupSizes>;
+
 export const widgetTypesWithoutConfig = [elementTypes.Values.text, elementTypes.Values.divider];
 
 
@@ -473,7 +483,12 @@ export const linksItemSchema = z.object({
   url: z.string().optional(),
   link_type: linksLinkTypes.optional().default("url"),
   popup_content: z.string().optional(),
+  popup_type: popupTypes.optional().default("popover"),
+  popup_placement: popupPlacements.optional().default("auto"),
+  popup_size: popupSizes.optional().default("md"),
 });
+
+export type LinksItemSchema = z.infer<typeof linksItemSchema>;
 
 export const linksElementConfigSchema = z.object({
   type: z.literal("links"),

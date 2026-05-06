@@ -344,6 +344,8 @@ export const otherPropertiesSchmea = z.object({
 // Raster styling schemas
 export const rasterStyleType = z.enum(["image", "color_range", "categories", "hillshade"]);
 
+export const rasterResampling = z.enum(["linear", "nearest"]);
+
 export const rasterStyleImageProperties = z.object({
   style_type: z.literal("image").default("image"),
   opacity: z.number().min(0).max(1).default(1.0),
@@ -402,6 +404,7 @@ export const rasterLayerPropertiesSchema = layerPropertiesBaseSchema.extend({
   text_label: TextLabelSchema.optional(),
   interaction: interactionProperties.optional().default({}),
   legend: layerLegend.optional().default({}),
+  resampling: rasterResampling.optional().default("nearest"),
   style: rasterStyleProperties
     .optional()
     .default({ style_type: "image", opacity: 1.0 } as z.infer<typeof rasterStyleImageProperties>),
@@ -605,6 +608,7 @@ export type SizeOrdinalMap = z.infer<typeof sizeOrdinalMap>;
 
 // Raster styling types
 export type RasterStyleType = z.infer<typeof rasterStyleType>;
+export type RasterResampling = z.infer<typeof rasterResampling>;
 export type RasterStyleImageProperties = z.infer<typeof rasterStyleImageProperties>;
 export type RasterStyleColorRangeProperties = z.infer<typeof rasterStyleColorRangeProperties>;
 export type RasterStyleCategoriesProperties = z.infer<typeof rasterStyleCategoriesProperties>;

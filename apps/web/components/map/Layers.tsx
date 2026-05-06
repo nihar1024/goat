@@ -511,6 +511,7 @@ const Layers = (props: LayersProps) => {
                       }}
                       paint={{
                         "raster-opacity": rasterProperties?.opacity || 1.0,
+                        "raster-resampling": rasterProperties?.resampling ?? "nearest",
                         ...(rasterProperties?.style?.style_type === "image" && {
                           "raster-brightness-min": rasterProperties.style.brightness_min ?? 0,
                           "raster-brightness-max": rasterProperties.style.brightness_max ?? 1,

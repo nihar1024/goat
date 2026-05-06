@@ -77,7 +77,7 @@ Sie können eine zuvor exportierte GOAT-Projektdatei importieren:
 Greifen Sie auf zusätzliche Projekt-Optionen zu, indem Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü neben jedem Projekt klicken. Sie haben folgende Optionen:
 
 - <code>Metadaten bearbeiten</code> - Projekt-Metadaten aufrufen und bearbeiten
-- <code>In Ordner verschieben</code> - Ihren Projekt-Speicherort neu organisieren
+- <code>In den Ordner verschieben</code> - Ihren Projekt-Speicherort neu organisieren
 - <code>Teilen</code> - Zusammenarbeiten, indem Sie Projekte mit Teammitgliedern oder Ihrer Organisation teilen
 - <code>Exportieren</code> - Das Projekt als Datei exportieren
 - <code>Duplizieren</code> - Eine Kopie des Projekts erstellen

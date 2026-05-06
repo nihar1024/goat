@@ -7,6 +7,10 @@ import TabItem from '@theme/TabItem';
 
 # Catchment Area
 
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+<iframe width="674" height="378" src="https://www.youtube.com/embed/_clsR386b9w?si=ZInxlY_TjYiEda23" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</div>
+
 Catchment Area shows **how far people can travel within a certain travel time or distance, using one or more transport modes** — with extended output shapes, custom step sizes, and additional public transport settings.
 
 ## 1. Explanation
@@ -29,7 +33,7 @@ Based on specified starting point(s), maximum travel time or distance, and trans
 Catchment Area computation is available in specific regions.
 
 When selecting a `Routing type`, GOAT displays a map overlay showing coverage.
-For `Walk`, `Bicycle`, `Pedelec`, and `Car`: over 30 European countries are supported.
+For `Walk`, `Bicycle`, `Pedelec`, and `Car`: **over 30 European countries** are supported.
 For `Public Transport`: Germany is supported.
 
 If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll discuss further options.
@@ -77,11 +81,6 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
   <div class="step-number">4</div>
   <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
 </div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Select the <code>Number of Steps</code> and the <code>Step sizes</code>.</div>
-</div>
 </TabItem>
 
 <TabItem value="cycling" label="Bicycle/Pedelec" className="tabItemBox">
@@ -104,11 +103,6 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
   <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
 </div>
 
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Select the <code>Number of Steps</code> and the <code>Step sizes</code>.</div>
-</div>
-
 </TabItem>
 
 <TabItem value="car" label="Car" className="tabItemBox">
@@ -129,11 +123,6 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 <div class="step">
   <div class="step-number">4</div>
   <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Select the <code>Number of Steps</code> and the <code>Step sizes</code>.</div>
 </div>
 
 </TabItem>
@@ -166,22 +155,22 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 </TabItem>
 </Tabs>
 
-### Advanced Configuration
+### Advanced Options
 
 <Tabs>
 <TabItem value="non-pt" label="Walk / Bicycle / Pedelec / Car" default className="tabItemBox">
 
 <div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Optionally, click on <code>Advanced Configurations</code> to set the <code>Step style</code>.</div>
+  <div class="step-number">5</div>
+  <div class="content">Optionally, click on <code>Advanced Options</code> to set the <code>Steps style</code>.</div>
 </div>
 
-#### Step Style
+#### Steps style
 
 Choose how the isochrone steps are displayed:
 
-- **Separate** — each step shows only the area reachable *between* that step and the previous one.
-- **Cumulative** — each step shows the *full area reachable up to* that travel cost.
+- **Separate steps** — each step shows only the area reachable *between* that step and the previous one.
+- **Cumulative steps** — each step shows the *full area reachable up to* that travel cost.
 
 <p></p>
 
@@ -190,16 +179,16 @@ Choose how the isochrone steps are displayed:
 <TabItem value="pt-advanced" label="Public Transport (PT)" className="tabItemBox">
 
 <div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Optionally, click on <code>Advanced Configurations</code> to configure the <code>Step style</code>, <code>Maximum Transfers</code>, <code>Access mode</code>, and <code>Egress mode</code>.</div>
+  <div class="step-number">5</div>
+  <div class="content">Optionally, click on <code>Advanced Options</code> to configure the <code>Steps style</code>, <code>Maximum Transfers</code>, <code>Access mode</code>, and <code>Egress mode</code>.</div>
 </div>
 
-#### Step Style
+#### Steps style
 
 Choose how the isochrone steps are displayed:
 
-- **Separate** — each step shows only the area reachable *between* that step and the previous one.
-- **Cumulative** — each step shows the *full area reachable up to* that travel cost.
+- **Separate steps** — each step shows only the area reachable *between* that step and the previous one.
+- **Cumulative steps** — each step shows the *full area reachable up to* that travel cost.
 
 #### Maximum Transfers
 
@@ -222,7 +211,7 @@ For each mode, configure the **maximum travel time or distance** and the **trave
 ### Starting Points
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">6</div>
   <div class="content">Select the <code>Starting point method</code>: <code>Select on map</code> and <b>click on the map to place starting point(s)</b>. Or <code>Select from layer</code> and <b>choose a Point layer</b> containing your desired starting point(s). All features in the layer will be used as starting points.</div>
 </div>
 
@@ -230,7 +219,7 @@ For each mode, configure the **maximum travel time or distance** and the **trave
 ### Scenario (Optional)
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">7</div>
   <div class="content">Optionally, expand the <code>Scenario</code> section and select a scenario to apply network modifications (e.g., new roads or paths) to the routing calculation.</div>
 </div>
 
@@ -241,7 +230,7 @@ Scenarios let you model infrastructure changes and immediately see how they affe
 :::
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">8</div>
   <div class="content">Click on <code>Run</code> to start the calculation.</div>
 </div>
 
@@ -255,7 +244,7 @@ Calculation time varies by settings. Check the [status bar](../../workspace/home
 
 Once the calculation finishes, the resulting layer(s) are added to the map:
 
-- **Catchment Area** — the calculated isochrones in the selected shape (polygon, network, rectangular grid, or point grid). Click any feature to inspect the **travel_cost** attribute, which shows travel time (minutes) or distance (meters) depending on your configuration.
+- **Catchment Area** — the calculated isochrones in the selected shape (polygon, network, hexagonal grid, or point grid). Click any feature to inspect the **travel_cost** attribute, which shows travel time (minutes) or distance (meters) depending on your configuration.
 - **Starting Points** — a point layer with the selected starting locations (only created when starting points were placed on the map, not when using a pre-existing layer).
 
 The result layer is automatically styled with a color scale ranging from the shortest to the longest travel cost step.
@@ -274,11 +263,15 @@ The result layer is automatically styled with a color scale ranging from the sho
 
 ### Visualization
 
-The catchment shape is derived from the routing grid using the [Marching Squares contour line algorithm](https://en.wikipedia.org/wiki/Marching_squares). This transforms the routing grid from a 2D array into smooth polygon contours for visualization and spatial analysis.
+The catchment shape is derived from the routing grid using the [Marching Squares contour line algorithm](https://en.wikipedia.org/wiki/Marching_squares), a computer graphics algorithm generating 2D contour lines from rectangular value arrays ([de Queiroz Neto et al. 2016](#6-references)). This transforms the routing grid from a 2D array into smooth polygon contours for visualization and spatial analysis.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <img src={require('/img/toolbox/accessibility_indicators/catchments/wiki.png').default} alt="Marching Squares illustration" style={{ maxHeight: "400px", maxWidth: "400px", objectFit: "contain"}}/>
+</div>
 
 ### Scientific background
 
-Catchments are *contour-based measures* (also *cumulative opportunities*), valued for their interpretable results ([Geurs and van Eck 2001](#5-references); [Albacete 2016](#5-references)). They do not distinguish between different travel times within the cut-off range ([Bertolini, le Clercq, and Kapoen 2005](#5-references)), unlike [heatmap-based accessibility indicators](./closest_average.md).
+Catchments are *contour-based measures* (also *cumulative opportunities*), valued for their interpretable results ([Geurs and van Eck 2001](#6-references); [Albacete 2016](#6-references)). They do not distinguish between different travel times within the cut-off range ([Bertolini, le Clercq, and Kapoen 2005](#6-references)), unlike [heatmap-based accessibility indicators](./closest_average.md).
 
 :::tip Hint
 
@@ -286,12 +279,22 @@ For further insights into the routing algorithm, visit [Routing](../../category/
 
 :::
 
-## 5. References
+## 5. Further readings
+
+Further insights into catchment calculation and scientific background: [this publication](https://doi.org/10.1016/j.jtrangeo.2021.103080).
+
+## 6. References
 
 Albacete, Xavier. 2016. "Evaluation and Improvements of Contour-Based Accessibility Measures." url: https://dspace.uef.fi/bitstream/handle/123456789/16857/urn_isbn_978-952-61-2103-1.pdf
 
 Bertolini, Luca, F. le Clercq, and L. Kapoen. 2005. "Sustainable Accessibility: A Conceptual Framework to Integrate Transport and Land Use Plan-Making." Transport Policy 12 (3): 207–20. https://doi.org/10.1016/j.tranpol.2005.01.006
 
-Geurs, Karst T., and Ritsema van Eck. 2001. "Accessibility Measures: Review and Applications." RIVM Report 408505 006. url: https://rivm.openrepository.com/handle/10029/259808
+J. F. de Queiroz Neto, E. M. d. Santos, and C. A. Vidal. "MSKDE - Using Marching Squares to Quickly Make High Quality Crime Hotspot Maps". en. In: 2016 29th SIBGRAPI Conference on Graphics, Patterns and Images (SIBGRAPI). Sao Paulo, Brazil: IEEE, Oct. 2016, pp. 305–312. isbn: 978-1-5090-3568-7. doi: 10.1109/SIBGRAPI.2016.049. url: https://ieeexplore.ieee.org/document/7813048
+
+https://fr.wikipedia.org/wiki/Marching_squares#/media/Fichier:Marching_Squares_Isoline.svg
+
+Majk Shkurti, "Spatio-temporal public transport accessibility analysis and benchmarking in an interactive WebGIS", Sep 2022. url: https://www.researchgate.net/publication/365790691_Spatio-temporal_public_transport_accessibility_analysis_and_benchmarking_in_an_interactive_WebGIS
 
 Matthew Wigginton Conway, Andrew Byrd, Marco Van Der Linden. "Evidence-Based Transit and Land Use Sketch Planning Using Interactive Accessibility Methods on Combined Schedule and Headway-Based Networks", 2017. url: https://journals.sagepub.com/doi/10.3141/2653-06
+
+Geurs, Karst T., and Ritsema van Eck. 2001. "Accessibility Measures: Review and Applications." RIVM Report 408505 006. url: https://rivm.openrepository.com/handle/10029/259808

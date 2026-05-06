@@ -81,25 +81,6 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
 
 
   </TabItem>
-  <TabItem value="Catalog Explorer" label="Catalog Explorer" className="tabItemBox">
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Browse <code>GOAT Dataset Catalog</code> to <strong>explore available datasets</strong>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Select the Dataset you want to <strong>import</strong>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Click on <code>+ Add Layer</code> to <strong>add the selected dataset</strong>.</div>
-</div>
-
-
- </TabItem>
   <TabItem value="Dataset External" label="Dataset External" className="tabItemBox">
   
 <div class="step">
@@ -132,6 +113,25 @@ You can add layers from [different sources](../data/dataset_types) to your map. 
     </TabItem>
   </Tabs>
 </TabItem>
+  <TabItem value="Catalog Explorer" label="Catalog Explorer" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Browse <code>GOAT Dataset Catalog</code> to <strong>explore available datasets</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Select the Dataset you want to <strong>import</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Click on <code>+ Add Layer</code> to <strong>add the selected dataset</strong>.</div>
+</div>
+
+
+ </TabItem>
   <TabItem value="Create Layer" label="Create Layer" className="tabItemBox">
 
 <div class="step">

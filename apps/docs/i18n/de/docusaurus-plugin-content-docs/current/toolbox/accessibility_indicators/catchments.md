@@ -7,6 +7,10 @@ import TabItem from '@theme/TabItem';
 
 # Einzugsgebiet
 
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+<iframe width="674" height="378" src="https://www.youtube.com/embed/GA_6PbhAA6k?si=4mA2OdTPGCl7iVRi&amp;start=46" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</div>
+
 Einzugsgebiet zeigt **wie weit Menschen innerhalb einer bestimmten Reisezeit oder Entfernung, mit einem oder mehreren Verkehrsmitteln reisen können** — mit erweiterten Ausgabeformen, anpassbaren Schrittgrößen und zusätzlichen Einstellungen für den öffentlichen Verkehr.
 
 ## 1. Erklärung
@@ -29,7 +33,7 @@ Basierend auf festgelegten Startpunkten, maximaler Reisezeit oder Entfernung und
 Die Berechnung ist in bestimmten Regionen verfügbar.
 
 Nach Auswahl eines `Routentyps` zeigt GOAT eine Kartenüberlagerung mit der Abdeckung an.
-Für `Zu Fuß`, `Fahrrad`, `Pedelec` und `Auto`: über 30 europäische Länder werden unterstützt.
+Für `Zu Fuß`, `Fahrrad`, `Pedelec` und `Auto`: **über 30 europäische Länder** werden unterstützt.
 Für `Öffentlicher Verkehr`: Deutschland wird unterstützt.
 
 Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns gerne](https://plan4better.de/en/contact/) — wir besprechen weitere Möglichkeiten.
@@ -75,12 +79,7 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Hexagonales Raster</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Wählen Sie die <code>Anzahl der Schritte</code> und die <code>Schrittgrößen</code>.</div>
+  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
 </div>
 </TabItem>
 
@@ -101,12 +100,7 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Hexagonales Raster</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Wählen Sie die <code>Anzahl der Schritte</code> und die <code>Schrittgrößen</code>.</div>
+  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
 </div>
 
 </TabItem>
@@ -128,12 +122,7 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Hexagonales Raster</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Wählen Sie die <code>Anzahl der Schritte</code> und die <code>Schrittgrößen</code>.</div>
+  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
 </div>
 
 </TabItem>
@@ -155,7 +144,7 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Hexagonales Raster</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
+  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
 </div>
 
 <div class="step">
@@ -166,22 +155,22 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 </TabItem>
 </Tabs>
 
-### Erweiterte Konfiguration
+### Erweiterte Optionen
 
 <Tabs>
 <TabItem value="non-pt" label="Zu Fuß / Fahrrad / Pedelec / Auto" default className="tabItemBox">
 
 <div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Optional können Sie auf <code>Erweiterte Konfiguration</code> klicken, um den <code>Schrittstil</code> festzulegen.</div>
+  <div class="step-number">5</div>
+  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um die <code>Darstellung der Schritte</code> festzulegen.</div>
 </div>
 
-#### Schrittstil
+#### Darstellung der Schritte
 
 Wählen Sie, wie die Isochronen-Schritte dargestellt werden:
 
-- **Separat** — jeder Schritt zeigt nur das Gebiet, das *zwischen* diesem und dem vorherigen Schritt erreichbar ist. Zum Beispiel zeigt bei Schritten bei 5, 10 und 15 Minuten die 10-Minuten-Zone nur das Gebiet, das zwischen 5 und 10 Minuten erreichbar ist.
-- **Kumulativ** — jeder Schritt zeigt das *gesamte bis zu diesem Reisekostenwert erreichbare Gebiet*. Zum Beispiel umfasst die 10-Minuten-Zone alles, was innerhalb von 10 Minuten erreichbar ist, einschließlich der 5-Minuten-Zone.
+- **Getrennte Schritte** — jeder Schritt zeigt nur das Gebiet, das *zwischen* diesem und dem vorherigen Schritt erreichbar ist. Zum Beispiel zeigt bei Schritten bei 5, 10 und 15 Minuten die 10-Minuten-Zone nur das Gebiet, das zwischen 5 und 10 Minuten erreichbar ist.
+- **Kumulative Schritte** — jeder Schritt zeigt das *gesamte bis zu diesem Reisekostenwert erreichbare Gebiet*. Zum Beispiel umfasst die 10-Minuten-Zone alles, was innerhalb von 10 Minuten erreichbar ist, einschließlich der 5-Minuten-Zone.
 
 <p></p>
 
@@ -190,16 +179,16 @@ Wählen Sie, wie die Isochronen-Schritte dargestellt werden:
 <TabItem value="pt-advanced" label="Öffentlicher Verkehr (ÖV)" className="tabItemBox">
 
 <div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Optional können Sie auf <code>Erweiterte Konfiguration</code> klicken, um den <code>Schrittstil</code>, die <code>Maximalen Umstiege</code>, den <code>Zugangsmodus</code> und den <code>Abgangsmodus</code> zu konfigurieren.</div>
+  <div class="step-number">5</div>
+  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um die <code>Darstellung der Schritte</code>, die <code>Maximalen Umstiege</code>, den <code>Zugangsmodus</code> und den <code>Abgangsmodus</code> zu konfigurieren.</div>
 </div>
 
-#### Schrittstil
+#### Darstellung der Schritte
 
 Wählen Sie, wie die Isochronen-Schritte dargestellt werden:
 
-- **Separat** — jeder Schritt zeigt nur das Gebiet, das *zwischen* diesem und dem vorherigen Schritt erreichbar ist.
-- **Kumulativ** — jeder Schritt zeigt das *gesamte bis zu diesem Reisekostenwert erreichbare Gebiet*.
+- **Getrennte Schritte** — jeder Schritt zeigt nur das Gebiet, das *zwischen* diesem und dem vorherigen Schritt erreichbar ist.
+- **Kumulative Schritte** — jeder Schritt zeigt das *gesamte bis zu diesem Reisekostenwert erreichbare Gebiet*.
 
 #### Maximale Umstiege
 
@@ -222,14 +211,14 @@ Für jeden Modus können Sie die **maximale Reisezeit oder Entfernung** sowie di
 ### Startpunkte
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">6</div>
   <div class="content">Wählen Sie die <code>Methode zur Startpunktauswahl</code>: Wählen Sie <code>Auf der Karte auswählen</code> und klicken Sie auf die Karte, um Startpunkte zu setzen, oder wählen Sie <code>Aus Layer auswählen</code> und wählen Sie einen Punktlayer mit den gewünschten Startpunkten. Alle Features des Layers werden als Startpunkte verwendet.</div>
 </div>
 
 ### Szenario (Optional)
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">7</div>
   <div class="content">Optional können Sie den Bereich <code>Szenario</code> aufklappen und ein Szenario auswählen, um Netzwerkänderungen (z. B. neue Straßen oder Wege) in die Routingberechnung einzubeziehen.</div>
 </div>
 
@@ -240,7 +229,7 @@ Szenarien ermöglichen es, Infrastrukturänderungen zu modellieren und deren Aus
 :::
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">8</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>, um die Berechnung zu starten.</div>
 </div>
 
@@ -254,7 +243,7 @@ Die Berechnungszeit variiert je nach Einstellungen. Den Fortschritt können Sie 
 
 Nach Abschluss der Berechnung werden die resultierenden Layer zur Karte hinzugefügt:
 
-- **Einzugsgebiet** — die berechneten Isochronen in der gewählten Form (Polygon, Netzwerk, Hexagonales Raster oder Punktraster). Durch Klick auf ein Feature kann das Attribut **travel_cost** eingesehen werden, das die Reisezeit (Minuten) oder Entfernung (Meter) anzeigt.
+- **Einzugsgebiet** — die berechneten Isochronen in der gewählten Form (Polygon, Netzwerk, Sechseckiges Gitter oder Punktraster). Durch Klick auf ein Feature kann das Attribut **travel_cost** eingesehen werden, das die Reisezeit (Minuten) oder Entfernung (Meter) anzeigt.
 - **Startpunkte** — ein Punktlayer mit den ausgewählten Startpositionen (wird nur erstellt, wenn Startpunkte auf der Karte gesetzt wurden, nicht bei Verwendung eines vorhandenen Layers).
 
 Der Ergebnislayer wird automatisch mit einer Farbskala von der kürzesten bis zur längsten Reisekostenstufe eingefärbt.
@@ -273,11 +262,15 @@ Der Ergebnislayer wird automatisch mit einer Farbskala von der kürzesten bis zu
 
 ### Visualisierung
 
-Die Einzugsgebietsform wird aus dem Routing-Raster mithilfe des [Marching-Squares-Konturlinienalgorithmus](https://en.wikipedia.org/wiki/Marching_squares) abgeleitet. Dieser wandelt das Routing-Raster von einem 2D-Array in glatte Polygonkonturen für die Visualisierung und räumliche Analyse um.
+Die Einzugsgebietsform wird aus dem Routing-Raster mithilfe des [Marching-Square-Konturlinien-Algorithmus](https://de.wikipedia.org/wiki/Marching_Squares "Wikipedia: Marching Squares") abgeleitet, einem Computergraphik-Algorithmus, der zweidimensionale Konturlinien aus einem rechteckigen Wertearray erzeugen kann ([de Queiroz Neto et al. 2016](#6-referenzen)). Dieser Algorithmus transformiert das Gitter von einem 2D-Array in eine Form, um es zu visualisieren oder zu analysieren. Eine Illustration der 2D-Bildverarbeitung ist in der Abbildung dargestellt.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <img src={require('/img/toolbox/accessibility_indicators/catchments/wiki.png').default} alt="Marching-Squares-Illustration" style={{ maxHeight: "400px", maxWidth: "400px", objectFit: "contain"}}/>
+</div>
 
 ### Wissenschaftlicher Hintergrund
 
-Einzugsgebiete sind *konturbasierte Maße* (auch *kumulierte Gelegenheiten*), die für ihre interpretierbaren Ergebnisse geschätzt werden ([Geurs und van Eck 2001](#5-quellen); [Albacete 2016](#5-quellen)). Sie unterscheiden nicht zwischen verschiedenen Reisezeiten innerhalb des Grenzwerts ([Bertolini, le Clercq und Kapoen 2005](#5-quellen)), anders als [heatmap-basierte Erreichbarkeitsindikatoren](./closest_average.md).
+Einzugsgebiete sind *konturbasierte Maße* (auch *kumulierte Gelegenheiten*), die für ihre interpretierbaren Ergebnisse geschätzt werden ([Geurs und van Eck 2001](#6-referenzen); [Albacete 2016](#6-referenzen)). Sie unterscheiden nicht zwischen verschiedenen Reisezeiten innerhalb des Grenzwerts ([Bertolini, le Clercq und Kapoen 2005](#6-referenzen)), anders als [heatmap-basierte Erreichbarkeitsindikatoren](./closest_average.md).
 
 :::tip Hinweis
 
@@ -285,12 +278,22 @@ Weitere Einblicke in den Routing-Algorithmus finden Sie unter [Routing](../../ca
 
 :::
 
-## 5. Quellen
+## 5. Weiterführende Literatur
 
-Albacete, Xavier. 2016. "Evaluation and Improvements of Contour-Based Accessibility Measures." url: https://dspace.uef.fi/bitstream/handle/123456789/16857/urn_isbn_978-952-61-2103-1.pdf
+Weitere Einblicke in die Einzugsgebietsberechnung und deren wissenschaftlichen Hintergrund finden Sie in dieser [Publikation](https://doi.org/10.1016/j.jtrangeo.2021.103080).
 
-Bertolini, Luca, F. le Clercq, and L. Kapoen. 2005. "Sustainable Accessibility: A Conceptual Framework to Integrate Transport and Land Use Plan-Making." Transport Policy 12 (3): 207–20. https://doi.org/10.1016/j.tranpol.2005.01.006
+## 6. Referenzen
 
-Geurs, Karst T., and Ritsema van Eck. 2001. "Accessibility Measures: Review and Applications." RIVM Report 408505 006. url: https://rivm.openrepository.com/handle/10029/259808
+Albacete, Xavier. 2016. "Evaluation and Improvements of Contour-Based Accessibility Measures." url: https://dspace.uef.fi/bitstream/handle/123456789/16857/urn_isbn_978-952-61-2103-1.pdf?sequence=1&isAllowed=y
+
+Bertolini, Luca, F. le Clercq, and L. Kapoen. 2005. "Sustainable Accessibility: A Conceptual Framework to Integrate Transport and Land Use Plan-Making. Two Test-Applications in the Netherlands and a Reflection on the Way Forward." Transport Policy 12 (3): 207–20. https://doi.org/10.1016/j.tranpol.2005.01.006.
+
+J. F. de Queiroz Neto, E. M. d. Santos, and C. A. Vidal. "MSKDE - Using Marching Squares to Quickly Make High Quality Crime Hotspot Maps". en. In: 2016 29th SIBGRAPI Conference on Graphics, Patterns and Images (SIBGRAPI). Sao Paulo, Brazil: IEEE, Oct. 2016, pp. 305–312. isbn: 978-1-5090-3568-7. doi: 10.1109/SIBGRAPI.2016.049. url: https://ieeexplore.ieee.org/document/7813048
+
+https://fr.wikipedia.org/wiki/Marching_squares#/media/Fichier:Marching_Squares_Isoline.svg
+
+Majk Shkurti, "Spatio-temporal public transport accessibility analysis and benchmarking in an interactive WebGIS", Sep 2022. url: https://www.researchgate.net/publication/365790691_Spatio-temporal_public_transport_accessibility_analysis_and_benchmarking_in_an_interactive_WebGIS
 
 Matthew Wigginton Conway, Andrew Byrd, Marco Van Der Linden. "Evidence-Based Transit and Land Use Sketch Planning Using Interactive Accessibility Methods on Combined Schedule and Headway-Based Networks", 2017. url: https://journals.sagepub.com/doi/10.3141/2653-06
+
+Geurs, Karst T., and Ritsema van Eck. 2001. "Accessibility Measures: Review and Applications." RIVM Report 408505 006. url: https://rivm.openrepository.com/handle/10029/259808

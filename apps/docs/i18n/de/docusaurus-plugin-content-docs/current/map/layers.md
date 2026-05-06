@@ -45,7 +45,7 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Katalog-Explorer</code>, <code>Externer Datensatz</code> oder <code>Layer erstellen</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
+  <div class="content">Wählen Sie aus, ob Sie einen Datensatz über folgende Optionen integrieren möchten: <code>Datensatz-Explorer</code>, <code>Datensatz-Upload</code>, <code>Externer Datensatz</code>, <code>Katalog-Explorer</code> oder <code>Layer erstellen</code>, um <strong>Ihre Datenquelle zu wählen</strong>.</div>
 </div>
 
 <Tabs>
@@ -84,25 +84,6 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
 
 
   </TabItem>
-  <TabItem value="Catalog Explorer" label="Katalog-Explorer" className="tabItemBox">
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Durchsuchen Sie den <code>GOAT Datensatz-Katalog</code>, um <strong>verfügbare Datensätze zu erkunden</strong>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Wählen Sie den Datensatz aus, den Sie <strong>importieren</strong> möchten.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Klicken Sie auf <code>+ Layer hinzufügen</code>, um <strong>den ausgewählten Datensatz hinzuzufügen</strong>.</div>
-</div>
-
-
- </TabItem>
   <TabItem value="Dataset External" label="Externer Datensatz" className="tabItemBox">
   
 <div class="step">
@@ -135,6 +116,25 @@ Sie können Layer aus [verschiedenen Quellen](../data/dataset_types) zu Ihrer Ka
     </TabItem>
   </Tabs>
 </TabItem>
+  <TabItem value="Catalog Explorer" label="Katalog-Explorer" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Durchsuchen Sie den <code>GOAT Datensatz-Katalog</code>, um <strong>verfügbare Datensätze zu erkunden</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Wählen Sie den Datensatz aus, den Sie <strong>importieren</strong> möchten.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Klicken Sie auf <code>+ Layer hinzufügen</code>, um <strong>den ausgewählten Datensatz hinzuzufügen</strong>.</div>
+</div>
+
+
+ </TabItem>
   <TabItem value="Create Layer" label="Layer erstellen" className="tabItemBox">
 
 <div class="step">
@@ -228,3 +228,32 @@ Möchten Sie das Design Ihrer Layer ändern? Siehe [Layer-Styling](../category/s
 Möchten Sie nur Teile Ihres Datensatzes visualisieren? Siehe [Filter](./filter). 
 
 :::
+
+### Features bearbeiten
+
+Verwenden Sie <code>Features bearbeiten</code> aus dem <code>Weitere Optionen</code>-Menü des Layers, um Feature-Daten direkt auf der Karte zu aktualisieren.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Klicken Sie auf <code>Features bearbeiten</code> in den Layer-Optionen, um den <strong>Bearbeitungsmodus zu starten</strong>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Klicken Sie auf ein Feature auf der Karte, um dessen <strong>Attribute</strong> im rechten Panel zu öffnen.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Aktualisieren Sie die gewünschten Werte im Panel <code>Feature-Attribute</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Klicken Sie auf <code>Fertig</code>, um die Feature-Bearbeitung zu bestätigen.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Klicken Sie auf <code>Speichern</code>, um alle ausstehenden Änderungen zu übernehmen, oder auf <code>Verwerfen</code>, um sie zu verwerfen.</div>
+</div>

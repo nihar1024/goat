@@ -22,7 +22,7 @@ You can add datasets to GOAT by:
 
 ### Upload data
 
-GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, and **Parquet** files.
+GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, **Parquet**, and **COG** files.
 
 <div class="step">
   <div class="step-number">1</div>

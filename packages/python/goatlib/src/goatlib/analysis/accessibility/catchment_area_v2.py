@@ -143,7 +143,9 @@ class CatchmentAreaToolV2(AnalysisTool):
         )
         cfg.max_cost = params.max_cost
         cfg.steps = params.steps
-        cfg.speed_km_h = params.speed
+        # C++ uses 0.0 as the "not set" sentinel; for routing modes that don't
+        # take a user-supplied speed (PT/Car), params.speed is None.
+        cfg.speed_km_h = params.speed if params.speed is not None else 0.0
         cfg.edge_dir = self._edge_dir
         cfg.node_dir = self._node_dir
         cfg.output_path = params.output_path
@@ -177,8 +179,25 @@ class CatchmentAreaToolV2(AnalysisTool):
             )
             cfg.access_max_cost = params.access_max_cost
             cfg.egress_max_cost = params.egress_max_cost
-            cfg.access_speed_km_h = params.access_speed
-            cfg.egress_speed_km_h = params.egress_speed
+            # If the user didn't set the per-leg speed (e.g. left advanced
+            # collapsed), fall back to a mode-specific default so the C++
+            # access/egress validation has a positive speed to work with.
+            # Car has no user-facing speed → 0 (C++ ignores user speed for car
+            # routing cost; per-edge OSM maxspeed governs).
+            _PT_LEG_DEFAULTS = {
+                AccessEgressMode.walk: 5.0,
+                AccessEgressMode.bicycle: 15.0,
+                AccessEgressMode.pedelec: 23.0,
+                AccessEgressMode.car: 0.0,
+            }
+            cfg.access_speed_km_h = (
+                params.access_speed if params.access_speed is not None
+                else _PT_LEG_DEFAULTS.get(params.access_mode, 0.0)
+            )
+            cfg.egress_speed_km_h = (
+                params.egress_speed if params.egress_speed is not None
+                else _PT_LEG_DEFAULTS.get(params.egress_mode, 0.0)
+            )
 
             if params.transit_modes:
                 cfg.transit_modes = [m.value for m in params.transit_modes]

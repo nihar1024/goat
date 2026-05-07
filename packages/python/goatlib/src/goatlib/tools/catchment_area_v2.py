@@ -52,6 +52,15 @@ class StepsStyle(StrEnum):
     cumulative = "cumulative"
 
 
+# Default per-mode budgets — catchment v2 uses these as field defaults; TCM
+# reuses them as placeholder hints in its (optional) max_cost inputs.
+DEFAULT_MAX_TIME_ACTIVE_MIN = 15
+DEFAULT_MAX_TIME_CAR_MIN = 30
+DEFAULT_MAX_TIME_PT_MIN = 30
+DEFAULT_MAX_DISTANCE_ACTIVE_M = 500
+DEFAULT_MAX_DISTANCE_CAR_M = 5000
+
+
 # =========================================================================
 # UI Sections
 # =========================================================================
@@ -260,7 +269,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "max_value_from": {
                     "fields": [],
                     "message": "max_transfers_limit_message",
-                    "max": 10,
+                    "max": 5,
                     "min": 0,
                 },
             },
@@ -304,7 +313,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
 
     # Time budget — active mobility
     max_cost_time_active: int = Field(
-        default=15,
+        default=DEFAULT_MAX_TIME_ACTIVE_MIN,
         description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
@@ -331,7 +340,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
 
     # Time budget — car
     max_cost_time_car: int = Field(
-        default=30,
+        default=DEFAULT_MAX_TIME_CAR_MIN,
         description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
@@ -358,7 +367,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
 
     # Time budget — PT (always time-based, no cost_type selector)
     max_cost_time_pt: int = Field(
-        default=30,
+        default=DEFAULT_MAX_TIME_PT_MIN,
         description="Maximum travel time in minutes.",
         json_schema_extra=ui_field(
             section="configuration",
@@ -378,7 +387,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
 
     # Distance budget — active mobility
     max_cost_distance: int = Field(
-        default=500,
+        default=DEFAULT_MAX_DISTANCE_ACTIVE_M,
         description="Maximum distance in meters.",
         json_schema_extra=ui_field(
             section="configuration",
@@ -405,7 +414,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
 
     # Distance budget — car
     max_cost_distance_car: int = Field(
-        default=5000,
+        default=DEFAULT_MAX_DISTANCE_CAR_M,
         description="Maximum distance in meters.",
         json_schema_extra=ui_field(
             section="configuration",
@@ -430,9 +439,10 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    speed: float = Field(
-        default=5,
-        description="Travel speed in km/h.",
+    speed: float | None = Field(
+        default=None,
+        description="Travel speed in km/h. None when the routing mode doesn't "
+                    "use a user-supplied speed (PT/Car).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=3,
@@ -442,14 +452,25 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "cost_type": "time",
             },
             widget_options={
+                # Default speed switches with the mode (kicks in on first show).
                 "default_by_field": {
                     "field": "routing_mode",
-                    "values": {
-                        "walking": 5,
-                        "bicycle": 15,
-                        "pedelec": 23,
-                    },
-                }
+                    "values": {"walking": 5, "bicycle": 15, "pedelec": 23},
+                },
+                # Per-mode caps using conditional literal entries — first
+                # matching `when` clause wins, with its own translation key.
+                "max_value_from": {
+                    "fields": [
+                        {"value": 30, "when": {"routing_mode": "walking"},
+                         "message": "walking_speed_limit_message"},
+                        {"value": 60, "when": {"routing_mode": "bicycle"},
+                         "message": "bicycle_speed_limit_message"},
+                        {"value": 60, "when": {"routing_mode": "pedelec"},
+                         "message": "pedelec_speed_limit_message"},
+                    ],
+                    "min": 1,
+                    "message": "walking_speed_limit_message",
+                },
             },
         ),
     )
@@ -642,19 +663,39 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_access_speed: float = Field(
-        default=0.0,
-        description="Access leg speed in km/h (0 = use default speed).",
+    pt_access_speed: float | None = Field(
+        default=None,
+        description="Access leg speed in km/h. None for car access (per-edge "
+                    "OSM maxspeed governs cost).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=23,
             label_key="speed_kmh",
-            widget_options={"placeholder": "default_value_placeholder"},
+            widget_options={
+                "default_by_field": {
+                    "field": "pt_access_mode",
+                    "values": {"walk": 5, "bicycle": 15, "pedelec": 23},
+                },
+                "max_value_from": {
+                    "fields": [
+                        {"value": 30, "when": {"pt_access_mode": "walk"},
+                         "message": "walking_speed_limit_message"},
+                        {"value": 60, "when": {"pt_access_mode": "bicycle"},
+                         "message": "bicycle_speed_limit_message"},
+                        {"value": 60, "when": {"pt_access_mode": "pedelec"},
+                         "message": "pedelec_speed_limit_message"},
+                    ],
+                    "min": 1,
+                    "message": "walking_speed_limit_message",
+                },
+            },
+            # Hidden for car access (per-edge OSM maxspeed governs cost).
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
                     {"pt_access_cost_type": "time"},
+                    {"pt_access_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
                 ]
             },
         ),
@@ -753,19 +794,38 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_egress_speed: float = Field(
-        default=0.0,
-        description="Egress leg speed in km/h (0 = use default speed).",
+    pt_egress_speed: float | None = Field(
+        default=None,
+        description="Egress leg speed in km/h. None for car egress (per-edge "
+                    "OSM maxspeed governs cost).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=27,
             label_key="speed_kmh",
-            widget_options={"placeholder": "default_value_placeholder"},
+            widget_options={
+                "default_by_field": {
+                    "field": "pt_egress_mode",
+                    "values": {"walk": 5, "bicycle": 15, "pedelec": 23},
+                },
+                "max_value_from": {
+                    "fields": [
+                        {"value": 30, "when": {"pt_egress_mode": "walk"},
+                         "message": "walking_speed_limit_message"},
+                        {"value": 60, "when": {"pt_egress_mode": "bicycle"},
+                         "message": "bicycle_speed_limit_message"},
+                        {"value": 60, "when": {"pt_egress_mode": "pedelec"},
+                         "message": "pedelec_speed_limit_message"},
+                    ],
+                    "min": 1,
+                    "message": "walking_speed_limit_message",
+                },
+            },
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
                     {"pt_egress_cost_type": "time"},
+                    {"pt_egress_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
                 ]
             },
         ),
@@ -874,6 +934,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         if self.routing_mode == CatchmentAreaRoutingMode.car:
             return float(self.max_cost_time_car)
         return float(self.max_cost_time_active)
+
 
 
 

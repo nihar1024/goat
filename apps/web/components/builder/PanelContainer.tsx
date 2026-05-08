@@ -185,7 +185,6 @@ export const Container: React.FC<ContainerProps> = ({
         transition: "all 0.3s",
         pointerEvents: "all",
         ...(viewOnly && {
-          pointerEvents: "none",
           cursor: "default",
         }),
         ...(panel.config?.options?.style === "default" && {
@@ -467,15 +466,6 @@ export const Container: React.FC<ContainerProps> = ({
                 </Box>
               ))
             )}
-            {panel.config?.options?.collapsible &&
-              (panel.config?.options?.style === "default" || panel.config?.options?.style === "rounded") && (
-                <ExpandCollapseButton
-                  position={panel.position}
-                  expanded={!isCollapsed}
-                  onClick={handleToggleCollapse}
-                  isVisible={viewOnly || isHovered || isCollapsed}
-                />
-              )}
           </Box>
           {isCollapsed && panel.config?.options?.collapsed_label && (
             <Box
@@ -518,6 +508,15 @@ export const Container: React.FC<ContainerProps> = ({
             </Box>
           )}
         </Stack>
+        {panel.config?.options?.collapsible &&
+          (panel.config?.options?.style === "default" || panel.config?.options?.style === "rounded") && (
+            <ExpandCollapseButton
+              position={panel.position}
+              expanded={!isCollapsed}
+              onClick={handleToggleCollapse}
+              isVisible={viewOnly || isHovered || isCollapsed}
+            />
+          )}
       </Box>
     </Box>
   );

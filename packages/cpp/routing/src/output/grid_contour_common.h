@@ -9,13 +9,20 @@
 namespace routing::output
 {
 
-// One marching-squares contour band, tagged by which origin (index into
-// the request's starting points) produced it. Origin tagging is what
-// makes shape_style=separated work — features from different origins can
-// be kept distinct downstream.
+// One marching-squares contour band. Each feature carries:
+//   origin_idx — index into the request's starting points, distinguishing
+//                features for shape_style=separated;
+//   cluster_idx — index of the spatial cluster within that origin's field.
+//                Combined catchments with widely-spread origins decompose
+//                into multiple disjoint clusters so each per-cluster grid
+//                stays bounded by the catchment radius. The cluster index
+//                must be carried through SQL band-difference JOINs so a
+//                step_cost in cluster A is differenced against the same
+//                cluster's previous step, not another cluster's.
 struct TaggedFeature
 {
     int32_t origin_idx;
+    int32_t cluster_idx;
     double step_cost;
     std::string multipolygon_wkt;
 };

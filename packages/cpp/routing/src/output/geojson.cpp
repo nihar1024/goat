@@ -136,35 +136,41 @@ std::string build_grid_contour_geojson_from_features(
     if (all_features.empty())
         return empty_feature_collection();
 
-    // VALUES list partitioned by origin_idx
+    // VALUES list keyed by (origin_idx, cluster_idx, step_cost). Both
+    // indices participate in the band-difference JOIN below.
     std::ostringstream values;
     values << std::setprecision(15);
     for (size_t i = 0; i < all_features.size(); ++i)
     {
         if (i > 0) values << ",";
         values << "(" << all_features[i].origin_idx << ", "
+               << all_features[i].cluster_idx << ", "
                << all_features[i].step_cost << ", "
                << "ST_GeomFromText('" << all_features[i].multipolygon_wkt << "'))";
     }
 
     std::ostringstream sql;
-    sql << "WITH raw_input(origin_idx, step_cost, geom) AS (VALUES " << values.str() << "), "
-        << "raw AS (SELECT origin_idx, step_cost, ST_MakeValid(geom) AS geom "
+    sql << "WITH raw_input(origin_idx, cluster_idx, step_cost, geom) AS (VALUES "
+        << values.str() << "), "
+        << "raw AS (SELECT origin_idx, cluster_idx, step_cost, ST_MakeValid(geom) AS geom "
         << "  FROM raw_input) ";
 
     if (cfg.polygon_difference)
     {
         sql << ", bands AS ("
-            << "  SELECT r.origin_idx, r.step_cost, "
+            << "  SELECT r.origin_idx, r.cluster_idx, r.step_cost, "
             << "    CASE WHEN p.geom IS NULL THEN r.geom "
             << "         ELSE ST_MakeValid(ST_Difference("
             << "           ST_MakeValid(r.geom), ST_MakeValid(p.geom))) END AS geom "
             << "  FROM raw r "
             << "  LEFT JOIN raw p "
             << "    ON p.origin_idx = r.origin_idx "
+            << "   AND p.cluster_idx = r.cluster_idx "
             << "   AND p.step_cost = ("
             << "     SELECT MAX(x.step_cost) FROM raw x "
-            << "      WHERE x.origin_idx = r.origin_idx AND x.step_cost < r.step_cost"
+            << "      WHERE x.origin_idx = r.origin_idx "
+            << "        AND x.cluster_idx = r.cluster_idx "
+            << "        AND x.step_cost < r.step_cost"
             << "   )"
             << ") ";
     }
@@ -180,7 +186,7 @@ std::string build_grid_contour_geojson_from_features(
         << "    'properties', json_object('step_cost', step_cost)"
         << "  ) AS feature "
         << "  FROM ("
-        << "    SELECT origin_idx, step_cost, "
+        << "    SELECT origin_idx, cluster_idx, step_cost, "
         << "      CASE WHEN ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON') THEN geom "
         << "           WHEN ST_GeometryType(geom) = 'GEOMETRYCOLLECTION' "
         << "             THEN ST_CollectionExtract(geom, 3) "
@@ -188,7 +194,7 @@ std::string build_grid_contour_geojson_from_features(
         << "    FROM " << (cfg.polygon_difference ? "bands" : "raw")
         << "  ) sub "
         << "  WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom) "
-        << "  ORDER BY origin_idx, step_cost"
+        << "  ORDER BY origin_idx, cluster_idx, step_cost"
         << ") t";
 
     auto result = con.Query(sql.str());

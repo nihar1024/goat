@@ -64,14 +64,16 @@ export function MeasureButton({
   activeMeasureTool,
   handleMeasureToggle,
   handleMeasureToolSelect,
+  placement,
 }: Pick<
   MeasureToolProps,
   "isMeasureActive" | "activeMeasureTool" | "handleMeasureToggle" | "handleMeasureToolSelect"
->) {
+> & { placement?: "left" | "right" }) {
   return (
     <Measure
       open={isMeasureActive}
       activeTool={activeMeasureTool}
+      placement={placement}
       onToggle={handleMeasureToggle}
       onSelectTool={handleMeasureToolSelect}
     />

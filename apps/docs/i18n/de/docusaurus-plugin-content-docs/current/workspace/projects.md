@@ -77,7 +77,7 @@ Sie können eine zuvor exportierte GOAT-Projektdatei importieren:
 Greifen Sie auf zusätzliche Projekt-Optionen zu, indem Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü neben jedem Projekt klicken. Sie haben folgende Optionen:
 
 - <code>Metadaten bearbeiten</code> - Projekt-Metadaten aufrufen und bearbeiten
-- <code>In Ordner verschieben</code> - Ihren Projekt-Speicherort neu organisieren
+- <code>In den Ordner verschieben</code> - Ihren Projekt-Speicherort neu organisieren
 - <code>Teilen</code> - Zusammenarbeiten, indem Sie Projekte mit Teammitgliedern oder Ihrer Organisation teilen
 - <code>Exportieren</code> - Das Projekt als Datei exportieren
 - <code>Duplizieren</code> - Eine Kopie des Projekts erstellen
@@ -86,3 +86,11 @@ Greifen Sie auf zusätzliche Projekt-Optionen zu, indem Sie auf das <img src={re
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/workspace/projects/options_de.webp').default} alt="Projekt-Verwaltungsoptionen" style={{ maxHeight: "auto", maxWidth: "100%"}}/>
 </div>
+
+## Ordner verwalten
+
+Klicken Sie auf das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Symbol neben einem Ordner, um ihn zu verwalten:
+
+- <code>Umbenennen</code> — Ordnernamen ändern
+- <code>Teilen</code> — Ordner mit der <strong>Organisation</strong> oder einzelnen <strong>Teams</strong> teilen. Zugriffsebene im Dialog <strong>Zugriff verwalten</strong> festlegen und auf <code>Speichern</code> klicken.
+- <code>Löschen</code> — Ordner entfernen

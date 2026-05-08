@@ -53,7 +53,7 @@ Wenn Sie im Profil-Tab nach unten zur Gefahrenzone scrollen, finden Sie auch ein
 Unter den **Organisations-Einstellungen** können Sie das Profil Ihrer Organisation anpassen und die Organisationsmitglieder verwalten:
 
 - Im <code>Profil</code>-Tab können Sie den **Namen Ihrer Organisation** ändern und **ein Logo oder Bild hochladen**. 
-- Im <code>Mitglieder</code>-Tab können Sie die **Mitgliederliste** Ihrer Organisation anzeigen. Durch Klicken auf die drei Punkte <img src={require('/img/map/filter/3dots.png').default} alt="Optionen" style={{ maxHeight: "25px", maxWidth: "25px", objectFit: "cover"}}/> können Sie **ihre Rollen verwalten** und persönliche Informationen. Außerdem können Sie **neue Mitglieder einladen**, Ihrer Organisation per E-Mail beizutreten.
+- Im <code>Mitglieder</code>-Tab können Sie die **Mitgliederliste** Ihrer Organisation anzeigen. Durch Klicken auf die drei Punkte <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> können Sie **ihre Rollen verwalten** und persönliche Informationen. Außerdem können Sie **neue Mitglieder einladen**, Ihrer Organisation per E-Mail beizutreten.
 
 :::info
 

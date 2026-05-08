@@ -1,4 +1,4 @@
-import { Box, Typography } from "@mui/material";
+import { Box } from "@mui/material";
 
 import type { ProjectLayer } from "@/lib/validations/project";
 import { type RichTextDataSchema, type TableDataSchema, type WidgetDataConfig, dataTypes } from "@/lib/validations/widget";
@@ -7,6 +7,8 @@ import { NumbersDataWidget } from "@/components/builder/widgets/data/Numbers";
 import { RichTextDataWidget } from "@/components/builder/widgets/data/RichText";
 import { TableDataWidget } from "@/components/builder/widgets/data/Table";
 import { FilterDataWidget } from "@/components/builder/widgets/data/WidgetFilter";
+import WidgetDescription from "@/components/builder/widgets/common/WidgetDescription";
+import WidgetTitle from "@/components/builder/widgets/common/WidgetTitle";
 
 interface WidgetDataProps {
   id: string;
@@ -17,7 +19,6 @@ interface WidgetDataProps {
 }
 
 const WidgetData: React.FC<WidgetDataProps> = ({ id, config, projectLayers, viewOnly, onConfigChange }) => {
-  // Rich text widget handles its own layout (inline TipTap editor, no title wrapper)
   if (config.type === dataTypes.Values.rich_text) {
     return (
       <Box sx={{ width: "100%", height: "100%" }}>
@@ -33,9 +34,8 @@ const WidgetData: React.FC<WidgetDataProps> = ({ id, config, projectLayers, view
 
   return (
     <Box sx={{ width: "100%" }}>
-      <Typography variant="body1" fontWeight="bold" align="left" gutterBottom>
-        {config.setup?.title}
-      </Typography>
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+      <WidgetTitle title={(config.setup as any)?.title} />
       {config.type === dataTypes.Values.numbers && (
         <NumbersDataWidget config={config} projectLayers={projectLayers} viewOnly={viewOnly} />
       )}
@@ -51,11 +51,7 @@ const WidgetData: React.FC<WidgetDataProps> = ({ id, config, projectLayers, view
           onConfigChange={onConfigChange as ((nextConfig: TableDataSchema) => void) | undefined}
         />
       )}
-      {config.options?.description && (
-        <Typography variant="body2" align="left">
-          {config.options.description}
-        </Typography>
-      )}
+      <WidgetDescription description={config.options?.description} sx={{ mt: 0.5 }} />
     </Box>
   );
 };

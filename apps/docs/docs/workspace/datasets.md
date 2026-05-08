@@ -22,7 +22,7 @@ You can add datasets to GOAT by:
 
 ### Upload data
 
-GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, and **Parquet** files.
+GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **Shapefile**, **KML**, **CSV**, **XLSX**, **ZIP**, **Parquet**, and **COG** files.
 
 <div class="step">
   <div class="step-number">1</div>
@@ -143,6 +143,16 @@ Organize your datasets into folders for better structure and easier navigation.
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/workspace/datasets/new_folder.gif').default} alt="Create new folders in Workspace of GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div>
+
+<p></p>
+
+**To rename, share, or delete a folder:**
+
+Click the <img src={require('/img/icons/3dots.png').default} alt="Options" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>More Options</code> icon next to any folder:
+
+- <code>Rename</code> — Change the folder name
+- <code>Share</code> — Open the <strong>Manage access</strong> dialog to grant access by <strong>Organization</strong> or per <strong>Team</strong>. Set the access level for each and click <code>Save</code>.
+- <code>Delete</code> — Remove the folder
 
 <p></p>
 

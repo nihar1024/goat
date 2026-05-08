@@ -76,5 +76,9 @@ When selecting a layer from the Layers Panel, the Editing Panel appears on the r
   
 - <img src={require('/img/icons/fullscreen.png').default} alt="Fullscreen" style={{ maxHeight: "16px", maxWidth: "16px", objectFit: "cover"}}/> <code>Fullscreen</code> 
 
--  <img src={require('/img/icons/map.png').default} alt="Base map" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Base map</code>: <strong>Choose between</strong> the available base map options. 
+-  <img src={require('/img/icons/map.png').default} alt="Base map" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Base map</code>: <strong>Choose between</strong> the available base map options. Click <code>+ Add a new basemap</code> at the bottom of the panel to add a custom basemap. Under the <code>Basemap</code> tab, select the type (<code>Vector</code> or <code>Raster</code>), enter the <strong>Basemap URL</strong>, a <strong>Title</strong>, and optionally a description and thumbnail URL. Alternatively, use the <code>Single Color</code> tab to set a solid color as the map background. Click <code>Add basemap</code> to save.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+  <img src={require('/img/map/basemap/add_basemap.webp').default} alt="Add custom basemap in GOAT" style={{ maxHeight: "auto", maxWidth: "100%", objectFit: "cover"}}/>
+</div>
 

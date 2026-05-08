@@ -1,5 +1,5 @@
-import { Box, Divider, Paper, Portal, Stack, Typography, styled } from "@mui/material";
-import { debounce } from "@mui/material/utils";
+import { Box, Divider, Stack, Typography } from "@mui/material";
+import type { Theme } from "@mui/material";
 import Color from "@tiptap/extension-color";
 import FontFamily from "@tiptap/extension-font-family";
 import Link from "@tiptap/extension-link";
@@ -8,7 +8,6 @@ import Superscript from "@tiptap/extension-superscript";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
 import type { Editor } from "@tiptap/react";
-import { useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMap } from "react-map-gl/maplibre";
@@ -30,16 +29,19 @@ import { useTemporaryFilters } from "@/hooks/map/DashboardBuilderHooks";
 import { useAppSelector } from "@/hooks/store/ContextHooks";
 
 
-import { TipTapEditorContent } from "@/components/builder/widgets/elements/text/Text";
 import { AlignSelect } from "@/components/builder/widgets/elements/text/AlignSelect";
 import LineHeightSelect from "@/components/builder/widgets/elements/text/LineHeightSelect";
 import MenuButton from "@/components/builder/widgets/elements/text/MenuButton";
-import { InfoChipEditPopover, InfoChipViewPopover } from "@/components/builder/widgets/data/InfoChipPopover";
-import LinkPopover from "@/components/builder/widgets/data/LinkPopover";
+import { InfoChipViewPopover } from "@/components/builder/widgets/common/InfoChipPopover";
 import RichTextFontSizeSelect from "@/components/builder/widgets/data/RichTextFontSizeSelect";
 import VariableInsertMenu from "@/components/builder/widgets/data/VariableInsertMenu";
+import RichTextEditor from "@/components/builder/widgets/common/RichTextEditor";
+import {
+  emitPopupOpen,
+  onPopupOpenElsewhere,
+} from "@/components/builder/widgets/common/popupCoordinator";
 
-const extensions = [
+const richTextExtensions = [
   StarterKit,
   Subscript,
   Superscript,
@@ -59,25 +61,47 @@ const extensions = [
   InfoChip,
 ];
 
-const ToolbarContainer = styled(Paper)(({ theme }) => ({
-  display: "flex",
-  alignItems: "center",
-  padding: theme.spacing(2),
-  borderRadius: theme.shape.borderRadius * 2,
-  boxShadow: theme.shadows[4],
-  backgroundColor: theme.palette.background.paper,
-}));
+interface RichTextSelectorState {
+  isBold: boolean;
+  isItalic: boolean;
+  isUnderline: boolean;
+  isLink: boolean;
+  isStrike: boolean;
+  isBulletList: boolean;
+  isOrderedList: boolean;
+  isChipSelected: boolean;
+  isInfoChipSelected: boolean;
+}
+
+const richTextSelector = ({ editor }: { editor: Editor }): RichTextSelectorState => {
+  const node = editor.state.doc.nodeAt(editor.state.selection.from);
+  const isChipSelected = node?.type.name === "variableChip";
+  return {
+    isBold: isChipSelected ? !!node?.attrs.bold : editor.isActive("bold"),
+    isItalic: isChipSelected ? !!node?.attrs.italic : editor.isActive("italic"),
+    isUnderline: editor.isActive("underline"),
+    isStrike: editor.isActive("strike"),
+    isBulletList: editor.isActive("bulletList"),
+    isOrderedList: editor.isActive("orderedList"),
+    isLink: editor.isActive("link"),
+    isChipSelected,
+    isInfoChipSelected: node?.type.name === "infoChip",
+  };
+};
 
 /**
- * Styled wrapper for variable chips in the editor (edit mode).
+ * Theme-aware sx for the editor content area — styles variable chips, info
+ * chips, and links inside the ProseMirror DOM in edit mode.
  */
-const RichTextEditorContent = styled(TipTapEditorContent)(({ theme }) => ({
+const richTextEditorSx = (theme: Theme) => ({
+  height: "100%",
+  width: "100%",
   "& .ProseMirror .variable-chip": {
     display: "inline-flex",
     alignItems: "center",
     backgroundColor: theme.palette.action.selected,
     color: theme.palette.primary.main,
-    borderRadius: theme.shape.borderRadius,
+    borderRadius: `${theme.shape.borderRadius}px`,
     padding: "0 6px",
     fontFamily: "monospace",
     fontSize: "0.85em",
@@ -114,7 +138,7 @@ const RichTextEditorContent = styled(TipTapEditorContent)(({ theme }) => ({
     textDecoration: "underline",
     cursor: "pointer",
   },
-}));
+});
 
 /**
  * Replace variable chip spans with styled resolved values.
@@ -155,44 +179,89 @@ function resolveVariablesInHtml(
 const RichTextPreview = ({ html }: { html: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewPopover, setViewPopover] = useState<{
+    openId: number;
+    chipId: string;
     anchorEl: HTMLElement;
     text: string;
     url?: string;
+    title?: string;
+    popup_type: "tooltip" | "popover" | "dialog";
+    placement: "top" | "bottom" | "left" | "right" | "auto";
+    size: "sm" | "md" | "lg";
   } | null>(null);
 
+  // Listen for other popup-open events; close ours if a different one opened.
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    return onPopupOpenElsewhere(
+      () => viewPopover?.openId ?? null,
+      () => setViewPopover(null)
+    );
+  }, [viewPopover?.openId]);
 
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Handle info chip clicks
-      const chip = target.closest(".info-chip") as HTMLElement | null;
-      if (chip) {
-        e.preventDefault();
-        e.stopPropagation();
-        const text = chip.getAttribute("data-info-text") || "";
-        const url = chip.getAttribute("data-info-url") || undefined;
-        setViewPopover({ anchorEl: chip, text, url });
-        return;
-      }
-      // Handle link clicks — open in new tab
-      const link = target.closest("a") as HTMLAnchorElement | null;
-      if (link?.href) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.open(link.href, "_blank", "noopener,noreferrer");
-      }
-    };
-
-    el.addEventListener("click", handleClick);
-    return () => el.removeEventListener("click", handleClick);
+  const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const chip = target.closest(".info-chip") as HTMLElement | null;
+    if (chip) {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = chip.getAttribute("data-info-text") || "";
+      const url = chip.getAttribute("data-info-url") || undefined;
+      const title = chip.getAttribute("data-info-title") || undefined;
+      const popup_type = (chip.getAttribute("data-popup-type") || "popover") as
+        | "tooltip"
+        | "popover"
+        | "dialog";
+      const placement = (chip.getAttribute("data-placement") || "auto") as
+        | "top"
+        | "bottom"
+        | "left"
+        | "right"
+        | "auto";
+      const size = (chip.getAttribute("data-popup-size") || "md") as "sm" | "md" | "lg";
+      // Use a virtual anchor that looks up the chip each time MUI Popper
+      // measures it. dangerouslySetInnerHTML can re-create the DOM when the
+      // resolved html prop changes, leaving any stored element reference
+      // detached → popup snaps to the top-left corner. Prefer matching by
+      // data-info-id, fall back to the originally-clicked element.
+      const chipId = chip.getAttribute("data-info-id") || "";
+      const virtualAnchor = {
+        getBoundingClientRect: () => {
+          const liveChip = chipId
+            ? (containerRef.current?.querySelector(
+                `[data-info-id="${chipId}"]`
+              ) as HTMLElement | null)
+            : null;
+          return (liveChip ?? chip).getBoundingClientRect();
+        },
+      } as unknown as HTMLElement;
+      const openId = Date.now();
+      setViewPopover({
+        openId,
+        chipId,
+        anchorEl: virtualAnchor,
+        text,
+        url,
+        title,
+        popup_type,
+        placement,
+        size,
+      });
+      emitPopupOpen(openId);
+      return;
+    }
+    const link = target.closest("a") as HTMLAnchorElement | null;
+    if (link?.href) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.open(link.href, "_blank", "noopener,noreferrer");
+    }
   }, []);
 
   return (
     <>
       <Box
         ref={containerRef}
+        onClick={handleContainerClick}
         sx={{
           height: "100%",
           fontFamily: "inherit",
@@ -224,9 +293,14 @@ const RichTextPreview = ({ html }: { html: string }) => {
       />
       {viewPopover && (
         <InfoChipViewPopover
+          key={viewPopover.openId}
           anchorEl={viewPopover.anchorEl}
           text={viewPopover.text}
           url={viewPopover.url}
+          title={viewPopover.title}
+          popup_type={viewPopover.popup_type}
+          placement={viewPopover.placement}
+          size={viewPopover.size}
           onClose={() => setViewPopover(null)}
         />
       )}
@@ -273,395 +347,173 @@ const RichTextEditable = ({
   onConfigChange?: (nextConfig: RichTextDataSchema) => void;
   resolvedValues: Record<string, string | number | null>;
 }) => {
-  const [isEditMode, setIsEditMode] = useState(false);
-  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
-
   const variables: RichTextVariableSchema[] = config.setup?.variables ?? [];
-
-  // Resolved HTML for preview (when not in edit mode)
   const resolvedHtml = useMemo(
     () => resolveVariablesInHtml(config.setup?.text || "", variables, resolvedValues),
     [config.setup?.text, variables, resolvedValues]
   );
 
-  const editor = useEditor({
-    extensions,
-    content: config.setup?.text || "",
-    immediatelyRender: true,
-    shouldRerenderOnTransaction: false,
-    editable: isEditMode,
-  });
-
-  // Update editor editable state when isEditMode changes
-  useEffect(() => {
-    if (editor) {
-      editor.setEditable(isEditMode);
-    }
-  }, [editor, isEditMode]);
-
-  // Sync editor content when config changes externally
-  useEffect(() => {
-    if (editor && config.setup?.text !== undefined && !isEditMode) {
-      const currentContent = editor.getHTML();
-      if (currentContent !== config.setup.text) {
-        editor.commands.setContent(config.setup.text || "");
-      }
-    }
-  }, [editor, config.setup?.text, isEditMode]);
-
-  const [toolbarOpen, setToolbarOpen] = useState(false);
+  // Toolbar dropdown coordination: when a dropdown (font size, align, etc.) is
+  // open, the editor must stay in edit mode even if it loses focus.
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const activeDropdownRef = useRef<string | null>(null);
-  const toolbarClickedRef = useRef(false);
-
+  const shouldKeepEditingRef = useRef(false);
   const updateActiveDropdown = useCallback((value: string | null) => {
     setActiveDropdown(value);
-    activeDropdownRef.current = value;
+    shouldKeepEditingRef.current = !!value;
   }, []);
 
-  useEffect(() => {
-    if (!editor) return;
+  // The InfoChipEditDialog (and chip click handler) live inside RichTextEditor
+  // now — we don't render our own copy here. The chip insert button below
+  // dispatches a click on the freshly-inserted chip so the editor's own handler
+  // opens the dialog.
 
-    const handleFocus = () => setToolbarOpen(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleBlur = ({ event }: any) => {
-      if (event?.relatedTarget && (event.relatedTarget as HTMLElement).closest(".tiptap-toolbar")) return;
-      if (activeDropdownRef.current) return;
-      if (toolbarClickedRef.current) return;
-      setToolbarOpen(false);
-      setIsEditMode(false);
-    };
-
-    editor.on("focus", handleFocus);
-    editor.on("blur", handleBlur);
-
-    return () => {
-      editor.off("focus", handleFocus);
-      editor.off("blur", handleBlur);
-    };
-  }, [editor]);
-
-  // Mouse handling to distinguish click from drag
-  const handleMouseDown = (e: React.MouseEvent) => {
-    mouseDownPos.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (!mouseDownPos.current) return;
-
-    const dx = e.clientX - mouseDownPos.current.x;
-    const dy = e.clientY - mouseDownPos.current.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance < 5 && !isEditMode) {
-      setIsEditMode(true);
-      setTimeout(() => {
-        editor?.commands.focus();
-      }, 0);
-    }
-
-    mouseDownPos.current = null;
-  };
-
-  // Popover state for link and info chip editing
-  const [linkAnchorEl, setLinkAnchorEl] = useState<HTMLElement | null>(null);
-  const [infoChipAnchorEl, setInfoChipAnchorEl] = useState<HTMLElement | null>(null);
-
-  const editorState = useEditorState({
-    editor,
-    selector: ({ editor }: { editor: Editor }) => {
-      const node = editor.state.doc.nodeAt(editor.state.selection.from);
-      const isChipSelected = node?.type.name === "variableChip";
-      const isInfoChipSelected = node?.type.name === "infoChip";
-      return {
-        isBold: isChipSelected ? !!node?.attrs.bold : editor.isActive("bold"),
-        isItalic: isChipSelected ? !!node?.attrs.italic : editor.isActive("italic"),
-        isUnderline: editor.isActive("underline"),
-        isStrike: editor.isActive("strike"),
-        isBulletList: editor.isActive("bulletList"),
-        isOrderedList: editor.isActive("orderedList"),
-        isLink: editor.isActive("link"),
-        isChipSelected,
-        isInfoChipSelected,
-      };
-    },
-  });
-
-  // Open info chip popover when an info chip is selected via click
-  useEffect(() => {
-    if (!editor || !isEditMode) return;
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      const chipEl = target.closest(".info-chip") as HTMLElement | null;
-      if (chipEl) {
-        // Select the info chip node in the editor
-        const pos = editor.view.posAtDOM(chipEl, 0);
-        const resolvedPos = editor.state.doc.resolve(pos);
-        const node = resolvedPos.parent.type.name === "infoChip" ? resolvedPos.parent : editor.state.doc.nodeAt(pos);
-        if (node?.type.name === "infoChip") {
-          editor.chain().focus().setNodeSelection(pos).run();
-          setInfoChipAnchorEl(chipEl);
-        }
-      }
-    };
-    const editorEl = editor.view.dom;
-    editorEl.addEventListener("click", handleClick);
-    return () => editorEl.removeEventListener("click", handleClick);
-  }, [editor, isEditMode]);
-
-  // Debounced config update on editor changes
-  const debouncedUpdate = debounce(() => {
-    if (editor && onConfigChange) {
+  const handleTextChange = useCallback(
+    (html: string) => {
+      if (!onConfigChange) return;
       onConfigChange({
         ...config,
-        setup: { ...config.setup, text: editor.getHTML() },
+        setup: { ...config.setup, text: html },
       });
-    }
-  }, 300);
+    },
+    [config, onConfigChange]
+  );
 
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleUpdate = () => {
-      debouncedUpdate();
-    };
-
-    editor.on("update", handleUpdate);
-
-    return () => {
-      editor.off("update", handleUpdate);
-    };
-  }, [editor, debouncedUpdate]);
-
-  // Toolbar positioning
-  const containerRef = useRef<HTMLDivElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0, width: 0 });
-
-  useEffect(() => {
-    if (!toolbarOpen || !containerRef.current) return;
-
-    const updatePosition = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        const centeredLeft = rect.left + rect.width / 2;
-        const toolbarWidth = toolbarRef.current?.offsetWidth ?? 0;
-        const halfToolbar = toolbarWidth / 2;
-        const padding = 8;
-        // Clamp so toolbar stays within viewport
-        const clampedLeft = halfToolbar > 0
-          ? Math.max(halfToolbar + padding, Math.min(centeredLeft, window.innerWidth - halfToolbar - padding))
-          : centeredLeft;
-        setToolbarPosition({
-          top: rect.top - 8,
-          left: clampedLeft,
-          width: rect.width,
-        });
-      }
-    };
-
-    updatePosition();
-
-    let animationId: number;
-    const animate = () => {
-      updatePosition();
-      animationId = requestAnimationFrame(animate);
-    };
-    animationId = requestAnimationFrame(animate);
-
-    return () => cancelAnimationFrame(animationId);
-  }, [toolbarOpen]);
+  const renderToolbar = useCallback(
+    (editor: Editor, state: RichTextSelectorState) => (
+      <Stack direction="row" spacing={1} alignItems="center">
+        <RichTextFontSizeSelect
+          editor={editor}
+          onOpen={() => updateActiveDropdown("fontSize")}
+          onClose={() => updateActiveDropdown(null)}
+          forceClose={activeDropdown !== "fontSize" && activeDropdown !== null}
+        />
+        <Divider flexItem orientation="vertical" />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <MenuButton
+            value="bold"
+            iconName={ICON_NAME.BOLD}
+            selected={state.isBold}
+            onClick={() => {
+              if (state.isChipSelected) {
+                editor.chain().focus().toggleVariableChipBold().run();
+              } else {
+                editor.chain().focus().toggleBold().run();
+              }
+            }}
+          />
+          <MenuButton
+            value="italic"
+            iconName={ICON_NAME.ITALIC}
+            selected={state.isItalic}
+            onClick={() => {
+              if (state.isChipSelected) {
+                editor.chain().focus().toggleVariableChipItalic().run();
+              } else {
+                editor.chain().focus().toggleItalic().run();
+              }
+            }}
+          />
+          <MenuButton
+            value="underline"
+            iconName={ICON_NAME.UNDERLINE}
+            selected={state.isUnderline}
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+          />
+          <MenuButton
+            value="strike"
+            iconName={ICON_NAME.STRIKETHROUGH}
+            selected={state.isStrike}
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+          />
+        </Stack>
+        <Divider flexItem orientation="vertical" />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <MenuButton
+            value="bulletList"
+            iconName={ICON_NAME.BULLET_LIST}
+            selected={state.isBulletList}
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+          />
+          <MenuButton
+            value="orderedList"
+            iconName={ICON_NAME.NUMBERED_LIST}
+            selected={state.isOrderedList}
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          />
+        </Stack>
+        <Divider flexItem orientation="vertical" />
+        <AlignSelect
+          editor={editor}
+          onOpen={() => updateActiveDropdown("align")}
+          onClose={() => updateActiveDropdown(null)}
+          forceClose={activeDropdown !== "align" && activeDropdown !== null}
+        />
+        <LineHeightSelect
+          editor={editor}
+          onOpen={() => updateActiveDropdown("lineHeight")}
+          onClose={() => updateActiveDropdown(null)}
+          forceClose={activeDropdown !== "lineHeight" && activeDropdown !== null}
+        />
+        <Divider flexItem orientation="vertical" />
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <MenuButton
+            value="link"
+            iconName={ICON_NAME.LINK}
+            selected={state.isLink}
+            onClick={() => {
+              if (state.isLink) {
+                editor.chain().focus().extendMarkRange("link").unsetLink().run();
+              } else {
+                // Use the editor's setLink command directly with a simple prompt
+                // — keeps this toolbar self-contained.
+                const url = window.prompt("URL", editor.getAttributes("link").href ?? "");
+                if (url) {
+                  editor.chain().focus().extendMarkRange("link").setLink({ href: url, target: "_blank" }).run();
+                }
+              }
+            }}
+          />
+          <MenuButton
+            value="infoChip"
+            iconName={ICON_NAME.INFO}
+            selected={false}
+            onClick={() => {
+              editor.chain().focus().insertInfoChip().run();
+              // After insert the cursor sits just past the chip, so the chip
+              // is at cursor - 1. Select the chip node so RichTextEditor's
+              // selectionUpdate listener opens the edit dialog.
+              const chipPos = editor.state.selection.from - 1;
+              const inserted = editor.state.doc.nodeAt(chipPos);
+              if (inserted?.type.name !== "infoChip") return;
+              editor.chain().focus().setNodeSelection(chipPos).run();
+            }}
+          />
+        </Stack>
+        <Divider flexItem orientation="vertical" />
+        <VariableInsertMenu
+          editor={editor}
+          variables={variables}
+          onOpen={() => updateActiveDropdown("variable")}
+          onClose={() => updateActiveDropdown(null)}
+          forceClose={activeDropdown !== "variable" && activeDropdown !== null}
+        />
+      </Stack>
+    ),
+    [activeDropdown, updateActiveDropdown, variables]
+  );
 
   return (
-    <Box
-      ref={containerRef}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      sx={{ height: "100%", width: "100%", cursor: isEditMode ? "text" : "default" }}>
-      {/* Toolbar rendered via Portal to escape overflow:hidden */}
-      {toolbarOpen && (
-        <Portal>
-          <Box
-            ref={toolbarRef}
-            className="tiptap-toolbar"
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              toolbarClickedRef.current = true;
-              setTimeout(() => {
-                toolbarClickedRef.current = false;
-              }, 200);
-            }}
-            onMouseUp={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-            }}
-            onPointerUp={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            sx={{
-              position: "fixed",
-              top: toolbarPosition.top,
-              left: toolbarPosition.left,
-              transform: "translate(-50%, -100%)",
-              zIndex: 1400,
-              pointerEvents: "auto",
-            }}>
-            <ToolbarContainer>
-              {editor && (
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <RichTextFontSizeSelect
-                    editor={editor}
-                    onOpen={() => updateActiveDropdown("fontSize")}
-                    onClose={() => updateActiveDropdown(null)}
-                    forceClose={activeDropdown !== "fontSize" && activeDropdown !== null}
-                  />
-                  <Divider flexItem orientation="vertical" />
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <MenuButton
-                      value="bold"
-                      iconName={ICON_NAME.BOLD}
-                      selected={editorState?.isBold}
-                      onClick={() => {
-                        if (editorState?.isChipSelected) {
-                          editor.chain().focus().toggleVariableChipBold().run();
-                        } else {
-                          editor.chain().focus().toggleBold().run();
-                        }
-                      }}
-                    />
-                    <MenuButton
-                      value="italic"
-                      iconName={ICON_NAME.ITALIC}
-                      selected={editorState?.isItalic}
-                      onClick={() => {
-                        if (editorState?.isChipSelected) {
-                          editor.chain().focus().toggleVariableChipItalic().run();
-                        } else {
-                          editor.chain().focus().toggleItalic().run();
-                        }
-                      }}
-                    />
-                    <MenuButton
-                      value="underline"
-                      iconName={ICON_NAME.UNDERLINE}
-                      selected={editorState?.isUnderline}
-                      onClick={() => editor.chain().focus().toggleUnderline().run()}
-                    />
-                    <MenuButton
-                      value="strike"
-                      iconName={ICON_NAME.STRIKETHROUGH}
-                      selected={editorState?.isStrike}
-                      onClick={() => editor.chain().focus().toggleStrike().run()}
-                    />
-                  </Stack>
-                  <Divider flexItem orientation="vertical" />
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <MenuButton
-                      value="bulletList"
-                      iconName={ICON_NAME.BULLET_LIST}
-                      selected={editorState?.isBulletList}
-                      onClick={() => editor.chain().focus().toggleBulletList().run()}
-                    />
-                    <MenuButton
-                      value="orderedList"
-                      iconName={ICON_NAME.NUMBERED_LIST}
-                      selected={editorState?.isOrderedList}
-                      onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                    />
-                  </Stack>
-                  <Divider flexItem orientation="vertical" />
-                  <AlignSelect
-                    editor={editor}
-                    onOpen={() => updateActiveDropdown("align")}
-                    onClose={() => updateActiveDropdown(null)}
-                    forceClose={activeDropdown !== "align" && activeDropdown !== null}
-                  />
-                  <LineHeightSelect
-                    editor={editor}
-                    onOpen={() => updateActiveDropdown("lineHeight")}
-                    onClose={() => updateActiveDropdown(null)}
-                    forceClose={activeDropdown !== "lineHeight" && activeDropdown !== null}
-                  />
-                  <Divider flexItem orientation="vertical" />
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <MenuButton
-                      value="link"
-                      iconName={ICON_NAME.LINK}
-                      selected={editorState?.isLink}
-                      onClick={(e) => {
-                        if (editorState?.isLink) {
-                          editor.chain().focus().extendMarkRange("link").unsetLink().run();
-                        } else {
-                          setLinkAnchorEl(e.currentTarget as HTMLElement);
-                        }
-                      }}
-                    />
-                    <MenuButton
-                      value="infoChip"
-                      iconName={ICON_NAME.INFO}
-                      selected={false}
-                      onClick={() => {
-                        editor.chain().focus().insertInfoChip().run();
-                        // The chip is inserted at the current selection position.
-                        // After insert, the cursor moves past the chip, so the chip is at cursor - 1.
-                        setTimeout(() => {
-                          const { selection } = editor.state;
-                          const pos = selection.from - 1;
-                          const domAtPos = editor.view.domAtPos(pos);
-                          const chipEl = (domAtPos.node as HTMLElement).closest?.(".info-chip")
-                            || (domAtPos.node as HTMLElement).querySelector?.(".info-chip")
-                            || (domAtPos.node.parentElement as HTMLElement)?.closest?.(".info-chip");
-                          if (chipEl) {
-                            editor.chain().setNodeSelection(pos).run();
-                            setInfoChipAnchorEl(chipEl as HTMLElement);
-                          }
-                        }, 50);
-                      }}
-                    />
-                  </Stack>
-                  <Divider flexItem orientation="vertical" />
-                  <VariableInsertMenu
-                    editor={editor}
-                    variables={variables}
-                    onOpen={() => updateActiveDropdown("variable")}
-                    onClose={() => updateActiveDropdown(null)}
-                    forceClose={activeDropdown !== "variable" && activeDropdown !== null}
-                  />
-                </Stack>
-              )}
-            </ToolbarContainer>
-          </Box>
-        </Portal>
-      )}
-
-      {/* Link editing popover */}
-      {editor && linkAnchorEl && (
-        <LinkPopover editor={editor} anchorEl={linkAnchorEl} onClose={() => setLinkAnchorEl(null)} />
-      )}
-
-      {/* Info chip editing popover */}
-      {editor && infoChipAnchorEl && (
-        <InfoChipEditPopover editor={editor} anchorEl={infoChipAnchorEl} onClose={() => setInfoChipAnchorEl(null)} />
-      )}
-
-      {/* Edit mode: show TipTap editor with variable chips */}
-      <RichTextEditorContent
-        editor={editor}
-        sx={{
-          height: "100%",
-          display: isEditMode ? "block" : "none",
-          overflowY: "auto",
-          "& .ProseMirror": {
-            minHeight: 40,
-          },
-        }}
-      />
-
-      {/* Preview mode: show resolved values */}
-      {!isEditMode && (
-        <RichTextPreview html={resolvedHtml} />
-      )}
-    </Box>
+    <RichTextEditor<RichTextSelectorState>
+      value={config.setup?.text || ""}
+      onChange={handleTextChange}
+      extensions={richTextExtensions}
+      selector={richTextSelector}
+      renderToolbarButtons={renderToolbar}
+      renderPreview={() => <RichTextPreview html={resolvedHtml} />}
+      changeDebounceMs={300}
+      shouldKeepEditingRef={shouldKeepEditingRef}
+      sx={richTextEditorSx}
+    />
   );
 };
 

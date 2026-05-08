@@ -12,7 +12,7 @@ import { layerSchema } from "@/lib/validations/layer";
 import { responseSchema } from "@/lib/validations/response";
 import { publicUserSchema } from "@/lib/validations/user";
 import { interactionRuleSchema } from "@/lib/validations/interaction";
-import { configSchemas } from "@/lib/validations/widget";
+import { configSchemas, popupPlacements, popupSizes, popupTypes } from "@/lib/validations/widget";
 
 export const projectRoleEnum = z.enum(["project-owner", "project-viewer", "project-editor"]);
 
@@ -140,6 +140,9 @@ export const builderConfigSchema = z.object({
       toolbar: z.boolean().default(true),
       scalebar: z.boolean().default(true),
       project_info_content: z.string().default(""),
+      project_info_popup_type: popupTypes.optional().default("dialog"),
+      project_info_popup_placement: popupPlacements.optional().default("auto"),
+      project_info_popup_size: popupSizes.optional().default("md"),
       // Branding
       language: dashboardLanguageEnum.default("auto"),
       font_family: z.string().default("Mulish, sans-serif"),
@@ -147,6 +150,10 @@ export const builderConfigSchema = z.object({
       icon_color: z.string().optional(),
       font_color: z.string().optional(),
       favicon_url: z.string().default(DEFAULT_FAVICON_URL),
+      // Social sharing — when unset, public pages fall back to GOAT defaults
+      // (see lib/metadata.ts and app/map/public/[projectId]/layout.tsx).
+      og_image_url: z.string().optional(),
+      meta_description: z.string().max(300).optional(),
     })
     .default({}),
   interface: z.preprocess(

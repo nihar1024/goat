@@ -85,19 +85,22 @@ def setup_tracing(
     # Capture user context first (before exporters fire).
     provider.add_span_processor(UserContextSpanProcessor())
 
-    # Always emit to stdout for visibility (cheap; useful in local dev).
-    # Use SimpleSpanProcessor to ensure synchronous export so tests can
-    # capture stdout immediately after span.end() without a flush delay.
-    # Pass sys.stdout explicitly at call time so that test frameworks
-    # (e.g. pytest capsys) that replace sys.stdout are respected — the
-    # default-arg on ConsoleSpanExporter captures sys.stdout at *import*
-    # time, which predates any per-test stdout substitution.
-    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter(out=sys.stdout)))
-
     if otlp_endpoint:
+        # Production path: ship spans to alloy-receiver via OTLP. Use
+        # BatchSpanProcessor so span creation never blocks on export.
         provider.add_span_processor(
             BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
         )
+    else:
+        # Local-dev fallback: when no OTLP endpoint is configured, dump
+        # spans to stdout so a developer running `uvicorn` locally can
+        # see traces flow without a backend. SimpleSpanProcessor exports
+        # synchronously, which keeps tests deterministic (pytest's capsys
+        # captures stdout immediately after span.end()) and means a dev
+        # sees the span as soon as the request finishes.
+        # `out=sys.stdout` is passed at call time, not as a default arg,
+        # so pytest's stdout substitution is respected.
+        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter(out=sys.stdout)))
 
     otel_trace.set_tracer_provider(provider)
 

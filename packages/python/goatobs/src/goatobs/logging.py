@@ -147,3 +147,22 @@ def setup_logging(
         lg = logging.getLogger(name)
         lg.handlers.clear()
         lg.propagate = True
+
+    # Uvicorn applies `logging.config.dictConfig(uvicorn.config.LOGGING_CONFIG)`
+    # in its `Server.serve()` startup path, which would WIPE OUT the
+    # handlers we just installed on the root logger and replace them with
+    # uvicorn's defaults (the colored `INFO 10.0.0.1:... "GET ..."` plain-
+    # text format). Set LOGGING_CONFIG to an empty-but-valid dict here so
+    # dictConfig is a no-op when uvicorn calls it. Works for both direct
+    # `uvicorn` invocation and `fastapi run` (which delegates to uvicorn).
+    try:
+        import uvicorn.config
+
+        uvicorn.config.LOGGING_CONFIG = {
+            "version": 1,
+            "disable_existing_loggers": False,
+        }
+    except ImportError:
+        # uvicorn not installed in this environment (e.g. unit tests) —
+        # nothing to override.
+        pass

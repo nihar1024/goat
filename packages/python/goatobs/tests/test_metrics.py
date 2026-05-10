@@ -2,6 +2,7 @@
 import pytest
 from opentelemetry import metrics as otel_metrics
 from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.resources import Resource
 
 from goatobs.metrics import setup_metrics
 
@@ -16,8 +17,14 @@ def _reset_meter_provider():
     otel_metrics.set_meter_provider(MeterProvider())
 
 
+def _resource() -> Resource:
+    return Resource.create(
+        {"service.name": "testsvc", "deployment.environment": "test"}
+    )
+
+
 def test_setup_metrics_registers_meter_with_service_name():
-    setup_metrics(service_name="testsvc", environment="test", otlp_endpoint=None)
+    setup_metrics(resource=_resource(), otlp_endpoint=None)
 
     provider = otel_metrics.get_meter_provider()
     # Resource is set by the constructor; service.name should be present.
@@ -26,7 +33,7 @@ def test_setup_metrics_registers_meter_with_service_name():
 
 
 def test_meter_can_record_a_counter():
-    setup_metrics(service_name="testsvc", environment="test", otlp_endpoint=None)
+    setup_metrics(resource=_resource(), otlp_endpoint=None)
     meter = otel_metrics.get_meter("test")
     counter = meter.create_counter("test_counter")
     # Smoke test — recording shouldn't raise.

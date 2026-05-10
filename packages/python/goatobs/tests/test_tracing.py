@@ -41,8 +41,14 @@ def _reset_tracer_provider():
     AsyncPGInstrumentor().uninstrument()
 
 
+def _resource(service_name: str = "testsvc", environment: str = "test") -> Resource:
+    return Resource.create(
+        {"service.name": service_name, "deployment.environment": environment}
+    )
+
+
 def test_setup_tracing_registers_provider_with_service_name():
-    setup_tracing(service_name="testsvc", environment="test", otlp_endpoint=None)
+    setup_tracing(resource=_resource(), otlp_endpoint=None)
 
     provider = otel_trace.get_tracer_provider()
     resource = provider.resource  # type: ignore[attr-defined]
@@ -52,7 +58,7 @@ def test_setup_tracing_registers_provider_with_service_name():
 
 def test_user_context_attached_to_active_span():
     """When a span is active and user is bound, span attributes include user.id/email/realm."""
-    setup_tracing(service_name="testsvc", environment="test", otlp_endpoint=None)
+    setup_tracing(resource=_resource(), otlp_endpoint=None)
     tracer = otel_trace.get_tracer("test")
 
     with bind_user_context(user_id="u1", email="a@b.com", realm="p4b"):
@@ -67,7 +73,7 @@ def test_user_context_attached_to_active_span():
 
 def test_setup_tracing_with_no_otlp_endpoint_uses_only_console_exporter(capsys):
     """When otlp_endpoint=None, traces emit to stdout (useful for local dev)."""
-    setup_tracing(service_name="testsvc", environment="test", otlp_endpoint=None)
+    setup_tracing(resource=_resource(), otlp_endpoint=None)
     tracer = otel_trace.get_tracer("test")
     with tracer.start_as_current_span("dev_span"):
         pass

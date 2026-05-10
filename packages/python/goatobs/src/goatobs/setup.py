@@ -1,8 +1,8 @@
 """Single entrypoint for service-side observability bootstrap.
 
-Each service's lifespan (or main module) calls:
+Each service's main module calls (right after constructing its FastAPI app):
 
-    setup_observability(service_name="core")
+    setup_observability(service_name="core", fastapi_app=app)
 
 Behavior is driven entirely by env vars:
 
@@ -10,6 +10,10 @@ Behavior is driven entirely by env vars:
   ENVIRONMENT                — "dev" / "prod" / etc. Required when enabled.
   OTEL_EXPORTER_OTLP_ENDPOINT — gRPC endpoint of the local Alloy receiver.
                                Default `http://localhost:4317` if unset.
+  OTEL_RESOURCE_ATTRIBUTES   — additional resource attrs (auto-merged by
+                               the OTel SDK). Set in the deployment
+                               manifest via downward API for things like
+                               service.instance.id, k8s.pod.uid, etc.
   LOG_JSON                   — explicit override; defaults to "true" when
                                OTEL_ENABLED, "false" otherwise.
 
@@ -17,6 +21,8 @@ When OTEL_ENABLED is unset or "false", the function is a complete no-op:
 no SDK initialised, no logging changes, no env mutations.
 """
 import os
+
+from opentelemetry.sdk.resources import Resource
 
 from goatobs.logging import setup_logging
 from goatobs.metrics import setup_metrics
@@ -53,26 +59,29 @@ def setup_observability(
     )
     json_output = _is_truthy(os.environ.get("LOG_JSON", "true"))
 
+    # Build the Resource once so traces + metrics carry identical
+    # attributes. The SDK's OTELResourceDetector automatically merges in
+    # `OTEL_RESOURCE_ATTRIBUTES` env-var contributions (service.instance.id,
+    # k8s.pod.uid, etc. — set per-pod via downward API).
+    resource = Resource.create(
+        {
+            "service.name": service_name,
+            "deployment.environment": environment,
+        }
+    )
+
     setup_logging(
         service_name=service_name,
         environment=environment,
         json_output=json_output,
     )
-    # Order matters: setup_metrics must run BEFORE setup_tracing because
-    # setup_tracing calls FastAPIInstrumentor().instrument(), which
-    # acquires a meter from the global MeterProvider at instrument time.
-    # If the global meter provider hasn't been set yet, the instrumentor
-    # captures a no-op meter and HTTP RED metrics get silently dropped
-    # (traces still work because the tracer provider IS set inside
-    # setup_tracing before instrumentation).
-    setup_metrics(
-        service_name=service_name,
-        environment=environment,
+    meter_provider = setup_metrics(
+        resource=resource,
         otlp_endpoint=otlp_endpoint,
     )
     setup_tracing(
-        service_name=service_name,
-        environment=environment,
+        resource=resource,
         otlp_endpoint=otlp_endpoint,
         fastapi_app=fastapi_app,
+        meter_provider=meter_provider,
     )

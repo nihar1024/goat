@@ -69,10 +69,10 @@ class UserContextSpanProcessor(SpanProcessor):
 
 def setup_tracing(
     *,
-    service_name: str,
-    environment: str,
+    resource: Resource,
     otlp_endpoint: str | None,
     fastapi_app: object | None = None,
+    meter_provider: object | None = None,
 ) -> None:
     """Configure global OTel TracerProvider + processors + exporters.
 
@@ -82,13 +82,12 @@ def setup_tracing(
     monkey-patches `fastapi.FastAPI` — services that do
     `from fastapi import FastAPI` (the standard idiom) bind the original
     class in their module namespace at import time, so the patch never
-    reaches the app they construct."""
-    resource = Resource.create(
-        {
-            "service.name": service_name,
-            "deployment.environment": environment,
-        }
-    )
+    reaches the app they construct.
+
+    `meter_provider` is forwarded to `instrument_app` so HTTP metrics
+    flow through it; without this, FastAPIInstrumentor falls back to
+    whatever global MeterProvider happens to be set at instrument time
+    (fragile — pass it explicitly)."""
     provider = TracerProvider(resource=resource)
 
     # Capture user context first (before exporters fire).
@@ -116,16 +115,23 @@ def setup_tracing(
     # Library auto-instrumentation. SQLAlchemy / HTTPX / asyncpg all
     # patch their own classes' methods so any existing instance is
     # transparently instrumented — fine to call here unconditionally.
-    SQLAlchemyInstrumentor().instrument()
-    HTTPXClientInstrumentor().instrument()
-    AsyncPGInstrumentor().instrument()
+    # Pass tracer_provider explicitly so they emit through the provider
+    # we just configured, not whatever global default exists.
+    SQLAlchemyInstrumentor().instrument(tracer_provider=provider, meter_provider=meter_provider)
+    HTTPXClientInstrumentor().instrument(tracer_provider=provider, meter_provider=meter_provider)
+    AsyncPGInstrumentor().instrument(tracer_provider=provider)
 
     # FastAPI is different: `.instrument()` monkey-patches
     # `fastapi.FastAPI`, which doesn't help if the caller did
     # `from fastapi import FastAPI` (the standard form) — in that case
-    # their local `FastAPI` name is bound to the original class. Use
-    # `instrument_app` against the specific app instance instead.
+    # their local `FastAPI` name is bound to the original class. We
+    # require the caller to pass the constructed app and use
+    # `instrument_app` against the specific instance. Passing the
+    # tracer + meter providers directly drops the global-state ordering
+    # foot-gun (whichever provider was last set wins, otherwise).
     if fastapi_app is not None:
-        FastAPIInstrumentor.instrument_app(fastapi_app)
-    else:
-        FastAPIInstrumentor().instrument()
+        FastAPIInstrumentor.instrument_app(
+            fastapi_app,
+            tracer_provider=provider,
+            meter_provider=meter_provider,
+        )

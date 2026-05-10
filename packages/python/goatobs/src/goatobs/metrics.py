@@ -16,18 +16,10 @@ from opentelemetry.sdk.resources import Resource
 
 def setup_metrics(
     *,
-    service_name: str,
-    environment: str,
+    resource: Resource,
     otlp_endpoint: str | None,
-) -> None:
+) -> MeterProvider:
     """Configure global OTel MeterProvider + OTLP push exporter."""
-    resource = Resource.create(
-        {
-            "service.name": service_name,
-            "deployment.environment": environment,
-        }
-    )
-
     readers = []
     if otlp_endpoint:
         readers.append(
@@ -39,3 +31,4 @@ def setup_metrics(
 
     provider = MeterProvider(resource=resource, metric_readers=readers)
     otel_metrics.set_meter_provider(provider)
+    return provider

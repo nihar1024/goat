@@ -1,0 +1,109 @@
+"""OpenTelemetry tracing setup for GOAT services.
+
+`setup_tracing(service_name, environment, otlp_endpoint)` configures
+the global OTel TracerProvider:
+
+  * Resource attributes: service.name, deployment.environment.
+  * Span processor: a custom UserContextSpanProcessor that copies
+    bound contextvars (user_id/email/realm) onto each span at start —
+    so they're visible on the span itself AND propagated to all
+    children automatically.
+  * Exporter: OTLP gRPC to `otlp_endpoint` (when provided), plus a
+    ConsoleSpanExporter for visibility in local dev / when no
+    endpoint is set.
+  * Auto-instrumentation: register the FastAPI / SQLAlchemy / HTTPX /
+    AsyncPG instrumentations. They no-op for libraries the running
+    process hasn't imported, so it's safe to register all of them
+    unconditionally from a shared package.
+"""
+import sys
+from typing import Any
+
+from opentelemetry import trace as otel_trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import ReadableSpan, Span, TracerProvider
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor,
+    SpanProcessor,
+)
+from opentelemetry.context import Context
+
+from goatobs.context import get_user_context
+
+
+class UserContextSpanProcessor(SpanProcessor):
+    """Copy bound user contextvars onto each span at start.
+
+    Runs synchronously on `on_start` so attributes are present
+    immediately and propagate via OTel context propagation to child
+    spans (including HTTPX outbound calls).
+    """
+
+    def on_start(self, span: Span, parent_context: Context | None = None) -> None:
+        ctx = get_user_context()
+        if not ctx:
+            return
+        if uid := ctx.get("user_id"):
+            span.set_attribute("user.id", uid)
+        if email := ctx.get("email"):
+            span.set_attribute("user.email", email)
+        if realm := ctx.get("realm"):
+            span.set_attribute("user.realm", realm)
+
+    def on_end(self, span: ReadableSpan) -> None:  # noqa: ARG002
+        pass
+
+    def shutdown(self) -> None:
+        pass
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:  # noqa: ARG002
+        return True
+
+
+def setup_tracing(
+    *,
+    service_name: str,
+    environment: str,
+    otlp_endpoint: str | None,
+) -> None:
+    """Configure global OTel TracerProvider + processors + exporters."""
+    resource = Resource.create(
+        {
+            "service.name": service_name,
+            "deployment.environment": environment,
+        }
+    )
+    provider = TracerProvider(resource=resource)
+
+    # Capture user context first (before exporters fire).
+    provider.add_span_processor(UserContextSpanProcessor())
+
+    # Always emit to stdout for visibility (cheap; useful in local dev).
+    # Use SimpleSpanProcessor to ensure synchronous export so tests can
+    # capture stdout immediately after span.end() without a flush delay.
+    # Pass sys.stdout explicitly at call time so that test frameworks
+    # (e.g. pytest capsys) that replace sys.stdout are respected — the
+    # default-arg on ConsoleSpanExporter captures sys.stdout at *import*
+    # time, which predates any per-test stdout substitution.
+    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter(out=sys.stdout)))
+
+    if otlp_endpoint:
+        provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
+        )
+
+    otel_trace.set_tracer_provider(provider)
+
+    # Auto-instrument supported libraries. Each instrumentor no-ops
+    # when its target library isn't imported in the running process.
+    FastAPIInstrumentor().instrument()
+    SQLAlchemyInstrumentor().instrument()
+    HTTPXClientInstrumentor().instrument()
+    AsyncPGInstrumentor().instrument()

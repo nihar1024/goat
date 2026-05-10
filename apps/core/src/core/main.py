@@ -1,4 +1,3 @@
-import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse
+
+from goatobs import setup_observability
 
 import core._dotenv  # noqa: E402, F401, I001
 from core.core.config import settings
@@ -29,12 +30,12 @@ if settings.SENTRY_DSN and settings.ENVIRONMENT:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Optional, env-var-gated. No-op when OTEL_ENABLED is unset/false,
+    # so other GOAT operators see no behavior change.
+    setup_observability(service_name="core")
+
     print("Starting up...")
     session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
-    logger = logging.getLogger("uvicorn.access")
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    logger.addHandler(handler)
     yield
     print("Shutting down...")
     await session_manager.close()
@@ -80,6 +81,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from core.middleware.auth_context import auth_context_middleware  # noqa: E402
+
+app.middleware("http")(auth_context_middleware)
 
 
 @app.get("/api/healthz", description="Health Check", tags=["Health Check"])

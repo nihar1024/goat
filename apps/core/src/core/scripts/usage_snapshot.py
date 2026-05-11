@@ -1,0 +1,609 @@
+"""GOAT Usage snapshot — gauge emitter for the "GOAT - Usage" Grafana dashboard.
+
+Runs as a Kubernetes CronJob (every 5 min), queries GOAT's Postgres via the
+existing async session manager, and pushes a fixed set of OTel gauges through
+the alloy-receiver OTLP endpoint that goatobs already speaks to. Each gauge
+maps 1:1 to a panel in ``argocd/apps/o11y/grafana/dashboards/goat-usage.json``.
+
+Invocation::
+
+    python -m core.scripts.usage_snapshot
+
+Env vars consumed (via ``goatobs.setup_observability`` and ``settings``):
+
+* ``OTEL_ENABLED`` -- must be ``true`` for any metric to be exported.
+* ``ENVIRONMENT`` -- ``dev`` / ``prod`` etc, used as ``deployment.environment``.
+* ``OTEL_EXPORTER_OTLP_ENDPOINT`` -- gRPC endpoint of the local Alloy receiver.
+* GOAT Postgres connection vars (``POSTGRES_*`` -> ``ASYNC_SQLALCHEMY_DATABASE_URI``).
+
+Exit codes:
+
+* ``0`` -- every query succeeded; ``goat_usage_snapshot_last_success_timestamp_seconds``
+  was advanced.
+* ``1`` -- at least one query failed; the gauges for failed queries keep their
+  previous value in Mimir, ``goat_usage_snapshot_query_errors_total{query_name=...}``
+  was incremented, and Kubernetes records the CronJob run as failed.
+
+Each query runs in its own ``try/except`` so one broken query does not prevent
+the rest from publishing.
+"""
+
+import asyncio
+import logging
+import sys
+import time
+from typing import Any, Awaitable, Callable
+
+from opentelemetry import metrics as otel_metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from goatobs import setup_observability
+
+from core.core.config import settings
+from core.db.session import session_manager
+
+# OTel Python SDK exposes sync gauges via `meter.create_gauge(...)` but the
+# public `opentelemetry.metrics` module doesn't re-export the `Gauge` /
+# `Counter` types for use in annotations (only `_Gauge` is exposed, and only
+# as an implementation detail). Use `Any` for instrument type hints — the
+# values are still type-checked via the `meter.create_*` return type at
+# the call site, and runtime calls don't care.
+Instrument = Any
+
+logger = logging.getLogger(__name__)
+
+# Sentinel used for the ``feature_layer_type`` label on non-feature layers.
+# Mimir/Prometheus dislikes empty-string labels (they round-trip as "missing"
+# in PromQL), so we use a stable "-" placeholder that's easy to filter out
+# in dashboard queries.
+NO_FEATURE_LAYER_TYPE = "-"
+
+# Reusable SQL CTE that adds disambiguating suffix to org names that
+# collide. Org names ARE NOT unique in the goat schema (e.g. multiple
+# orgs literally called "Test"), so emitting raw `org_name` to Mimir
+# would have the dashboard's Organization dropdown collapse colliding
+# orgs into one entry that filters to BOTH.
+#
+# Strategy: suffix the name ONLY when it collides, using the owner's
+# full email as the human-readable disambiguator. The owner is the
+# user with the `organization-owner` role (see accounts/src/db/seed_roles.py)
+# whose own `organization_id` points at this org. If the org has
+# multiple owners we pick MIN(email) deterministically; if it has zero
+# owners we fall back to an 8-char UUID prefix. Output shape:
+#   - "Acme GmbH"                            -- unique, untouched
+#   - "Test (alice@plan4better.de)"          -- collides; owner alice@…
+#   - "Test (bob@example.com)"               -- the other collider
+#   - "Test (a1b2c3d4)"                      -- collides + no owner record
+#
+# The metric label `org_id` (the actual UUID) is emitted on every
+# series independently, so anyone needing exact identification can
+# filter by it — the suffix only exists to make the dropdown readable.
+ORG_DISAMBIG_CTE = """
+    WITH org_owner_emails AS (
+        SELECT
+            u.organization_id,
+            -- Pick a deterministic owner if there are multiple.
+            MIN(u.email) AS owner_email
+        FROM {accounts}."user" u
+        JOIN {accounts}.user_role ur ON ur.user_id = u.id
+        JOIN {accounts}.role r ON r.id = ur.role_id
+        WHERE r.name = 'organization-owner'
+          AND u.email IS NOT NULL
+        GROUP BY u.organization_id
+    ),
+    disambig_orgs AS (
+        SELECT
+            o.id,
+            CASE WHEN COUNT(*) OVER (PARTITION BY o.name) > 1
+                 THEN o.name || ' ('
+                      || COALESCE(oe.owner_email, LEFT(o.id::text, 8))
+                      || ')'
+                 ELSE o.name
+            END AS display_name
+        FROM {accounts}.organization o
+        LEFT JOIN org_owner_emails oe ON oe.organization_id = o.id
+    )
+"""
+
+# Database query names -- referenced by the per-query error counter labels.
+# Keep stable: dashboards and alerts may key off these names.
+Q_LAYERS = "layers"
+Q_LAYER_BYTES = "layer_bytes"
+Q_PROJECTS = "projects"
+Q_USERS = "users"
+Q_USER_PROJECTS = "user_projects"
+# Layers + bytes per user share one SQL query (same join shape) so they share
+# one error-counter bucket too. If the query fails, both gauges stop updating
+# together, which is the cardinality we want for alerting.
+Q_USER_LAYERS = "user_layers"
+
+
+def _build_meter() -> otel_metrics.Meter:
+    """Return the meter for the snapshot.
+
+    ``setup_observability`` installs the global ``MeterProvider`` whenever
+    ``OTEL_ENABLED=true``; otherwise we get the no-op provider and the
+    instruments below silently drop their values, which is the right
+    behavior for local invocations.
+    """
+    return otel_metrics.get_meter("core.scripts.usage_snapshot")
+
+
+def _make_instruments(meter: otel_metrics.Meter) -> dict[str, object]:
+    """Construct all gauges + the error counter once per run.
+
+    Returning a dict (rather than module-level constants) keeps the instruments
+    bound to the meter created *after* ``setup_observability`` ran, which
+    matters because the global ``MeterProvider`` is replaced inside that call.
+    """
+    return {
+        "layers_total": meter.create_gauge(
+            "goat_layers_total",
+            description="Number of layers per org x type x feature_layer_type.",
+        ),
+        "layer_bytes_total": meter.create_gauge(
+            "goat_layer_bytes_total",
+            description="Total bytes of layer storage per org (SUM(layer.size)).",
+            unit="By",
+        ),
+        "projects_total": meter.create_gauge(
+            "goat_projects_total",
+            description="Number of projects per org.",
+        ),
+        "users_total": meter.create_gauge(
+            "goat_users_total",
+            description="Number of users per org x role.",
+        ),
+        "user_projects_total": meter.create_gauge(
+            "goat_user_projects_total",
+            description="Number of projects owned by each user.",
+        ),
+        "user_layers_total": meter.create_gauge(
+            "goat_user_layers_total",
+            description="Number of layers owned by each user.",
+        ),
+        "user_layer_bytes_total": meter.create_gauge(
+            "goat_user_layer_bytes_total",
+            description="Bytes of layer storage owned by each user (SUM(layer.size)).",
+            unit="By",
+        ),
+        "snapshot_success_ts": meter.create_gauge(
+            "goat_usage_snapshot_last_success_timestamp_seconds",
+            description=(
+                "Unix timestamp of the most recent fully-successful snapshot. "
+                "Drives the snapshot-lag stat on the GOAT - Usage dashboard."
+            ),
+            unit="s",
+        ),
+        "query_errors_total": meter.create_counter(
+            "goat_usage_snapshot_query_errors_total",
+            description="Per-query failure counter for the GOAT usage snapshot.",
+        ),
+    }
+
+
+# ----------------------------------------------------------------------------
+# Per-query handlers. Each function runs one SQL query and writes the
+# corresponding gauge(s). They MUST raise on failure so the outer orchestrator
+# can record the error -- they must not swallow exceptions.
+# ----------------------------------------------------------------------------
+
+
+async def snapshot_layers(
+    db: AsyncSession, gauge: Instrument
+) -> int:
+    """Emit ``goat_layers_total`` per (org, type, feature_layer_type).
+
+    "Org" here is the *owning* org: ``layer.user_id -> user.organization_id``.
+    Sharing links (``accounts.layer_organization``) intentionally do not
+    contribute -- otherwise a shared layer would be double-counted across
+    every org it's shared into, and the dashboard's "total layers" panel
+    would no longer equal ``count(*) FROM customer.layer``.
+    """
+    accounts = settings.ACCOUNTS_SCHEMA
+    customer = settings.CUSTOMER_SCHEMA
+    query = text(
+        ORG_DISAMBIG_CTE.format(accounts=accounts)
+        + f"""
+        SELECT
+            o.id::text AS org_id,
+            do_.display_name AS org_name,
+            l.type AS type,
+            COALESCE(l.feature_layer_type, :no_flt) AS feature_layer_type,
+            count(*) AS n
+        FROM {customer}.layer l
+        JOIN {accounts}."user" u ON u.id = l.user_id
+        JOIN {accounts}.organization o ON o.id = u.organization_id
+        JOIN disambig_orgs do_ ON do_.id = o.id
+        GROUP BY o.id, do_.display_name, l.type, l.feature_layer_type
+        """
+    )
+    result = await db.execute(query, {"no_flt": NO_FEATURE_LAYER_TYPE})
+    rows = result.all()
+    for row in rows:
+        gauge.set(
+            row.n,
+            attributes={
+                "org_id": row.org_id,
+                "org_name": row.org_name,
+                "type": row.type,
+                "feature_layer_type": row.feature_layer_type,
+            },
+        )
+    return len(rows)
+
+
+async def snapshot_layer_bytes(
+    db: AsyncSession, gauge: Instrument
+) -> int:
+    """Emit ``goat_layer_bytes_total`` per org (SUM of ``layer.size`` bytes)."""
+    accounts = settings.ACCOUNTS_SCHEMA
+    customer = settings.CUSTOMER_SCHEMA
+    query = text(
+        ORG_DISAMBIG_CTE.format(accounts=accounts)
+        + f"""
+        SELECT
+            o.id::text AS org_id,
+            do_.display_name AS org_name,
+            COALESCE(SUM(l.size), 0)::bigint AS bytes
+        FROM {customer}.layer l
+        JOIN {accounts}."user" u ON u.id = l.user_id
+        JOIN {accounts}.organization o ON o.id = u.organization_id
+        JOIN disambig_orgs do_ ON do_.id = o.id
+        GROUP BY o.id, do_.display_name
+        """
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    for row in rows:
+        gauge.set(
+            row.bytes,
+            attributes={"org_id": row.org_id, "org_name": row.org_name},
+        )
+    return len(rows)
+
+
+async def snapshot_projects(
+    db: AsyncSession, gauge: Instrument
+) -> int:
+    """Emit ``goat_projects_total`` per org (owner-of-record interpretation)."""
+    accounts = settings.ACCOUNTS_SCHEMA
+    customer = settings.CUSTOMER_SCHEMA
+    query = text(
+        ORG_DISAMBIG_CTE.format(accounts=accounts)
+        + f"""
+        SELECT
+            o.id::text AS org_id,
+            do_.display_name AS org_name,
+            count(*) AS n
+        FROM {customer}.project p
+        JOIN {accounts}."user" u ON u.id = p.user_id
+        JOIN {accounts}.organization o ON o.id = u.organization_id
+        JOIN disambig_orgs do_ ON do_.id = o.id
+        GROUP BY o.id, do_.display_name
+        """
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    for row in rows:
+        gauge.set(
+            row.n,
+            attributes={"org_id": row.org_id, "org_name": row.org_name},
+        )
+    return len(rows)
+
+
+async def snapshot_users(
+    db: AsyncSession, gauge: Instrument
+) -> int:
+    """Emit ``goat_users_total`` per (org, role).
+
+    Joins via ``accounts.user_role`` so a user with multiple roles in the
+    same org contributes to every role bucket. Users without any row in
+    ``user_role`` are not emitted -- the dashboard's "total users" stat
+    should ``sum by (org_name)`` over this metric, and unrole'd users
+    aren't really "GOAT users" in the product sense.
+    """
+    accounts = settings.ACCOUNTS_SCHEMA
+    query = text(
+        ORG_DISAMBIG_CTE.format(accounts=accounts)
+        + f"""
+        SELECT
+            o.id::text AS org_id,
+            do_.display_name AS org_name,
+            r.name AS role,
+            count(DISTINCT u.id) AS n
+        FROM {accounts}."user" u
+        JOIN {accounts}.organization o ON o.id = u.organization_id
+        JOIN {accounts}.user_role ur ON ur.user_id = u.id
+        JOIN {accounts}.role r ON r.id = ur.role_id
+        JOIN disambig_orgs do_ ON do_.id = o.id
+        GROUP BY o.id, do_.display_name, r.name
+        """
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    for row in rows:
+        gauge.set(
+            row.n,
+            attributes={
+                "org_id": row.org_id,
+                "org_name": row.org_name,
+                "role": row.role,
+            },
+        )
+    return len(rows)
+
+
+async def snapshot_user_projects(
+    db: AsyncSession, gauge: Instrument
+) -> int:
+    """Emit ``goat_user_projects_total{user_email, org_id, org_name}``.
+
+    Users have a single ``organization_id`` in this schema, so emitting one
+    series per (user, owning_org) is the same as one series per user. The
+    extra org labels keep the dashboard's Organization dropdown working
+    when scoped to a specific org.
+    """
+    accounts = settings.ACCOUNTS_SCHEMA
+    customer = settings.CUSTOMER_SCHEMA
+    query = text(
+        ORG_DISAMBIG_CTE.format(accounts=accounts)
+        + f"""
+        SELECT
+            u.email AS user_email,
+            o.id::text AS org_id,
+            do_.display_name AS org_name,
+            count(p.id) AS n
+        FROM {accounts}."user" u
+        JOIN {accounts}.organization o ON o.id = u.organization_id
+        JOIN {customer}.project p ON p.user_id = u.id
+        JOIN disambig_orgs do_ ON do_.id = o.id
+        WHERE u.email IS NOT NULL
+        GROUP BY u.email, o.id, do_.display_name
+        """
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    for row in rows:
+        gauge.set(
+            row.n,
+            attributes={
+                "user_email": row.user_email,
+                "org_id": row.org_id,
+                "org_name": row.org_name,
+            },
+        )
+    return len(rows)
+
+
+async def snapshot_user_layers(
+    db: AsyncSession,
+    layers_gauge: Instrument,
+    bytes_gauge: Instrument,
+) -> int:
+    """Emit ``goat_user_layers_total`` and ``goat_user_layer_bytes_total``.
+
+    Both share the same join shape, so we issue a single query that returns
+    both columns and write to two gauges. Keeps user-scoped data in one place.
+    """
+    accounts = settings.ACCOUNTS_SCHEMA
+    customer = settings.CUSTOMER_SCHEMA
+    query = text(
+        ORG_DISAMBIG_CTE.format(accounts=accounts)
+        + f"""
+        SELECT
+            u.email AS user_email,
+            o.id::text AS org_id,
+            do_.display_name AS org_name,
+            count(l.id) AS n,
+            COALESCE(SUM(l.size), 0)::bigint AS bytes
+        FROM {accounts}."user" u
+        JOIN {accounts}.organization o ON o.id = u.organization_id
+        JOIN {customer}.layer l ON l.user_id = u.id
+        JOIN disambig_orgs do_ ON do_.id = o.id
+        WHERE u.email IS NOT NULL
+        GROUP BY u.email, o.id, do_.display_name
+        """
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    for row in rows:
+        attrs = {
+            "user_email": row.user_email,
+            "org_id": row.org_id,
+            "org_name": row.org_name,
+        }
+        layers_gauge.set(row.n, attributes=attrs)
+        bytes_gauge.set(row.bytes, attributes=attrs)
+    return len(rows)
+
+
+# ----------------------------------------------------------------------------
+# Orchestration
+# ----------------------------------------------------------------------------
+
+
+async def _run_query(
+    *,
+    name: str,
+    fn: Callable[[], Awaitable[int]],
+    error_counter: Instrument,
+) -> bool:
+    """Run a query function with isolated error handling.
+
+    Returns ``True`` on success, ``False`` on failure (the failure is logged
+    and the error counter is incremented). Caller decides what to do with
+    the aggregated success bit.
+    """
+    try:
+        n = await fn()
+        logger.info("snapshot query %s ok: %d series", name, n)
+        return True
+    except Exception:
+        logger.exception("snapshot query %s failed", name)
+        error_counter.add(1, attributes={"query_name": name})
+        return False
+
+
+async def _apply_session_safety_limits(db: AsyncSession) -> None:
+    """Bound the cost a misbehaving query can impose on Postgres.
+
+    - ``statement_timeout`` kills any single query that runs longer than 30s.
+      Our aggregations are cheap (count(*) / sum(size) over a few tables) but
+      a missing index or a vacuum-blocked table could turn one into a
+      sequential scan. 30s is a generous ceiling that still keeps the CronJob
+      tight — if it's hitting this, that's an alertable signal, not normal.
+    - ``lock_timeout`` ensures we don't wait forever for a lock that some
+      other transaction holds (we only run SELECTs, but the planner may take
+      AccessShareLocks).
+    - ``idle_in_transaction_session_timeout`` is a backstop for the unlikely
+      case that the script wedges between queries; the server will drop the
+      connection itself rather than us holding a pooler slot indefinitely.
+
+    All three are SET LOCAL — they apply only to this session and revert on
+    commit/rollback. Wrapped in their own try/except: a server that refuses
+    to honor these (very unlikely) shouldn't fail the whole run.
+    """
+    try:
+        await db.execute(text("SET LOCAL statement_timeout = '30s'"))
+        await db.execute(text("SET LOCAL lock_timeout = '5s'"))
+        await db.execute(
+            text("SET LOCAL idle_in_transaction_session_timeout = '60s'")
+        )
+    except Exception:
+        logger.exception("failed to apply session safety limits; continuing")
+
+
+async def snapshot() -> bool:
+    """Run a full snapshot pass. Returns True iff every query succeeded."""
+    meter = _build_meter()
+    instr = _make_instruments(meter)
+    error_counter = instr["query_errors_total"]  # type: ignore[assignment]
+
+    session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
+    try:
+        async with session_manager.session() as db:
+            await _apply_session_safety_limits(db)
+            results = [
+                await _run_query(
+                    name=Q_LAYERS,
+                    fn=lambda: snapshot_layers(db, instr["layers_total"]),  # type: ignore[arg-type]
+                    error_counter=error_counter,  # type: ignore[arg-type]
+                ),
+                await _run_query(
+                    name=Q_LAYER_BYTES,
+                    fn=lambda: snapshot_layer_bytes(
+                        db, instr["layer_bytes_total"]  # type: ignore[arg-type]
+                    ),
+                    error_counter=error_counter,  # type: ignore[arg-type]
+                ),
+                await _run_query(
+                    name=Q_PROJECTS,
+                    fn=lambda: snapshot_projects(db, instr["projects_total"]),  # type: ignore[arg-type]
+                    error_counter=error_counter,  # type: ignore[arg-type]
+                ),
+                await _run_query(
+                    name=Q_USERS,
+                    fn=lambda: snapshot_users(db, instr["users_total"]),  # type: ignore[arg-type]
+                    error_counter=error_counter,  # type: ignore[arg-type]
+                ),
+                await _run_query(
+                    name=Q_USER_PROJECTS,
+                    fn=lambda: snapshot_user_projects(
+                        db, instr["user_projects_total"]  # type: ignore[arg-type]
+                    ),
+                    error_counter=error_counter,  # type: ignore[arg-type]
+                ),
+                await _run_query(
+                    name=Q_USER_LAYERS,
+                    fn=lambda: snapshot_user_layers(
+                        db,
+                        instr["user_layers_total"],  # type: ignore[arg-type]
+                        instr["user_layer_bytes_total"],  # type: ignore[arg-type]
+                    ),
+                    error_counter=error_counter,  # type: ignore[arg-type]
+                ),
+            ]
+    finally:
+        await session_manager.close()
+
+    all_ok = all(results)
+    if all_ok:
+        instr["snapshot_success_ts"].set(time.time())  # type: ignore[attr-defined]
+        logger.info("snapshot done: all queries ok")
+    else:
+        logger.error(
+            "snapshot done with failures: %d/%d queries failed",
+            len(results) - sum(results),
+            len(results),
+        )
+
+    # TODO(usage-snapshot): Windmill cross-DB metrics. The dashboard expects
+    # counter-typed series goat_jobs_total / goat_jobs_duration_seconds_total /
+    # goat_jobs_output_bytes_total (labels: org_id, org_name, tool, status) plus
+    # a goat_jobs_running gauge. Source tables in the Windmill Postgres DB:
+    #   - `completed_job` (a.k.a. history of finished runs) -- has columns
+    #     `started_at`, `duration_ms`, `success`, `canceled`, `created_by`,
+    #     `script_path`, `result` (JSONB; output-bytes lives here if at all).
+    #     This is the source for the *_total counters.
+    #   - `queue` -- currently-queued/running jobs; source for goat_jobs_running.
+    #   - There may also be a `job` view that unions both -- prefer the
+    #     explicit tables for predictable behaviour.
+    # Implementation notes:
+    #   1. A second async engine pointed at the Windmill Postgres -- same
+    #      cluster as GOAT but different database (`windmill`), so the URL
+    #      is the same host:port but `?database=windmill`.
+    #   2. Use ObservableCounter so the OTel SDK emits a cumulative absolute
+    #      value (queried from `completed_job` at observation time) rather
+    #      than per-run deltas -- otherwise each fresh CronJob process looks
+    #      like a counter reset to Prometheus and rate()/increase() misbehave.
+    #      The ObservableCounter callback can run sync against a tiny psycopg
+    #      connection -- no need to drag asyncio through the callback.
+    #   3. `tool` label: map from Windmill's `script_path` (e.g.
+    #      "f/goat/buffer") to the dashboard's tool taxonomy.
+    #   4. `org_id` / `org_name` label: join `completed_job.created_by`
+    #      against GOAT's `accounts.user` to find the user's organization.
+    #      This means the Windmill DB connection alone isn't sufficient --
+    #      the script needs both DBs visible. Tracked in spec section 4.3.
+
+    return all_ok
+
+
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    # Bootstrap OTel before doing anything else, so the MeterProvider is in
+    # place by the time _build_meter() runs. Service name "core" lands these
+    # metrics in the same Mimir bucket as the FastAPI RED metrics, which is
+    # what the dashboard's datasource variable expects.
+    setup_observability(service_name="core")
+
+    try:
+        all_ok = asyncio.run(snapshot())
+    except Exception:
+        logger.exception("snapshot crashed before completing")
+        all_ok = False
+
+    # Force-flush the OTel exporter so the cronjob pod doesn't exit before
+    # the periodic reader has pushed this batch. The default reader interval
+    # is 30s; without an explicit flush the pod can shut down with a full
+    # in-memory buffer.
+    provider = otel_metrics.get_meter_provider()
+    if isinstance(provider, MeterProvider):
+        try:
+            provider.force_flush(timeout_millis=10_000)
+            provider.shutdown(timeout_millis=10_000)
+        except Exception:
+            logger.exception("OTel meter provider flush/shutdown failed")
+
+    return 0 if all_ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

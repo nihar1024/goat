@@ -326,13 +326,17 @@ async def snapshot_projects(
 async def snapshot_users(
     db: AsyncSession, gauge: Instrument
 ) -> int:
-    """Emit ``goat_users_total`` per (org, role).
+    """Emit ``goat_users_total`` per org (DISTINCT user count).
 
-    Joins via ``accounts.user_role`` so a user with multiple roles in the
-    same org contributes to every role bucket. Users without any row in
-    ``user_role`` are not emitted -- the dashboard's "total users" stat
-    should ``sum by (org_name)`` over this metric, and unrole'd users
-    aren't really "GOAT users" in the product sense.
+    Earlier iteration broke this out by role too, which caused
+    ``sum(goat_users_total)`` on the dashboard's "Total Users" panel to
+    double-count users with multiple roles. The role label is dropped;
+    if a role breakdown panel is needed later, emit it as a separate
+    metric family.
+
+    The EXISTS filter keeps the original "user must have at least one
+    role to be a GOAT user" semantics — unrole'd ghost rows in the
+    ``user`` table are still excluded.
     """
     accounts = settings.ACCOUNTS_SCHEMA
     query = text(
@@ -341,14 +345,14 @@ async def snapshot_users(
         SELECT
             o.id::text AS org_id,
             do_.display_name AS org_name,
-            r.name AS role,
             count(DISTINCT u.id) AS n
         FROM {accounts}."user" u
         JOIN {accounts}.organization o ON o.id = u.organization_id
-        JOIN {accounts}.user_role ur ON ur.user_id = u.id
-        JOIN {accounts}.role r ON r.id = ur.role_id
         JOIN disambig_orgs do_ ON do_.id = o.id
-        GROUP BY o.id, do_.display_name, r.name
+        WHERE EXISTS (
+            SELECT 1 FROM {accounts}.user_role ur WHERE ur.user_id = u.id
+        )
+        GROUP BY o.id, do_.display_name
         """
     )
     result = await db.execute(query)
@@ -359,7 +363,6 @@ async def snapshot_users(
             attributes={
                 "org_id": row.org_id,
                 "org_name": row.org_name,
-                "role": row.role,
             },
         )
     return len(rows)

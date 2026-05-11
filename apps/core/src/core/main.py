@@ -83,9 +83,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from core.middleware.auth_context import auth_context_middleware  # noqa: E402
+from goatlib.auth import JOSEError  # noqa: E402
+from goatobs import build_auth_context_middleware  # noqa: E402
+from core.deps.auth import decode_token  # noqa: E402
 
-app.middleware("http")(auth_context_middleware)
+app.middleware("http")(
+    build_auth_context_middleware(decode_token, decode_errors=(JOSEError,))
+)
 
 
 @app.get("/api/healthz", description="Health Check", tags=["Health Check"])

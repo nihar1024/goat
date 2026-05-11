@@ -69,8 +69,14 @@ def setup_logging(
     service_name: str,
     environment: str,
     json_output: bool,
+    level: int = logging.INFO,
 ) -> None:
     """Configure structlog AND stdlib logging through a shared processor chain.
+
+    `level` is the threshold applied to the root logger and to uvicorn's
+    loggers. Defaults to INFO — appropriate for prod. Local dev / debugging
+    can pass DEBUG (or set `LOG_LEVEL=DEBUG` if calling via
+    `setup_observability`, which forwards the env var here).
 
     Idempotent: calling twice replaces the prior config (useful in tests).
     """
@@ -130,7 +136,7 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(level)
 
     # Uvicorn installs its own handlers on its loggers during startup,
     # which would bypass ours. Clearing their handlers + propagate=True

@@ -112,6 +112,28 @@ def test_setup_logging_neutralises_uvicorn_log_config():
     assert cfg == {"version": 1, "disable_existing_loggers": False}
 
 
+def test_setup_logging_respects_explicit_level(capsys):
+    """`level=` overrides the root logger threshold so DEBUG records can
+    surface when requested. Default is INFO (anything below dropped) —
+    regression test for the prod default that silences geoapi's tile
+    tracing DEBUG logs."""
+    import logging as _logging
+
+    # Default (INFO): DEBUG message is suppressed.
+    setup_logging(service_name="t", environment="test", json_output=True)
+    _logging.getLogger("test").debug("debug_hidden")
+    assert capsys.readouterr().out == ""
+
+    # Explicit DEBUG level: same call lands on stdout.
+    setup_logging(
+        service_name="t", environment="test", json_output=True, level=_logging.DEBUG
+    )
+    _logging.getLogger("test").debug("debug_visible")
+    [line] = _captured_lines(capsys)
+    assert line["event"] == "debug_visible"
+    assert line["level"] == "debug"
+
+
 def test_setup_logging_neutralises_fastapi_cli_log_config():
     """`fastapi run ...` (the production entrypoint for goat services)
     doesn't read uvicorn.config.LOGGING_CONFIG — it builds its own log

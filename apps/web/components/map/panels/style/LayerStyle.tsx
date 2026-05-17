@@ -13,6 +13,7 @@ import { COLOR_RANGES } from "@/lib/constants/color";
 import {
   type ClassBreaks,
   type ColorMap,
+  type FeatureLayerPointProperties,
   type FeatureLayerProperties,
   type LayerUniqueValues,
   type MarkerMap,
@@ -585,13 +586,20 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                         />
                       )}
 
-                      {/* {CLUSTERING} */}
-                      {activeLayer.feature_layer_geometry_type === "point" && (
-                        <ClusteringSection
-                          layerProperties={layerProperties}
-                          onStyleChange={(newStyle) => updateLayerStyle(newStyle)}
-                        />
-                      )}
+                      {/* {CLUSTERING}
+                          Only available for point layers ≤ 100k features
+                          (the cap on the bulk-features endpoint used by the
+                          GeoJSON cluster source). Layers that already have
+                          clustering enabled keep the section visible so users
+                          can still toggle it off if the layer has grown. */}
+                      {activeLayer.feature_layer_geometry_type === "point" &&
+                        ((activeLayer.total_count ?? 0) <= 100_000 ||
+                          !!(layerProperties as FeatureLayerPointProperties)?.cluster?.enabled) && (
+                          <ClusteringSection
+                            layerProperties={layerProperties}
+                            onStyleChange={(newStyle) => updateLayerStyle(newStyle)}
+                          />
+                        )}
 
                       {/* {MARKER ICON} */}
                       {activeLayer.feature_layer_geometry_type &&

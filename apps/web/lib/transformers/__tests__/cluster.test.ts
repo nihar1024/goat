@@ -61,9 +61,9 @@ const byAttrBuiltinMarkerLayer = {
 } as unknown as Parameters<typeof buildClusterSourceProps>[0];
 
 describe("getClusterGeoJsonUrl", () => {
-  it("builds the OGC items URL with limit=200000", () => {
+  it("builds the OGC items URL with limit=100000", () => {
     const url = getClusterGeoJsonUrl("http://geoapi", "layer-1");
-    expect(url).toBe("http://geoapi/collections/layer-1/items?limit=200000&f=json");
+    expect(url).toBe("http://geoapi/collections/layer-1/items?limit=100000&f=json");
   });
 
   it("appends a filter param when given", () => {

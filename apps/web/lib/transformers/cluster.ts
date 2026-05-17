@@ -18,7 +18,7 @@ export const getClusterGeoJsonUrl = (
   layerId: string,
   filter?: string,
 ): string => {
-  const params = new URLSearchParams({ limit: "200000", f: "json" });
+  const params = new URLSearchParams({ limit: "100000", f: "json" });
   if (filter) params.set("filter", filter);
   return `${geoapiBaseUrl}/collections/${layerId}/items?${params.toString()}`;
 };

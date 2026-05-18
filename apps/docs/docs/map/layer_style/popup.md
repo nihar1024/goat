@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Popup
 
-**Popups display relevant information when users interact with map features.** They keep your map clean while providing detailed information on demand. You can fully customize what content appears and how it is presented.
+**Popups display relevant information when users interact with map features.** This keeps your map clean while providing detailed information on demand. You can choose when to show the popup, add content blocks, and control how everything is presented.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/map/styling/popup.webp').default} alt="Popup displaying feature information" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>

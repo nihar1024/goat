@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Popup
 
-**Popups zeigen relevante Informationen an, wenn Benutzer mit Karten-Features interagieren.** Sie halten Ihre Karte übersichtlich und stellen gleichzeitig detaillierte Informationen auf Abruf bereit. Sie können vollständig anpassen, welcher Inhalt angezeigt wird und wie er dargestellt wird.
+**Popups zeigen relevante Informationen an, wenn Benutzer mit Karten-Features interagieren.** Dies hält Ihre Karte übersichtlich und stellt gleichzeitig detaillierte Informationen auf Abruf bereit. Sie können wählen, wann das Popup angezeigt wird, Inhaltsblöcke hinzufügen und die Darstellung vollständig steuern.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/map/styling/popup_de.webp').default} alt="Popup zeigt Feature-Informationen an" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>

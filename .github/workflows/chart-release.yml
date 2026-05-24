@@ -47,9 +47,17 @@ jobs:
       - name: Package chart
         run: helm package charts/goat/ --destination /tmp/
 
+      # `helm registry login` against ghcr.io has been flaky across versions
+      # (returns "unsupported" or "Error logging in to endpoint" depending on
+      # the helm version). docker/login-action@v3 is the GitHub-recommended
+      # path and writes ~/.docker/config.json — helm picks it up automatically
+      # for the subsequent `helm push`.
       - name: Log in to ghcr.io
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
-          -u "${{ github.actor }}" --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push chart to OCI registry
         id: push

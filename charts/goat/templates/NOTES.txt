@@ -10,6 +10,6 @@ To check core health from inside the cluster:
 If you bundled redis (redis.enabled=true), its password is in:
   kubectl -n {{ .Release.Namespace }} get secret {{ .Release.Name }}-redis -o jsonpath='{.data.redis-password}' | base64 -d
 
-For external Postgres (civitas profile), ensure the secret named in
+For external Postgres, ensure the secret named in
 postgresql.external.existingSecret exists in namespace "{{ .Release.Namespace }}"
 before `helm install`. See README.md for details.

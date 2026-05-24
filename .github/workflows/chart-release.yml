@@ -19,7 +19,10 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          # 3.14.0 had a bug with ghcr.io OCI registry login ("unsupported"
+          # error on Bearer realm negotiation). Fixed in 3.14.1+. Pin to a
+          # recent stable.
+          version: v3.16.4
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3

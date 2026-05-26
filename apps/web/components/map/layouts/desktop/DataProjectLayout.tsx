@@ -425,7 +425,11 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               }}
             />
           </Stack>
-          <AttributionControl />
+          <AttributionControl
+            extraAttribution={
+              activeBasemap.source === "custom" ? activeBasemap.attribution : null
+            }
+          />
         </Stack>
       </Stack>
       {/* Right panel + measure results — rendered separately when data panel is open so controls can be to the left */}

@@ -170,6 +170,7 @@ const baseCustomBasemapSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).nullable().optional(),
   thumbnail_url: z.string().url().max(2048).nullable().optional(),
+  attribution: z.string().max(500).nullable().optional(),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
 });
@@ -191,7 +192,6 @@ export const customBasemapSchema = z.discriminatedUnion("type", [
         (s) => s.includes("{z}") && s.includes("{x}") && s.includes("{y}"),
         { message: "URL must contain {z}, {x}, and {y} placeholders" }
       ),
-    attribution: z.string().max(500).nullable().optional(),
   }),
   baseCustomBasemapSchema.extend({
     type: z.literal("solid"),

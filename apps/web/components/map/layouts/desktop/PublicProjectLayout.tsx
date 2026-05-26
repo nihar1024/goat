@@ -767,7 +767,11 @@ const PublicProjectLayout = ({
               transition: "all 0.3s",
             }}>
             {controlsByCorner["bottom-right"].map((c) => renderControl(c, "bottom-right"))}
-            <AttributionControl />
+            <AttributionControl
+              extraAttribution={
+                activeBasemap.source === "custom" ? activeBasemap.attribution : null
+              }
+            />
           </Box>
 
           {/* Scalebar — bottom-left is reserved exclusively for the scalebar */}

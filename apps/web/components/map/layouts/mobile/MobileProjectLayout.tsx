@@ -449,7 +449,11 @@ const MobileProjectLayout = ({
                 <Scalebar />
               </Box>
             )}
-            <AttributionControl />
+            <AttributionControl
+              extraAttribution={
+                activeBasemap.source === "custom" ? activeBasemap.attribution : null
+              }
+            />
           </Box>
         </Box>
 

@@ -179,6 +179,7 @@ const ToolsTabContent: React.FC<ToolsTabContentProps> = ({ onDragStart }) => {
     () => [
       { id: "add_dataset", title: t("add_dataset") },
       { id: "export_dataset", title: t("export_dataset") },
+      { id: "if_node", title: t("if_node", { defaultValue: "If" }) },
     ],
     [t]
   );
@@ -257,6 +258,11 @@ const ToolsTabContent: React.FC<ToolsTabContentProps> = ({ onDragStart }) => {
     onDragStart(event, "export");
   };
 
+  // Handle drag start for If/Switch branching node
+  const handleIfDragStart = (event: React.DragEvent) => {
+    onDragStart(event, "if");
+  };
+
   const hasNoResults = filteredDataIoItems.length === 0 && sortedCategories.length === 0;
 
   return (
@@ -290,6 +296,7 @@ const ToolsTabContent: React.FC<ToolsTabContentProps> = ({ onDragStart }) => {
                       onDragStart={(event) => {
                         if (item.id === "add_dataset") handleDatasetDragStart(event);
                         else if (item.id === "export_dataset") handleExportDragStart(event);
+                        else if (item.id === "if_node") handleIfDragStart(event);
                       }}
                     />
                   </Grid>

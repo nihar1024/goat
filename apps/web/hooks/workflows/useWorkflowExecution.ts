@@ -462,6 +462,9 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
       const exportedLayerIds: Record<string, string> = {};
       const tempLayerProperties: Record<string, Record<string, unknown>> = {};
 
+      const resolveStatus = (nodeId: string): NodeExecutionStatus =>
+        results?.[nodeId]?.status === "skipped" ? "skipped" : "completed";
+
       // Build execution info with timing from node_results
       const finalExecutionInfo: Record<string, NodeExecutionInfo> = {};
 
@@ -480,7 +483,7 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
           }
           // Extract timing info from each node result
           finalExecutionInfo[nodeId] = {
-            status: "completed",
+            status: resolveStatus(nodeId),
             durationMs: result.duration_ms,
           };
         });
@@ -494,7 +497,7 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
         exportedLayerIds,
         tempLayerProperties,
         nodeStatuses: Object.fromEntries(
-          Object.entries(s.nodeStatuses).map(([id, _status]) => [id, "completed"])
+          Object.entries(s.nodeStatuses).map(([id]) => [id, resolveStatus(id)])
         ),
         // Set final execution info with timing from node_results
         nodeExecutionInfo: finalExecutionInfo,
@@ -521,7 +524,81 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
         const newStatuses = { ...s.nodeStatuses };
         const newTempLayerIds = { ...s.tempLayerIds };
 
+        // Backend may have marked branches as "skipped" via an If-node before
+        // failing — honor that status instead of falsely marking them failed.
+        const skipped = new Set<string>();
+        if (job.node_status) {
+          Object.entries(job.node_status).forEach(([nodeId, statusData]) => {
+            const status =
+              typeof statusData === "string" ? statusData : statusData?.status;
+            if (status === "skipped") {
+              skipped.add(nodeId);
+            }
+          });
+        }
+
+        // If-node descendants aren't spawned as Windmill child jobs, so the
+        // backend's skipped status for them never reaches node_status. Infer
+        // from the graph: for each If-node, whichever side has any non-pending
+        // descendant is the active branch — mark the other side as skipped.
+        const ifNodeIds = nodes
+          .filter((n) => n.data?.type === "if")
+          .map((n) => n.id);
+        if (ifNodeIds.length > 0) {
+          const adj = new Map<string, { target: string; handle: string | null }[]>();
+          for (const e of edges) {
+            const list = adj.get(e.source) ?? [];
+            list.push({ target: e.target, handle: e.sourceHandle ?? null });
+            adj.set(e.source, list);
+          }
+          const bfs = (starts: string[]): Set<string> => {
+            const seen = new Set<string>();
+            const queue = [...starts];
+            while (queue.length > 0) {
+              const cur = queue.shift()!;
+              for (const { target } of adj.get(cur) ?? []) {
+                if (!seen.has(target)) {
+                  seen.add(target);
+                  queue.push(target);
+                }
+              }
+            }
+            return seen;
+          };
+          for (const ifId of ifNodeIds) {
+            const trueStarts: string[] = [];
+            const falseStarts: string[] = [];
+            for (const { target, handle } of adj.get(ifId) ?? []) {
+              if (handle === "true") trueStarts.push(target);
+              else if (handle === "false") falseStarts.push(target);
+            }
+            const trueReached = new Set([...trueStarts, ...bfs(trueStarts)]);
+            const falseReached = new Set([...falseStarts, ...bfs(falseStarts)]);
+            const wasActive = (ids: Set<string>): boolean =>
+              [...ids].some((id) => {
+                const st = newStatuses[id];
+                return st === "completed" || st === "failed" || st === "running";
+              });
+            const trueActive = wasActive(trueReached);
+            const falseActive = wasActive(falseReached);
+            // Only mark skipped if we can unambiguously identify the active side.
+            if (trueActive && !falseActive) {
+              for (const id of falseReached) {
+                if (!trueReached.has(id)) skipped.add(id);
+              }
+            } else if (falseActive && !trueActive) {
+              for (const id of trueReached) {
+                if (!falseReached.has(id)) skipped.add(id);
+              }
+            }
+          }
+        }
+
         Object.entries(newStatuses).forEach(([nodeId, status]) => {
+          if (skipped.has(nodeId)) {
+            newStatuses[nodeId] = "skipped";
+            return;
+          }
           if (status === "running" || status === "pending") {
             newStatuses[nodeId] = "failed";
           }

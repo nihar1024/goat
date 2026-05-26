@@ -7,7 +7,7 @@
  * For tool nodes, displays the same inputs as GenericTool.
  * For dataset nodes, delegates to DatasetNodeSettings.
  */
-import { CheckCircle as CheckCircleIcon } from "@mui/icons-material";
+import { Block as BlockIcon, CheckCircle as CheckCircleIcon } from "@mui/icons-material";
 import {
   Box,
   Button,
@@ -69,6 +69,7 @@ import { useWorkflowExecutionContext } from "@/components/workflows/context/Work
 import SaveDatasetDialog from "@/components/workflows/dialogs/SaveDatasetDialog";
 import VariableAwareInput from "@/components/workflows/inputs/VariableAwareInput";
 import DatasetNodeSettings from "@/components/workflows/panels/DatasetNodeSettings";
+import IfNodeSettings from "@/components/workflows/panels/IfNodeSettings";
 import SqlToolSettings from "@/components/workflows/panels/SqlToolSettings";
 
 // Map section icons from backend to ICON_NAME
@@ -945,6 +946,11 @@ export default function WorkflowNodeSettings({
     return <SqlToolSettings node={node} onBack={onBack} />;
   }
 
+  // Render If/Switch branching node settings
+  if (node.type === "if" && node.data.type === "if") {
+    return <IfNodeSettings node={node} onBack={onBack} />;
+  }
+
   // Render tool node settings
   if (node.type === "tool" && node.data.type === "tool") {
     // Loading state
@@ -1001,8 +1007,11 @@ export default function WorkflowNodeSettings({
                 </Typography>
                 <Divider sx={{ mb: 1.5 }} />
                 <Chip
-                  label={nodeStatus ? t(nodeStatus) : t("idle")}
+                  label={nodeStatus ? t(nodeStatus, { defaultValue: nodeStatus }) : t("idle")}
                   size="small"
+                  icon={
+                    nodeStatus === "skipped" ? <BlockIcon sx={{ fontSize: 14 }} /> : undefined
+                  }
                   color={
                     nodeStatus === "completed"
                       ? "primary"

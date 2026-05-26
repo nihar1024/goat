@@ -7,7 +7,14 @@ import * as z from "zod";
 /**
  * Status of a workflow node during execution
  */
-export const nodeStatusSchema = z.enum(["idle", "pending", "running", "completed", "error"]);
+export const nodeStatusSchema = z.enum([
+  "idle",
+  "pending",
+  "running",
+  "completed",
+  "error",
+  "skipped",
+]);
 
 export type NodeStatus = z.infer<typeof nodeStatusSchema>;
 
@@ -95,6 +102,95 @@ export const exportNodeDataSchema = z.object({
 export type ExportNodeData = z.infer<typeof exportNodeDataSchema>;
 
 // ============================================================================
+// Conditional Node (binary if/else branching)
+// ============================================================================
+
+/**
+ * Reserved source-handle ids for the Conditional node's two outputs.
+ * Mirrored in [packages/python/goatlib/src/goatlib/tools/workflow_runner.py].
+ */
+export const IF_TRUE_HANDLE = "true";
+export const IF_FALSE_HANDLE = "false";
+
+/**
+ * A statistic-style condition row inside the Simple-condition builder.
+ * Evaluates an aggregate over the upstream layer (e.g. ``COUNT(*) > 100``,
+ * ``AVG(population) >= 500``).
+ */
+export const ifStatisticExpressionSchema = z.object({
+  id: z.string(),
+  /** Marker so the evaluator can distinguish from logical filter rows. */
+  kind: z.literal("statistic"),
+  /** Aggregate method — `count` requires no field; the others need one. */
+  method: z.enum(["count", "sum", "mean", "median", "min", "max"]).optional(),
+  /** Field/column to aggregate. Empty for `count(*)`. */
+  field: z.string().optional(),
+  /** Comparison operator against the threshold value. */
+  operator: z.enum(["=", "!=", ">", ">=", "<", "<="]).optional(),
+  /** Threshold. Accepts a number, a literal string, or a {{@variable}} reference. */
+  value: z.union([z.string(), z.number()]).optional(),
+});
+
+export type IfStatisticExpression = z.infer<typeof ifStatisticExpressionSchema>;
+
+/**
+ * A spatial-style condition row inside the Simple-condition builder.
+ * Evaluates a geometric relation between the upstream (input) layer and a
+ * comparison layer wired to the if-node's `comparison_layer_id` target handle.
+ *
+ * The schema doesn't carry the comparison layer id — it's resolved at runtime
+ * by inspecting the incoming edge whose `targetHandle === "comparison_layer_id"`.
+ */
+export const ifSpatialExpressionSchema = z.object({
+  id: z.string(),
+  /** Marker so the evaluator can distinguish from logical / statistic rows. */
+  kind: z.literal("spatial"),
+  /** Geometric relation. Mirrors the predicates supported by cql_evaluator.py. */
+  relation: z
+    .enum([
+      "intersects",
+      "within",
+      "contains",
+      "touches",
+      "crosses",
+      "overlaps",
+      "disjoint",
+      "within_distance",
+    ])
+    .optional(),
+  /** Required only when relation === "within_distance" (meters). */
+  distance: z.union([z.number(), z.string()]).optional(),
+});
+
+export type IfSpatialExpression = z.infer<typeof ifSpatialExpressionSchema>;
+
+/**
+ * Data schema for the Conditional (if/else) node. Evaluates a single rule
+ * against the connected upstream layer; rows matching the condition flow
+ * through the TRUE handle, the rest through FALSE.
+ */
+export const ifNodeDataSchema = z.object({
+  type: z.literal("if"),
+  label: z.string(),
+  mode: z.enum(["simple", "custom"]).default("simple"),
+  // Simple-mode condition: mix of logical filter rows and statistic rows
+  condition: z
+    .object({
+      op: z.string(),
+      expressions: z.array(z.record(z.unknown())),
+    })
+    .optional(),
+  // Custom-mode free-text SQL expression
+  customExpression: z.string().default(""),
+  // Populated by the executor; identifies which output handle was taken
+  activeHandle: z.enum(["true", "false"]).optional(),
+  status: nodeStatusSchema.default("idle"),
+  error: z.string().optional(),
+});
+
+export type IfNodeData = z.infer<typeof ifNodeDataSchema>;
+
+// ============================================================================
 // Workflow Node (ReactFlow compatible)
 // ============================================================================
 
@@ -103,7 +199,7 @@ export type ExportNodeData = z.infer<typeof exportNodeDataSchema>;
  */
 export const workflowNodeSchema = z.object({
   id: z.string(),
-  type: z.enum(["dataset", "tool", "textAnnotation", "export"]),
+  type: z.enum(["dataset", "tool", "textAnnotation", "export", "if"]),
   position: z.object({
     x: z.number(),
     y: z.number(),
@@ -113,6 +209,7 @@ export const workflowNodeSchema = z.object({
     toolNodeDataSchema,
     textAnnotationNodeDataSchema,
     exportNodeDataSchema,
+    ifNodeDataSchema,
   ]),
   // Optional ReactFlow properties
   width: z.number().optional(),
@@ -342,6 +439,12 @@ export const isExportNode = (node: WorkflowNode): node is WorkflowNode & { data:
   node.data.type === "export";
 
 /**
+ * Check if a node is an If/Switch node
+ */
+export const isIfNode = (node: WorkflowNode): node is WorkflowNode & { data: IfNodeData } =>
+  node.data.type === "if";
+
+/**
  * Create a new export node
  */
 export const createExportNode = (
@@ -359,6 +462,27 @@ export const createExportNode = (
     datasetName: "",
     addToProject: true,
     overwritePrevious: false,
+    status: "idle",
+  },
+});
+
+/**
+ * Create a new Conditional (binary if/else) node.
+ */
+export const createIfNode = (
+  id: string,
+  position: { x: number; y: number },
+  label: string = "Conditional"
+): WorkflowNode => ({
+  id,
+  type: "if",
+  position,
+  zIndex: 1000,
+  data: {
+    type: "if",
+    label,
+    mode: "simple",
+    customExpression: "",
     status: "idle",
   },
 });

@@ -29,6 +29,7 @@ import {
 } from "@/lib/store/workflow/slice";
 import { parseCQLQueryToObject } from "@/lib/transformers/filter";
 import type { Project, ProjectLayer, ProjectLayerGroup } from "@/lib/validations/project";
+import { createIfNode } from "@/lib/validations/workflow";
 import type { WorkflowNode } from "@/lib/validations/workflow";
 
 import { useWorkflowExecution } from "@/hooks/workflows/useWorkflowExecution";
@@ -339,6 +340,8 @@ const WorkflowsLayoutInner: React.FC<WorkflowsLayoutProps> = ({
             },
           })
         );
+      } else if (nodeType === "if") {
+        dispatch(addNode(createIfNode(`if-${uuidv4()}`, position)));
       }
     },
     [selectedWorkflowId, reactFlowInstance, dispatch]

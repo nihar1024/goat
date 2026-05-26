@@ -83,12 +83,14 @@ jobs:
             core:
                 - 'apps/core/**'
                 - 'packages/python/goatlib/**'
+                - 'packages/python/goatobs/**'
                 - 'pyproject.toml'
                 - 'uv.lock'
 
             geoapi:
                 - 'apps/geoapi/**'
                 - 'packages/python/goatlib/**'
+                - 'packages/python/goatobs/**'
                 - 'pyproject.toml'
                 - 'uv.lock'
 
@@ -132,6 +134,7 @@ jobs:
             processes:
                 - 'apps/processes/**'
                 - 'packages/python/goatlib/**'
+                - 'packages/python/goatobs/**'
                 - 'pyproject.toml'
                 - 'uv.lock'
 

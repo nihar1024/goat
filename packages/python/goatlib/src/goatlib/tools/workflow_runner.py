@@ -595,6 +595,30 @@ def build_tool_inputs(
                 if old_filter in inputs:
                     inputs[new_filter] = inputs.pop(old_filter)
 
+    # For merge: build input_paths list from numbered input_path_N inputs.
+    if process_id == "merge":
+        path_keys = sorted(
+            k
+            for k in list(inputs)
+            if k.startswith("input_path_")
+            and not k.endswith("_filter")
+            and k != "input_paths"
+        )
+        if path_keys:
+            input_paths: list[dict[str, Any]] = []
+            for key in path_keys:
+                layer_id = inputs.pop(key)
+                if not layer_id:
+                    continue
+                filter_key = f"{key}_filter"
+                layer_filter = inputs.pop(filter_key, None)
+                item: dict[str, Any] = {"input_path": layer_id}
+                if layer_filter:
+                    item["input_layer_filter"] = layer_filter
+                input_paths.append(item)
+            if input_paths:
+                inputs["input_paths"] = input_paths
+
     # For heatmap gravity/closest_average: build opportunities list from
     # numbered opportunity_layer_N_id inputs and per-opportunity config keys.
     if process_id in ("heatmap_gravity", "heatmap_closest_average", "heatmap_2sfca"):
@@ -820,29 +844,13 @@ def main(
         if node_type == "if":
             print(f"[workflow_runner] Evaluating If node {node_id}...")
             try:
-                # Two target handles: the input edge (anything not explicitly
-                # tagged comparison_layer_id flows through to True/False) and
-                # the comparison edge (Spatial-row reference; never propagates).
+                # Single input edge — the upstream layer flows through to the
+                # active True/False branch.
                 incoming_input = next(
-                    (
-                        e
-                        for e in edges
-                        if e["target"] == node_id
-                        and e.get("targetHandle") != "comparison_layer_id"
-                    ),
-                    None,
-                )
-                incoming_compare = next(
-                    (
-                        e
-                        for e in edges
-                        if e["target"] == node_id
-                        and e.get("targetHandle") == "comparison_layer_id"
-                    ),
+                    (e for e in edges if e["target"] == node_id),
                     None,
                 )
                 upstream_layer_id: str | None = None
-                comparison_layer_id: str | None = None
                 if incoming_input:
                     source_node = next(
                         (n for n in nodes if n["id"] == incoming_input["source"]),
@@ -850,19 +858,9 @@ def main(
                     )
                     if source_node is not None:
                         upstream_layer_id = get_input_layer_id(source_node, results)
-                if incoming_compare:
-                    compare_source = next(
-                        (n for n in nodes if n["id"] == incoming_compare["source"]),
-                        None,
-                    )
-                    if compare_source is not None:
-                        comparison_layer_id = get_input_layer_id(
-                            compare_source, results
-                        )
                 if_result = execute_if_node(
                     node,
                     upstream_layer_id,
-                    comparison_layer_id,
                     params.user_id,
                     if_var_map,
                 )

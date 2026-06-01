@@ -391,6 +391,16 @@ export const popupBlock = z.discriminatedUnion("type", [
 
 export const popupAnchor = z.enum(["top_left", "top_right", "bottom_left", "bottom_right"]);
 
+export const popupLayout = z.enum([
+  "popup",
+  "pinned",
+  "modal",
+  "left_sidebar",
+  "right_sidebar",
+]);
+
+export const popupHeader = z.enum(["standard", "compact", "none"]);
+
 export const popupProperties = z.object({
   enabled: z.boolean().default(true),
   // "click_and_hover" opens the popup on hover (transient) AND on click
@@ -400,10 +410,17 @@ export const popupProperties = z.object({
   mode: z.enum(["simple", "html"]).default("simple"),
   blocks: z.array(popupBlock).default([]),
   html: z.string().default(""),
-  show_layer_header: z.boolean().default(true),
-  position: z.enum(["in_place", "fixed"]).default("in_place"),
-  anchor: popupAnchor.default("top_right"),
+  // Unified, mode-agnostic appearance ("Desktop layout").
+  layout: popupLayout.default("popup"),
+  anchor: popupAnchor.optional(), // only meaningful when layout === "pinned"
+  width: z.number().int().positive().optional(), // px; undefined = auto
+  max_height: z.number().int().positive().optional(), // px; undefined = auto
+  header: popupHeader.default("standard"),
   highlight_active_feature: z.boolean().default(true),
+  // DEPRECATED — kept optional so legacy stored popups survive parsing
+  // and can be mapped forward by normalizePopup(). Never written by new code.
+  position: z.enum(["in_place", "fixed"]).optional(),
+  show_layer_header: z.boolean().optional(),
 });
 
 export type PopupBlock = z.infer<typeof popupBlock>;
@@ -416,6 +433,9 @@ export type PopupButtonBlock = z.infer<typeof popupButtonBlock>;
 export type PopupBadgeBlock = z.infer<typeof popupBadgeBlock>;
 export type PopupDividerBlock = z.infer<typeof popupDividerBlock>;
 export type PopupProperties = z.infer<typeof popupProperties>;
+export type PopupLayout = z.infer<typeof popupLayout>;
+export type PopupHeader = z.infer<typeof popupHeader>;
+export type PopupAnchor = z.infer<typeof popupAnchor>;
 
 export const featureLayerBasePropertiesSchema = z
   .object({

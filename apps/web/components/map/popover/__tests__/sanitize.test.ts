@@ -49,4 +49,36 @@ describe("sanitizePopupHtml", () => {
     const out = sanitizePopupHtml('<span style="color:#f00">x</span>');
     expect(out).toContain('style="color:#f00"');
   });
+
+  it("preserves an inline SVG icon (shapes/paths/viewBox)", () => {
+    const svg =
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="#2BB381">' +
+      '<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
+    const out = sanitizePopupHtml(svg);
+    expect(out).toContain("<svg");
+    expect(out).toContain("viewBox=\"0 0 24 24\"");
+    expect(out).toContain("<path");
+    expect(out).toContain('fill="#2BB381"');
+    expect(out).toContain('d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"');
+  });
+
+  it("strips <script> inside an <svg>", () => {
+    const out = sanitizePopupHtml('<svg><script>alert(1)</script><circle r="5"/></svg>');
+    expect(out).not.toContain("script");
+    expect(out).not.toContain("alert");
+  });
+
+  it("strips SVG event handlers", () => {
+    const out = sanitizePopupHtml('<svg onload="alert(1)"><path d="M0 0"/></svg>');
+    expect(out).not.toContain("onload");
+    expect(out).not.toContain("alert");
+  });
+
+  it("strips <foreignObject> (HTML smuggling vector)", () => {
+    const out = sanitizePopupHtml(
+      '<svg><foreignObject><img src=x onerror="alert(1)"></foreignObject></svg>',
+    );
+    expect(out.toLowerCase()).not.toContain("foreignobject");
+    expect(out).not.toContain("onerror");
+  });
 });

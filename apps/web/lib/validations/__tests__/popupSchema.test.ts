@@ -69,7 +69,7 @@ describe("popupBlock", () => {
         id: "11111111-1111-1111-1111-111111111117",
         type: "divider",
       }),
-    ).toEqual({ id: "11111111-1111-1111-1111-111111111117", type: "divider" });
+    ).toEqual({ id: "11111111-1111-1111-1111-111111111117", type: "divider", thickness: 1 });
   });
 
   it("rejects badge block with empty field", () => {
@@ -84,22 +84,44 @@ describe("popupBlock", () => {
 });
 
 describe("popupProperties", () => {
-  it("provides defaults for an empty object", () => {
+  it("provides unified-layout defaults for an empty object", () => {
     const parsed = popupProperties.parse({});
-    expect(parsed).toEqual({
+    expect(parsed).toMatchObject({
       enabled: true,
       trigger: "click",
       mode: "simple",
       blocks: [],
       html: "",
-      show_layer_header: true,
-      position: "in_place",
-      anchor: "top_right",
+      layout: "popup",
+      header: "standard",
       highlight_active_feature: true,
     });
+    // optional fields are omitted when absent
+    expect(parsed.anchor).toBeUndefined();
+    expect(parsed.width).toBeUndefined();
+    expect(parsed.max_height).toBeUndefined();
   });
 
-  it("rejects unknown anchor values", () => {
-    expect(() => popupProperties.parse({ anchor: "middle" })).toThrow();
+  it("accepts valid layout/header values and rejects unknown ones", () => {
+    expect(popupProperties.parse({ layout: "pinned" }).layout).toBe("pinned");
+    expect(popupProperties.parse({ header: "compact" }).header).toBe("compact");
+    expect(() => popupProperties.parse({ layout: "drawer" })).toThrow();
+    expect(() => popupProperties.parse({ header: "tiny" })).toThrow();
+  });
+
+  it("preserves legacy position/show_layer_header so they can be migrated", () => {
+    const parsed = popupProperties.parse({
+      position: "fixed",
+      anchor: "bottom_left",
+      show_layer_header: false,
+    });
+    expect(parsed.position).toBe("fixed");
+    expect(parsed.show_layer_header).toBe(false);
+    expect(parsed.anchor).toBe("bottom_left");
+  });
+
+  it("rejects non-positive width / max_height", () => {
+    expect(() => popupProperties.parse({ width: 0 })).toThrow();
+    expect(() => popupProperties.parse({ max_height: -10 })).toThrow();
   });
 });

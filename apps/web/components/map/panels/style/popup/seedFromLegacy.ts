@@ -66,9 +66,8 @@ export function seedPopupFromInteraction(
     mode: "simple",
     blocks,
     html: "",
-    show_layer_header: true,
-    position: "in_place",
-    anchor: "top_right",
+    header: "standard",
+    layout: "popup",
     highlight_active_feature: true,
   };
 }

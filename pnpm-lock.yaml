@@ -449,6 +449,9 @@ importers:
       js-cookie:
         specifier: ^3.0.5
         version: 3.0.5
+      liquidjs:
+        specifier: ^10.27.0
+        version: 10.27.0
       lodash.uniq:
         specifier: ^4.5.0
         version: 4.5.0
@@ -10726,6 +10729,11 @@ packages:
 
   linkifyjs@4.3.2:
     resolution: {integrity: sha512-NT1CJtq3hHIreOianA8aSXn6Cw0JzYOuDQbOrSPe7gqFnCpKP++MQe3ODgO3oh2GJFORkAAdqredOa60z63GbA==}
+
+  liquidjs@10.27.0:
+    resolution: {integrity: sha512-tw/OA59K7aIBlMKIrKlumr37fiZUheShVHXY8cVctWisgY1p9mc5hreOvlreoS0wTiwlWk14Ya7305c2a/Cg5w==}
+    engines: {node: '>=16'}
+    hasBin: true
 
   lit-element@3.3.3:
     resolution: {integrity: sha512-XbeRxmTHubXENkV4h8RIPyr8lXc+Ff28rkcQzw3G6up2xg5E8Zu1IgOWIwBLEQsu3cOVFqdYwiVi0hv0SlpqUA==}
@@ -30154,6 +30162,10 @@ snapshots:
       uc.micro: 2.1.0
 
   linkifyjs@4.3.2: {}
+
+  liquidjs@10.27.0:
+    dependencies:
+      commander: 10.0.1
 
   lit-element@3.3.3:
     dependencies:

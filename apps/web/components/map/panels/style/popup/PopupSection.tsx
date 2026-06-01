@@ -23,12 +23,18 @@ import type { SelectorItem } from "@/types/map/common";
 import useLayerFields from "@/hooks/map/CommonHooks";
 
 import type { LayerField } from "@/components/map/popover/formatFeatureProperties";
+import { normalizePopup } from "@/components/map/popover/normalizePopup";
 import SectionHeader from "@/components/map/panels/common/SectionHeader";
 import SectionOptions from "@/components/map/panels/common/SectionOptions";
 import Selector from "@/components/map/panels/common/Selector";
 
-import { HtmlModeEditor } from "./HtmlModeEditor";
+import { blocksToHtml } from "./blocksToHtml";
+import { buildLayerIcon } from "@/components/map/panels/layer/legend/LayerIcon";
+
+import { HtmlModeCard } from "./HtmlModeCard";
+import { PopupAppearanceSettings } from "./PopupAppearanceSettings";
 import { PopupBlockList } from "./PopupBlockList";
+import { PopupModeToggle } from "./PopupModeToggle";
 import { PopupPreviewController } from "./PopupPreviewController";
 import { BadgeBlockEditor } from "./blocks/BadgeBlockEditor";
 import { ButtonBlockEditor } from "./blocks/ButtonBlockEditor";
@@ -70,11 +76,13 @@ export default function PopupSection({ layer, onStyleChange }: PopupSectionProps
 
   const popup = useMemo<PopupProperties>(
     () =>
-      (layer.properties as { popup?: PopupProperties })?.popup ??
-      seedPopupFromInteraction(
-        (layer.properties as {
-          interaction?: { type?: string; content?: never[] };
-        })?.interaction,
+      normalizePopup(
+        (layer.properties as { popup?: PopupProperties })?.popup ??
+          seedPopupFromInteraction(
+            (layer.properties as {
+              interaction?: { type?: string; content?: never[] };
+            })?.interaction,
+          ),
       ),
     [layer.properties],
   );
@@ -102,32 +110,6 @@ export default function PopupSection({ layer, onStyleChange }: PopupSectionProps
   const selectedTrigger = useMemo(
     () => triggerItems.find((i) => i.value === popup.trigger),
     [triggerItems, popup.trigger],
-  );
-
-  const positionItems: SelectorItem[] = useMemo(
-    () => [
-      { value: "in_place", label: t("position_in_place") },
-      { value: "fixed", label: t("position_fixed") },
-    ],
-    [t],
-  );
-  const selectedPosition = useMemo(
-    () => positionItems.find((i) => i.value === popup.position),
-    [positionItems, popup.position],
-  );
-
-  const anchorItems: SelectorItem[] = useMemo(
-    () => [
-      { value: "top_left", label: t("anchor_top_left") },
-      { value: "top_right", label: t("anchor_top_right") },
-      { value: "bottom_left", label: t("anchor_bottom_left") },
-      { value: "bottom_right", label: t("anchor_bottom_right") },
-    ],
-    [t],
-  );
-  const selectedAnchor = useMemo(
-    () => anchorItems.find((i) => i.value === popup.anchor),
-    [anchorItems, popup.anchor],
   );
 
   return (
@@ -179,9 +161,25 @@ export default function PopupSection({ layer, onStyleChange }: PopupSectionProps
                       <Icon iconName={ICON_NAME.EYE} style={{ fontSize: 14 }} />
                     </IconButton>
                   </Tooltip>
-                  {/* HTML popup mode is gated behind a follow-up. Toggle
-                      stays hidden for now so users only see the block
-                      editor. Re-enable once HTML mode ships. */}
+                  <PopupModeToggle
+                    value={popup.mode}
+                    onChange={(mode) => {
+                      if (mode === "html") {
+                        // One-way eject: seed HTML from blocks only the first
+                        // time. After that HTML is the source of truth.
+                        if (!popup.html) {
+                          updatePopup({
+                            mode,
+                            html: blocksToHtml(popup.blocks, layerFields),
+                          });
+                        } else {
+                          updatePopup({ mode });
+                        }
+                      } else {
+                        updatePopup({ mode });
+                      }
+                    }}
+                  />
                 </Stack>
               </Stack>
               {popup.mode === "simple" ? (
@@ -192,10 +190,12 @@ export default function PopupSection({ layer, onStyleChange }: PopupSectionProps
                   editingId={editing?.block.id ?? null}
                 />
               ) : (
-                <HtmlModeEditor
-                  value={popup.html}
-                  onChange={(html) => updatePopup({ html })}
-                  fields={layerFields as LayerField[]}
+                <HtmlModeCard
+                  layerId={layer.layer_id}
+                  layerName={layer.name ?? ""}
+                  layerIcon={buildLayerIcon(layer)}
+                  popup={popup}
+                  onChange={updatePopup}
                 />
               )}
               {popup.enabled && previewOn && (
@@ -207,35 +207,7 @@ export default function PopupSection({ layer, onStyleChange }: PopupSectionProps
             <Stack spacing={1.5}>
               <SubSectionLabel>{t("appearance")}</SubSectionLabel>
 
-              <Selector
-                label={t("popup_position")}
-                items={positionItems}
-                selectedItems={selectedPosition}
-                setSelectedItems={(item) => {
-                  if (item && !Array.isArray(item)) {
-                    updatePopup({ position: item.value as "in_place" | "fixed" });
-                  }
-                }}
-              />
-
-              {popup.position === "fixed" && (
-                <Selector
-                  label={t("anchor")}
-                  items={anchorItems}
-                  selectedItems={selectedAnchor}
-                  setSelectedItems={(item) => {
-                    if (item && !Array.isArray(item)) {
-                      updatePopup({ anchor: item.value as typeof popup.anchor });
-                    }
-                  }}
-                />
-              )}
-
-              <ToggleRow
-                label={t("show_layer_name_header")}
-                checked={popup.show_layer_header}
-                onChange={(v) => updatePopup({ show_layer_header: v })}
-              />
+              <PopupAppearanceSettings popup={popup} onChange={updatePopup} />
 
               <ToggleRow
                 label={t("highlight_active_feature")}

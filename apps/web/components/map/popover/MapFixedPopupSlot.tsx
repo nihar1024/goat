@@ -12,6 +12,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { buildLayerIcon } from "@/components/map/panels/layer/legend/LayerIcon";
 import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/seedFromLegacy";
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
+import { normalizePopup } from "@/components/map/popover/normalizePopup";
 
 export interface MapFixedPopupSlotProps {
   layers: ProjectLayer[] | undefined;
@@ -56,11 +57,14 @@ export function MapFixedPopupSlot({ layers }: MapFixedPopupSlotProps) {
     const props = clickedLayer.properties as
       | { popup?: PopupProperties; interaction?: { type?: string; content?: never[] } }
       | undefined;
-    if (props?.popup) return props.popup;
+    // normalizePopup maps legacy position/show_layer_header forward so the
+    // `layout === "pinned"` gate below works for popups stored before the
+    // unified-layout schema. Matches the normalize in MapViewer's memos.
+    if (props?.popup) return normalizePopup(props.popup);
     // Auto-seed from the legacy `interaction` config so layers that have
     // never been touched in the new popup editor still render the new
     // popup. Matches the editor's auto-seed in PopupSection.tsx.
-    return seedPopupFromInteraction(props?.interaction);
+    return normalizePopup(seedPopupFromInteraction(props?.interaction));
   }, [clickedLayer]);
 
   const previewLayer = useMemo(() => {
@@ -78,8 +82,8 @@ export function MapFixedPopupSlot({ layers }: MapFixedPopupSlotProps) {
     const props = previewLayer.properties as
       | { popup?: PopupProperties; interaction?: { type?: string; content?: never[] } }
       | undefined;
-    if (props?.popup) return props.popup;
-    return seedPopupFromInteraction(props?.interaction);
+    if (props?.popup) return normalizePopup(props.popup);
+    return normalizePopup(seedPopupFromInteraction(props?.interaction));
   }, [previewLayer]);
 
   const clickedLayerIcon = useMemo(() => buildLayerIcon(clickedLayer), [clickedLayer]);
@@ -101,12 +105,12 @@ export function MapFixedPopupSlot({ layers }: MapFixedPopupSlotProps) {
   }, [popupPreview]);
 
   const showClicked =
-    Boolean(popupInfo) && activePopupConfig?.position === "fixed";
+    Boolean(popupInfo) && activePopupConfig?.layout === "pinned";
   const showPreview =
     !popupInfo &&
     Boolean(popupPreview) &&
     Boolean(previewLayer) &&
-    previewPopupConfig?.position === "fixed" &&
+    previewPopupConfig?.layout === "pinned" &&
     Boolean(previewCentroid);
 
   return (

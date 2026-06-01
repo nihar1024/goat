@@ -14,8 +14,9 @@ import type { LayerField } from "./formatFeatureProperties";
 import { formatFeatureProperties } from "./formatFeatureProperties";
 import { PopupBlockRenderer } from "./PopupBlockRenderer";
 import { PopupFixedHost } from "./PopupFixedHost";
+import { PopupHtmlStyles } from "./popupStyles";
 import { sanitizePopupHtml } from "./sanitize";
-import { substituteTokens } from "./tokens";
+import { renderTemplate } from "./renderTemplate";
 
 export interface MapFeaturePopoverProps {
   layerId: string;
@@ -52,8 +53,8 @@ export function MapFeaturePopover(props: MapFeaturePopoverProps) {
     return point.y < height * 0.4 ? "top" : "bottom";
   }, [mapRef, props.lngLat.lng, props.lngLat.lat]);
 
-  if (props.popup.position === "fixed") {
-    return <PopupFixedHost anchor={props.popup.anchor}>{body}</PopupFixedHost>;
+  if (props.popup.layout === "pinned") {
+    return <PopupFixedHost anchor={props.popup.anchor ?? "top_right"}>{body}</PopupFixedHost>;
   }
   return (
     <Popup
@@ -83,8 +84,13 @@ function PopoverBody({
 
   return (
     <Box
+      // Carries the scoped popup-content styles (popupStyles.tsx) on BOTH the
+      // in-place and pinned branches — the maplibre <Popup> also sets this
+      // class for in-place, but the pinned branch (PopupFixedHost) does not,
+      // so it must live on the body to style custom-HTML content everywhere.
+      className="goat-feature-popup"
       sx={{
-        width: 320,
+        width: popup.width ?? 320,
         // Match the FloatingPanel surface used by the side panels
         // (apps/web/components/common/FloatingPanel.tsx).
         bgcolor: alpha(theme.palette.background.paper, 0.9),
@@ -95,10 +101,16 @@ function PopoverBody({
         boxShadow: theme.shadows[6],
         display: "flex",
         flexDirection: "column",
-        maxHeight: "min(420px, 60vh)",
+        maxHeight: popup.max_height ? `${popup.max_height}px` : "min(420px, 60vh)",
       }}>
-      {popup.show_layer_header && (
-        <PopupHeader layerName={layerName} layerIcon={layerIcon} onClose={onClose} />
+      <PopupHtmlStyles />
+      {popup.header !== "none" && (
+        <PopupHeader
+          layerName={layerName}
+          layerIcon={layerIcon}
+          onClose={onClose}
+          compact={popup.header === "compact"}
+        />
       )}
       <PopupContent layerId={layerId} popup={popup} properties={properties} />
     </Box>
@@ -115,10 +127,12 @@ export function PopupHeader({
   layerName,
   layerIcon,
   onClose,
+  compact = false,
 }: {
   layerName: string;
   layerIcon?: ReactNode;
   onClose: () => void;
+  compact?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -152,16 +166,18 @@ export function PopupHeader({
             htmlColor={alpha(theme.palette.text.primary, 0.5)}
           />
         )}
-        <Typography
-          variant="body2"
-          fontWeight={600}
-          sx={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-          {layerName}
-        </Typography>
+        {!compact && (
+          <Typography
+            variant="body2"
+            fontWeight={600}
+            sx={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+            {layerName}
+          </Typography>
+        )}
       </Stack>
       <IconButton
         disableRipple
@@ -278,7 +294,7 @@ export function PopupContent({
             "& > *:not(:last-child)": { mb: 1 },
           }}
           dangerouslySetInnerHTML={{
-            __html: sanitizePopupHtml(substituteTokens(popup.html, byColumn)),
+            __html: sanitizePopupHtml(renderTemplate(popup.html, byColumn)),
           }}
         />
       )}

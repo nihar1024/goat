@@ -49,6 +49,7 @@ import { buildLayerIcon } from "@/components/map/panels/layer/legend/LayerIcon";
 import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/seedFromLegacy";
 import { ActiveFeaturePulseLayer } from "@/components/map/popover/ActiveFeaturePulseLayer";
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
+import { normalizePopup } from "@/components/map/popover/normalizePopup";
 
 maplibregl.addProtocol("cog", cogProtocol);
 
@@ -136,8 +137,8 @@ const MapViewer: React.FC<MapProps> = ({
     const props = clickedPopupLayer.properties as
       | { popup?: PopupProperties; interaction?: { type?: string; content?: never[] } }
       | undefined;
-    if (props?.popup) return props.popup;
-    return seedPopupFromInteraction(props?.interaction);
+    if (props?.popup) return normalizePopup(props.popup);
+    return normalizePopup(seedPopupFromInteraction(props?.interaction));
   }, [clickedPopupLayer]);
 
   // Same lookup pattern as `clickedPopupLayer` above, but for the live-preview
@@ -158,8 +159,8 @@ const MapViewer: React.FC<MapProps> = ({
     const props = previewLayer.properties as
       | { popup?: PopupProperties; interaction?: { type?: string; content?: never[] } }
       | undefined;
-    if (props?.popup) return props.popup;
-    return seedPopupFromInteraction(props?.interaction);
+    if (props?.popup) return normalizePopup(props.popup);
+    return normalizePopup(seedPopupFromInteraction(props?.interaction));
   }, [previewLayer]);
 
   // Small layer-style icon shown in the popup header. Mirrors the preview
@@ -892,7 +893,7 @@ const MapViewer: React.FC<MapProps> = ({
                   ToolboxCtrl / MeasureButton do. Only the in-place
                   variant lives inside <Map>, where it needs useMap to
                   anchor to feature coordinates. */}
-              {activePopupConfig.position !== "fixed" && (
+              {activePopupConfig.layout !== "pinned" && (
                 <MapFeaturePopover
                   key={highlightedFeature?.id ?? v4()}
                   layerId={popupInfo.layerId ?? ""}
@@ -936,7 +937,7 @@ const MapViewer: React.FC<MapProps> = ({
               <>
                 {/* Fixed-anchor preview lives in the layout — see comment
                     on the click-popup branch above. */}
-                {previewPopupConfig.position !== "fixed" && (
+                {previewPopupConfig.layout !== "pinned" && (
                   <MapFeaturePopover
                     layerId={popupPreview.layerId}
                     layerName={previewLayer.name ?? ""}

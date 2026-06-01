@@ -17,6 +17,14 @@ const ALLOWED_TAGS = [
   "table", "thead", "tbody", "tr", "th", "td", "caption",
   // definition lists (field list "list" layout)
   "dl", "dt", "dd",
+  // Inline SVG — a presentational subset only (shapes, paths, gradients,
+  // text). Deliberately EXCLUDES the SVG XSS vectors: <script>,
+  // <foreignObject> (embeds arbitrary HTML), <use>/xlink (external refs),
+  // and SMIL <animate>/<set> (can fire script via events). Those tags are
+  // simply not in this allowlist, so DOMPurify drops them.
+  "svg", "g", "path", "circle", "ellipse", "rect", "line",
+  "polyline", "polygon", "title", "text", "tspan",
+  "defs", "linearGradient", "radialGradient", "stop", "clipPath",
 ];
 
 const ALLOWED_ATTRS = [
@@ -24,13 +32,23 @@ const ALLOWED_ATTRS = [
   "src", "alt", "width", "height",
   "class", "style",
   "colspan", "rowspan",
+  // SVG presentational attributes
+  "viewbox", "xmlns", "fill", "stroke", "stroke-width", "stroke-linecap",
+  "stroke-linejoin", "stroke-dasharray", "fill-rule", "clip-rule", "clip-path",
+  "d", "points", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2",
+  "transform", "opacity", "offset", "stop-color", "stop-opacity",
+  "gradientunits", "gradienttransform", "preserveaspectratio",
 ];
 
 export function sanitizePopupHtml(dirty: string): string {
   return DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS,
     ALLOWED_ATTR: ALLOWED_ATTRS,
-    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur"],
+    // Defense-in-depth: even though these aren't in ALLOWED_TAGS, forbid the
+    // dangerous SVG/script tags explicitly so a future allowlist edit can't
+    // silently re-enable an XSS vector.
+    FORBID_TAGS: ["script", "foreignObject", "use", "animate", "animateTransform", "animateMotion", "set"],
+    FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur", "xlink:href"],
     KEEP_CONTENT: false,
   }) as string;
 }

@@ -1052,9 +1052,14 @@ export default function WorkflowNodeSettings({
 
                 // Filter out layer inputs that should come from node connections
                 const workflowHiddenWidgets = ["layer-selector", "starting-points"];
-                const visibleInputs = getVisibleInputs(section.inputs, effectiveValues).filter(
-                  (input) => !workflowHiddenWidgets.includes(input.uiMeta?.widget || "")
-                );
+                const visibleInputs = getVisibleInputs(section.inputs, effectiveValues)
+                  .filter((input) => !workflowHiddenWidgets.includes(input.uiMeta?.widget || ""))
+                  // Repeatable layer inputs come from connections; don't pad to min_items.
+                  .map((input) =>
+                    input.inputType === "repeatable-object"
+                      ? { ...input, uiMeta: { ...input.uiMeta, min_items: 0 } }
+                      : input
+                  );
                 const sectionEnabled = isSectionEnabled(section, effectiveValues);
 
                 // Skip empty sections

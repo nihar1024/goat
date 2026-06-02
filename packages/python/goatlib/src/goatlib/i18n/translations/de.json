@@ -1018,7 +1018,7 @@
       "description": "Überträgt Attribute zwischen Layern basierend auf räumlichen und Attributbeziehungen. Optional können statistische Daten für die verbundenen Objekte berechnet werden."
     },
     "dissolve": {
-      "title": "Zusammenführen",
+      "title": "Zusammenführen (Dissolve)",
       "description": "Fasst Objekte mit gleichen Attributwerten zusammen. Optional können Statistiken für numerische Felder berechnet werden."
     },
     "catchment_area_v2": {
@@ -1030,7 +1030,7 @@
       "description": "Berechnet Reisezeiten und Entfernungen zwischen Start- und Zielpunkt-Layern."
     },
     "merge": {
-      "title": "Merge",
+      "title": "Zusammenführen (Merge)",
       "description": "Parameter für das Merge-Werkzeug. Standardmäßig werden Felder mit gleichem Namen zusammengeführt, während eingabespezifische Felder im Ergebnis erhalten bleiben."
     }
   },

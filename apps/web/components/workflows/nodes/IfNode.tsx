@@ -100,8 +100,7 @@ const IfNode: React.FC<IfNodeProps> = ({ id, data, selected }) => {
       </NodeToolbar>
 
       <NodeContainer selected={selected}>
-        {/* Input handle - left edge, vertically centered. Carries the layer
-            that flows through to the active True/False branch. */}
+        {/* Input handle — carries the layer through to the active branch */}
         <Tooltip
           title={t("if_input_handle_tooltip", {
             defaultValue: "Input layer (flows through to the active branch)",

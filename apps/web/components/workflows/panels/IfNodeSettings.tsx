@@ -58,9 +58,7 @@ import type { SelectorItem } from "@/types/map/common";
 import useLayerFields from "@/hooks/map/CommonHooks";
 import useLogicalExpressionOperations from "@/hooks/map/FilteringHooks";
 
-/** Normalize a workflow-metadata column type (DuckDB SQL flavor) to the
- *  "string"/"number"/"date"/"boolean"/"object" categories the filter UI
- *  expects. Matches the normalization used by useLayerFields. */
+// Normalize a DuckDB column type to the filter UI's categories (as useLayerFields does).
 const normalizeMetadataType = (raw: string): string => {
   const t = raw.toUpperCase();
   if (
@@ -97,9 +95,7 @@ const metadataColumnsToLayerFields = (
     .map(([name, type]) => ({ name, type: normalizeMetadataType(type) }));
 };
 
-/** Fetch a dataset layer's columns from the OGC queryables API. Used by the
- *  predict-schema walker when the upstream chain starts at a dataset whose
- *  columns haven't been cached anywhere yet. Mirrors SqlToolSettings. */
+// Fetch a dataset layer's columns from the OGC queryables API.
 async function fetchLayerColumns(
   layerUuid: string
 ): Promise<Record<string, string>> {
@@ -142,10 +138,7 @@ interface IfNodeSettingsProps {
   onBack: () => void;
 }
 
-/** Resolve a dataset node's `layerId` to a layer UUID. Workflow dataset nodes
- *  can store either a UUID directly or a numeric project-layer id (same
- *  ambiguity SqlToolSettings/WorkflowNodeSettings handle). Returns `undefined`
- *  if a numeric id can't be mapped through the project layers list. */
+// Resolve a dataset node's layerId (UUID or numeric project-layer id) to a layer UUID.
 const resolveDatasetLayerUuid = (
   layerIdValue: string,
   projectLayers: ProjectLayer[]
@@ -163,14 +156,13 @@ interface ConditionState {
   expressions: Array<ExpressionType | IfStatisticExpression>;
 }
 
-/** Type guard: identifies a statistic row variant in the expressions array. */
 const isStatisticRow = (
   e: ExpressionType | IfStatisticExpression
 ): e is IfStatisticExpression => (e as IfStatisticExpression).kind === "statistic";
 
 const VARIABLE_REF_REGEX = /^\{\{@([a-zA-Z_][a-zA-Z0-9_]*)\}\}$/;
 
-/** Operators that produce a boolean from the field alone — no value input. */
+// Operators that produce a boolean from the field alone — no value input.
 const VALUE_LESS_OPERATORS = new Set([
   "is_blank",
   "is_not_blank",
@@ -178,13 +170,10 @@ const VALUE_LESS_OPERATORS = new Set([
   "is_not_empty_string",
 ]);
 
-/** Operators that take a list of values; user enters them comma-separated. */
+// Operators that take a list of values; user enters them comma-separated.
 const MULTI_VALUE_OPERATORS = new Set(["includes", "excludes"]);
 
-/** Operators hidden from the logical-row dropdown because they read
- * misleadingly under the implicit "any feature matches" semantic.
- * Example: "name Is 'München'" looks like layer equality but actually means
- * "any feature is named München" — almost always not what users intend. */
+// Operators hidden because they read misleadingly under "any feature matches".
 const LOGICAL_OPERATORS_REMOVED = new Set([
   "is",
   "is_not",
@@ -195,18 +184,11 @@ const LOGICAL_OPERATORS_REMOVED = new Set([
   "does_not_contains_the_text",
 ]);
 
-// --------------------------------------------------------------------------
-// VariableTextField — TextField with a `{{@var}}` insertion adornment.
-// Used by both row types so the value editor is consistent.
-// --------------------------------------------------------------------------
-
 interface VariableTextFieldProps {
   value: string;
   onChange: (next: string) => void;
   variables: WorkflowVariable[];
   placeholder?: string;
-  /** Separator to insert before the variable when the field is non-empty
-   *  (e.g. ", " for multi-value operators so picks form a comma list). */
   appendSeparator?: string;
 }
 
@@ -299,10 +281,6 @@ function VariableTextField({
   );
 }
 
-// --------------------------------------------------------------------------
-// Shared row-header — icon + title on the left, delete button on the right.
-// --------------------------------------------------------------------------
-
 function ConditionRowHeader({
   iconName,
   title,
@@ -333,22 +311,8 @@ function ConditionRowHeader({
   );
 }
 
-// --------------------------------------------------------------------------
-// LogicalConditionRow — logical-filter editor with free-form value input.
-//
-// Replaces the canonical <Expression> component for if-node use because the
-// filter's value picker (SelectorLayerValue) only offers values that already
-// exist in the layer. In a conditional we need to test arbitrary thresholds
-// AND workflow-variable references, so the value editor is a free-form
-// TextField with the same {{@var}} adornment as StatisticConditionRow.
-//
-// Reuses the same primitives the filter UI uses: LayerFieldSelector for the
-// field, Selector for the operator, useLogicalExpressionOperations for the
-// operator list (which adapts to field type — string vs number vs date), and
-// the same `Expression` data shape — so the backend CQL pipeline (which turns
-// the Expression into DuckDB SQL) needs no changes.
-// --------------------------------------------------------------------------
-
+// Logical-filter editor with a free-form value input so conditionals can test
+// arbitrary thresholds and {{@var}} references, not just existing layer values.
 interface LogicalConditionRowProps {
   expression: ExpressionType;
   fields: LayerFieldType[];
@@ -477,10 +441,6 @@ function LogicalConditionRow({
   );
 }
 
-// --------------------------------------------------------------------------
-// StatisticConditionRow — small inline editor for aggregate-style conditions
-// --------------------------------------------------------------------------
-
 interface StatisticConditionRowProps {
   expression: IfStatisticExpression;
   fields: LayerFieldType[];
@@ -587,8 +547,7 @@ function StatisticConditionRow({
           />
         )}
 
-        {/* Only show the comparison row once the method is set — otherwise the
-            row is "empty by default" and the user picks the method first. */}
+        {/* Comparison row only after the method is set. */}
         {expression.method && (
           <>
             <Selector
@@ -619,10 +578,6 @@ function StatisticConditionRow({
   );
 }
 
-// --------------------------------------------------------------------------
-// IfNodeSettings — Conditional node settings panel
-// --------------------------------------------------------------------------
-
 export default function IfNodeSettings({
   node,
   projectLayers = [],
@@ -640,10 +595,6 @@ export default function IfNodeSettings({
   const data = node.data as IfNodeData;
 
   // Resolve the upstream source so the field selectors know what to offer.
-  // Dataset → layer UUID (fetched via queryables). Tool → use the workflow
-  // metadata's predicted/executed columns for that node. The dataset's
-  // raw `layerId` can be either a UUID or a numeric project-layer id, so
-  // resolve it through `projectLayers` the same way the other tool panels do.
   const upstreamSource = useMemo<
     | { kind: "dataset"; layerId: string }
     | { kind: "tool"; nodeId: string }
@@ -670,9 +621,7 @@ export default function IfNodeSettings({
     upstreamSource?.kind === "dataset" ? upstreamSource.layerId : "";
   const { layerFields: datasetFields } = useLayerFields(datasetLayerId);
 
-  // Predicted columns for an upstream tool that hasn't executed yet.
-  // Keyed by source node id; mirrors SqlToolSettings/WorkflowNodeSettings —
-  // recursively walks back through the chain calling predictNodeSchema.
+  // Predicted columns for an upstream tool that hasn't executed yet, keyed by source node id.
   const [predictedColumns, setPredictedColumns] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -763,7 +712,7 @@ export default function IfNodeSettings({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId, upstreamSource, workflowMetadata]);
 
-  // Combined field list — priority: executed metadata > predicted > queryables (dataset).
+  // Field list priority: executed metadata > predicted > queryables (dataset).
   const upstreamFields = useMemo<LayerFieldType[]>(() => {
     if (!upstreamSource) return [];
     if (upstreamSource.kind === "dataset") return datasetFields || [];
@@ -968,8 +917,7 @@ export default function IfNodeSettings({
                 </Box>
               )}
 
-              {/* Expression list — all row types are if-node-owned components
-                  that share the same primitives + VariableTextField. */}
+              {/* Expression list */}
               {condition.expressions.length > 0 && (
                 <Stack spacing={2} sx={{ pt: 1 }}>
                   <Divider />

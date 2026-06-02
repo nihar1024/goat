@@ -301,6 +301,23 @@ export default function WorkflowNodeSettings({
     return sections.flatMap((section) => section.inputs);
   }, [sections]);
 
+  // Repeatable inputs whose items are layers (e.g. merge) — these are filled by
+  // canvas connections, so we don't pad them to min_items in the workflow panel.
+  const layerRepeatableInputNames = useMemo(() => {
+    const names = new Set<string>();
+    if (!process) return names;
+    for (const input of allInputs) {
+      if (input.inputType !== "repeatable-object") continue;
+      const itemsRef = input.schema?.items?.$ref;
+      if (!itemsRef || !process.$defs) continue;
+      const itemSchema = process.$defs[itemsRef.replace("#/$defs/", "")];
+      if (!itemSchema) continue;
+      const fields = processObjectProperties(itemSchema, process.$defs);
+      if (fields.some((f) => f.inputType === "layer")) names.add(input.name);
+    }
+    return names;
+  }, [process, allInputs]);
+
   // Helper to get layer ID from a connected source node
   const getLayerIdFromSourceNode = useCallback(
     (inputName: string): string | undefined => {
@@ -1052,9 +1069,14 @@ export default function WorkflowNodeSettings({
 
                 // Filter out layer inputs that should come from node connections
                 const workflowHiddenWidgets = ["layer-selector", "starting-points"];
-                const visibleInputs = getVisibleInputs(section.inputs, effectiveValues).filter(
-                  (input) => !workflowHiddenWidgets.includes(input.uiMeta?.widget || "")
-                );
+                const visibleInputs = getVisibleInputs(section.inputs, effectiveValues)
+                  .filter((input) => !workflowHiddenWidgets.includes(input.uiMeta?.widget || ""))
+                  // Repeatable layer inputs come from connections; don't pad to min_items.
+                  .map((input) =>
+                    layerRepeatableInputNames.has(input.name)
+                      ? { ...input, uiMeta: { ...input.uiMeta, min_items: 0 } }
+                      : input
+                  );
                 const sectionEnabled = isSectionEnabled(section, effectiveValues);
 
                 // Skip empty sections

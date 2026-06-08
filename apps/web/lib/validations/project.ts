@@ -146,6 +146,7 @@ export const builderConfigSchema = z.object({
       // Branding
       language: dashboardLanguageEnum.default("auto"),
       font_family: z.string().default("Mulish, sans-serif"),
+      font_url: z.string().optional(),
       primary_color: z.string().optional(),
       icon_color: z.string().optional(),
       font_color: z.string().optional(),
@@ -169,6 +170,7 @@ const baseCustomBasemapSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).nullable().optional(),
   thumbnail_url: z.string().url().max(2048).nullable().optional(),
+  attribution: z.string().max(500).nullable().optional(),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
 });
@@ -190,7 +192,6 @@ export const customBasemapSchema = z.discriminatedUnion("type", [
         (s) => s.includes("{z}") && s.includes("{x}") && s.includes("{y}"),
         { message: "URL must contain {z}, {x}, and {y} placeholders" }
       ),
-    attribution: z.string().max(500).nullable().optional(),
   }),
   baseCustomBasemapSchema.extend({
     type: z.literal("solid"),
@@ -263,12 +264,20 @@ export const projectPublicSchemaConfig = z.object({
   layer_groups: z.array(projectLayerGroupSchema).optional().default([]),
 });
 
+export const projectPublicAnalyticsSchema = z.object({
+  provider: z.string(),
+  config: z.record(z.unknown()),
+});
+
 export const projectPublicSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   project_id: z.string(),
   config: projectPublicSchemaConfig,
   custom_domain_id: z.string().uuid().nullable().optional(),
+  tracking_enabled: z.boolean().optional(),
+  tracking_require_consent: z.boolean().optional(),
+  analytics: projectPublicAnalyticsSchema.nullable().optional(),
 });
 
 export const projectLayerTreeNodeSchema = z.object({

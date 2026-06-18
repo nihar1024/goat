@@ -28,7 +28,11 @@ from sqlmodel import (
 )
 
 from core.core.config import settings
-from core.db.models._base_class import ContentBaseAttributes, DateTimeBase
+from core.db.models._base_class import (
+    ContentBaseAttributes,
+    DateTimeBase,
+    serialize_str_enum,
+)
 
 if TYPE_CHECKING:
     from core.db.models.folder import Folder
@@ -468,10 +472,7 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
 
     @field_serializer("type", "feature_layer_type", "feature_layer_geometry_type")
     def _serialize_enum(self, value: Enum | str | None) -> str | None:
-        """Serialize str-enum fields whether the value arrives as an enum member
-        or a raw str from the Text column, avoiding the enum-vs-str serializer
-        warning while keeping output identical."""
-        return value.value if isinstance(value, Enum) else value
+        return serialize_str_enum(value)
 
     @field_validator("url", "distribution_url", mode="before")
     @classmethod

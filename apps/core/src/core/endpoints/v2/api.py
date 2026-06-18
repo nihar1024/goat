@@ -11,6 +11,9 @@ from . import (
     organization_domain,
     organizations,
     project,
+    project_group,
+    project_layer,
+    project_public,
     report_layout,
     share,
     system,
@@ -34,6 +37,15 @@ router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 router.include_router(folder.router, prefix="/folder", tags=["Folder"])
 router.include_router(layer.router, prefix="/layer", tags=["Layer"])
 router.include_router(project.router, prefix="/project", tags=["Project"])
+router.include_router(
+    project_layer.router, prefix="/project", tags=["Project Layers"]
+)
+router.include_router(
+    project_public.router, prefix="/project", tags=["Project Public"]
+)
+router.include_router(
+    project_group.router, prefix="/project", tags=["Project Layer Groups"]
+)
 router.include_router(report_layout.router, prefix="/project", tags=["Report Layout"])
 router.include_router(workflow.router, prefix="/project", tags=["Workflow"])
 router.include_router(system.router, prefix="/system", tags=["System Settings"])

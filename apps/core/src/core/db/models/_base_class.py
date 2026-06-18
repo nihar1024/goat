@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from enum import Enum
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Text
@@ -6,6 +7,16 @@ from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import Column, DateTime, Field, SQLModel, text
 
 from core.core.config import settings
+
+
+def serialize_str_enum(value: "Enum | str | None") -> "str | None":
+    """Serialize a str-enum field whether the value arrives as an enum member or
+    a raw str (e.g. read straight off a Text column). Avoids Pydantic's
+    enum-vs-str serializer warning while keeping the JSON output identical.
+
+    Delegate to this from a model's ``@field_serializer(...)`` method.
+    """
+    return value.value if isinstance(value, Enum) else value
 
 
 class DateTimeBase(SQLModel):

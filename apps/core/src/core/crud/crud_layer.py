@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Local application imports
 from core.core.content import build_shared_with_object, create_query_shared_content
-from core.core.layer import CRUDLayerBase
 from core.crud.base import CRUDBase
 from core.db.models._link_model import (
     LayerOrganizationLink,
@@ -42,7 +41,7 @@ from core.schemas.layer import (
 logger = logging.getLogger(__name__)
 
 
-class CRUDLayer(CRUDLayerBase):
+class CRUDLayer(CRUDBase):
     """CRUD class for Layer."""
 
     async def update(

@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import Column, Field, Relationship, SQLModel, Text
 
 from core.core.config import settings
-from core.db.models._base_class import DateTimeBase
+from core.db.models._base_class import DateTimeBase, serialize_str_enum
 from core.db.models.user import User
 
 
@@ -38,11 +38,8 @@ class SystemSettingBase(SQLModel):
     unit: UnitType = Field(sa_column=Column(Text, nullable=False))
 
     @field_serializer("client_theme", "preferred_language", "unit")
-    def _serialize_enum(self, value: Enum | str) -> str:
-        """Serialize str-enum fields whether the value arrives as an enum member
-        or a raw str from the Text column, avoiding Pydantic's enum-vs-str
-        serializer warning while keeping output identical."""
-        return value.value if isinstance(value, Enum) else value
+    def _serialize_enum(self, value: Enum | str | None) -> str | None:
+        return serialize_str_enum(value)
 
 
 class SystemSetting(SystemSettingBase, DateTimeBase, table=True):

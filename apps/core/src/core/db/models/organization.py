@@ -19,7 +19,7 @@ from sqlmodel import (
 )
 
 from core.core.config import settings
-from core.db.models._base_class import UUIDServerDefaultBase
+from core.db.models._base_class import UUIDServerDefaultBase, serialize_str_enum
 
 if TYPE_CHECKING:
     from ._link_model import LayerOrganizationLink, ProjectOrganizationLink
@@ -166,11 +166,8 @@ class OrganizationBase(SQLModel):
         return value
 
     @field_serializer("plan_name", "type", "industry", "use_case", "region")
-    def _serialize_enum(self, value: Enum | str) -> str:
-        """Serialize str-enum fields whether the value arrives as an enum member
-        or a raw str from the Text column, avoiding Pydantic's enum-vs-str
-        serializer warning while keeping output identical."""
-        return value.value if isinstance(value, Enum) else value
+    def _serialize_enum(self, value: Enum | str | None) -> str | None:
+        return serialize_str_enum(value)
 
 
 class Organization(UUIDServerDefaultBase, OrganizationBase, table=True):

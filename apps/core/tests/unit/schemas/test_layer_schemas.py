@@ -2,7 +2,6 @@ from uuid import uuid4
 
 import pytest
 from core.db.models.layer import DataCategory, DataLicense, Layer, LayerBase
-from core.schemas.layer import FeatureLayerExportType, ILayerExport
 from pydantic import ValidationError
 
 
@@ -113,39 +112,3 @@ def test_layer_base_creation_invalid_geographical_code():
     # Test with an invalid geographical code
     with pytest.raises(ValidationError):
         LayerBase(geographical_code="XX")
-
-
-def test_layer_export_valid_crs():
-    # Test with valid CRS
-    valid_crs = "EPSG:4326"
-    layer_export = ILayerExport(
-        id=uuid4(),
-        file_type=FeatureLayerExportType.geojson,
-        file_name="test",
-        crs=valid_crs,
-    )
-    assert layer_export.crs == valid_crs
-
-
-def test_layer_export_invalid_crs():
-    # Test with invalid CRS
-    invalid_crs = "Invalid CRS"
-    with pytest.raises(ValidationError):
-        ILayerExport(
-            id=uuid4(),
-            file_type=FeatureLayerExportType.geojson,
-            file_name="test",
-            crs=invalid_crs,
-        )
-
-
-def test_layer_export_invalid_crs_kml():
-    # Test with invalid CRS for KML
-    invalid_crs = "Invalid CRS"
-    with pytest.raises(ValidationError):
-        ILayerExport(
-            id=uuid4(),
-            file_type=FeatureLayerExportType.kml,
-            file_name="test",
-            crs=invalid_crs,
-        )

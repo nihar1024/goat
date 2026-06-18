@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import (
     UUID4,
     BaseModel,
+    ConfigDict,
     ValidationInfo,
     field_validator,
 )
@@ -378,6 +379,8 @@ class PublicAnalytics(BaseModel):
 
 
 class ProjectPublicRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     created_at: datetime = Field(..., description="Created at")
     updated_at: datetime = Field(..., description="Updated at")
     project_id: UUID

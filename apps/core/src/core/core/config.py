@@ -1,6 +1,3 @@
-from typing import Any
-
-import boto3
 from pydantic import PostgresDsn, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -16,12 +13,8 @@ class Settings(BaseSettings):
     API_V2_STR: str = "/api/v2"
     API_URL: str = "http://localhost:8000/api/v2"
     CLIENT_URL: str = "http://localhost:3000"
-    DATA_DIR: str = "/app/data"
     MAX_FOLDER_COUNT: int = 100
     SENTRY_DSN: str | None = None
-
-    ASYNC_CLIENT_DEFAULT_TIMEOUT: float = 10.0
-    ASYNC_CLIENT_READ_TIMEOUT: float = 30.0
 
     # ------------------------------------------------------------------
     # Database
@@ -102,21 +95,6 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str | None = None
     AWS_REGION: str | None = "eu-central-1"
     AWS_S3_ASSETS_BUCKET: str | None = "plan4better-assets"
-    S3_CLIENT: Any | None = None
-
-    @field_validator("S3_CLIENT", mode="after")
-    @classmethod
-    def assemble_s3_client(
-        cls: type["Settings"], value: Any | None, info: ValidationInfo
-    ) -> Any:
-        if value is not None:
-            return value
-        return boto3.client(
-            "s3",
-            aws_access_key_id=info.data.get("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=info.data.get("AWS_SECRET_ACCESS_KEY"),
-            region_name=info.data.get("AWS_REGION"),
-        )
 
     # ------------------------------------------------------------------
     # Assets / thumbnails
@@ -130,7 +108,6 @@ class Settings(BaseSettings):
     DEFAULT_LAYER_THUMBNAIL: str | None = (
         "https://assets.plan4better.de/img/goat_new_dataset_thumbnail.png"
     )
-    THUMBNAIL_DIR_LAYER: str = "thumbnails/layers/"
 
     # ------------------------------------------------------------------
     # Default avatars

@@ -37,56 +37,12 @@ if TYPE_CHECKING:
     from .data_store import DataStore
 
 
-class ToolType(str, Enum):
-    """Indicator types."""
-
-    catchment_area_active_mobility = "catchment_area_active_mobility"
-    catchment_area_pt = "catchment_area_pt"
-    catchment_area_car = "catchment_area_car"
-    catchment_area_nearby_station_access = "catchment_area_nearby_station_access"
-    oev_gueteklasse = "oev_gueteklasse"
-    trip_count_station = "trip_count_station"
-    join = "join"
-    aggregate_point = "aggregate_point"
-    aggregate_polygon = "aggregate_polygon"
-    aggregate_line = "aggregate_line"
-    intersect = "intersect"
-    buffer = "buffer"
-    origin_destination = "origin_destination"
-    nearby_station_access = "nearby_station_access"
-    heatmap_gravity_active_mobility = "heatmap_gravity_active_mobility"
-    heatmap_gravity_motorized_mobility = "heatmap_gravity_motorized_mobility"
-    heatmap_closest_average_active_mobility = "heatmap_closest_average_active_mobility"
-    heatmap_closest_average_motorized_mobility = (
-        "heatmap_closest_average_motorized_mobility"
-    )
-    heatmap_connectivity_active_mobility = "heatmap_connectivity_active_mobility"
-    heatmap_connectivity_motorized_mobility = "heatmap_connectivity_motorized_mobility"
-
-
 class FeatureType(str, Enum):
     """Feature layer types."""
 
     standard = "standard"
     tool = "tool"
     street_network = "street_network"
-
-
-class TableUploadType(str, Enum):
-    """Table data types."""
-
-    csv = "csv"
-    xlsx = "xlsx"
-
-
-# It was decided against using MIME types here because for e.g. gpkg they are commonly just generic application/octet-stream
-class FeatureUploadType(str, Enum):
-    """File upload types."""
-
-    geojson = "geojson"
-    gpkg = "gpkg"
-    kml = "kml"
-    zip = "zip"  # Commonly used for shapefiles
 
 
 class FileUploadType(str, Enum):
@@ -99,31 +55,6 @@ class FileUploadType(str, Enum):
     kml = "kml"
     zip = "zip"  # Commonly used for shapefiles
     parquet = "parquet"  # GeoParquet files
-
-
-class FeatureLayerExportType(str, Enum):
-    """Feature Layer export types."""
-
-    geojson = "geojson"
-    shp = "shp"
-    gpkg = "gpkg"
-    csv = "csv"
-    xlsx = "xlsx"
-    kml = "kml"
-    parquet = "parquet"
-
-
-class TableLayerExportType(str, Enum):
-    """Table Layer export types."""
-
-    csv = "csv"
-    xlsx = "xlsx"
-
-
-class FeatureServeType(str, Enum):
-    mvt = "mvt"
-    wfs = "wfs"
-    binary = "binary"
 
 
 class RasterDataType(str, Enum):
@@ -141,15 +72,6 @@ class LayerType(str, Enum):
     feature = "feature"
     raster = "raster"
     table = "table"
-
-
-class RasterStyleType(str, Enum):
-    """Raster style types for COG layers."""
-
-    image = "image"
-    color_range = "color_range"
-    categories = "categories"
-    hillshade = "hillshade"
 
 
 class FeatureDataType(str, Enum):

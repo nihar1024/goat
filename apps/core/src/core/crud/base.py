@@ -167,36 +167,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 raise e
         return db_obj
 
-    async def update_multi(
-        self,
-        db: AsyncSession,
-        *,
-        db_objs: ModelType,
-        objs_in: List[Union[UpdateSchemaType, Dict[str, Any]]],
-    ) -> List[ModelType]:
-        """Update multiple objects at once by id."""
-        ids = []
-        # Loop through all db_objs and objs_in and update the db_obj with the obj_in.
-        for db_obj, obj_in in zip(db_objs, objs_in, strict=True):
-            if isinstance(obj_in, dict):
-                update_data = obj_in
-                fields = obj_in.keys()
-            else:
-                update_data = obj_in.model_dump(exclude_unset=True)
-                fields = type(obj_in).model_fields.keys()
-            for field in fields:
-                if field in update_data:
-                    setattr(db_obj, field, update_data[field])
-            db.add(db_obj)
-            ids.append(db_obj.id)
-        await db.commit()
-
-        # Get objects again to return them. Refresh cannot be used as it only returns one object.
-        ids = [db_obj.id for db_obj in db_objs]
-        statement = select(self.model).where(self.model.id.in_(ids))
-        result = await db.execute(statement)
-        return list(result.scalars().all())
-
     async def remove(self, db: AsyncSession, *, id: int | UUID) -> ModelType:
         obj = await db.get(self.model, id)
 
@@ -238,11 +208,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(statement)
         return list(result.scalars().all())
 
-    async def get_n_rows(self, db: AsyncSession, *, n: int) -> List[ModelType]:
-        statement = select(self.model).limit(n)
-        result = await db.execute(statement)
-        return list(result.scalars().all())
-
     async def remove_multi(
         self, db: AsyncSession, *, ids: int | List[int]
     ) -> List[int]:
@@ -252,16 +217,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         await db.execute(statement)
         await db.commit()
         return ids
-
-    async def remove_multi_by_key(
-        self, db: AsyncSession, *, key: str, values: Any
-    ) -> List[Any]:
-        if not isinstance(values, list):
-            values = [values]
-        statement = delete(self.model).where(getattr(self.model, key).in_(values))
-        await db.execute(statement)
-        await db.commit()
-        return values
 
     async def count(self, db: AsyncSession) -> int:
         """

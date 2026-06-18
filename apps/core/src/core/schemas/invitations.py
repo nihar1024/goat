@@ -42,7 +42,3 @@ class InvitationOrgUpdate(SQLModel):
     role: OrganizationInvitationRole | None = None
 
 
-class InvitationTeamCreate(SQLModel):
-    user_id: str
-    team_id: str
-    name: str

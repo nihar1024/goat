@@ -16,7 +16,6 @@ from core.db.models.invitation import Invitation, InvitationStatusEnum
 from core.db.models.organization import OrganizationRolesEnum
 from core.db.models.role import Role
 from core.db.models.user import User
-from core.deps.aws import s3_client
 from core.deps.keycloak import keycloak_admin
 from core.schemas import OrganizationUpdate
 from core.schemas.email import EmailTemplateContent
@@ -26,6 +25,7 @@ from core.schemas.organization import (
     OrganizationUser,
     TrialPlanTypeEnum,
 )
+from core.services.s3 import s3_service
 from core.utils.email import send_email
 from core.utils.i18n import trans as _
 from core.utils.other import decode_base64_file, get_image_extension_from_base64
@@ -183,13 +183,10 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             timestamp_str = now.strftime("%Y%m%d%H%M%S")
             file_name = f"avatar_org_{db_obj.id}_T{timestamp_str}.{extension}"
             file = decode_base64_file(organization_obj.avatar)
-            s3_client.upload_fileobj(
-                Fileobj=file,
-                Bucket=settings.AWS_S3_ASSETS_BUCKET,
-                Key=f"img/users/{settings.ENVIRONMENT}/{file_name}",
-                ExtraArgs={"ContentType": f"image/{extension}"},
-                Callback=None,
-                Config=None,
+            s3_service.upload_asset(
+                file,
+                f"img/users/{settings.ENVIRONMENT}/{file_name}",
+                f"image/{extension}",
             )
             organization_obj.avatar = f"https://assets.plan4better.de/img/users/{settings.ENVIRONMENT}/{file_name}"
         updated_organization = await self.update(

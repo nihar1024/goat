@@ -13,11 +13,11 @@ import pytest_asyncio
 # Local application imports
 from core.core.config import settings
 from core.crud.base import CRUDBase
-from core.db.models import User
+from core.db.models import Folder, User
 from core.endpoints.deps import get_db, session_manager
 from core.main import app
 from httpx import AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 
 def set_test_mode():
@@ -110,9 +110,14 @@ async def fixture_create_user(client: AsyncClient, db_session):
         await db_session.commit()
         await db_session.refresh(user)
 
-    # Setup: Create user data schemas
-    result = await client.post(f"{settings.API_V2_STR}/user/data-schema")
-    assert result.status_code == 201
+    # Setup: create the user's home folder (created lazily in the auth dependency
+    # for real requests; created explicitly here for a deterministic fixture)
+    existing_home = await db_session.execute(
+        select(Folder.id).where(Folder.user_id == user_id, Folder.name == "home")
+    )
+    if existing_home.first() is None:
+        db_session.add(Folder(user_id=user_id, name="home"))
+        await db_session.commit()
     yield user.id
     # Teardown: Delete the user after the test
     await CRUDBase(User).delete(db_session, id=user_id)

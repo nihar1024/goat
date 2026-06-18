@@ -138,23 +138,3 @@ async def auth_z(
     return True
 
 
-async def auth_z_lite(request: Request, async_session: AsyncSession) -> bool:
-    """
-    Authorization function to check if the user has access to the requested resource (without FastAPI dependencies).
-    """
-
-    try:
-        if settings.AUTH is False:
-            return True
-        token = request.headers.get("Authorization")
-        if token:
-            token = token.split(" ")[1]
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing authorization token",
-            )
-        user_token = decode_token(token)
-        return await _validate_authorization(request, user_token, async_session)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))

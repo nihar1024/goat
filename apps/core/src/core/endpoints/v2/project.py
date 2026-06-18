@@ -730,12 +730,10 @@ async def publish_project(
     """
     Publish a project
     """
-    result = ProjectPublicRead(
-        **(
-            await crud_project.publish_project(
-                async_session=async_session, project_id=project_id
-            )
-        ).model_dump()
+    result = ProjectPublicRead.model_validate(
+        await crud_project.publish_project(
+            async_session=async_session, project_id=project_id
+        )
     )
 
     return result
@@ -806,7 +804,7 @@ async def assign_custom_domain(
     project_public.custom_domain_id = payload.domain_id
     await async_session.commit()
     await async_session.refresh(project_public)
-    return ProjectPublicRead(**project_public.model_dump())
+    return ProjectPublicRead.model_validate(project_public)
 
 
 @router.delete(
@@ -887,7 +885,7 @@ async def set_tracking_settings(
         project_public.tracking_require_consent = payload.require_consent
     await async_session.commit()
     await async_session.refresh(project_public)
-    return ProjectPublicRead(**project_public.model_dump())
+    return ProjectPublicRead.model_validate(project_public)
 
 
 ##############################################

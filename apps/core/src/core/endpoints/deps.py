@@ -1,8 +1,7 @@
-from typing import Generator, Optional
+from typing import Generator
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
-from httpx import AsyncClient, Timeout
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +9,6 @@ from core.core.config import settings
 from core.crud.crud_folder import folder as crud_folder
 from core.db.session import session_manager
 from core.schemas.folder import FolderCreate
-
-http_client: Optional[AsyncClient] = None
 
 
 async def get_db() -> Generator:  # type: ignore
@@ -51,29 +48,6 @@ def get_user_id(request: Request) -> UUID:
         result = settings.DEFAULT_USER_ID
 
     return UUID(result)
-
-
-def get_http_client() -> AsyncClient:
-    """Returns an asynchronous HTTP client, typically used for connecting to the GOAT Routing service."""
-
-    global http_client
-    if http_client is None:
-        http_client = AsyncClient(
-            timeout=Timeout(
-                settings.ASYNC_CLIENT_DEFAULT_TIMEOUT,
-                read=settings.ASYNC_CLIENT_READ_TIMEOUT,
-            )
-        )
-    return http_client
-
-
-async def close_http_client() -> None:
-    """Clean-up network resources used by the HTTP client."""
-
-    global http_client
-    if http_client is not None:
-        await http_client.aclose()
-        http_client = None
 
 
 def get_current_token_claims(request: Request) -> dict:

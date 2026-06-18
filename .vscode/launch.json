@@ -201,8 +201,7 @@
         "GeoAPI Debug",
         "Processes Debug",
         "Core Debug",
-        "Web Debug",
-        "Docs Debug"
+        "Web Debug"
       ],
       "presentation": {
         "hidden": false,

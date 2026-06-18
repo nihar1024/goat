@@ -14,8 +14,8 @@ from core.db.models.invitation import InvitationStatusEnum
 from core.db.models.role import Role
 from core.db.models.team import Team, TeamRolesEnum
 from core.db.models.user import User
-from core.deps.aws import s3_client
 from core.schemas.team import TeamCreate, TeamMember, TeamRead, TeamUpdate
+from core.services.s3 import s3_service
 from core.utils.i18n import trans as _
 from core.utils.other import decode_base64_file, get_image_extension_from_base64
 
@@ -47,13 +47,10 @@ class CRUDTeam(CRUDBase[Team, TeamCreate, TeamUpdate]):
             timestamp_str = now.strftime("%Y%m%d%H%M%S")
             file_name = f"avatar_team_{db_obj.id}_T{timestamp_str}.{extension}"
             file = decode_base64_file(team_obj.avatar)
-            s3_client.upload_fileobj(
-                Fileobj=file,
-                Bucket=settings.AWS_S3_ASSETS_BUCKET,
-                Key=f"img/users/{settings.ENVIRONMENT}/{file_name}",
-                ExtraArgs={"ContentType": f"image/{extension}"},
-                Callback=None,
-                Config=None,
+            s3_service.upload_asset(
+                file,
+                f"img/users/{settings.ENVIRONMENT}/{file_name}",
+                f"image/{extension}",
             )
             team_obj.avatar = f"https://assets.plan4better.de/img/users/{settings.ENVIRONMENT}/{file_name}"
         updated_team = await self.update(db=db, db_obj=db_obj, obj_in=team_obj)

@@ -17,11 +17,11 @@ from core.db.models._link_model import UserRoleLink
 from core.db.models.invitation import Invitation, InvitationStatusEnum, InvitationType
 from core.db.models.organization import Organization
 from core.deps.auth import auth, auth_z, user_token
-from core.deps.aws import s3_client
 from core.deps.keycloak import keycloak_admin
 from core.endpoints.deps import get_db
 from core.schemas.common import OrderEnum
 from core.schemas.user import UserProfileUpdate, UserRead, UserUpdate, request_examples
+from core.services.s3 import s3_service
 from core.utils.other import decode_base64_file, get_image_extension_from_base64
 
 router = APIRouter()
@@ -261,13 +261,10 @@ async def update_profile(
         timestamp_str = now.strftime("%Y%m%d%H%M%S")
         file_name = f"avatar_{user_id}_T{timestamp_str}.{extension}"
         file = decode_base64_file(user.avatar)
-        s3_client.upload_fileobj(
-            Fileobj=file,
-            Bucket=settings.AWS_S3_ASSETS_BUCKET,
-            Key=f"img/users/{settings.ENVIRONMENT}/{file_name}",
-            ExtraArgs={"ContentType": f"image/{extension}"},
-            Callback=None,
-            Config=None,
+        s3_service.upload_asset(
+            file,
+            f"img/users/{settings.ENVIRONMENT}/{file_name}",
+            f"image/{extension}",
         )
         user.avatar = f"https://assets.plan4better.de/img/users/{settings.ENVIRONMENT}/{file_name}"
     accounts_updated_user = UserUpdate(

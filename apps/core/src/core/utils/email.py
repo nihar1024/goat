@@ -4,9 +4,7 @@ from typing import Any, Dict
 import emails
 
 from core.core.config import settings
-from core.schemas.email import EmailTemplateContent
 from core.utils.i18n import jinja_env
-from core.utils.i18n import trans as _
 
 
 def send_email(
@@ -33,19 +31,6 @@ def send_email(
         smtp_options["password"] = settings.SMTP_PASSWORD
     response = message.send(to=email_to, render=environment, smtp=smtp_options)
     logging.info(f"send email result: {response}")
-
-
-def send_test_email(email_to: str) -> None:
-    subject = "P4B-Auth - Test email"
-    content = EmailTemplateContent(
-        artwork_url="https://assets.plan4better.de/img/logo/plan4better_standard.png",
-        title=_("Test email"),
-        message=_("This is a test email"),
-        action_label="Test",
-        action_url="https://plan4better.de",
-    )
-
-    send_email(email_to=email_to, subject=subject, environment=content.dict())
 
 
 email_content_config = {

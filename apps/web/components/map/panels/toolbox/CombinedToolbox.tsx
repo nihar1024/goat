@@ -239,6 +239,7 @@ function ToolsTabContent({ onSelectTool }: ToolsTabContentProps) {
                 {betaTools.length > 0 && (
                   <Box sx={{ mt: 3 }}>
                     <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
+                      <Divider sx={{ width: 8, flexShrink: 0 }} />
                       <Box
                         sx={{
                           flexShrink: 0,
@@ -326,11 +327,7 @@ export default function CombinedToolbox() {
   // Render selected workflow (full panel takeover)
   if (selectedWorkflowId) {
     return (
-      <WorkflowRunner
-        workflowId={selectedWorkflowId}
-        onBack={handleWorkflowBack}
-        onClose={handleClose}
-      />
+      <WorkflowRunner workflowId={selectedWorkflowId} onBack={handleWorkflowBack} onClose={handleClose} />
     );
   }
 
@@ -345,9 +342,7 @@ export default function CombinedToolbox() {
         </Typography>
       }
       body={
-        <Stack
-          direction="column"
-          sx={{ height: "100%", overflow: "hidden", mt: -2 }}>
+        <Stack direction="column" sx={{ height: "100%", overflow: "hidden", mt: -2 }}>
           <Box sx={{ borderBottom: 1, borderColor: "divider", flexShrink: 0 }}>
             <Tabs
               value={activeTab}
@@ -371,9 +366,7 @@ export default function CombinedToolbox() {
             {activeTab === 0 && <ToolsTabContent onSelectTool={handleSelectTool} />}
 
             {/* Workflows Tab */}
-            {activeTab === 1 && (
-              <WorkflowList onSelectWorkflow={(id) => setSelectedWorkflowId(id)} />
-            )}
+            {activeTab === 1 && <WorkflowList onSelectWorkflow={(id) => setSelectedWorkflowId(id)} />}
           </Box>
         </Stack>
       }

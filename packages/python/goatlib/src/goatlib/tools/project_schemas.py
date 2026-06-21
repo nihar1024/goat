@@ -138,6 +138,10 @@ class ExportLayerProjectLinkEntry(BaseModel):
 
     Unlike [ExportLayerProjectLink], this carries `layer_id` so the archive
     can represent multiple links referencing the same dataset.
+
+    Note: the DB column is `layer_project_group_id`; older code/tests
+    sometimes used the shorter `group_id`. Both are accepted on read; the
+    importer prefers `layer_project_group_id`.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -150,6 +154,7 @@ class ExportLayerProjectLinkEntry(BaseModel):
     other_properties: dict[str, Any] | None = None
     query: dict[str, Any] | None = None
     charts: dict[str, Any] | None = None
+    layer_project_group_id: int | None = None
     group_id: str | int | None = None
 
 

@@ -44,6 +44,8 @@ from goatlib.tools.schemas import ToolInputBase
 
 logger = logging.getLogger(__name__)
 
+_GROUP_ICON_KEY_RE = re.compile(r"^group_icon_(\d+)$")
+
 
 class ProjectImportParams(ToolInputBase):
     """Parameters for project import tool."""
@@ -261,11 +263,16 @@ class ProjectImportRunner(SimpleToolRunner):
         self: Self,
         config: dict[str, Any],
         lp_id_map: dict[int, int],
+        group_id_map: dict[int, int] | None = None,
     ) -> dict[str, Any]:
-        """Remap layer_project_id references in builder_config.
+        """Remap layer_project_id and group_id references in builder_config.
 
-        Widget configs reference layer_project link IDs (integers) which change
-        on import. This walks the config JSON and replaces old IDs with new ones.
+        Widget configs reference layer_project link IDs (integers) and
+        layer_project_group IDs (integers) which both change on import.
+        For layer_project IDs, walks the serialized JSON and rewrites
+        `"layer_project_id": <int>` plus integers in arrays. For group IDs,
+        walks the deserialized tree and rewrites widget config keys of the
+        form `group_icon_<id>` and `group_info` object keys.
         """
         config_str = json.dumps(config)
         # Replace integer IDs carefully — match "layer_project_id": 66 patterns
@@ -286,7 +293,59 @@ class ProjectImportRunner(SimpleToolRunner):
                 str(new_id),
                 config_str,
             )
-        return json.loads(config_str)
+        remapped = json.loads(config_str)
+        if group_id_map:
+            remapped = self._remap_group_ids_in_config(remapped, group_id_map)
+        return remapped  # type: ignore[no-any-return]
+
+    def _remap_group_ids_in_config(
+        self: Self,
+        node: Any,
+        group_id_map: dict[int, int],
+    ) -> Any:
+        """Recursively rewrite `group_icon_<id>` keys and `group_info` keys.
+
+        Layer-widget configs encode group IDs into dynamic keys (one per
+        group), which a pure value-based remap cannot touch. Keys with no
+        mapping are preserved so stale entries (e.g. for groups deleted
+        before export) don't get silently dropped — the frontend ignores
+        them, same as before the remap.
+        """
+        if isinstance(node, dict):
+            new_dict: dict[str, Any] = {}
+            for key, value in node.items():
+                if key == "group_info" and isinstance(value, dict):
+                    new_dict[key] = {
+                        self._remap_group_info_key(k, group_id_map): v
+                        for k, v in value.items()
+                    }
+                    continue
+                match = _GROUP_ICON_KEY_RE.match(key) if isinstance(key, str) else None
+                if match:
+                    old_gid = int(match.group(1))
+                    new_gid = group_id_map.get(old_gid)
+                    new_key = f"group_icon_{new_gid}" if new_gid is not None else key
+                    new_dict[new_key] = self._remap_group_ids_in_config(
+                        value, group_id_map
+                    )
+                else:
+                    new_dict[key] = self._remap_group_ids_in_config(
+                        value, group_id_map
+                    )
+            return new_dict
+        if isinstance(node, list):
+            return [self._remap_group_ids_in_config(item, group_id_map) for item in node]
+        return node
+
+    @staticmethod
+    def _remap_group_info_key(key: str, group_id_map: dict[int, int]) -> str:
+        """Map a single group_info key (string-encoded int) to its new ID."""
+        try:
+            old_gid = int(key)
+        except (TypeError, ValueError):
+            return key
+        new_gid = group_id_map.get(old_gid)
+        return str(new_gid) if new_gid is not None else key
 
     def _import_ducklake_layer(
         self: Self,
@@ -482,6 +541,10 @@ class ProjectImportRunner(SimpleToolRunner):
 
                 # Map old group id (str) -> new serial id (returned by RETURNING id)
                 group_new_serial: dict[str, int] = {}
+                # Same mapping, but keyed by the old integer id — used for
+                # remapping group references inside builder_config (which
+                # are stored as ints in widget keys like `group_icon_42`).
+                group_old_int_to_new: dict[int, int] = {}
 
                 for group in sorted_groups:
                     old_gid = str(group.id)
@@ -508,6 +571,12 @@ class ProjectImportRunner(SimpleToolRunner):
                     )
                     if new_serial is not None:
                         group_new_serial[old_gid] = new_serial
+                        try:
+                            group_old_int_to_new[int(old_gid)] = new_serial
+                        except ValueError:
+                            # Non-numeric source group id (shouldn't happen
+                            # for PG serial ids, but stay defensive).
+                            pass
                     # Also store in id_map for reference (old group id -> new serial str)
                     if new_group_id:
                         group_new_serial[new_group_id] = group_new_serial.get(
@@ -632,9 +701,16 @@ class ProjectImportRunner(SimpleToolRunner):
                         layer_project_id_map[int(old_link_id)] = int(new_link_id)
 
                 # 4c. Update builder_config with remapped layer_project IDs
-                if project_data.builder_config and layer_project_id_map:
+                # and remapped group IDs (the latter affects widget keys like
+                # `group_icon_<id>` and `group_info` dictionaries).
+                needs_remap = bool(layer_project_id_map) or bool(
+                    group_old_int_to_new
+                )
+                if project_data.builder_config and needs_remap:
                     remapped_config = self._remap_builder_config(
-                        project_data.builder_config, layer_project_id_map
+                        project_data.builder_config,
+                        layer_project_id_map,
+                        group_old_int_to_new,
                     )
                     await conn.execute(
                         f"UPDATE {schema}.project SET builder_config = $1 WHERE id = $2",

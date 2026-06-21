@@ -11,7 +11,8 @@ The backend of GOAT is making use of a Microservice architecture that is built u
 - [PostGIS](https://postgis.net/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Keycloak](https://www.keycloak.org/)
-- [R5](https://github.com/conveyal/r5)
+- [DuckDB / DuckLake](https://duckdb.org/)
+- [Windmill](https://www.windmill.dev/)
 
 To describe the software architecture the [C4 Model](https://c4model.com/) is used. The C4 Model is a hierarchical model that describes the software architecture on four different levels. The following sections will describe level 1 and level 2 of the C4 Model, which are context and containers.
 
@@ -68,17 +69,22 @@ We utilize a PostgreSQL database to store detailed user, organization, and group
 
 ### GOAT Application
 
-#### GOAT API 
-The GOAT API, developed using Python and FastAPI, serves as the central core of the application. It takes on the critical tasks of managing projects, performing analyses, and generating results. The API maintains direct interaction with the GOAT database and is furnished with a variety of built-in algorithms. Additionally, it utilizes the R5 Engine for conducting travel time analyses and computing diverse indicators. It also facilitates the distribution of spatial data, providing it in a wide range of formats, types, and resolutions to cater to different needs.
+#### GOAT Core API
+The GOAT Core API, developed using Python and FastAPI, serves as the central core of the application. It takes on the critical tasks of managing projects, folders, scenarios, and content metadata. It maintains direct interaction with the Application Database and exposes the endpoints the client uses for project and account management.
 
-#### GOAT Database
+#### GEO API
+The GEO API is a Python/FastAPI service that implements the OGC API Features and Vector Tiles specifications. It serves user layers and analysis outputs directly out of the DuckLake analysis database, so tile and feature requests stay fast and isolated from long-running analytics jobs.
 
-The GOAT database is a comprehensive PostgreSQL database, equipped with the PostGIS extension. It encompasses all the fundamental components necessary to operate GOAT, such as network configurations, opportunity data sets, base settings, and more. Consequently, the database holds a wide array of both spatial and non-spatial data, catering to the diverse needs of the GOAT system.
+#### Processes API
+The Processes API is a Python/FastAPI service implementing the OGC API Processes specification. It exposes the analytical capabilities of GOAT as standardized processes, validates inputs, manages jobs, and dispatches the work to the workflow engine.
 
-#### Organization Database
+#### Workflow Engine (Windmill + goatlib)
+Heavy analyses run on [Windmill](https://www.windmill.dev/), which acts as the workflow and job-execution engine. The Windmill workers ship with `goatlib` pre-installed — the shared Python library that contains all of GOAT's analytical features: accessibility and isochrone analyses, routing for car/walking/cycling/public transport, indicator calculations, scenario logic, and data import/export. Every analytical tool is registered as a Windmill job and reads/writes directly from the DuckLake analysis database. This collapses what used to be several dedicated routing services into a single, horizontally scalable execution layer.
 
-Database for the organization data. Each organization receives its database to separate the data of the different organizations. It is used to store the custom data of the organization or users of the organization. And it is used to store the data that is produced using the GOAT application. 
+#### Application Database
 
-#### R5 Engine
+The Application Database is a PostgreSQL database with the PostGIS extension. It stores everything needed to operate GOAT outside of the bulk geospatial payload: user accounts, organizations, projects, folders, layer metadata, scenarios, jobs, and subscriptions.
 
-The R5 Engine, crafted in Java, functions as a versatile routing mechanism employed to conduct intermodal travel time analyses for cars and public transport. This engine is harnessed by the GOAT API to perform sophisticated travel time analyses, reinforcing the application's efficiency and functionality.
+#### Analysis Database (DuckLake)
+
+User layers and the outputs of analytical jobs are stored in a [DuckLake](https://ducklake.select/) catalog backed by Parquet on object storage and queried with DuckDB. This separation — metadata in PostgreSQL, bulk geospatial data in DuckLake — lets the GEO API serve features and tiles efficiently while the workflow engine reads and writes the same data for analyses.

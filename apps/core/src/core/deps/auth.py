@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict
 
 from core.core.config import settings
@@ -6,6 +7,8 @@ from fastapi import Depends, HTTPException, Request, status
 from goatlib.auth import JOSEError, KeycloakAuth
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 # Initialize Keycloak auth using goatlib
 _keycloak_auth = KeycloakAuth(
@@ -96,18 +99,38 @@ async def _validate_authorization(
                 cleaned_route_path = clean_path(
                     route.path
                 )  # e.g /organizations/{organization_id}
+                # Bind all user-controlled values as parameters — never
+                # f-string-interpolate them (SQL injection). The schema is a
+                # trusted config identifier (cannot be a bind param). user_id is
+                # cast to uuid to match the function signature.
                 authz_query = text(
-                    f"SELECT * FROM {settings.SCHEMA}.authorization('{user_id}', '{cleaned_route_path}', '{cleaned_path}', '{method}');"
+                    f"SELECT * FROM {settings.SCHEMA}.authorization("
+                    "CAST(:user_id AS uuid), :requested_resource, "
+                    ":requested_path, :requested_method)"
                 )
-                response = await async_session.execute(authz_query)
+                response = await async_session.execute(
+                    authz_query,
+                    {
+                        "user_id": user_id,
+                        "requested_resource": cleaned_route_path,
+                        "requested_path": cleaned_path,
+                        "requested_method": method,
+                    },
+                )
                 state = response.scalars().all()
                 if not state or not len(state) or state[0] is False:
                     raise ValueError("Unauthorized")
                 return True
             else:
                 raise ValueError("Missing path, route, or method in request scope")
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception:
+            # Don't leak the internal error (e.g. DB messages) to the client.
+            logger.warning("authorization check failed", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
+            )
 
     return True
 
@@ -132,8 +155,14 @@ async def auth_z(
             )
         user_token = decode_token(token)
         await _validate_authorization(request, user_token, async_session)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        # Don't leak the internal error (token/decode/DB details) to the client.
+        logger.warning("authorization failed", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
+        )
 
     return True
 

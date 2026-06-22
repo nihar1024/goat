@@ -116,44 +116,28 @@
       "type": "node-terminal",
       "request": "launch",
       "command": "tmux new -ADs core 'cd ${workspaceFolder}/apps/core && set -a && . ${workspaceFolder}/.env && set +a && exec uv run fastapi dev src/core/main.py --reload --port 8000'",
-      "presentation": {
-        "hidden": false,
-        "group": "tmux",
-        "order": 1
-      }
+      "presentation": { "hidden": false, "group": "tmux", "order": 1 }
     },
     {
       "name": "GeoAPI (tmux)",
       "type": "node-terminal",
       "request": "launch",
       "command": "tmux new -ADs geoapi 'cd ${workspaceFolder}/apps/geoapi && set -a && . ${workspaceFolder}/.env && set +a && exec uv run fastapi dev src/geoapi/main.py --reload --port 8100'",
-      "presentation": {
-        "hidden": false,
-        "group": "tmux",
-        "order": 2
-      }
+      "presentation": { "hidden": false, "group": "tmux", "order": 2 }
     },
     {
       "name": "Processes (tmux)",
       "type": "node-terminal",
       "request": "launch",
       "command": "tmux new -ADs processes 'cd ${workspaceFolder}/apps/processes && set -a && . ${workspaceFolder}/.env && set +a && exec uv run fastapi dev src/processes/main.py --reload --port 8300'",
-      "presentation": {
-        "hidden": false,
-        "group": "tmux",
-        "order": 3
-      }
+      "presentation": { "hidden": false, "group": "tmux", "order": 3 }
     },
     {
       "name": "Web (tmux)",
       "type": "node-terminal",
       "request": "launch",
       "command": "tmux new -ADs web 'cd ${workspaceFolder} && set -a && . ${workspaceFolder}/.env && set +a && exec pnpm web'",
-      "presentation": {
-        "hidden": false,
-        "group": "tmux",
-        "order": 4
-      }
+      "presentation": { "hidden": false, "group": "tmux", "order": 4 }
     },
     {
       "name": "Python: Current File",

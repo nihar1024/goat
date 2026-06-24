@@ -145,6 +145,9 @@ ${NIGIRI_SDK_DIR}/lib/libabsl_bad_variant_access.a"
 # --- pybind11 ---
 find_package(pybind11 CONFIG REQUIRED)
 
+# std::thread (reverse-RAPTOR parallelism) needs the platform thread library.
+find_package(Threads REQUIRED)
+
 file(GLOB_RECURSE SOURCES
     src/input/*.cpp
     src/data/*.cpp
@@ -154,6 +157,7 @@ file(GLOB_RECURSE SOURCES
     src/output/*.cpp
     src/heatmap/*.cpp
     src/network/*.cpp
+    src/preprocessing/*.cpp
     src/pipeline.cpp
 )
 
@@ -163,6 +167,6 @@ pybind11_add_module(_routing
 )
 
 target_include_directories(_routing PRIVATE src)
-target_link_libraries(_routing PRIVATE duckdb nigiri)
+target_link_libraries(_routing PRIVATE duckdb nigiri Threads::Threads)
 
 install(TARGETS _routing LIBRARY DESTINATION routing)

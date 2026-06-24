@@ -7,6 +7,7 @@
 #include "output/geojson.h"
 #include "output/grid_contour_common.h"
 #include "output/parquet.h"
+#include "output/sql_export.h"
 #include "geometry/grid_surface_builder.h"
 #include "heatmap/heatmap.h"
 #include "network/network_prep.h"
@@ -27,20 +28,6 @@ namespace routing
 
     namespace
     {
-        static std::string sql_escape(std::string const &s)
-        {
-            std::string out;
-            out.reserve(s.size() + 4);
-            for (char c : s)
-            {
-                if (c == '\'')
-                    out += "''";
-                else
-                    out.push_back(c);
-            }
-            return out;
-        }
-
         // Build a RequestConfig from a MatrixConfig for reusing
         // edge loading, cost computation, and snapping infrastructure.
         RequestConfig matrix_to_request_config(
@@ -399,12 +386,8 @@ namespace routing
             }
         }
 
-        // Write results to parquet via DuckDB Appender.
-        namespace fs = std::filesystem;
-        fs::path out_path(cfg.output_path);
-        if (!out_path.parent_path().empty())
-            fs::create_directories(out_path.parent_path());
-
+        // Stage the matrix in a TEMP TABLE via the Appender, then export to
+        // parquet (write_query_to_parquet creates the parent directory).
         {
             bool const has_origin_ids = cfg.origin_ids.size() == n_origins;
             bool const has_dest_ids = cfg.destination_ids.size() == n_dests;
@@ -440,13 +423,9 @@ namespace routing
                 }
             }
 
-            std::string copy_sql =
-                "COPY _matrix_tmp TO '" + sql_escape(cfg.output_path) +
-                "' (FORMAT PARQUET, COMPRESSION ZSTD)";
-            auto result = con.Query(copy_sql);
-            if (result->HasError())
-                throw std::runtime_error(
-                    "Travel cost matrix parquet export failed: " + result->GetError());
+            output::write_query_to_parquet(
+                con, "SELECT * FROM _matrix_tmp", cfg.output_path,
+                "Travel cost matrix parquet export failed");
             con.Query("DROP TABLE _matrix_tmp");
         }
     }

@@ -51,6 +51,22 @@ DEFAULT_H3_RESOLUTION: dict[RoutingMode, int] = {
     RoutingMode.bicycle: 9,
     RoutingMode.pedelec: 9,
     RoutingMode.car: 8,
+    RoutingMode.pt: 9,
+}
+
+# PT access/egress lookup tables are precomputed per mode at a fixed H3
+# resolution and built max-time, named `accessegress_{mode}_r{res}_{max}min`
+# and stored beside the nigiri timetable (gtfs.bin). The runtime
+# access/egress max-time params filter rows from these tables; they cannot
+# exceed the built max. RoutingMode → table mode-name follows the precompute
+# tool's CLI (walking is spelled "walk").
+_PT_ACCESSEGRESS_RES = 9
+_PT_ACCESSEGRESS_MAX_MIN = 20
+_PT_TABLE_MODE_NAME: dict[RoutingMode, str] = {
+    RoutingMode.walking: "walk",
+    RoutingMode.bicycle: "bicycle",
+    RoutingMode.pedelec: "pedelec",
+    RoutingMode.car: "car",
 }
 
 # Hard cap on opportunity points per layer (and on AOI cells synthesised
@@ -82,6 +98,21 @@ class HeatmapV2Tool(HeatmapToolBase):
         super().__init__()
         self._edge_dir = settings.routing.street_network_edges_base_path
         self._node_dir = settings.routing.street_network_nodes_base_path
+        # PT: the nigiri timetable and the per-mode access/egress lookup
+        # tables live in the same directory (gtfs.bin's parent).
+        self._timetable_path = str(settings.routing.pt_network_base_path)
+        self._pt_network_dir = str(Path(self._timetable_path).parent)
+
+    def _accessegress_table_path(self: Self, mode: RoutingMode) -> str:
+        """Resolve the precomputed access/egress lookup parquet for a mode."""
+        name = _PT_TABLE_MODE_NAME.get(mode)
+        if name is None:
+            raise ValueError(f"Unsupported PT access/egress mode: {mode}")
+        fname = (
+            f"accessegress_{name}_r{_PT_ACCESSEGRESS_RES}"
+            f"_{_PT_ACCESSEGRESS_MAX_MIN}min.parquet"
+        )
+        return str(Path(self._pt_network_dir) / fname)
 
     # --------------------------------------------------------- opportunities
 
@@ -203,6 +234,7 @@ class HeatmapV2Tool(HeatmapToolBase):
             RoutingMode.bicycle: routing.RoutingMode.Bicycle,
             RoutingMode.pedelec: routing.RoutingMode.Pedelec,
             RoutingMode.car: routing.RoutingMode.Car,
+            RoutingMode.pt: routing.RoutingMode.PublicTransport,
         }
         htype_map = {
             HeatmapType.gravity: routing.HeatmapType.Gravity,
@@ -243,6 +275,29 @@ class HeatmapV2Tool(HeatmapToolBase):
         cfg.max_sensitivity = params.max_sensitivity
         cfg.closest_k = closest_k
         cfg.output_path = output_path
+
+        # PT: arrive-by reverse RAPTOR + precomputed access/egress lookup
+        # tables. max_cost here is the total journey budget (minutes). The
+        # timetable and per-mode lookup tables are resolved from settings
+        # (mirrors how catchment v2 resolves its timetable).
+        if params.routing_mode == RoutingMode.pt:
+            if params.arrival_time is None:
+                raise ValueError("PT heatmap requires an arrival_time.")
+            cfg.timetable_path = self._timetable_path
+            cfg.arrival_time = int(params.arrival_time)
+            cfg.max_transfers = params.max_transfers
+            cfg.transit_modes = list(params.transit_modes or [])
+            cfg.access_mode = routing_mode_map[params.access_mode]
+            cfg.egress_mode = routing_mode_map[params.egress_mode]
+            cfg.access_max_time = params.access_max_time
+            cfg.egress_max_time = params.egress_max_time
+            cfg.access_table_path = self._accessegress_table_path(
+                params.access_mode
+            )
+            cfg.egress_table_path = self._accessegress_table_path(
+                params.egress_mode
+            )
+
         return cfg
 
     # ----------------------- connectivity helpers ----------------------------
@@ -337,9 +392,11 @@ class HeatmapV2Tool(HeatmapToolBase):
                     "Filter the layer or pick a smaller dataset."
                 )
             label = self._opportunity_label(opp, idx)
-            sensitivity = opp.sensitivity or 300000.0
+            # OpportunityV2 declares both fields with validated defaults, so
+            # read them directly (no fallback needed).
+            sensitivity = opp.sensitivity
             layer_max_cost = float(opp.max_cost)
-            n_destinations = getattr(opp, "n_destinations", 1)
+            n_destinations = opp.n_destinations
             layers.append((label, opp_points, sensitivity, layer_max_cost, n_destinations))
         return layers
 

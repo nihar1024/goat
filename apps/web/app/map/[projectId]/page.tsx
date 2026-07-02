@@ -28,6 +28,7 @@ import { MeasureProvider } from "@/lib/providers/MeasureProvider";
 import { setSelectedBuilderItem } from "@/lib/store/map/slice";
 import { addOrUpdateMarkerImages, addPatternImages } from "@/lib/transformers/map-image";
 import { createSnapToCursorModifier } from "@/lib/utils/dnd-modifier";
+import { getLocFromUrl, writeLocToUrl, writeMapLocToUrl } from "@/lib/utils/map/loc-url";
 import type { FeatureLayerPointProperties } from "@/lib/validations/layer";
 import { type BuilderWidgetSchema, type CustomBasemap, builderWidgetSchema, projectSchema } from "@/lib/validations/project";
 import { widgetSchemaMap } from "@/lib/validations/widget";
@@ -56,6 +57,8 @@ export default function MapPage({ params: { projectId } }) {
   const theme = useTheme();
   const { t, i18n } = useTranslation("common");
   const mapRef = useRef<MapRef | null>(null);
+  // Read ?loc= once on mount; it wins over the project's saved initial view.
+  const urlLoc = useMemo(() => getLocFromUrl(), []);
   const mapMode = useAppSelector((state) => state.map.mapMode);
   const dispatch = useAppDispatch();
 
@@ -259,6 +262,22 @@ export default function MapPage({ params: { projectId } }) {
       }, UPDATE_VIEW_STATE_DEBOUNCE_TIME),
     [initialView?.max_zoom, initialView?.min_zoom, projectId]
   );
+
+  const handleMoveEnd = useCallback(
+    (e: ViewStateChangeEvent) => {
+      writeLocToUrl(e.viewState);
+      if (isProjectEditor) {
+        updateViewState(e);
+      }
+    },
+    [isProjectEditor, updateViewState]
+  );
+
+  const handleMapLoaded = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    writeMapLocToUrl(map);
+  }, []);
 
   const handleMapLoad = useCallback(() => {
     if (mapRef.current) {
@@ -593,18 +612,19 @@ export default function MapPage({ params: { projectId } }) {
                             scenarioFeatures={scenarioFeatures}
                             maxExtent={project?.max_extent || undefined}
                             initialViewState={{
-                              zoom: initialView?.zoom ?? 3,
-                              latitude: initialView?.latitude ?? 48.13,
-                              longitude: initialView?.longitude ?? 11.57,
-                              pitch: initialView?.pitch ?? 0,
-                              bearing: initialView?.bearing ?? 0,
+                              zoom: urlLoc?.zoom ?? initialView?.zoom ?? 3,
+                              latitude: urlLoc?.latitude ?? initialView?.latitude ?? 48.13,
+                              longitude: urlLoc?.longitude ?? initialView?.longitude ?? 11.57,
+                              pitch: urlLoc?.pitch ?? initialView?.pitch ?? 0,
+                              bearing: urlLoc?.bearing ?? initialView?.bearing ?? 0,
                               fitBoundsOptions: {
                                 minZoom: initialView?.min_zoom ?? 0,
                                 maxZoom: initialView?.max_zoom ?? 24,
                               },
                             }}
                             mapStyle={mapStyle}
-                            {...(isProjectEditor ? { onMoveEnd: updateViewState } : {})}
+                            onMoveEnd={handleMoveEnd}
+                            onLoad={handleMapLoaded}
                             isEditor={isProjectEditor}
                           />
                           <DataPanel projectLayers={allProjectLayersIncludingTables} isEditor={isProjectEditor} />

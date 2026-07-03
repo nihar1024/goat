@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { setColorFunction } from "@geomatico/maplibre-cog-protocol";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { FilterSpecification } from "maplibre-gl";
 import type { LayerProps, MapGeoJSONFeature } from "react-map-gl/maplibre";
 import { Layer as MapLayer, Source, useMap } from "react-map-gl/maplibre";
@@ -245,6 +245,30 @@ const Layers = (props: LayersProps) => {
       }
     });
     return { useDataLayers: dataLayers, systemLayers: sysLayers };
+  }, [props.layers]);
+
+  // Lazy-load clustered (GeoJSON) layers: their source downloads the full
+  // dataset (/items?limit=100000) eagerly on mount, so we only mount it once a
+  // layer has been made visible — and keep it mounted afterwards so re-toggling
+  // never refetches. Vector-tile layers don't need this (MapLibre skips tiles
+  // for hidden layers). Tracks the set of layer ids that have ever been visible.
+  const [revealedLayerIds, setRevealedLayerIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const nowVisible = (props.layers ?? [])
+      .filter((l) => (l.properties as { visibility?: boolean } | undefined)?.visibility)
+      .map((l) => String(l.id));
+    if (nowVisible.length === 0) return;
+    setRevealedLayerIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of nowVisible) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [props.layers]);
 
   // Map of icon-image name (`${layer.id}-${marker.name}`) → url+sdf for
@@ -570,6 +594,14 @@ const Layers = (props: LayersProps) => {
                   layer.feature_layer_geometry_type === "point" &&
                   isClusteringEnabled(layer)
                 ) {
+                  // Defer the full-dataset GeoJSON download until the layer has
+                  // been visible at least once (see revealedLayerIds above).
+                  const isVisible = !!(
+                    layer.properties as { visibility?: boolean } | undefined
+                  )?.visibility;
+                  if (!isVisible && !revealedLayerIds.has(String(layer.id))) {
+                    return null;
+                  }
                   const pointProps = layer.properties as FeatureLayerPointProperties;
                   const isCustomMarker = !!pointProps.custom_marker;
                   const clusterSourceProps = buildClusterSourceProps(layer);

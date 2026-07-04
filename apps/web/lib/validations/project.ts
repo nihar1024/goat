@@ -151,6 +151,10 @@ export const builderConfigSchema = z.object({
       icon_color: z.string().optional(),
       font_color: z.string().optional(),
       favicon_url: z.string().default(DEFAULT_FAVICON_URL),
+      // Home-screen/PWA icon. Optional; when absent the GOAT logo is used.
+      // Deliberately independent from favicon_url (favicons are often too
+      // small to make good app icons).
+      app_icon_url: z.string().optional(),
       // Social sharing — when unset, public pages fall back to GOAT defaults
       // (see lib/metadata.ts and app/map/public/[projectId]/layout.tsx).
       og_image_url: z.string().optional(),

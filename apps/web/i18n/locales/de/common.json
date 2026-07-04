@@ -646,6 +646,8 @@
   "failed_to_compute_catchment_area": "Einzugsgebiet konnte nicht berechnet werden",
   "failed_to_update_preferences": "Aktualisierung der Systemeinstellungen fehlgeschlagen",
   "favicon": "Favicon",
+  "app_icon": "App-Icon",
+  "app_icon_description": "Wird angezeigt, wenn das Dashboard zum Startbildschirm eines Telefons hinzugefügt wird. SVG oder großes PNG (mindestens 512px) empfohlen.",
   "feature": "Feature",
   "feature_attribute": "Feature-Attribut",
   "feature_attributes": "Feature-Attribute",

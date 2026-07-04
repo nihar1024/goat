@@ -633,6 +633,8 @@
   "features": "Features",
   "features_saved": "Features saved",
   "favicon": "Favicon",
+  "app_icon": "App icon",
+  "app_icon_description": "Shown when the dashboard is added to a phone's home screen. SVG or large PNG (at least 512px) recommended.",
   "feet": "Feet",
   "field": "Field",
   "field_display_name": "Field Display Name",

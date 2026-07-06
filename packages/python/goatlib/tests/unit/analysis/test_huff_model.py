@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import pytest
@@ -7,6 +6,12 @@ from goatlib.analysis.schemas.heatmap import (
     HuffmodelParams,
 )
 from pydantic import ValidationError
+
+_ANALYSIS_DATA = Path(__file__).parent.parent.parent / "data" / "analysis"
+requires_analysis_data = pytest.mark.skipif(
+    not (_ANALYSIS_DATA / "kita_munich.geojson").exists(),
+    reason="kita_munich.geojson / census_munich.geojson not in repo",
+)
 
 
 def test_huffmodel_schema_validation() -> None:
@@ -24,7 +29,7 @@ def test_huffmodel_schema_validation() -> None:
         "attractivity": "capacity",
         "max_cost": 20,
         "attractiveness_param": 1.0,
-        "distance_decay": 1.0
+        "distance_decay": 1.0,
     }
 
     # Should create successfully
@@ -55,22 +60,21 @@ def test_huffmodel_schema_validation() -> None:
     print("Schema validation tests passed")
 
 
+@requires_analysis_data
 def test_huff_model_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
     """Test the Huff model workflow using kindergarten data"""
     result_dir = Path(__file__).parent.parent.parent / "result"
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # Create opportunity layer using kindergarten data (kita.geojson)
-    opportunity_path=str(data_root / "analysis" / "kita_munich.geojson")
-    attractivity="capacity"
-    max_cost=30
+    opportunity_path = str(data_root / "analysis" / "kita_munich.geojson")
+    attractivity = "capacity"
+    max_cost = 30
     # Create demand layer using census data (population needing kindergarten services)
-    demand_path=str(data_root / "analysis" / "census_munich.geojson")
-    demand_field="einwohner"# Population count as demand
+    demand_path = str(data_root / "analysis" / "census_munich.geojson")
+    demand_field = "einwohner"  # Population count as demand
 
-    reference_area_path = str(
-        data_root / "analysis" / "munich_districts.geojson"
-    )
+    reference_area_path = str(data_root / "analysis" / "munich_districts.geojson")
     params = HuffmodelParams(
         routing_mode="walking",
         od_matrix_path=str(walking_matrix_dir),
@@ -82,7 +86,7 @@ def test_huff_model_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
         opportunity_path=opportunity_path,
         attractivity=attractivity,
         max_cost=max_cost,
-        )
+    )
 
     tool = HuffmodelTool()
     results = tool.run(params)
@@ -134,46 +138,60 @@ def test_huff_computation_with_known_values() -> None:
         "test_demand",
         attractiveness_param=1.0,  # Linear attractiveness
         distance_decay=1.0,  # Linear distance decay
-        max_cost=25
+        max_cost=25,
     )
 
     # Verify results
-    results = tool.con.execute(f"SELECT * FROM {result_table} ORDER BY supply_id").fetchdf()
+    results = tool.con.execute(
+        f"SELECT * FROM {result_table} ORDER BY supply_id"
+    ).fetchdf()
 
     assert len(results) == 2, "Should have results for both supply locations"
-    assert all(prob >= 0 for prob in results['huff_probability']), "Probabilities should be non-negative"
-    assert all(prob <= 1 for prob in results['huff_probability']), "Probabilities should be <= 1"
+    # `probability` is the share of total demand captured, in percent (0-100)
+    assert all(
+        prob >= 0 for prob in results["probability"]
+    ), "Probabilities should be non-negative"
+    assert all(
+        prob <= 100 for prob in results["probability"]
+    ), "Probabilities should be <= 100"
 
-    # Calculate expected Huff probabilities manually
-    # For origin 'orig_1':
+    # Calculate expected captured demand manually
+    # For origin 'orig_1' (demand 300):
     # - supply_1: utility = 100^1.0 * 10^-1.0 = 10
     # - supply_2: utility = 200^1.0 * 20^-1.0 = 10
-    # - Total utility = 20, so P(supply_1) = P(supply_2) = 0.5
+    # - P(supply_1) = P(supply_2) = 0.5 -> captured 150 each
 
-    # For origin 'orig_2':
+    # For origin 'orig_2' (demand 400):
     # - supply_1: utility = 100^1.0 * 15^-1.0 = 6.667
     # - supply_2: utility = 200^1.0 * 5^-1.0 = 40
-    # - Total utility = 46.667, so P(supply_1) = 0.143, P(supply_2) = 0.857
+    # - P(supply_1) = 0.143, P(supply_2) = 0.857 -> captured 57.14 / 342.86
 
-    # Check specific expected values (allowing for small floating point differences)
-    supply1_result = results[results['supply_id'] == 'supply_1'].iloc[0]
-    supply2_result = results[results['supply_id'] == 'supply_2'].iloc[0]
+    # Total demand 700:
+    # - supply_1: (150 + 57.14) / 700 * 100 = 29.59 %
+    # - supply_2: (150 + 342.86) / 700 * 100 = 70.41 %
+    supply1_result = results[results["supply_id"] == "supply_1"].iloc[0]
+    supply2_result = results[results["supply_id"] == "supply_2"].iloc[0]
 
-    # Since we have aggregated probabilities across both origins, check that they're reasonable
-    assert supply1_result['huff_probability'] >= 0.1, f"Supply 1 probability {supply1_result['huff_probability']} should be >= 0.1"
-    assert supply2_result['huff_probability'] >= 0.1, f"Supply 2 probability {supply2_result['huff_probability']} should be >= 0.1"
+    assert supply1_result["probability"] == pytest.approx(29.59, abs=0.1)
+    assert supply2_result["probability"] == pytest.approx(70.41, abs=0.1)
 
-    # For aggregated model, supply_2 should have higher probability due to higher attractiveness and closer distance to orig_2
-    assert supply2_result['huff_probability'] > supply1_result['huff_probability'], "Supply 2 should have higher probability"
-
-    # Sum of probabilities should be reasonable (close to 1 for normalized model)
-    total_prob = results['huff_probability'].sum()
-    assert 0.5 <= total_prob <= 1.5, f"Total probability {total_prob} seems unreasonable"
-    assert total_prob == pytest.approx(1.0, rel=1e-1), f"Total probability {total_prob} should be normalized close to 1.0"
-    print(f"Huff model results: {len(results)} facilities, total probability: {total_prob:.3f}")
-    print(f"Supply 1 probability: {supply1_result['huff_probability']:.3f}")
-    print(f"Supply 2 probability: {supply2_result['huff_probability']:.3f}")
+    # All demand is within max_cost, so shares should sum to 100 %
+    total_prob = results["probability"].sum()
+    assert total_prob == pytest.approx(
+        100.0, abs=0.1
+    ), f"Total probability {total_prob} should sum to 100 %"
+    print(
+        f"Huff model results: {len(results)} facilities, total probability: {total_prob:.3f}"
+    )
+    print(f"Supply 1 probability: {supply1_result['probability']:.3f}")
+    print(f"Supply 2 probability: {supply2_result['probability']:.3f}")
 
     # Cleanup
-    for table in ['test_od_matrix', 'test_supply', 'test_demand', 'test_reference', result_table]:
+    for table in [
+        "test_od_matrix",
+        "test_supply",
+        "test_demand",
+        "test_reference",
+        result_table,
+    ]:
         tool.con.execute(f"DROP TABLE IF EXISTS {table}")

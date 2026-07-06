@@ -177,20 +177,17 @@ class HuffmodelTool(HeatmapToolBase):
          Returns a list of (standardized_table_name, opportunity_name)
         """
         table_name = "supply_input"
-        try:
-            meta, table_name = self.import_input(supply_table, table_name=table_name)
-            geom_col = meta.geometry_column or "geom"
-            geom_type = (meta.geometry_type or "").lower()
-            output_table = f"{table_name}_std"
+        meta, table_name = self.import_input(supply_table, table_name=table_name)
+        geom_col = meta.geometry_column or "geom"
+        geom_type = (meta.geometry_type or "").lower()
+        output_table = f"{table_name}_std"
 
-            transform_to_4326 = geom_col
-            if meta.crs and meta.crs.to_epsg() != 4326:
-                source_crs = meta.crs.to_string()
-                transform_to_4326 = (
-                    f"ST_Transform({geom_col}, '{source_crs}', 'EPSG:4326')"
-                )
-        except Exception:
-            pass
+        transform_to_4326 = geom_col
+        if meta.crs and meta.crs.to_epsg() != 4326:
+            source_crs = meta.crs.to_string()
+            transform_to_4326 = (
+                f"ST_Transform({geom_col}, '{source_crs}', 'EPSG:4326')"
+            )
 
         if "point" in geom_type:
             query = f"""

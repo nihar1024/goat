@@ -240,13 +240,13 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
             return None
         if not isinstance(value, list):
             return value
-        # Filter to only include items that have both required fields
+        # Drop incomplete dicts only; non-dict items (e.g. AttributeRelationship
+        # instances) are passed through for regular validation.
         filtered = [
             item
             for item in value
-            if isinstance(item, dict)
-            and item.get("target_field")
-            and item.get("join_field")
+            if not isinstance(item, dict)
+            or (item.get("target_field") and item.get("join_field"))
         ]
         return filtered if filtered else None
 

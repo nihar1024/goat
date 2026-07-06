@@ -99,18 +99,11 @@ def test_statistical_aggregation() -> bool:
         join_operation=JoinOperationType.one_to_one,
         multiple_matching_records=MultipleMatchingRecordsType.calculate_statistics,
         field_statistics=[
-            FieldStatistic(
-                field="sales_amount",
-                operations=[
-                    StatisticOperation.sum,
-                    StatisticOperation.count,
-                    StatisticOperation.mean,
-                ],
-            ),
-            FieldStatistic(
-                field="units_sold",
-                operations=[StatisticOperation.sum, StatisticOperation.max],
-            ),
+            FieldStatistic(field="sales_amount", operation=StatisticOperation.sum),
+            FieldStatistic(field="sales_amount", operation=StatisticOperation.mean),
+            FieldStatistic(operation=StatisticOperation.count),
+            FieldStatistic(field="units_sold", operation=StatisticOperation.sum),
+            FieldStatistic(field="units_sold", operation=StatisticOperation.max),
         ],
         join_type=JoinType.left,
     )
@@ -127,7 +120,7 @@ def test_statistical_aggregation() -> bool:
 
     # Check North region statistics
     north_stats = con.execute(
-        "SELECT sales_amount_sum, sales_amount_count, units_sold_sum FROM result WHERE region_code = 'NORTH'"
+        'SELECT sales_amount_sum, "count", units_sold_sum FROM result WHERE region_code = \'NORTH\''
     ).fetchone()
 
     print(
@@ -138,7 +131,7 @@ def test_statistical_aggregation() -> bool:
     expected_sum = 1500.50 + 2200.75 + 1800.00  # Excludes NULL
     success = (
         abs(float(north_stats[0]) - expected_sum) < 0.01
-        and north_stats[1] == 3  # Count excludes NULL
+        and north_stats[1] == 4  # Count of matched join records (incl. NULL sales)
         and north_stats[2] == 95
     )  # 25+18+22+30 units
 

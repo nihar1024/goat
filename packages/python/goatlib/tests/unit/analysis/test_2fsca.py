@@ -9,6 +9,12 @@ from goatlib.analysis.schemas.heatmap import (
     TwoSFCAType,
 )
 
+_ANALYSIS_DATA = Path(__file__).parent.parent.parent / "data" / "analysis"
+requires_analysis_data = pytest.mark.skipif(
+    not (_ANALYSIS_DATA / "kita_munich.geojson").exists(),
+    reason="kita_munich.geojson / census_munich.geojson not in repo",
+)
+
 
 def test_2sfca_schema_validation():
     """Test 2SFCA parameter schema validation."""
@@ -62,12 +68,13 @@ def test_2sfca_tool_initialization():
     tool = Heatmap2SFCATool()
 
     # Verify tool has expected methods
-    assert hasattr(tool, '_run_implementation')
-    assert hasattr(tool, '_compute_capacity_ratios')
-    assert hasattr(tool, '_compute_cumulative_accessibility')
+    assert hasattr(tool, "_run_implementation")
+    assert hasattr(tool, "_compute_capacity_ratios")
+    assert hasattr(tool, "_compute_cumulative_accessibility")
 
     # Verify tool inherits from HeatmapToolBase
     from goatlib.analysis.accessibility.base import HeatmapToolBase
+
     assert isinstance(tool, HeatmapToolBase)
 
     print("✓ 2SFCA tool initialization successful")
@@ -111,29 +118,25 @@ def test_2sfca_basic_computation():
     """Test 2SFCA computation with synthetic data and expected values."""
     tool = Heatmap2SFCATool()
 
-    # Step 1 filtered matrix: origins=opportunities, destinations=demand
-    # In 2SFCA Step 1 the matrix is filtered so orig_id = opportunity locations
+    # OD matrix: orig_id = demand locations, dest_id = opportunity locations.
+    # Both 2SFCA steps consume this same orientation.
     tool.con.execute("""
         CREATE TABLE filtered_matrix_step1 AS
-        SELECT 101 AS orig_id, 1 AS dest_id, 10 AS cost
-        UNION ALL SELECT 101, 2, 15
-        UNION ALL SELECT 102, 1, 20
-        UNION ALL SELECT 102, 2, 8
-    """)
-
-    # Step 2 filtered matrix: origins=demand, destinations=opportunities
-    tool.con.execute("""
-        CREATE TABLE filtered_matrix_step2 AS
         SELECT 1 AS orig_id, 101 AS dest_id, 10 AS cost
         UNION ALL SELECT 1, 102, 20
         UNION ALL SELECT 2, 101, 15
         UNION ALL SELECT 2, 102, 8
     """)
 
-    # Create demand data (schema: dest_id, demand_value)
+    tool.con.execute("""
+        CREATE TABLE filtered_matrix_step2 AS
+        SELECT * FROM filtered_matrix_step1
+    """)
+
+    # Create demand data (schema: orig_id, demand_value)
     tool.con.execute("""
         CREATE TABLE demand AS
-        SELECT 1 AS dest_id, 1000.0 AS demand_value
+        SELECT 1 AS orig_id, 1000.0 AS demand_value
         UNION ALL SELECT 2, 1500.0
     """)
 
@@ -148,14 +151,16 @@ def test_2sfca_basic_computation():
 
     # Run 2SFCA Step 1: compute capacity ratios
     result_table, safe_names = tool._compute_capacity_ratios(
-        "filtered_matrix_step1", "opportunities_unified", std_tables, "demand",
-        TwoSFCAType.twosfca
+        "filtered_matrix_step1",
+        "opportunities_unified",
+        std_tables,
+        "demand",
+        TwoSFCAType.twosfca,
     )
 
     # Run 2SFCA Step 2: compute cumulative accessibility
     final_table = tool._compute_cumulative_accessibility(
-        "filtered_matrix_step2", result_table, safe_names,
-        TwoSFCAType.twosfca
+        "filtered_matrix_step2", result_table, safe_names, TwoSFCAType.twosfca
     )
 
     df = tool.con.execute(f"""
@@ -188,9 +193,12 @@ def test_2sfca_basic_computation():
         == expected2
     )
 
-    print(f"✓ 2SFCA computation: accessibility values {df['total_accessibility'].values}")
+    print(
+        f"✓ 2SFCA computation: accessibility values {df['total_accessibility'].values}"
+    )
 
 
+@requires_analysis_data
 def test_2sfca_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
     """Test the standard 2SFCA workflow"""
     result_dir = Path(__file__).parent.parent.parent / "result"
@@ -226,6 +234,7 @@ def test_2sfca_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
     assert Path(results[0][1].path).exists()
 
 
+@requires_analysis_data
 def test_e2sfca_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
     """Test the Enhanced 2SFCA workflow with impedance weighting"""
     result_dir = Path(__file__).parent.parent.parent / "result"
@@ -263,6 +272,7 @@ def test_e2sfca_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
     assert Path(results[0][1].path).exists()
 
 
+@requires_analysis_data
 def test_m2sfca_workflow(data_root: Path, walking_matrix_dir: Path) -> None:
     """Test the Enhanced 2SFCA workflow with impedance weighting"""
     result_dir = Path(__file__).parent.parent.parent / "result"

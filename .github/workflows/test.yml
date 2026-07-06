@@ -110,8 +110,8 @@ jobs:
     name: goatlib (pytest)
     if: ${{ inputs.goatlib }}
     runs-on: ubuntu-latest
-    # ADVISORY: pre-existing failures + tests needing GDAL/DuckDB data fixtures.
-    continue-on-error: true
+    # REQUIRED. Data-dependent tests skip when their fixtures are absent;
+    # travel-time matrices auto-download from assets.plan4better.de.
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4

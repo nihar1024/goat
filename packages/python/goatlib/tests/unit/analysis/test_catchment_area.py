@@ -173,7 +173,6 @@ class TestEnums:
         assert CatchmentAreaRoutingMode.walking.value == "walking"
         assert CatchmentAreaRoutingMode.bicycle.value == "bicycle"
         assert CatchmentAreaRoutingMode.pedelec.value == "pedelec"
-        assert CatchmentAreaRoutingMode.wheelchair.value == "wheelchair"
         assert CatchmentAreaRoutingMode.car.value == "car"
         assert CatchmentAreaRoutingMode.pt.value == "pt"
 
@@ -181,7 +180,7 @@ class TestEnums:
         """Test all catchment area type values."""
         assert CatchmentAreaType.polygon.value == "polygon"
         assert CatchmentAreaType.network.value == "network"
-        assert CatchmentAreaType.rectangular_grid.value == "rectangular_grid"
+        assert CatchmentAreaType.hexagonal_grid.value == "hexagonal_grid"
 
     def test_pt_modes(self) -> None:
         """Test PT mode values."""

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,15 @@ WFS_URL = (
 )
 LAYER_NAME = "adv:AX_Strasse"
 
+# Live tests against the Bavarian ATKIS WFS: slow (minutes) and dependent on
+# an external service, so opt-in only.
+requires_live_wfs = pytest.mark.skipif(
+    os.environ.get("RUN_LIVE_WFS") != "1",
+    reason="live WFS test — set RUN_LIVE_WFS=1 to run",
+)
 
+
+@requires_live_wfs
 def test_get_layers_parses_names() -> None:
     """Ensure get_layers() correctly extracts layer names."""
     reader = WFSReader()
@@ -29,7 +38,8 @@ def test_build_datasource_creates_xml(tmp_path: Path) -> None:
     content = xml_path.read_text(encoding="utf-8")
     assert xml_path.exists()
     assert "<OGRWFSDataSource>" in content
-    assert url in content
+    # SERVICE/VERSION params are stripped — they confuse the GDAL WFS driver
+    assert "<URL>https://geo.example/wfs</URL>" in content
 
 
 def test_can_handle() -> None:
@@ -39,6 +49,7 @@ def test_can_handle() -> None:
     assert not reader.can_handle("https://x/service=WMS")
 
 
+@requires_live_wfs
 def test_real_wfs(tmp_path: Path) -> None:
     """
     Full integration test against the Bavarian ATKIS WFS service.

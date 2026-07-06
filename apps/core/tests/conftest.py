@@ -55,6 +55,7 @@ async def session_fixture(event_loop):
         }
     )
     async with session_manager.connect() as connection:
+        await connection.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
         for schema in [settings.SCHEMA]:
             await connection.execute(
                 text(f"""DROP SCHEMA IF EXISTS {schema} CASCADE""")

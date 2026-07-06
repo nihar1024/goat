@@ -341,17 +341,18 @@ class TestBuildFilters:
         assert "ST_Intersects" in filters.clauses[0]
 
     def test_build_filters_with_ids(self):
-        """Test building filters with IDs."""
-        filters = build_filters(ids=["a", "b"])
+        """Test building filters with IDs (feature_id = rowid + 1)."""
+        filters = build_filters(ids=["1", "2"])
 
         assert len(filters.clauses) == 1
-        assert "IN" in filters.clauses[0]
+        assert "rowid IN" in filters.clauses[0]
+        assert filters.params == [0, 1]
 
     def test_build_filters_combined(self):
         """Test building combined filters."""
         filters = build_filters(
             bbox=[0, 0, 10, 10],
-            ids=["a", "b"],
+            ids=["1", "2"],
             geometry_column="geom",
         )
 

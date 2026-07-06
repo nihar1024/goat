@@ -102,6 +102,17 @@
       "database": "goat",
       "username": "rds",
       "password": "database_password"
+    },
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "goat_backup",
+      "database": "goat_backup",
+      "username": "rds",
+      "password": "database_password"
     }
   ]
 }

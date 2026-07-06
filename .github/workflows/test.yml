@@ -45,6 +45,15 @@ jobs:
           enable-corepack: true
           cwd: ${{ github.workspace }}
           node_version: 22
+      - name: 💾 Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: 📥 Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter web exec playwright install --with-deps chromium
       - name: 🧪 Vitest
         run: pnpm --filter web exec vitest run
 
@@ -88,8 +97,10 @@ jobs:
         with:
           version: "0.9.2"
           enable-cache: true
+      # gdal is sdist-only and needs libgdal to build; only goatlib's WFS/
+      # converter paths import it (lazily), so this suite runs without it.
       - name: 🐍 Install dependencies
-        run: uv sync --frozen --all-packages
+        run: uv sync --frozen --all-packages --no-install-package gdal
       - name: 🧪 pytest
         run: uv run pytest tests/
         working-directory: apps/core
@@ -110,6 +121,11 @@ jobs:
         with:
           version: "0.9.2"
           enable-cache: true
+      # Only suite that needs real gdal (WFS/converter tests). The compiled
+      # wheel lands in the uv cache, so the source build runs once per
+      # lockfile change, not per run.
+      - name: 🌍 Install libgdal-dev
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgdal-dev
       - name: 🐍 Install dependencies
         run: uv sync --frozen --all-packages
       - name: 🧪 pytest (unit)
@@ -133,7 +149,7 @@ jobs:
           version: "0.9.2"
           enable-cache: true
       - name: 🐍 Install dependencies
-        run: uv sync --frozen --all-packages
+        run: uv sync --frozen --all-packages --no-install-package gdal
       - name: 🧪 pytest
         run: uv run pytest tests/ || echo "no tests / advisory"
         working-directory: apps/geoapi
@@ -155,7 +171,7 @@ jobs:
           version: "0.9.2"
           enable-cache: true
       - name: 🐍 Install dependencies
-        run: uv sync --frozen --all-packages
+        run: uv sync --frozen --all-packages --no-install-package gdal
       - name: 🧪 pytest
         run: uv run pytest tests/ || echo "no tests / advisory"
         working-directory: apps/processes

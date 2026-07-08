@@ -16,6 +16,8 @@ from core.db.session import AsyncSession
 from core.deps.auth import auth_z
 from core.endpoints.deps import get_db, get_user_id
 from core.schemas.organization_analytics import (
+    AnalyticsDashboardRead,
+    AnalyticsDashboardsUpdate,
     OrganizationAnalyticsCreate,
     OrganizationAnalyticsRead,
 )
@@ -130,3 +132,75 @@ async def delete_analytics(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="analytics instance not found",
         )
+
+
+@router.get(
+    "/dashboards",
+    summary="List the organization's published dashboards and their analytics assignment",
+    response_model=list[AnalyticsDashboardRead],
+    dependencies=[Depends(auth_z)],
+)
+async def list_analytics_dashboards(
+    *,
+    organization_id: UUID4 = Path(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> list[AnalyticsDashboardRead]:
+    """Only published dashboards appear — unpublished projects have no
+    public row, so there is nothing to assign."""
+    rows = await crud.list_org_dashboards(
+        async_session, organization_id=organization_id
+    )
+    return [
+        AnalyticsDashboardRead(project_id=pid, name=name, analytics_id=aid)
+        for pid, name, aid in rows
+    ]
+
+
+@router.put(
+    "/{analytics_id}/dashboards",
+    summary="Set which dashboards report to an analytics instance",
+    response_model=list[AnalyticsDashboardRead],
+    dependencies=[Depends(auth_z)],
+)
+async def set_analytics_dashboards(
+    *,
+    organization_id: UUID4 = Path(...),
+    analytics_id: UUID4 = Path(...),
+    payload: AnalyticsDashboardsUpdate = Body(...),
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+) -> list[AnalyticsDashboardRead]:
+    """Reconcile-style bulk assignment: the body is the desired complete
+    set for this instance. Listed dashboards are assigned (reassignment
+    from another instance included); dashboards currently on this instance
+    but unlisted are cleared. Consent settings are untouched."""
+    instance = await crud.get_for_organization(
+        async_session,
+        organization_id=organization_id,
+        analytics_id=analytics_id,
+    )
+    if instance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="analytics instance not found",
+        )
+    try:
+        await crud.set_instance_dashboards(
+            async_session,
+            organization_id=organization_id,
+            analytics_id=analytics_id,
+            project_ids=payload.project_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"not published dashboards of this organization: {exc}",
+        ) from exc
+    rows = await crud.list_org_dashboards(
+        async_session, organization_id=organization_id
+    )
+    return [
+        AnalyticsDashboardRead(project_id=pid, name=name, analytics_id=aid)
+        for pid, name, aid in rows
+    ]

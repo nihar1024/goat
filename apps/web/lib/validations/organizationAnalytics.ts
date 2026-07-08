@@ -53,3 +53,12 @@ export const organizationAnalyticsSchema = z.object({
 });
 
 export type OrganizationAnalytics = z.infer<typeof organizationAnalyticsSchema>;
+
+/** One published dashboard of the org with its analytics assignment. */
+export const analyticsDashboardSchema = z.object({
+  project_id: z.string().uuid(),
+  name: z.string(),
+  analytics_id: z.string().uuid().nullable(),
+});
+
+export type AnalyticsDashboard = z.infer<typeof analyticsDashboardSchema>;

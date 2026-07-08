@@ -79,3 +79,22 @@ class OrganizationAnalyticsRead(BaseModel):
     usage_count: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class AnalyticsDashboardRead(BaseModel):
+    """One published dashboard of the organization with its analytics
+    assignment. Feeds the settings 'Manage dashboards' dialog."""
+
+    project_id: UUID
+    name: str
+    analytics_id: UUID | None = None
+
+
+class AnalyticsDashboardsUpdate(BaseModel):
+    """Request body for PUT /organizations/{org_id}/analytics/{analytics_id}/dashboards.
+
+    ``project_ids`` is the desired complete set of dashboards reporting to
+    the instance; an empty list unassigns everything from it.
+    """
+
+    project_ids: list[UUID]

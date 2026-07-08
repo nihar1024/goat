@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  analyticsDashboardSchema,
   organizationAnalyticsCreateSchema,
   organizationAnalyticsSchema,
 } from "@/lib/validations/organizationAnalytics";
@@ -55,5 +56,35 @@ describe("organizationAnalyticsSchema", () => {
       updated_at: "2026-01-01T00:00:00Z",
     });
     expect(parsed.usage_count).toBe(3);
+  });
+});
+
+describe("analyticsDashboardSchema", () => {
+  it("parses a dashboard row", () => {
+    const parsed = analyticsDashboardSchema.parse({
+      project_id: "11111111-1111-1111-1111-111111111111",
+      name: "My dashboard",
+      analytics_id: "22222222-2222-2222-2222-222222222222",
+    });
+    expect(parsed.name).toBe("My dashboard");
+  });
+
+  it("accepts null analytics_id", () => {
+    const parsed = analyticsDashboardSchema.parse({
+      project_id: "11111111-1111-1111-1111-111111111111",
+      name: "Untracked dashboard",
+      analytics_id: null,
+    });
+    expect(parsed.analytics_id).toBeNull();
+  });
+
+  it("rejects a non-uuid project_id", () => {
+    expect(() =>
+      analyticsDashboardSchema.parse({
+        project_id: "not-a-uuid",
+        name: "Bad dashboard",
+        analytics_id: null,
+      })
+    ).toThrow();
   });
 });

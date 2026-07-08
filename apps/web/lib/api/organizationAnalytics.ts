@@ -2,6 +2,7 @@ import useSWR from "swr";
 
 import { apiRequestAuth, fetcher } from "@/lib/api/fetcher";
 import type {
+  AnalyticsDashboard,
   OrganizationAnalytics,
   OrganizationAnalyticsCreate,
 } from "@/lib/validations/organizationAnalytics";
@@ -96,4 +97,37 @@ export function setProjectAnalytics(projectId: string, analyticsId: string | nul
 
 export function setProjectTrackingRequireConsent(projectId: string, requireConsent: boolean) {
   return updateTrackingSettings(projectId, { require_consent: requireConsent });
+}
+
+const orgAnalyticsDashboardsUrl = (orgId: string) =>
+  `${orgAnalyticsUrl(orgId)}dashboards`;
+
+/** Lists the org's published dashboards with their analytics assignment. */
+export function useOrganizationAnalyticsDashboards(organizationId: string | undefined) {
+  const { data, error, isLoading, mutate } = useSWR<AnalyticsDashboard[]>(
+    organizationId ? [orgAnalyticsDashboardsUrl(organizationId)] : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+  return { dashboards: data ?? [], isLoading, isError: error, mutate };
+}
+
+/** Set the complete list of dashboards reporting to an instance. */
+export async function setAnalyticsDashboards(
+  organizationId: string,
+  analyticsId: string,
+  projectIds: string[]
+): Promise<AnalyticsDashboard[]> {
+  const response = await apiRequestAuth(
+    `${orgAnalyticsUrl(organizationId)}${analyticsId}/dashboards`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_ids: projectIds }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Failed to update dashboard assignments");
+  }
+  return await response.json();
 }

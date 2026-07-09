@@ -12,6 +12,7 @@ import { shallowEqual, useSelector } from "react-redux";
 import { usePublicProject } from "@/lib/api/projects";
 import { DrawProvider } from "@/lib/providers/DrawProvider";
 import { MeasureProvider } from "@/lib/providers/MeasureProvider";
+import { PublicProjectProvider } from "@/lib/providers/PublicProjectProvider";
 import type { RootState } from "@/lib/store";
 import { selectFilteredProjectLayers, selectProjectLayers } from "@/lib/store/layer/selectors";
 import { setProjectLayerGroups, setProjectLayers } from "@/lib/store/layer/slice";
@@ -119,7 +120,7 @@ export default function MapPage({ params: { projectId } }) {
       ?.tracking_require_consent ?? true;
 
   return (
-    <>
+    <PublicProjectProvider>
       {isLoading && <LoadingPage />}
       {!isLoading && !projectError && project && (
         <>
@@ -202,6 +203,6 @@ export default function MapPage({ params: { projectId } }) {
         </MapProvider>
         </>
       )}
-    </>
+    </PublicProjectProvider>
   );
 }

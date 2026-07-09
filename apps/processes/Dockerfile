@@ -23,9 +23,10 @@ RUN apt-get upgrade -y
 RUN apt-get install --no-install-recommends -y tzdata
 
 # ===== STAGE 2: Python environment ====
+# processes needs no GDAL/routing and no build toolchain — it imports the
+# analytics stack (all manylinux wheels) for OGC schema generation but never
+# GDAL/routing (those run only on the Windmill worker image).
 FROM linux-base AS python-base
-# Install debian dependencies including GDAL for building Python bindings
-RUN apt-get update && apt-get install --no-install-recommends -y build-essential cmake gettext libgdal-dev
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /usr/local/bin/uv
 
@@ -33,18 +34,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /usr/local/bin/uv
 COPY apps/processes /app/apps/processes
 COPY packages/python/goatlib /app/packages/python/goatlib
 COPY packages/python/goatobs /app/packages/python/goatobs
-COPY packages/cpp/routing /app/packages/cpp/routing
 COPY pyproject.toml uv.lock /app/
 
 WORKDIR /app
 
-RUN uv sync --all-extras --frozen --no-dev --no-editable --package=processes
+RUN uv sync --frozen --no-dev --no-editable --package=processes
 
 # ==== STAGE 3: Webapp environment ====
 FROM linux-base AS webapp
-
-# Install GDAL runtime library needed by Python bindings
-RUN apt-get update && apt-get install --no-install-recommends -y libgdal32 && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m appuser
 

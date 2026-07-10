@@ -247,7 +247,7 @@ export const tableDataConfigSchema = dataConfigSchema.extend({
     .default({}),
 });
 
-export const filterLayoutTypes = z.enum(["checkbox", "cards", "chips", "select", "range"]);
+export const filterLayoutTypes = z.enum(["checkbox", "cards", "chips", "select", "range", "picker"]);
 export const pieLayoutTypes = z.enum(["center_active", "all_labels_outside", "legend"]);
 export const pieChartTypes = z.enum(["donut", "pie", "half_donut"]);
 export const labelSizeTypes = z.enum(["sm", "md", "lg"]);
@@ -276,6 +276,8 @@ export const filterDataConfigSchema = dataConfigSchema.extend({
       show_histogram: z.boolean().optional().default(true),
       steps: z.number().min(1).max(100).optional().default(50),
       show_slider: z.boolean().optional().default(true),
+      // Temporal range slider step unit (only for date/datetime/time columns)
+      granularity: z.enum(["minute", "hour", "day", "week", "month"]).optional(),
     })
     .default({}),
   options: dataConfigOptionsBaseSchema
@@ -568,7 +570,11 @@ export type WidgetElementConfig =
   | TabsContainerSchema
   | LinksElementSchema;
 export type WidgetInformationConfig = LayerInformationSchema;
-export type WidgetDataConfig = NumbersDataSchema | TableDataSchema | FilterDataSchema | RichTextDataSchema;
+export type WidgetDataConfig =
+  | NumbersDataSchema
+  | TableDataSchema
+  | FilterDataSchema
+  | RichTextDataSchema;
 
 export type LayersLayoutStyleType = z.infer<typeof layersLayoutStyleTypes>;
 export type LayersToggleStyleType = z.infer<typeof layersToggleStyleTypes>;

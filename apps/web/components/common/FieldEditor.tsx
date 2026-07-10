@@ -39,6 +39,7 @@ const UNIT_OPTIONS_BY_KIND: Record<FieldKind, string[]> = {
   area: ["auto", "mm²", "cm²", "m²", "ha", "km²"],
   perimeter: ["auto", "mm", "cm", "m", "km"],
   length: ["auto", "mm", "cm", "m", "km"],
+  datetime: [],
 };
 
 const PREVIEW_VALUES_BY_KIND: Record<FieldKind, number[]> = {
@@ -47,6 +48,7 @@ const PREVIEW_VALUES_BY_KIND: Record<FieldKind, number[]> = {
   area: [42500, 12.35],
   perimeter: [4250, 12.35],
   length: [4250, 12.35],
+  datetime: [],
 };
 
 interface FieldEditorProps {
@@ -80,6 +82,7 @@ const FIELD_TYPE_ICON: Record<FieldKind, ICON_NAME> = {
   area: ICON_NAME.RULES_COMBINED,
   perimeter: ICON_NAME.RULER_HORIZONTAL,
   length: ICON_NAME.RULER_HORIZONTAL,
+  datetime: ICON_NAME.CALENDAR,
 };
 
 const ALL_FIELD_TYPE_ITEMS: Record<FieldKind, SelectorItem> = {
@@ -88,7 +91,23 @@ const ALL_FIELD_TYPE_ITEMS: Record<FieldKind, SelectorItem> = {
   area: { value: "area", label: "Area", icon: ICON_NAME.RULES_COMBINED },
   perimeter: { value: "perimeter", label: "Perimeter", icon: ICON_NAME.RULER_HORIZONTAL },
   length: { value: "length", label: "Length", icon: ICON_NAME.RULER_HORIZONTAL },
+  datetime: { value: "datetime", label: "Date", icon: ICON_NAME.CALENDAR },
 };
+
+const NUMERIC_KINDS: FieldKind[] = ["number", "area", "perimeter", "length"];
+
+const TIMEZONE_OPTIONS: SelectorItem[] = (() => {
+  let zones: string[] = [];
+  try {
+    zones =
+      (Intl as unknown as { supportedValuesOf?: (k: string) => string[] })
+        .supportedValuesOf?.("timeZone") ?? [];
+  } catch {
+    zones = [];
+  }
+  if (!zones.includes("UTC")) zones = ["UTC", ...zones];
+  return zones.map((z) => ({ value: z, label: z }));
+})();
 
 // --- Sortable field row ---
 
@@ -489,8 +508,10 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
               thousands_separator?: boolean;
               abbreviate?: boolean;
               always_show_sign?: boolean;
+              tz?: string;
             };
-            const showFormat = selectedField.kind !== "string";
+            const showFormat = NUMERIC_KINDS.includes(selectedField.kind);
+            const isDatetime = selectedField.kind === "datetime";
             const unitOptions = UNIT_OPTIONS_BY_KIND[selectedField.kind];
             const previewValues = PREVIEW_VALUES_BY_KIND[selectedField.kind];
             return (
@@ -516,6 +537,24 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
                   items={fieldTypeItems}
                   disabled={lockedFieldIds?.has(selectedField.id) || COMPUTED_KINDS.has(selectedField.kind)}
                 />
+
+                {isDatetime && (
+                  <Selector
+                    label={t("timezone")}
+                    enableSearch
+                    selectedItems={
+                      TIMEZONE_OPTIONS.find((z) => z.value === (cfg.tz ?? "UTC")) ??
+                      TIMEZONE_OPTIONS[0]
+                    }
+                    setSelectedItems={(item) => {
+                      const value = Array.isArray(item) ? item[0]?.value : item?.value;
+                      handleDisplayConfigChange(selectedField.id, {
+                        tz: (value as string) ?? "UTC",
+                      });
+                    }}
+                    items={TIMEZONE_OPTIONS}
+                  />
+                )}
 
                 {showFormat && (
                   <>

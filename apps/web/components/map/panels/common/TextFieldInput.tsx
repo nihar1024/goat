@@ -11,7 +11,7 @@ type TextFieldInputProps = {
   disabled?: boolean;
   tooltip?: string;
   onFocus?: () => void;
-  type?: "text" | "number";
+  type?: "text" | "number" | "date" | "datetime-local" | "time";
   clearable?: boolean;
   placeholder?: string;
   multiline?: boolean;
@@ -63,6 +63,8 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
             width: "100%",
             padding: "0px 15px 0px 12px",
             height: "40px",
+            // GOAT green for native date/time picker highlights & spinners
+            accentColor: "#2BB381",
           },
         }}
         endAdornment={

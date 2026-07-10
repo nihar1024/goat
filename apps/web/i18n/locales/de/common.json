@@ -179,13 +179,34 @@
   "basemap_layer_all_my_layers": "Alle meine Layer",
   "basemap_layer_below": "Unter",
   "basemap_layer_categories": {
-    "buildings": { "title": "Gebäude", "subtitle": "Gebäudegrundrisse" },
-    "labels": { "title": "Beschriftungen", "subtitle": "Straßen- und Ortsnamen" },
-    "landuse": { "title": "Flächennutzung", "subtitle": "Wald, Parks, Felder" },
-    "other": { "title": "Sonstiges", "subtitle": "Übrige Layer" },
-    "poi": { "title": "Points of Interest", "subtitle": "Geschäfte, Dienste" },
-    "roads": { "title": "Straßen", "subtitle": "Straßennetz, Wege" },
-    "water": { "title": "Gewässer", "subtitle": "Flüsse, Seen, Küsten" }
+    "buildings": {
+      "title": "Gebäude",
+      "subtitle": "Gebäudegrundrisse"
+    },
+    "labels": {
+      "title": "Beschriftungen",
+      "subtitle": "Straßen- und Ortsnamen"
+    },
+    "landuse": {
+      "title": "Flächennutzung",
+      "subtitle": "Wald, Parks, Felder"
+    },
+    "other": {
+      "title": "Sonstiges",
+      "subtitle": "Übrige Layer"
+    },
+    "poi": {
+      "title": "Points of Interest",
+      "subtitle": "Geschäfte, Dienste"
+    },
+    "roads": {
+      "title": "Straßen",
+      "subtitle": "Straßennetz, Wege"
+    },
+    "water": {
+      "title": "Gewässer",
+      "subtitle": "Flüsse, Seen, Küsten"
+    }
   },
   "basemap_layer_hidden": "Ausgeblendet",
   "basemap_layer_no_layers": "Keine Layer verfügbar.",
@@ -530,7 +551,7 @@
   "end": "Ende",
   "enums": {
     "gravity_decay": {
-      "gaussian": "Gauß",
+      "gaussian": "GaPuß",
       "exponential": "Exponentiell",
       "linear": "Linear",
       "power": "Potenz"
@@ -2302,6 +2323,21 @@
   "field_kind_area": "Fläche",
   "field_kind_perimeter": "Umfang",
   "field_kind_length": "Länge",
+  "field_kind_date": "Datum",
+  "field_kind_datetime": "Datum & Uhrzeit",
+  "field_kind_time": "Uhrzeit",
+  "select_date": "Datum auswählen",
+  "select_time": "Uhrzeit auswählen",
+  "number_of_days": "Anzahl der Tage",
+  "calendar": "Kalender",
+  "picker": "Auswahl",
+  "granularity": "Granularität",
+  "minute": "Minute",
+  "hour": "Stunde",
+  "day": "Tag",
+  "week": "Woche",
+  "month": "Monat",
+  "time_series": "Zeitleisten-Filter",
   "write": "Schreiben",
   "popup_type": "Popup-Typ",
   "popup_placement": "Popup-Platzierung",

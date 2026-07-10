@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 import type { FieldKind } from "@/lib/validations/layer";
 
 type DisplayConfig = {
@@ -6,6 +8,7 @@ type DisplayConfig = {
   thousands_separator?: boolean;
   abbreviate?: boolean;
   always_show_sign?: boolean;
+  format?: string;
 };
 
 const AREA_AUTO_THRESHOLDS: { from: number; unit: string; factor: number }[] = [
@@ -89,6 +92,12 @@ export function formatFieldValue(
   if (value === null || value === undefined) return "";
 
   if (kind === "string") return String(value);
+
+  if (kind === "datetime") {
+    const parsed = dayjs(value as string | number | Date);
+    if (!parsed.isValid()) return String(value);
+    return parsed.format(cfg.format ?? "YYYY-MM-DD HH:mm");
+  }
 
   if (typeof value !== "number" || Number.isNaN(value)) return String(value);
 

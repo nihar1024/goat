@@ -23,8 +23,10 @@ from geoapi.services.layer_service import layer_service
 router = APIRouter(tags=["Metadata"])
 
 
-def _kind_from_json_type(json_type: str) -> str:
-    """Infer the field kind from the JSON-schema type for columns without explicit metadata."""
+def _kind_from_json_type(json_type: str, json_format: str | None = None) -> str:
+    """Infer the field kind from the JSON-schema type/format for columns without explicit metadata."""
+    if json_format == "date-time":
+        return "datetime"
     if json_type in ("number", "integer"):
         return "number"
     return "string"
@@ -61,7 +63,8 @@ def _apply_field_config_to_properties(
             continue
         entry = field_config.get(name, {})
         json_type = prop.get("type", "string")
-        prop["kind"] = entry.get("kind") or _kind_from_json_type(json_type)
+        json_format = prop.get("format")
+        prop["kind"] = entry.get("kind") or _kind_from_json_type(json_type, json_format)
         prop["is_computed"] = entry.get("is_computed", False)
         prop["display_config"] = entry.get("display_config", {})
 
@@ -261,10 +264,13 @@ async def get_queryables(
         if col_name == "geom":
             properties["geom"] = {"$ref": "https://geojson.org/schema/Geometry.json"}
         else:
-            properties[col_name] = {
+            prop: dict[str, Any] = {
                 "name": col_name,
                 "type": col["json_type"],
             }
+            if col.get("format"):
+                prop["format"] = col["format"]
+            properties[col_name] = prop
 
     # Augment each property with field-config metadata (kind, is_computed, display_config).
     field_config = await _load_field_config(layer_info)

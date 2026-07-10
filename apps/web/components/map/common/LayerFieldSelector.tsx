@@ -43,7 +43,10 @@ export const FieldTypeColors = {
   string: [140, 210, 205],
   number: [248, 194, 28],
   object: [255, 138, 101],
+  date: [43, 179, 129],
 };
+
+export const fieldTagKey = (field: { type: string; kind?: string }): string => field.type;
 
 export const FieldTypeTag = styled("div")<{ fieldType: string }>(({ fieldType }) => ({
   backgroundColor: `rgba(${FieldTypeColors[fieldType]}, 0.1)`,
@@ -57,6 +60,8 @@ export const FieldTypeTag = styled("div")<{ fieldType: string }>(({ fieldType })
   marginRight: "10px",
   textAlign: "center",
   width: "50px",
+  whiteSpace: "nowrap",
+  boxSizing: "border-box",
   lineHeight: "20px",
 }));
 
@@ -175,8 +180,10 @@ const LayerFieldSelector = (props: SelectorProps) => {
             {!props.multiple &&
               selectedField &&
               !Array.isArray(selectedField) &&
-              FieldTypeColors[selectedField.type] && (
-                <FieldTypeTag fieldType={selectedField.type}>{selectedField.type}</FieldTypeTag>
+              FieldTypeColors[fieldTagKey(selectedField)] && (
+                <FieldTypeTag fieldType={fieldTagKey(selectedField)}>
+                  {fieldTagKey(selectedField)}
+                </FieldTypeTag>
               )}
           </>
         }
@@ -297,7 +304,9 @@ const LayerFieldSelector = (props: SelectorProps) => {
               />
             )}
 
-            {FieldTypeColors[field.type] && <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>}
+            {FieldTypeColors[fieldTagKey(field)] && (
+              <FieldTypeTag fieldType={fieldTagKey(field)}>{fieldTagKey(field)}</FieldTypeTag>
+            )}
             <Typography
               variant="body2"
               fontWeight="bold"

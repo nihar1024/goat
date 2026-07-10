@@ -306,7 +306,7 @@ class JoinToolParams(ScenarioSelectorMixin, ToolInputBase, BaseModel):
                 widget="field-selector",
                 widget_options={
                     "source_layer": "join_layer_id",
-                    "multi": True,
+                    "multiple": True,
                     "default_all": True,
                 },
                 visible_when={

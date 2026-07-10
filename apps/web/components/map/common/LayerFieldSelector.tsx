@@ -122,7 +122,17 @@ const LayerFieldSelector = (props: SelectorProps) => {
         multiple={props.multiple ? true : false}
         disabled={props.disabled}
         IconComponent={() => null}
-        sx={{ pr: 1 }}
+        sx={{
+          pr: 1,
+          // Let the value area shrink and truncate instead of pushing the
+          // clear button out of the box when many fields are selected.
+          "& .MuiSelect-select": {
+            minWidth: "0 !important",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          },
+        }}
         displayEmpty
         value={selectedValue as unknown}
         defaultValue={props.multiple ? EMPTY_FIELDS : ""}
@@ -196,17 +206,17 @@ const LayerFieldSelector = (props: SelectorProps) => {
             return <Typography variant="body2">{t("select_field")}</Typography>;
           if (props.multiple && Array.isArray(selectedField) && selectedField.length === 0)
             return <Typography variant="body2">{t("select_fields")}</Typography>;
-          return (
-            <>
-              {selectedField && (
-                <Typography variant="body2" fontWeight="bold">
-                  {props.multiple && Array.isArray(selectedField)
-                    ? selectedField.map((f) => f.name).join(", ")
-                    : selectedField.name}
-                </Typography>
-              )}
-            </>
-          );
+          let displayText: string | undefined;
+          if (props.multiple && Array.isArray(selectedField)) {
+            displayText = selectedField.map((f) => f.name).join(", ");
+          } else if (selectedField && !Array.isArray(selectedField)) {
+            displayText = selectedField.name;
+          }
+          return displayText ? (
+            <Typography variant="body2" fontWeight="bold" noWrap>
+              {displayText}
+            </Typography>
+          ) : null;
         }}>
         <ListSubheader sx={{ px: 2, pt: 1 }}>
           <TextField

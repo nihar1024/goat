@@ -21,6 +21,7 @@ import { projectSchema } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
+import { useDashboardLanguageOverride } from "@/hooks/dashboard/useDashboardLanguageOverride";
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
@@ -144,6 +145,9 @@ const MobileProjectLayout = ({
   const { t, i18n } = useTranslation("common");
   const theme = useTheme();
   const dispatch = useAppDispatch();
+
+  // Apply dashboard language override only for public/shared view (mirrors PublicProjectLayout)
+  useDashboardLanguageOverride(_project?.builder_config?.settings?.language, viewOnly);
 
   // Layer style change hook
   const { handleStyleChange } = useLayerStyleChange(projectLayers, viewOnly);
@@ -594,8 +598,8 @@ const MobileProjectLayout = ({
             sx={{
               height: "100%",
               overflow: "auto", // Hide overflow, specific content scrolls internally
-              borderTopLeftRadius: 8,
-              borderTopRightRadius: 8,
+              // Square top: the Puller Area above already provides the sheet's
+              // rounded top, so rounding here would notch under the flat puller.
               backgroundColor: drawerBgColor,
             }}
             // Attach touch move handler to prevent drawer swipe when scrolling content

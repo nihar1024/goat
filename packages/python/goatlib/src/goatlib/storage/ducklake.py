@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import queue
+import re
 import threading
 from contextlib import contextmanager
 from typing import Any, Generator, Protocol
@@ -770,6 +771,23 @@ class DuckLakePool:
         # return-path close/repool decisions) so generation tags always match
         # the snapshot a connection is actually attached to.
         self._rebuild_lock = threading.Lock()
+        # Pinned mode: per-generation shared base connections, keyed by
+        # generation -> [base_con, live_cursor_count, created_at]. Pool queue
+        # entries are cursors of a base and share its DuckLake catalog cache,
+        # so a rebuild costs ONE metadata load per pod. A base closes only
+        # when its generation is superseded AND its last cursor is closed
+        # (an in-flight query must never lose its base). Guarded by
+        # _rebuild_lock.
+        self._bases: dict[int, list[Any]] = {}
+        # Serializes whole _apply_snapshot invocations (build included) so
+        # racing rebuild triggers (pin refresh, aged recycle, reconnect)
+        # cannot interleave and swap the pool BEHIND the pin's snapshot.
+        self._apply_lock = threading.Lock()
+        # Watermark of the snapshot the pool actually serves, and when it
+        # was applied — lets stale rebuild requests and reconnect storms
+        # no-op instead of regressing or duplicating work.
+        self._applied_snapshot: int | None = None
+        self._applied_at = 0.0
 
     def init(self, settings: DuckLakeSettings) -> None:
         """Initialize the connection pool from settings."""
@@ -803,14 +821,23 @@ class DuckLakePool:
             # Create pool connections with retry for transient connection errors
             import time
 
-            for i in range(self._pool_size):
-                if self._pin_snapshot:
-                    con = self._create_warmed_connection(initial)
-                else:
+            if self._pin_snapshot:
+                # One warmed base per generation; pooled handles are cursors
+                # sharing its catalog cache.
+                assert initial is not None
+                base = self._create_base_with_retry(snapshot_version=initial)
+                self._register_base(self._generation, base)
+                self._applied_snapshot = initial
+                self._applied_at = time.monotonic()
+                for _ in range(self._pool_size):
+                    self._pool.put((base.cursor(), time.time(), self._generation))
+            else:
+                for i in range(self._pool_size):
                     con = self._create_connection_with_retry()
-                # Store connection with its creation timestamp and generation
-                self._pool.put((con, time.time(), self._generation))
-                logger.debug("Created pool connection %d/%d", i + 1, self._pool_size)
+                    self._pool.put((con, time.time(), self._generation))
+                    logger.debug(
+                        "Created pool connection %d/%d", i + 1, self._pool_size
+                    )
 
             self._initialized = True
             logger.info(
@@ -991,12 +1018,46 @@ class DuckLakePool:
             "SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lake'"
         ).fetchone()
 
-    def _create_warmed_connection(
-        self, snapshot_version: int | None
+    def _scaled_memory_limit(self) -> str | None:
+        """The configured per-connection memory limit scaled to the pool size.
+
+        In pinned mode all cursors execute on ONE DuckDB instance, so the
+        base gets the aggregate budget that pool_size independent
+        connections would have had. Returns None (leave DuckDB's default)
+        when unset or unparseable.
+        """
+        if not self._memory_limit:
+            return None
+        m = re.match(r"^\s*([0-9.]+)\s*([A-Za-z]+)\s*$", self._memory_limit)
+        if not m:
+            logger.warning(
+                "Cannot scale DUCKDB_MEMORY_LIMIT %r to the pool; the shared "
+                "base keeps the per-connection value (pool total is %dx "
+                "lower than with independent connections)",
+                self._memory_limit,
+                self._pool_size,
+            )
+            return None
+        return f"{float(m.group(1)) * self._pool_size:g}{m.group(2)}"
+
+    def _create_base_with_retry(
+        self, snapshot_version: int | None = None
     ) -> duckdb.DuckDBPyConnection:
-        """Create and warm a connection; close it if warming fails."""
+        """Create and warm the shared base connection for one generation.
+
+        The base carries the DuckLake catalog cache for every cursor drawn
+        from it, and receives the pool's aggregate memory/thread budget
+        because all cursor queries execute on this single instance. Closed
+        and re-raised on any setup/warm failure so a failed build never
+        leaks or mutates the pool.
+        """
         con = self._create_connection_with_retry(snapshot_version=snapshot_version)
         try:
+            scaled = self._scaled_memory_limit()
+            if scaled:
+                con.execute(f"SET memory_limit='{scaled}'")
+            if self._threads:
+                con.execute(f"SET threads={self._threads * self._pool_size}")
             self._warm_connection(con)
         except Exception:
             try:
@@ -1006,111 +1067,175 @@ class DuckLakePool:
             raise
         return con
 
-    def _apply_snapshot(self, snapshot_id: int) -> None:
-        """Swap the pool to connections pinned at snapshot_id.
+    def _register_base(self, gen: int, base: duckdb.DuckDBPyConnection) -> None:
+        """Track a generation's base with pool_size live cursors expected.
 
-        Two phases so a failed build never mutates the pool: every
-        replacement connection is built and warmed first; only then is the
-        generation bumped and the queue swapped under the rebuild lock. On a
-        build failure everything built so far is closed and the error
-        propagates — the pin keeps serving the previous snapshot and the
-        next poll tick retries.
+        Call while holding _rebuild_lock (or before the pool is serving).
         """
         import time
 
-        started = time.monotonic()
-        new_cons: list[duckdb.DuckDBPyConnection] = []
-        try:
-            for _ in range(self._pool_size):
-                new_cons.append(self._create_warmed_connection(snapshot_id))
-        except Exception:
-            for built in new_cons:
-                try:
-                    built.close()
-                except Exception:
-                    pass
-            raise
+        self._bases[gen] = [base, self._pool_size, time.time()]
 
-        # Closing a DuckDB connection (with DETACH) can take tens of ms, so
-        # superseded connections are collected under the lock and closed
-        # after it is released — the return path must never queue behind
-        # connection teardown.
-        to_close: list[duckdb.DuckDBPyConnection] = []
+    def _decrement_base_locked(self, gen: int) -> duckdb.DuckDBPyConnection | None:
+        """Drop one live cursor from a generation; return its base when the
+        last cursor of a superseded generation is gone (caller closes it
+        OUTSIDE the lock — teardown can take tens of ms).
+
+        Must be called while holding _rebuild_lock.
+        """
+        entry = self._bases.get(gen)
+        if entry is None:
+            return None
+        entry[1] -= 1
+        if entry[1] <= 0 and gen != self._generation:
+            del self._bases[gen]
+            base: duckdb.DuckDBPyConnection = entry[0]
+            return base
+        return None
+
+    def _decrement_base(self, gen: int) -> None:
+        """Lock-taking wrapper around _decrement_base_locked + base close."""
         with self._rebuild_lock:
-            self._generation += 1
-            gen = self._generation
-            for new_con in new_cons:
-                try:
-                    old_con, old_created, old_gen = self._pool.get_nowait()
-                    if old_gen == gen:
-                        self._pool.put((old_con, old_created, old_gen))
-                    else:
-                        to_close.append(old_con)
-                except queue.Empty:
-                    pass  # checked-out stale conns close themselves on return
-                self._pool.put((new_con, time.time(), gen))
-        for old_con in to_close:
-            try:
-                old_con.close()
-            except Exception:
-                pass
-        logger.info(
-            "DuckLake pool: %d pinned connections rebuilt at snapshot %s " "in %.0f ms",
-            self._pool_size,
-            snapshot_id,
-            (time.monotonic() - started) * 1000,
-        )
+            base = self._decrement_base_locked(gen)
+        if base is not None:
+            self._close_base(base)
+
+    def _close_base(self, base: duckdb.DuckDBPyConnection) -> None:
+        try:
+            base.execute("DETACH lake")
+        except Exception:
+            pass
+        try:
+            base.close()
+        except Exception:
+            pass
+
+    def _replace_failed_cursor(self, gen: int) -> None:
+        """Replace a failed (already closed and decremented) cursor's slot.
+
+        Draws a cheap cursor from the current base and pools it — atomically
+        under the rebuild lock, and only when the slot's generation is still
+        current: if a rebuild landed since checkout it already put a full
+        set of fresh cursors, so adding one would exceed pool_size.
+        """
+        import time
+
+        with self._rebuild_lock:
+            if gen != self._generation:
+                return
+            entry = self._bases.get(self._generation)
+            if entry is None:
+                raise RuntimeError("no live base connection")
+            cursor = entry[0].cursor()
+            entry[1] += 1
+            self._pool.put((cursor, time.time(), self._generation))
+
+    # A rebuild completed this recently satisfies an allow_same re-apply
+    # request (reconnect storms after a PG blip coalesce onto one rebuild).
+    REBUILD_DEDUP_SECONDS = 5.0
+
+    def _apply_snapshot(self, snapshot_id: int, allow_same: bool = False) -> None:
+        """Swap the pool to cursors of a fresh base pinned at snapshot_id.
+
+        Whole invocations serialize on _apply_lock and check the applied
+        watermark, so racing triggers (pin refresh, aged recycle, reconnect)
+        can neither regress the pool behind the pin nor duplicate rebuilds:
+        a request older than the watermark no-ops, and an allow_same
+        re-apply (recycle/reconnect) no-ops when an equal rebuild just
+        completed.
+
+        The single base is built and warmed OUTSIDE the rebuild lock (one
+        metadata load per rebuild, shared by all cursors); the swap under
+        the lock is O(1) queue operations. On a build failure nothing is
+        mutated — the pin keeps serving the previous snapshot and the next
+        poll tick retries. Superseded bases stay alive until their last
+        checked-out cursor is returned.
+        """
+        import time
+
+        with self._apply_lock:
+            with self._rebuild_lock:
+                applied = self._applied_snapshot
+                applied_at = self._applied_at
+            if applied is not None:
+                if applied > snapshot_id:
+                    logger.info(
+                        "DuckLake pool: skipping stale rebuild to %s "
+                        "(already serving %s)",
+                        snapshot_id,
+                        applied,
+                    )
+                    return
+                if applied == snapshot_id and (
+                    not allow_same
+                    or time.monotonic() - applied_at < self.REBUILD_DEDUP_SECONDS
+                ):
+                    return
+
+            started = time.monotonic()
+            new_base = self._create_base_with_retry(snapshot_version=snapshot_id)
+
+            closable: list[duckdb.DuckDBPyConnection] = []
+            with self._rebuild_lock:
+                self._generation += 1
+                gen = self._generation
+                self._register_base(gen, new_base)
+                # Drain queued stale cursors; checked-out ones are released
+                # on return. Cursor close is cheap (no DETACH) — base
+                # teardown is the expensive part and happens outside the
+                # lock.
+                while True:
+                    try:
+                        old_cursor, _, old_gen = self._pool.get_nowait()
+                    except queue.Empty:
+                        break
+                    try:
+                        old_cursor.close()
+                    except Exception:
+                        pass
+                    base = self._decrement_base_locked(old_gen)
+                    if base is not None:
+                        closable.append(base)
+                # Sweep superseded bases whose count already hit zero while
+                # they were still current (possible when replacement-cursor
+                # draws failed): nothing will decrement them again.
+                for g in list(self._bases):
+                    if g != gen and self._bases[g][1] <= 0:
+                        closable.append(self._bases.pop(g)[0])
+                for _ in range(self._pool_size):
+                    self._pool.put((new_base.cursor(), time.time(), gen))
+                self._applied_snapshot = snapshot_id
+                self._applied_at = time.monotonic()
+            for base in closable:
+                self._close_base(base)
+            logger.info(
+                "DuckLake pool: base + %d cursors rebuilt at snapshot %s in %.0f ms",
+                self._pool_size,
+                snapshot_id,
+                (time.monotonic() - started) * 1000,
+            )
 
     def _recycle_aged(self) -> None:
-        """Rebuild connections past MAX_CONNECTION_AGE_SECONDS at the current pin.
+        """Rebuild the shared base at the current pin once it ages out.
 
-        Builds happen outside the rebuild lock (they can take seconds); the
-        pulled entry and the generation are captured under the lock first,
-        and the put decision re-checks the generation afterwards so a rebuild
-        that landed mid-build wins and the late replacement is discarded.
+        Runs on the pin's poll thread. A full generation swap reuses
+        _apply_snapshot's build-outside-the-lock machinery, so age recycling
+        (libpq/SSL hygiene) never touches the request path.
         """
         import time
 
-        for _ in range(self._pool_size):
-            with self._rebuild_lock:
-                snapshot_id = self._pin.current if self._pin is not None else None
-                gen = self._generation
-                try:
-                    con, created_at, entry_gen = self._pool.get_nowait()
-                except queue.Empty:
-                    return
-                if entry_gen == gen and (
-                    time.time() - created_at <= self.MAX_CONNECTION_AGE_SECONDS
-                ):
-                    self._pool.put((con, created_at, entry_gen))
-                    continue
-            # Build the replacement before closing the old connection so a
-            # failed create/warm never shrinks the pool: on failure the old
-            # (aged but healthy) entry goes back and keeps serving.
-            try:
-                new_con = self._create_warmed_connection(snapshot_id)
-            except Exception:
-                with self._rebuild_lock:
-                    self._pool.put((con, created_at, entry_gen))
-                raise
-            try:
-                con.close()
-            except Exception:
-                pass
-            discard: duckdb.DuckDBPyConnection | None = None
-            with self._rebuild_lock:
-                if gen != self._generation:
-                    # A rebuild replaced this slot while we were building;
-                    # pooling ours would exceed pool_size and pin the wrong
-                    # snapshot. Discard it (closed outside the lock).
-                    discard = new_con
-                else:
-                    self._pool.put((new_con, time.time(), gen))
-            if discard is not None:
-                try:
-                    discard.close()
-                except Exception:
-                    pass
+        with self._rebuild_lock:
+            snapshot_id = self._pin.current if self._pin is not None else None
+            entry = self._bases.get(self._generation)
+        if snapshot_id is None or entry is None:
+            return
+        if time.time() - entry[2] <= self.MAX_CONNECTION_AGE_SECONDS:
+            return
+        logger.info(
+            "DuckLake pool: base aged out (>%ds), rebuilding at the current pin",
+            self.MAX_CONNECTION_AGE_SECONDS,
+        )
+        self._apply_snapshot(snapshot_id, allow_same=True)
 
     def force_pin_refresh(self) -> bool:
         """Bring the pin to the latest snapshot now. False when unpinned."""
@@ -1194,42 +1319,52 @@ class DuckLakePool:
                     pass
             raise
         finally:
-            # Only recreate if connection failed during use
-            if connection_failed:
-                with self._rebuild_lock:
-                    snapshot_version = self._pin.current if self._pin else None
-                    gen = self._generation
-                try:
-                    con = self._create_connection_with_retry(
-                        snapshot_version=snapshot_version
-                    )
-                    created_at = time.time()
-                except Exception as create_err:
-                    logger.error("Failed to recreate connection: %s", create_err)
-                    # Retry with more attempts
-                    con = self._create_connection_with_retry(
-                        max_retries=5, snapshot_version=snapshot_version
-                    )
-                    created_at = time.time()
-            stale_con: duckdb.DuckDBPyConnection | None = None
-            with self._rebuild_lock:
-                if gen != self._generation:
-                    # Stale generation: a rebuild happened while this
-                    # connection was checked out (or while its replacement
-                    # was being created). The rebuild already put a fresh
-                    # entry in for this slot — close ours instead of pooling
-                    # it, which would exceed pool_size or pin a superseded
-                    # snapshot. The close happens after the lock is released:
-                    # connection teardown can take tens of ms and must not
-                    # block other returns.
-                    stale_con = con
+            # Gate on the configured mode, not the pin object: bases exist
+            # for every pinned pool even before/while the pin is (re)built.
+            if self._pin_snapshot:
+                if connection_failed:
+                    # The failed cursor is already closed: settle its base
+                    # accounting, then refill its slot with a cheap cursor
+                    # from the current base (atomic; skipped when a rebuild
+                    # already replaced this slot).
+                    self._decrement_base(gen)
+                    try:
+                        self._replace_failed_cursor(gen)
+                    except Exception as draw_err:
+                        # Base itself is unhealthy; reconnect/pin rebuild
+                        # heals it and its swap restores full pool size.
+                        logger.error("Failed to draw replacement cursor: %s", draw_err)
                 else:
-                    self._pool.put((con, created_at, gen))
-            if stale_con is not None:
-                try:
-                    stale_con.close()
-                except Exception:
-                    pass
+                    stale = False
+                    base: duckdb.DuckDBPyConnection | None = None
+                    with self._rebuild_lock:
+                        if gen != self._generation:
+                            # A rebuild happened while this cursor was
+                            # checked out; its slot was already replaced.
+                            # Cursor close is cheap — the base (expensive
+                            # teardown) closes outside the lock below.
+                            try:
+                                con.close()
+                            except Exception:
+                                pass
+                            base = self._decrement_base_locked(gen)
+                            stale = True
+                        else:
+                            self._pool.put((con, created_at, gen))
+                    if stale and base is not None:
+                        self._close_base(base)
+            else:
+                # Unpinned: original behavior.
+                if connection_failed:
+                    try:
+                        con = self._create_connection_with_retry()
+                        created_at = time.time()
+                    except Exception as create_err:
+                        logger.error("Failed to recreate connection: %s", create_err)
+                        # Retry with more attempts
+                        con = self._create_connection_with_retry(max_retries=5)
+                        created_at = time.time()
+                self._pool.put((con, created_at, gen))
 
     def execute_with_retry(
         self,
@@ -1284,6 +1419,16 @@ class DuckLakePool:
                     logger.info("Pin miss, refreshed snapshot and retrying: %s", e)
                     continue
                 if is_connection_error(e) and attempt < max_retries - 1:
+                    if self._pin_snapshot:
+                        # A broken cursor means the shared base's PG link is
+                        # dead for ALL cursors; rebuild it now (single-flight
+                        # + dedup in _apply_snapshot coalesce concurrent
+                        # failures onto one rebuild) instead of redrawing
+                        # doomed cursors until the next snapshot advance.
+                        try:
+                            self.reconnect()
+                        except Exception as rec_err:
+                            logger.error("Pinned pool reconnect failed: %s", rec_err)
                     logger.warning(
                         "Query failed (attempt %d/%d), will retry: %s",
                         attempt + 1,
@@ -1344,9 +1489,24 @@ class DuckLakePool:
     def reconnect(self) -> None:
         """Reconnect all connections in the pool.
 
-        Drains pool, closes old connections, creates new ones.
+        Pinned: a full generation swap at the current pin rebuilds the base
+        and every cursor. Unpinned: drains and recreates plain connections.
         """
         import time
+
+        if self._pin_snapshot:
+            pin = self._pin
+            if pin is None or pin.current is None:
+                # init() is still bringing the pin up; nothing to heal yet
+                # and the unpinned body must never run on a pinned pool.
+                logger.warning("Pinned pool reconnect requested before pin is up")
+                return
+            # allow_same rebuilds the base at the unchanged pin (dead libpq
+            # heal); the dedup window coalesces reconnect storms from many
+            # concurrently-failing requests onto one rebuild.
+            self._apply_snapshot(pin.current, allow_same=True)
+            logger.info("DuckLake pool reconnected at pinned snapshot")
+            return
 
         with self._init_lock:
             # Drain and close all connections
@@ -1371,9 +1531,8 @@ class DuckLakePool:
 
             # Create new connections with timestamps
             current_time = time.time()
-            snapshot_version = self._pin.current if self._pin else None
             for i in range(self._pool_size):
-                con = self._create_connection(snapshot_version=snapshot_version)
+                con = self._create_connection()
                 self._pool.put((con, current_time, self._generation))
                 logger.debug("Recreated pool connection %d/%d", i + 1, self._pool_size)
 
@@ -1401,5 +1560,10 @@ class DuckLakePool:
                 con.close()
             except queue.Empty:
                 break
+        with self._rebuild_lock:
+            bases = [entry[0] for entry in self._bases.values()]
+            self._bases.clear()
+        for base in bases:
+            self._close_base(base)
         self._initialized = False
         logger.info("DuckLake pool closed")

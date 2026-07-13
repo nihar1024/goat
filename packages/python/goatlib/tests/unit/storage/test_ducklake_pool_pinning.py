@@ -1,4 +1,10 @@
-"""Pool swap/generation logic tests with stubbed connections (no DuckDB)."""
+"""Pool swap/generation logic tests with stubbed connections (no DuckDB).
+
+Pinned pools use the shared-instance cursor model: one warmed base
+connection per generation, pool_size cursors drawn from it. The catalog
+metadata cache lives on the base, so a rebuild costs ONE metadata load
+per pod instead of one per pooled connection.
+"""
 
 import queue
 import time
@@ -8,17 +14,18 @@ import pytest
 from goatlib.storage.ducklake import DuckLakePool
 
 
-class FakeCon:
-    def __init__(self, snapshot: int | None) -> None:
-        self.snapshot = snapshot
+class FakeCursor:
+    def __init__(self, base: "FakeBase") -> None:
+        self.base = base
         self.closed = False
 
     def close(self) -> None:
         self.closed = True
 
-    def execute(self, *_: Any) -> "FakeCon":
-        if self.closed:
-            raise RuntimeError("closed")
+    def execute(self, *_: Any) -> "FakeCursor":
+        if self.closed or self.base.closed:
+            # Matches CONNECTION_ERROR_PATTERNS, like a real dead libpq link
+            raise RuntimeError("connection error: cursor or base closed")
         return self
 
     def fetchall(self) -> list[tuple[int]]:
@@ -28,30 +35,57 @@ class FakeCon:
         return (1,)
 
 
+class FakeBase:
+    def __init__(self, snapshot: int | None) -> None:
+        self.snapshot = snapshot
+        self.closed = False
+        self.cursors: list[FakeCursor] = []
+
+    def cursor(self) -> FakeCursor:
+        if self.closed:
+            raise RuntimeError("base closed")
+        c = FakeCursor(self)
+        self.cursors.append(c)
+        return c
+
+    def close(self) -> None:
+        self.closed = True
+
+    def execute(self, *_: Any) -> "FakeBase":
+        if self.closed:
+            raise RuntimeError("closed")
+        return self
+
+    def fetchone(self) -> tuple[int]:
+        return (1,)
+
+    def fetchall(self) -> list[tuple[int]]:
+        return [(1,)]
+
+
 @pytest.fixture()
 def pool(monkeypatch: pytest.MonkeyPatch) -> DuckLakePool:
     p = DuckLakePool(pool_size=2, pin_snapshot=True)
-    created: list[FakeCon] = []
+    bases: list[FakeBase] = []
 
-    def fake_create(snapshot_version: int | None = None) -> FakeCon:
-        con = FakeCon(snapshot_version)
-        created.append(con)
-        return con
+    def fake_base(snapshot_version: int | None = None) -> FakeBase:
+        b = FakeBase(snapshot_version)
+        bases.append(b)
+        return b
 
-    monkeypatch.setattr(p, "_create_connection", fake_create)
     monkeypatch.setattr(
         p,
-        "_create_connection_with_retry",
-        lambda max_retries=3, retry_delay=1.0, snapshot_version=None: fake_create(
-            snapshot_version
-        ),
+        "_create_base_with_retry",
+        lambda snapshot_version=None: fake_base(snapshot_version),
     )
     monkeypatch.setattr(p, "_warm_connection", lambda con: None)
     monkeypatch.setattr(p, "_fetch_latest_snapshot_id", lambda: 10)
-    p._test_created = created  # type: ignore[attr-defined]
-    # Simulate init(): fill the pool at snapshot 10, generation 0
+    p._test_bases = bases
+    # Simulate pinned init(): one base at snapshot 10, generation 0, 2 cursors
+    base = fake_base(10)
+    p._register_base(0, base)
     for _ in range(2):
-        p._pool.put((fake_create(10), time.time(), p._generation))  # type: ignore[arg-type]
+        p._pool.put((base.cursor(), time.time(), 0))
     p._initialized = True
     return p
 
@@ -68,24 +102,98 @@ def pool_entries(p: DuckLakePool) -> list[tuple[Any, float, int]]:
     return items
 
 
-def test_apply_snapshot_swaps_all_connections(pool: DuckLakePool) -> None:
-    old = [e[0] for e in pool_entries(pool)]
+def bases(p: DuckLakePool) -> list[Any]:
+    result: list[Any] = p._test_bases
+    return result
+
+
+def test_apply_snapshot_single_base_swap(pool: DuckLakePool) -> None:
+    old_base = bases(pool)[0]
     pool._apply_snapshot(11)
     entries = pool_entries(pool)
     assert len(entries) == 2
-    assert all(e[0].snapshot == 11 for e in entries)
+    new_base = bases(pool)[-1]
+    assert new_base.snapshot == 11
+    assert len(bases(pool)) == 2  # exactly ONE new base built (not one per cursor)
+    assert all(e[0].base is new_base for e in entries)
     assert all(e[2] == pool._generation for e in entries)
-    assert all(c.closed for c in old)
+    assert old_base.closed  # no outstanding cursors -> base closed
+    assert all(c.closed for c in old_base.cursors)
 
 
-def test_checked_out_stale_connection_closed_on_return(pool: DuckLakePool) -> None:
+def test_checked_out_stale_cursor_keeps_old_base_alive_until_return(
+    pool: DuckLakePool,
+) -> None:
+    old_base = bases(pool)[0]
     with pool.connection() as con:
-        pool._apply_snapshot(11)  # rebuild while one conn is checked out
+        pool._apply_snapshot(11)  # rebuild while one cursor is checked out
+        assert not old_base.closed  # in-flight query must keep its base alive
         held = con
-    assert held.closed  # type: ignore[attr-defined]  # stale gen: closed, not re-pooled
+    assert held.closed  # stale cursor closed on return
+    assert old_base.closed  # last outstanding cursor returned -> base closed
     entries = pool_entries(pool)
     assert len(entries) == 2
-    assert all(e[0].snapshot == 11 for e in entries)
+    assert all(e[0].base.snapshot == 11 for e in entries)
+
+
+def test_apply_snapshot_build_failure_leaves_pool_untouched(
+    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def failing_base(snapshot_version: int | None = None) -> FakeBase:
+        raise RuntimeError("create failed")
+
+    monkeypatch.setattr(pool, "_create_base_with_retry", failing_base)
+    before = [e[0] for e in pool_entries(pool)]
+    gen_before = pool._generation
+    old_base = bases(pool)[0]
+
+    with pytest.raises(RuntimeError, match="create failed"):
+        pool._apply_snapshot(11)
+
+    assert pool._generation == gen_before
+    entries = pool_entries(pool)
+    assert [e[0] for e in entries] == before
+    assert not old_base.closed
+
+
+def test_warm_failure_closes_new_base_and_keeps_pool(
+    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Use the REAL _create_base_with_retry (the fixture stubs it out) with a
+    # fake connection factory, so the create->warm->close-on-failure path is
+    # exercised for real.
+    monkeypatch.setattr(
+        pool,
+        "_create_base_with_retry",
+        DuckLakePool._create_base_with_retry.__get__(pool),
+    )
+
+    def fake_conn(
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        snapshot_version: int | None = None,
+    ) -> FakeBase:
+        b = FakeBase(snapshot_version)
+        bases(pool).append(b)
+        return b
+
+    monkeypatch.setattr(pool, "_create_connection_with_retry", fake_conn)
+
+    def bad_warm(con: Any) -> None:
+        raise RuntimeError("warm failed")
+
+    monkeypatch.setattr(pool, "_warm_connection", bad_warm)
+    old_base = bases(pool)[0]
+    n_before = len(bases(pool))
+
+    with pytest.raises(RuntimeError, match="warm failed"):
+        pool._apply_snapshot(11)
+
+    new_bases = bases(pool)[n_before:]
+    assert len(new_bases) == 1
+    assert new_bases[0].closed  # failed base not leaked
+    assert not old_base.closed
+    assert len(pool_entries(pool)) == 2
 
 
 def test_miss_triggers_force_refresh_and_retry(
@@ -126,7 +234,7 @@ def test_miss_triggers_force_refresh_and_retry(
     result = pool.execute_with_retry("SELECT 1", fetch_all=True)
     assert result == [(42,)]
     assert calls["n"] == 2
-    assert pool._pin.current == 10  # force_refresh advanced the pin
+    assert pool._pin.current == 10
 
 
 def test_genuine_missing_table_still_raises(
@@ -137,9 +245,7 @@ def test_genuine_missing_table_still_raises(
     pool._pin = SnapshotPin(
         pool._fetch_latest_snapshot_id, pool._apply_snapshot, min_refresh_gap=0.0
     )
-    pool._pin._current = (
-        10  # already at latest: refresh returns True, retry fails again
-    )
+    pool._pin._current = 10
 
     import contextlib
 
@@ -162,92 +268,42 @@ def test_genuine_missing_table_still_raises(
 def test_unpinned_pool_behaves_as_before(monkeypatch: pytest.MonkeyPatch) -> None:
     p = DuckLakePool(pool_size=1)  # pin_snapshot defaults to False
     assert p.force_pin_refresh() is False
-    con = FakeCon(None)
-    p._pool.put((con, time.time(), 0))  # type: ignore[arg-type]
+
+    class PlainCon:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    con = PlainCon()
+    p._pool.put((con, time.time(), 0))
     p._initialized = True
     with p.connection() as c:
-        assert c is con  # type: ignore[comparison-overlap]
+        assert c is con
     entries = pool_entries(p)
     assert len(entries) == 1 and entries[0][0] is con
 
 
-def test_recycle_aged_rebuilds_old_connections(pool: DuckLakePool) -> None:
-    pool.MAX_CONNECTION_AGE_SECONDS = 0  # everything is "old"
-    pool._pin = __import__(
-        "goatlib.storage.snapshot_pin", fromlist=["SnapshotPin"]
-    ).SnapshotPin(pool._fetch_latest_snapshot_id, pool._apply_snapshot)
-    pool._pin._current = 10  # type: ignore[union-attr]
-    old = [e[0] for e in pool_entries(pool)]
-    pool._recycle_aged()
-    entries = pool_entries(pool)
-    assert len(entries) == 2
-    assert all(not e[0].closed for e in entries)
-    assert all(c.closed for c in old)
-    assert all(e[0].snapshot == 10 for e in entries)  # same pin, fresh conns
-
-
-def test_apply_snapshot_warm_failure_closes_new_and_keeps_pool(
-    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def bad_warm(con: Any) -> None:
-        raise RuntimeError("warm failed")
-
-    monkeypatch.setattr(pool, "_warm_connection", bad_warm)
-    before = [e[0] for e in pool_entries(pool)]
-    created: list[FakeCon] = pool._test_created  # type: ignore[attr-defined]
-    n_before = len(created)
-
-    with pytest.raises(RuntimeError, match="warm failed"):
-        pool._apply_snapshot(11)
-
-    new_cons = created[n_before:]
-    assert len(new_cons) == 1
-    assert new_cons[0].closed  # freshly created conn was not leaked
-    entries = pool_entries(pool)
-    assert len(entries) == 2
-    assert [e[0] for e in entries] == before  # previous healthy conns intact
-    assert all(not e[0].closed for e in entries)
-
-
-def test_recycle_aged_warm_failure_keeps_old_connection(
-    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from goatlib.storage.snapshot_pin import SnapshotPin
-
-    pool.MAX_CONNECTION_AGE_SECONDS = 0  # everything is "old"
-    pool._pin = SnapshotPin(pool._fetch_latest_snapshot_id, pool._apply_snapshot)
-    pool._pin._current = 10
-
-    def bad_warm(con: Any) -> None:
-        raise RuntimeError("warm failed")
-
-    monkeypatch.setattr(pool, "_warm_connection", bad_warm)
-    before = [e[0] for e in pool_entries(pool)]
-    created: list[FakeCon] = pool._test_created  # type: ignore[attr-defined]
-    n_before = len(created)
-
-    with pytest.raises(RuntimeError, match="warm failed"):
-        pool._recycle_aged()
-
-    new_cons = created[n_before:]
-    assert len(new_cons) == 1
-    assert new_cons[0].closed  # freshly created conn was not leaked
-    entries = pool_entries(pool)
-    assert len(entries) == 2  # pool did not shrink
-    assert set(e[0] for e in entries) == set(before)  # old conns kept serving
-    assert all(not e[0].closed for e in entries)
-
-
 def test_unpinned_init_does_not_warm(monkeypatch: pytest.MonkeyPatch) -> None:
-    p = DuckLakePool(pool_size=2)  # pin_snapshot defaults to False
+    p = DuckLakePool(pool_size=2)
     warm_calls = {"n": 0}
+    created: list[Any] = []
+
+    class PlainCon:
+        def __init__(self, snapshot: int | None) -> None:
+            self.snapshot = snapshot
+
+        def close(self) -> None:
+            pass
 
     def fake_create(
         max_retries: int = 3,
         retry_delay: float = 1.0,
         snapshot_version: int | None = None,
-    ) -> FakeCon:
-        return FakeCon(snapshot_version)
+    ) -> Any:
+        c = PlainCon(snapshot_version)
+        created.append(c)
+        return c
 
     def spy_warm(con: Any) -> None:
         warm_calls["n"] += 1
@@ -262,107 +318,171 @@ def test_unpinned_init_does_not_warm(monkeypatch: pytest.MonkeyPatch) -> None:
         POSTGRES_DATABASE_URI = "postgresql://u:p@localhost/db"
         DUCKLAKE_CATALOG_SCHEMA = "ducklake"
 
-    p.init(Settings())  # type: ignore[arg-type]
-    assert warm_calls["n"] == 0  # unpinned pools never pay the warm-up query
+    p.init(Settings())
+    assert warm_calls["n"] == 0
     entries = pool_entries(p)
     assert len(entries) == 2
-    assert all(e[0].snapshot is None for e in entries)  # no SNAPSHOT_VERSION
+    assert all(e[0].snapshot is None for e in entries)
 
 
-def test_apply_snapshot_build_failure_leaves_pool_untouched(
-    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    created: list[FakeCon] = pool._test_created  # type: ignore[attr-defined]
-    calls = {"n": 0}
+def test_recycle_aged_rebuilds_base_at_current_pin(pool: DuckLakePool) -> None:
+    from goatlib.storage.snapshot_pin import SnapshotPin
 
-    def flaky_create(
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-        snapshot_version: int | None = None,
-    ) -> FakeCon:
-        calls["n"] += 1
-        if calls["n"] == 2:  # 2nd of 2 builds fails
-            raise RuntimeError("create failed")
-        con = FakeCon(snapshot_version)
-        created.append(con)
-        return con
-
-    monkeypatch.setattr(pool, "_create_connection_with_retry", flaky_create)
-    before = [e[0] for e in pool_entries(pool)]
-    gen_before = pool._generation
-    n_before = len(created)
-
-    with pytest.raises(RuntimeError, match="create failed"):
-        pool._apply_snapshot(11)
-
-    assert pool._generation == gen_before  # generation NOT bumped
+    pool.MAX_CONNECTION_AGE_SECONDS = 0  # everything is "old"
+    pool._pin = SnapshotPin(pool._fetch_latest_snapshot_id, pool._apply_snapshot)
+    pool._pin._current = 10
+    old_base = bases(pool)[0]
+    pool._recycle_aged()
     entries = pool_entries(pool)
-    assert [e[0] for e in entries] == before  # same entries, untouched
-    assert all(not e[0].closed for e in entries)  # old conns NOT closed
-    new_cons = created[n_before:]
-    assert len(new_cons) == 1  # only the 1st build succeeded
-    assert new_cons[0].closed  # and it was cleaned up, not leaked
+    assert len(entries) == 2
+    new_base = bases(pool)[-1]
+    assert new_base.snapshot == 10  # same pin, fresh base
+    assert all(e[0].base is new_base for e in entries)
+    assert old_base.closed
 
 
-def test_error_recreate_racing_rebuild_discards_replacement(
-    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    created: list[FakeCon] = pool._test_created  # type: ignore[attr-defined]
-    raced = {"done": False}
+def test_recycle_aged_noop_when_young(pool: DuckLakePool) -> None:
+    from goatlib.storage.snapshot_pin import SnapshotPin
 
-    def racing_create(
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-        snapshot_version: int | None = None,
-    ) -> FakeCon:
-        if not raced["done"]:
-            # Simulate a rebuild landing while this replacement is created:
-            # generation bumps and the queue is swapped to pool_size new-gen
-            # entries (including a replacement for the checked-out slot).
-            raced["done"] = True
-            pool._generation += 1
-            while True:
-                try:
-                    old, _, _ = pool._pool.get_nowait()
-                except queue.Empty:
-                    break
-                old.close()
-            for _ in range(2):
-                nc = FakeCon(11)
-                created.append(nc)
-                pool._pool.put((nc, time.time(), pool._generation))  # type: ignore[arg-type]
-        con = FakeCon(snapshot_version)
-        created.append(con)
-        return con
+    pool._pin = SnapshotPin(pool._fetch_latest_snapshot_id, pool._apply_snapshot)
+    pool._pin._current = 10
+    n_before = len(bases(pool))
+    pool._recycle_aged()
+    assert len(bases(pool)) == n_before  # no rebuild
+    assert len(pool_entries(pool)) == 2
 
-    monkeypatch.setattr(pool, "_create_connection_with_retry", racing_create)
 
+def test_error_recreate_draws_cursor_from_current_base(pool: DuckLakePool) -> None:
+    base = bases(pool)[0]
+    n_cursors_before = len(base.cursors)
     with pytest.raises(RuntimeError, match="connection reset"):
         with pool.connection():
             raise RuntimeError("connection reset")  # triggers recreate path
-
-    replacement = created[-1]
-    assert replacement.closed  # discarded: pooling it would exceed pool_size
     entries = pool_entries(pool)
-    assert len(entries) == 2  # exactly pool_size entries
+    assert len(entries) == 2  # replacement cursor pooled
+    assert len(base.cursors) == n_cursors_before + 1  # cheap cursor, no new base
+    assert all(e[0].base is base for e in entries)
+
+
+def test_error_recreate_racing_rebuild_skips_replacement(
+    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raced = {"done": False}
+    orig_replace = pool._replace_failed_cursor
+
+    def racing_replace(gen: int) -> None:
+        if not raced["done"]:
+            raced["done"] = True
+            pool._apply_snapshot(11)  # rebuild lands before the slot refill
+        orig_replace(gen)
+
+    monkeypatch.setattr(pool, "_replace_failed_cursor", racing_replace)
+    with pytest.raises(RuntimeError, match="connection reset"):
+        with pool.connection():
+            raise RuntimeError("connection reset")
+    entries = pool_entries(pool)
+    assert len(entries) == 2  # exactly pool_size entries, all current gen
     assert all(e[2] == pool._generation for e in entries)
-    assert all(not e[0].closed for e in entries)
+    new_base = bases(pool)[-1]
+    assert all(e[0].base is new_base for e in entries)
+
+
+def test_rebuild_with_all_cursors_checked_out(pool: DuckLakePool) -> None:
+    """The general form of the base-lifetime invariant: a rebuild while
+    EVERY cursor is checked out keeps the old base alive until the LAST
+    return, and the pool converges to exactly pool_size fresh cursors."""
+    old_base = bases(pool)[0]
+    with pool.connection():
+        with pool.connection():
+            pool._apply_snapshot(11)  # rebuild with BOTH cursors checked out
+            assert not old_base.closed
+        assert not old_base.closed  # one stale cursor still out
+    assert old_base.closed  # last outstanding cursor returned
+
+    entries = pool_entries(pool)
+    assert len(entries) == 2
+    assert all(e[0].base is bases(pool)[-1] for e in entries)
+
+
+def test_apply_snapshot_skips_stale_target(pool: DuckLakePool) -> None:
+    """A racing recycle/reconnect must never regress the pool behind the
+    snapshot it already serves (the pin would report a newer snapshot than
+    the data, disabling miss-heal and poisoning ETags)."""
+    pool._apply_snapshot(11)
+    n_bases = len(bases(pool))
+    pool._apply_snapshot(10, allow_same=True)  # stale request: must no-op
+    assert len(bases(pool)) == n_bases
+    assert pool._applied_snapshot == 11
+    entries = pool_entries(pool)
+    assert all(e[0].base is bases(pool)[-1] for e in entries)
+
+
+def test_apply_snapshot_same_target_deduped_within_window(
+    pool: DuckLakePool,
+) -> None:
+    """Reconnect storms (many concurrently-failing requests) coalesce onto
+    one rebuild via the dedup window; outside the window an allow_same
+    re-apply (aged recycle, genuine second heal) does rebuild."""
+    pool._apply_snapshot(11, allow_same=True)
+    n_bases = len(bases(pool))
+    pool._apply_snapshot(11, allow_same=True)  # within window: no-op
+    assert len(bases(pool)) == n_bases
+    pool._applied_at -= pool.REBUILD_DEDUP_SECONDS + 1  # age the watermark
+    pool._apply_snapshot(11, allow_same=True)  # outside window: rebuilds
+    assert len(bases(pool)) == n_bases + 1
+
+
+def test_connection_error_triggers_pinned_reconnect(
+    pool: DuckLakePool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dead base breaks all cursors; the pool method must rebuild it
+    instead of redrawing doomed cursors until the next snapshot advance."""
+    from goatlib.storage.snapshot_pin import SnapshotPin
+
+    pool._pin = SnapshotPin(pool._fetch_latest_snapshot_id, pool._apply_snapshot)
+    pool._pin._current = 10
+    reconnects = {"n": 0}
+    orig_reconnect = pool.reconnect
+
+    def spy_reconnect() -> None:
+        reconnects["n"] += 1
+        orig_reconnect()
+
+    monkeypatch.setattr(pool, "reconnect", spy_reconnect)
+    bases(pool)[0].close()  # kill the base -> every cursor errors
+    result = pool.execute_with_retry("SELECT 1", fetch_all=False)
+    assert result == (1,)  # healed within the retry budget
+    assert reconnects["n"] >= 1
+    entries = pool_entries(pool)
+    assert all(not e[0].base.closed for e in entries)
+
+
+def test_scaled_memory_limit() -> None:
+    p = DuckLakePool(pool_size=4, pin_snapshot=True)
+    p._memory_limit = "1.5GB"
+    assert p._scaled_memory_limit() == "6GB"
+    p._memory_limit = "512MB"
+    assert p._scaled_memory_limit() == "2048MB"
+    p._memory_limit = "80%"  # DuckDB-valid but unscalable: keep per-conn value
+    assert p._scaled_memory_limit() is None
+    p._memory_limit = None
+    assert p._scaled_memory_limit() is None
 
 
 def test_fetch_latest_snapshot_id_installs_postgres_before_load(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A fresh poll connection must INSTALL postgres before LOAD postgres —
-    on a clean container this is the first DuckDB call of the process and
-    must not rely on autoinstall-on-LOAD."""
+    """Fresh containers have no preinstalled extensions: the lazily created
+    poll connection must INSTALL postgres before LOAD or first boot fails."""
+    import duckdb as duckdb_module
+
     p = DuckLakePool(pool_size=1, pin_snapshot=True)
     p._catalog_schema = "ducklake"
     p._postgres_uri = "postgresql://u:p@localhost/db"
-
     executed: list[str] = []
 
-    class FakePollConn:
-        def execute(self, sql: str, *_: Any) -> "FakePollConn":
+    class SpyCon:
+        def execute(self, sql: str, *a: Any) -> "SpyCon":
             executed.append(sql)
             return self
 
@@ -372,13 +492,11 @@ def test_fetch_latest_snapshot_id_installs_postgres_before_load(
         def close(self) -> None:
             pass
 
-    import goatlib.storage.ducklake as ducklake_module
-
-    monkeypatch.setattr(ducklake_module.duckdb, "connect", lambda: FakePollConn())
-
+    monkeypatch.setattr(duckdb_module, "connect", lambda: SpyCon())
     assert p._fetch_latest_snapshot_id() == 5
-    assert executed[0] == "INSTALL postgres"
-    assert executed[1] == "LOAD postgres"
+    install_idx = executed.index("INSTALL postgres")
+    load_idx = executed.index("LOAD postgres")
+    assert install_idx < load_idx
 
 
 def test_fetch_latest_snapshot_id_holds_poll_lock() -> None:
@@ -397,7 +515,7 @@ def test_fetch_latest_snapshot_id_holds_poll_lock() -> None:
         def close(self) -> None:
             pass
 
-    p._poll_con = FakePollCon()  # type: ignore[assignment]
+    p._poll_con = FakePollCon()
     assert p._fetch_latest_snapshot_id() == 7
-    assert observed["locked"] is True  # lock held for the whole fetch body
-    assert not p._poll_lock.locked()  # and released afterwards
+    assert observed["locked"] is True
+    assert not p._poll_lock.locked()

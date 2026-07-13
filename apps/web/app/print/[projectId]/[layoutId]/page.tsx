@@ -12,7 +12,8 @@ import { useProject } from "@/lib/api/projects";
 import { useReportLayout } from "@/lib/api/reportLayouts";
 import type { AtlasPage } from "@/lib/print/atlas-utils";
 import { PAGE_SIZES, mmToPx } from "@/lib/print/units";
-import type { ProjectLayer } from "@/lib/validations/project";
+import { orderLayersByTree } from "@/lib/utils/map/layerTreeOrder";
+import type { CustomBasemap, ProjectLayer } from "@/lib/validations/project";
 import type { ReportLayoutConfig } from "@/lib/validations/reportLayout";
 
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
@@ -61,41 +62,33 @@ export default function PrintPage() {
     []
   );
   const { layerGroups: projectLayerGroups } = useProjectLayerGroups(projectId);
-  const { mapStyle } = useBasemap(project);
+  const { mapStyle, setActiveBasemap } = useBasemap(project);
 
-  // Filter out layers that belong to invisible groups (same logic as editor)
-  const projectLayers = useMemo(() => {
-    if (!allProjectLayers || !projectLayerGroups) {
-      return allProjectLayers || [];
-    }
+  // Populate the Redux active basemap so <Layers> can apply the custom
+  // basemap's layer_config (label visibility, layer stacking). Unlike the
+  // interactive map page, the print route is a fresh isolated store that
+  // nothing else dispatches into — without this, layer_config is empty and
+  // hidden basemap layers (e.g. disabled labels) render in the PDF. Keyed on
+  // a stable string so SWR revalidations don't force needless style reloads.
+  const activeBasemapValue = project?.basemap;
+  const activeBasemapLayerConfigKey = useMemo(() => {
+    const customs = (project?.custom_basemaps as CustomBasemap[] | undefined) ?? [];
+    const active = customs.find((c) => c.id === activeBasemapValue);
+    return JSON.stringify(active && active.type === "vector" ? (active.layer_config ?? null) : null);
+  }, [project?.custom_basemaps, activeBasemapValue]);
+  useEffect(() => {
+    if (activeBasemapValue) setActiveBasemap(activeBasemapValue);
+    // setActiveBasemap is recreated on each render; the stable deps above gate
+    // when we actually need to re-sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBasemapValue, activeBasemapLayerConfigKey]);
 
-    const invisibleGroupIds = new Set<number>();
-
-    const findInvisibleGroups = (groups: typeof projectLayerGroups) => {
-      groups.forEach((group) => {
-        const groupVisibility = group.properties?.visibility ?? true;
-        if (!groupVisibility) {
-          invisibleGroupIds.add(group.id);
-        }
-        if (group.parent_id && invisibleGroupIds.has(group.parent_id)) {
-          invisibleGroupIds.add(group.id);
-        }
-      });
-    };
-
-    let previousSize = -1;
-    while (invisibleGroupIds.size !== previousSize) {
-      previousSize = invisibleGroupIds.size;
-      findInvisibleGroups(projectLayerGroups);
-    }
-
-    return allProjectLayers.filter((layer) => {
-      if (!layer.layer_project_group_id) {
-        return true;
-      }
-      return !invisibleGroupIds.has(layer.layer_project_group_id);
-    });
-  }, [allProjectLayers, projectLayerGroups]);
+  // Order layers to match the visual layer panel hierarchy (same logic as editor)
+  // and filter out layers that belong to invisible groups.
+  const projectLayers = useMemo(
+    () => orderLayersByTree(allProjectLayers || [], projectLayerGroups),
+    [allProjectLayers, projectLayerGroups]
+  );
   const [isReady, setIsReady] = useState(false);
 
   // Print config (atlas limits from backend)

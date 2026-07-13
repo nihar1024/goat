@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { setColorFunction } from "@geomatico/maplibre-cog-protocol";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { FilterSpecification } from "maplibre-gl";
 import type { LayerProps, MapGeoJSONFeature } from "react-map-gl/maplibre";
 import { Layer as MapLayer, Source, useMap } from "react-map-gl/maplibre";
 
 import { GEOAPI_BASE_URL, SYSTEM_LAYERS_IDS } from "@/lib/constants";
-import { excludes as excludeOp } from "@/lib/transformers/filter";
 import {
   buildClusterBadgeSpec,
   buildClusterCirclePaint,
@@ -36,15 +35,12 @@ import type {
   RasterLayerProperties,
 } from "@/lib/validations/layer";
 import type { BasemapLayerConfig, ProjectLayer } from "@/lib/validations/project";
-import { type ScenarioFeatures, scenarioEditTypeEnum } from "@/lib/validations/scenario";
 
 import { useAppSelector } from "@/hooks/store/ContextHooks";
 
 interface LayersProps {
   layers?: ProjectLayer[] | Layer[];
-  selectedScenarioLayer?: ProjectLayer | null;
   highlightFeature?: MapGeoJSONFeature | null;
-  scenarioFeatures?: ScenarioFeatures | null;
   /**
    * Atlas-driven filter applied client-side to the matching layer's MapLibre
    * filter. Lets the report renderer restrict the coverage layer to the
@@ -117,47 +113,13 @@ const Layers = (props: LayersProps) => {
     return Array.isArray(filter) ? (filter as FilterSpecification) : undefined;
   };
 
-  const scenarioFeaturesToExclude = useMemo(() => {
-    const featuresToExclude: { [key: string]: string[] } = {};
-    props.scenarioFeatures?.features.forEach((feature) => {
-      // Exclude deleted and modified features
-      if (
-        feature.properties?.edit_type === scenarioEditTypeEnum.Enum.d ||
-        feature.properties?.edit_type === scenarioEditTypeEnum.Enum.m
-      ) {
-        const projectLayerId = feature.properties.layer_project_id;
-        if (!projectLayerId || !feature.properties?.feature_id) return;
-
-        if (!featuresToExclude[projectLayerId]) featuresToExclude[projectLayerId] = [];
-
-        if (feature.properties?.feature_id)
-          featuresToExclude[projectLayerId].push(feature.properties?.feature_id);
-      }
-    });
-
-    return featuresToExclude;
-  }, [props.scenarioFeatures]);
-
   const getLayerQueryFilter = (layer: ProjectLayer | Layer) => {
     const cqlFilter = layer["query"]?.cql;
-    if (!layer["layer_id"] || (!Object.keys(scenarioFeaturesToExclude).length && mapMode === "data"))
-      return cqlFilter;
+    if (!layer["layer_id"] || mapMode === "data") return cqlFilter;
 
     const extendedFilter = JSON.parse(JSON.stringify(cqlFilter || {}));
-    if (scenarioFeaturesToExclude[layer.id]?.length && mapMode === "data") {
-      const scenarioFeaturesExcludeFilter = excludeOp("id", scenarioFeaturesToExclude[layer.id]);
-      const parsedScenarioFeaturesExcludeFilter = JSON.parse(scenarioFeaturesExcludeFilter);
-      // Append the filter to the existing filters
-      if (extendedFilter["op"] === "and" && extendedFilter["args"]) {
-        extendedFilter["args"].push(parsedScenarioFeaturesExcludeFilter);
-      } else {
-        // Create a new filter
-        extendedFilter["op"] = "and";
-        extendedFilter["args"] = [parsedScenarioFeaturesExcludeFilter];
-      }
-    }
 
-    if (mapMode !== "data" && temporaryFilters.length > 0) {
+    if (temporaryFilters.length > 0) {
       // Primary layer filters (filter.layer_id matches this layer)
       // Skip filters with excludeFromSourceLayer (used by click-to-filter to keep features clickable)
       const primaryFilters = temporaryFilters
@@ -232,19 +194,39 @@ const Layers = (props: LayersProps) => {
     return getClusterGeoJsonUrl(GEOAPI_BASE_URL ?? "", layerId, filterStr);
   };
 
-  const { useDataLayers, systemLayers } = useMemo(() => {
+  const useDataLayers = useMemo(() => {
     const dataLayers = [] as ProjectLayer[] | Layer[];
-    const sysLayers = [] as ProjectLayer[] | Layer[];
-
     props.layers?.forEach((layer) => {
       const layerId = layer["layer_id"] ?? layer.id;
       if (SYSTEM_LAYERS_IDS.indexOf(layerId) === -1) {
         dataLayers.push(layer);
-      } else {
-        sysLayers.push(layer);
       }
     });
-    return { useDataLayers: dataLayers, systemLayers: sysLayers };
+    return dataLayers;
+  }, [props.layers]);
+
+  // Lazy-load clustered (GeoJSON) layers: their source downloads the full
+  // dataset (/items?limit=100000) eagerly on mount, so we only mount it once a
+  // layer has been made visible — and keep it mounted afterwards so re-toggling
+  // never refetches. Vector-tile layers don't need this (MapLibre skips tiles
+  // for hidden layers). Tracks the set of layer ids that have ever been visible.
+  const [revealedLayerIds, setRevealedLayerIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const nowVisible = (props.layers ?? [])
+      .filter((l) => (l.properties as { visibility?: boolean } | undefined)?.visibility)
+      .map((l) => String(l.id));
+    if (nowVisible.length === 0) return;
+    setRevealedLayerIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of nowVisible) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [props.layers]);
 
   // Map of icon-image name (`${layer.id}-${marker.name}`) → url+sdf for
@@ -450,10 +432,23 @@ const Layers = (props: LayersProps) => {
         .filter(Boolean) as Array<{ id: string; sublayers: string[] }>;
       const userSubIds = new Set(userLayers.flatMap((u) => u.sublayers));
 
-      // Basemap layers = everything that isn't a user data layer. Capture their
-      // pristine order once per basemap style (keyed by the basemap layer-id set,
-      // which is stable when user layers are added/removed).
-      const basemapIds = allIdsBottomToTop.filter((id) => !userSubIds.has(id));
+      // Overlay layers (active-feature pulse, pending-feature edits, draw
+      // controls) must always sit ABOVE the data layers — they highlight/annotate
+      // features, so they are neither user data nor basemap. Excluding them here
+      // keeps the restack from pushing them underneath the features.
+      const isOverlayId = (id: string) =>
+        id.startsWith("popup-active-feature") ||
+        id.startsWith("pending-features") ||
+        id.startsWith("gl-draw") ||
+        id.startsWith("mapbox-gl-draw") ||
+        id.startsWith("__measure");
+
+      // Basemap layers = everything that isn't a user data layer or an overlay.
+      // Capture their pristine order once per basemap style (keyed by the basemap
+      // layer-id set, which is stable when user layers are added/removed).
+      const basemapIds = allIdsBottomToTop.filter(
+        (id) => !userSubIds.has(id) && !isOverlayId(id)
+      );
       const styleKey = [...basemapIds].sort().join("|");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cache = map as any;
@@ -513,8 +508,13 @@ const Layers = (props: LayersProps) => {
         currentRelative.every((id, i) => id === desiredOrder[i]);
       if (alreadyOrdered) return;
 
+      // Place the top data/basemap layer just beneath the lowest overlay layer
+      // (pulse/pending/draw) so those overlays stay on top. With no overlays
+      // present, move it to the absolute top.
+      const lowestOverlayId = allIdsBottomToTop.find(isOverlayId);
       try {
-        map.moveLayer(desiredOrder[0]); // force top item to absolute top
+        if (lowestOverlayId) map.moveLayer(desiredOrder[0], lowestOverlayId);
+        else map.moveLayer(desiredOrder[0]);
       } catch {
         /* not ready */
       }
@@ -552,6 +552,14 @@ const Layers = (props: LayersProps) => {
                   layer.feature_layer_geometry_type === "point" &&
                   isClusteringEnabled(layer)
                 ) {
+                  // Defer the full-dataset GeoJSON download until the layer has
+                  // been visible at least once (see revealedLayerIds above).
+                  const isVisible = !!(
+                    layer.properties as { visibility?: boolean } | undefined
+                  )?.visibility;
+                  if (!isVisible && !revealedLayerIds.has(String(layer.id))) {
+                    return null;
+                  }
                   const pointProps = layer.properties as FeatureLayerPointProperties;
                   const isCustomMarker = !!pointProps.custom_marker;
                   const clusterSourceProps = buildClusterSourceProps(layer);
@@ -616,6 +624,7 @@ const Layers = (props: LayersProps) => {
                   });
                   return (
                     <Source
+                      id={`src-${layer.id}`}
                       key={`${layer.id}-cluster-${layer.updated_at || ""}-${clusterKeySalt}`}
                       type="geojson"
                       data={dataUrl}
@@ -812,6 +821,7 @@ const Layers = (props: LayersProps) => {
 
                 return (
                   <Source
+                    id={`src-${layer.id}`}
                     key={`${layer.id}-${layer.updated_at || ""}`}
                     type="vector"
                     tiles={[getFeatureTileUrl(layer, needsLabel, decorationParam)]}
@@ -901,6 +911,7 @@ const Layers = (props: LayersProps) => {
 
                 return (
                   <Source
+                    id={`src-${layer.id}`}
                     key={layer.id}
                     type="raster"
                     {...(layer.data_type === "cog" ? { url: `cog://${layer.url}` } : { tiles: [layer.url] })}
@@ -934,36 +945,6 @@ const Layers = (props: LayersProps) => {
             })()
           )
         : null}
-      {systemLayers?.length
-        ? systemLayers.map((layer: ProjectLayer | Layer) =>
-            props.selectedScenarioLayer?.id === layer.id ? (
-              (() => {
-                const { filter: layerFilter, layerStyleSpec } = splitLayerFilter(
-                  transformToMapboxLayerStyleSpec(layer) as any
-                );
-                const mapLayerFilter = getMapLayerFilter(layerFilter);
-                return (
-              <Source
-                key={`${layer.id}-${layer.updated_at || ""}`}
-                type="vector"
-                tiles={[getFeatureTileUrl(layer)]}
-                minzoom={14}
-                maxzoom={22}>
-                <MapLayer
-                  key={getLayerKey(layer)}
-                  id={layer.id.toString()}
-                  {...(layerStyleSpec as any)}
-                  {...(mapLayerFilter ? { filter: mapLayerFilter } : {})}
-                  source-layer="default"
-                  minzoom={14}
-                  maxzoom={22}
-                />
-              </Source>
-                );
-              })()
-            ) : null
-          )
-        : null}
       {/* Pending features overlay — uses editing layer's original style */}
       {editLayerId && editingLayer && pendingGeoJSON.features.length > 0 && (() => {
         const layerStyle = transformToMapboxLayerStyleSpec(editingLayer) as any & { paint?: Record<string, unknown> };
@@ -974,7 +955,7 @@ const Layers = (props: LayersProps) => {
           : null;
 
         return (
-          <Source key="pending-features" type="geojson" data={pendingGeoJSON}>
+          <Source id="src-pending-features" key="pending-features" type="geojson" data={pendingGeoJSON}>
             {geomType === "polygon" && layerStyle.type === "fill" && (
               <MapLayer
                 id="pending-features-fill"

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
-    POSTGRES_PORT: int = int(os.getenv("POSTGRES_OUTER_PORT", "5432"))
+    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "goat")
 
     # DuckLake settings
@@ -44,9 +44,7 @@ class Settings(BaseSettings):
     S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL")
     S3_ACCESS_KEY_ID: Optional[str] = os.getenv("S3_ACCESS_KEY_ID")
     S3_SECRET_ACCESS_KEY: Optional[str] = os.getenv("S3_SECRET_ACCESS_KEY")
-    S3_REGION_NAME: str = os.getenv("S3_REGION_NAME") or os.getenv(
-        "S3_REGION", "us-east-1"
-    )
+    S3_REGION_NAME: str = os.getenv("S3_REGION", "us-east-1")
     S3_BUCKET_NAME: Optional[str] = os.getenv("S3_BUCKET_NAME")
 
     # Hidden fields - columns to exclude from API responses (tiles and features)
@@ -67,7 +65,16 @@ class Settings(BaseSettings):
 
     # Connection pool size for concurrent tile requests
     # Lower values reduce memory usage and idle connections that can go stale
-    DUCKLAKE_POOL_SIZE: int = int(os.getenv("GEOAPI_DUCKLAKE_POOL_SIZE", "2"))
+    DUCKLAKE_POOL_SIZE: int = int(os.getenv("GEOAPI_DUCKLAKE_POOL_SIZE", "4"))
+
+    # Pin read connections to a DuckLake snapshot and refresh off the request
+    # path. Kill-switch: DUCKLAKE_PIN_SNAPSHOT=false restores unpinned reads.
+    DUCKLAKE_PIN_SNAPSHOT: bool = (
+        os.getenv("DUCKLAKE_PIN_SNAPSHOT", "true").lower() == "true"
+    )
+    DUCKLAKE_SNAPSHOT_REFRESH_SECONDS: float = float(
+        os.getenv("DUCKLAKE_SNAPSHOT_REFRESH_SECONDS", "5")
+    )
 
     # DuckDB memory limit per connection (e.g., "1GB", "512MB")
     # Total potential memory = DUCKLAKE_POOL_SIZE * DUCKDB_MEMORY_LIMIT

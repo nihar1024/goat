@@ -3,6 +3,7 @@ import type { Theme } from "@mui/material";
 import { Box, IconButton, Stack, SwipeableDrawer, Typography, alpha, styled, useTheme } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useMap } from "react-map-gl/maplibre";
 import "swiper/css";
 import "swiper/css/pagination";
 import { Pagination } from "swiper/modules";
@@ -20,6 +21,7 @@ import { projectSchema } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
+import { useDashboardLanguageOverride } from "@/hooks/dashboard/useDashboardLanguageOverride";
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
@@ -42,10 +44,12 @@ import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/se
 import SimpleLayerStyle from "@/components/map/panels/style/SimpleLayerStyle";
 import { PopupContent } from "@/components/map/popover/MapFeaturePopover";
 
-import "@/styles/swiper.css";
-
 // --- Constants ---
 const drawerBleeding = 56;
+// Fraction of the viewport the open bottom drawer covers (paper +
+// puller). The paper height rule in GlobalSwiperStyles and the
+// pan-into-view logic below both derive from this.
+const drawerHeightRatio = 0.6;
 
 // --- Types ---
 type DrawerView = "default" | "layerInfo" | "basemapSelector" | "layerSettings";
@@ -80,8 +84,7 @@ const GlobalSwiperStyles = ({ open, drawerView }: { open: boolean; drawerView: D
         },
       },
       ".MuiDrawer-root > .MuiPaper-root": {
-        // Adjusted height calculation if needed, but 60% seems reasonable
-        height: `calc(60% - ${drawerBleeding}px)`,
+        height: `calc(${drawerHeightRatio * 100}% - ${drawerBleeding}px)`,
         overflow: "visible",
       },
     })}
@@ -139,9 +142,12 @@ const MobileProjectLayout = ({
   onProjectUpdate,
   viewOnly,
 }: PublicProjectLayoutProps) => {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const theme = useTheme();
   const dispatch = useAppDispatch();
+
+  // Apply dashboard language override only for public/shared view (mirrors PublicProjectLayout)
+  useDashboardLanguageOverride(_project?.builder_config?.settings?.language, viewOnly);
 
   // Layer style change hook
   const { handleStyleChange } = useLayerStyleChange(projectLayers, viewOnly);
@@ -214,6 +220,11 @@ const MobileProjectLayout = ({
 
   // --- Hooks ---
   const { translatedBaseMaps, activeBasemap, setActiveBasemap } = useBasemap(project);
+  const allowedStyles = useMemo(() => {
+    const allowed = project?.builder_config?.settings?.allowed_basemaps;
+    if (!allowed) return translatedBaseMaps;
+    return translatedBaseMaps.filter((b) => b.source === "custom" || allowed.includes(b.value));
+  }, [project?.builder_config, translatedBaseMaps]);
   // Ephemeral preview of a non-active basemap while its edit dialog is open;
   // restored on close (never persisted).
   const basemapBeforeEdit = useRef<string | null>(null);
@@ -282,6 +293,29 @@ const MobileProjectLayout = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layerInfo]);
 
+  // Keep the tapped feature visible above the drawer. The sheet covers
+  // the bottom `drawerHeightRatio` of the viewport, so a feature tapped
+  // in that band would be hidden the moment the drawer opens — ease it
+  // into the middle of the still-visible band. Features already above
+  // the drawer stay put (no gratuitous camera movement).
+  const { map } = useMap();
+  useEffect(() => {
+    if (!layerInfo || !map) return;
+    const rect = map.getContainer().getBoundingClientRect();
+    // Top edge of the open drawer (paper + puller), in map-container px.
+    const drawerTop = window.innerHeight * (1 - drawerHeightRatio) - rect.top;
+    if (drawerTop <= 0) return;
+    const lngLat: [number, number] = [layerInfo.lngLat[0], layerInfo.lngLat[1]];
+    if (map.project(lngLat).y <= drawerTop) return;
+    map.easeTo({
+      center: lngLat,
+      // Land the feature in the center of the visible band above the
+      // drawer (offset is relative to the map-container center).
+      offset: [0, drawerTop / 2 - rect.height / 2],
+      duration: 500,
+    });
+  }, [layerInfo, map]);
+
   // Effect to handle layer settings panel requests from ProjectLayerTree three dots menu
   useEffect(() => {
     if (activeRightPanel && activeLayer) {
@@ -323,6 +357,22 @@ const MobileProjectLayout = ({
   // --- Handlers ---
   const toggleDrawer = (newOpen: boolean) => () => {
     setOpen(newOpen);
+  };
+
+  // Swipe-dismiss (SwipeableDrawer onClose). Unlike the X button, a swipe
+  // means "close the drawer" regardless of what was open before, so the
+  // drawer stays closed — but the map state must still be cleared:
+  // popupInfo left behind would block taps on other layers' features
+  // (MapViewer ignores cross-layer clicks while a popup is open).
+  const handleDrawerDismiss = () => {
+    if (drawerView === "layerInfo" && layerInfo) {
+      layerInfo.onClose();
+    }
+    if (activeRightPanel) {
+      dispatch(setActiveRightPanel(undefined));
+    }
+    setDrawerView("default");
+    setOpen(false);
   };
 
   // Handles clicks on the close ('X') button in the InfoHeader
@@ -425,6 +475,7 @@ const MobileProjectLayout = ({
               <Geocoder
                 accessToken={MAPBOX_TOKEN}
                 bbox={project?.max_extent ?? undefined}
+                language={i18n.language}
                 placeholder={t("enter_an_address")}
                 tooltip={t("search")}
                 onSelect={(result) => {
@@ -455,7 +506,7 @@ const MobileProjectLayout = ({
             {hasControl("find_my_location") && (
               <UserLocation tooltip={t("find_location")} />
             )}
-            {hasControl("basemap") && (
+            {hasControl("basemap") && allowedStyles.length > 0 && (
               <BasemapSelectorButton
                 // Use `open` state derived from drawerView for visual indication (optional)
                 open={drawerView === "basemapSelector"}
@@ -500,7 +551,7 @@ const MobileProjectLayout = ({
             },
             keepMounted: true, // Keep content mounted for transitions/state
           }}
-          onClose={toggleDrawer(false)}
+          onClose={handleDrawerDismiss}
           onOpen={toggleDrawer(true)}
           swipeAreaWidth={drawerBleeding}
           disableSwipeToOpen={false}
@@ -547,8 +598,8 @@ const MobileProjectLayout = ({
             sx={{
               height: "100%",
               overflow: "auto", // Hide overflow, specific content scrolls internally
-              borderTopLeftRadius: 8,
-              borderTopRightRadius: 8,
+              // Square top: the Puller Area above already provides the sheet's
+              // rounded top, so rounding here would notch under the flat puller.
               backgroundColor: drawerBgColor,
             }}
             // Attach touch move handler to prevent drawer swipe when scrolling content
@@ -576,7 +627,7 @@ const MobileProjectLayout = ({
 
             {drawerView === "basemapSelector" && (
               <BaseMapSelectorList
-                styles={translatedBaseMaps}
+                styles={allowedStyles}
                 active={activeBasemap.value}
                 editable={editable}
                 basemapChange={async (basemap) => {

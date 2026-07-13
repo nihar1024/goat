@@ -8,6 +8,10 @@
     }
   ],
   "typescript.tsdk": "node_modules/typescript/lib",
+  // Auto Attach instruments every Node process spawned from the terminal with
+  // the V8 inspector, which pegs CPU on the large Next.js dev graph. Keep it off
+  // by default; use the "dev:inspect" script or a launch config when debugging.
+  "debug.javascript.autoAttachFilter": "disabled",
   "typescript.preferences.importModuleSpecifier": "non-relative",
   "workbench.editor.showTabs": "multiple",
   "i18n-ally.localesPaths": [
@@ -96,6 +100,17 @@
       "name": "goat",
       "group": "GOAT",
       "database": "goat",
+      "username": "rds",
+      "password": "database_password"
+    },
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "goat_backup",
+      "database": "goat_backup",
       "username": "rds",
       "password": "database_password"
     }

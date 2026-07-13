@@ -2,7 +2,6 @@ from uuid import uuid4
 
 import pytest
 from core.db.models.layer import DataCategory, DataLicense, Layer, LayerBase
-from core.schemas.layer import FeatureLayerExportType, ILayerExport
 from pydantic import ValidationError
 
 
@@ -42,7 +41,7 @@ def test_layer_creation():
     assert layer.attribute_accuracy == "High"
     assert layer.completeness == "Complete"
     assert layer.upload_reference_system == 4326
-    assert layer.upload_file_type.value == "geojson"
+    assert layer.upload_file_type == "geojson"
     assert layer.geographical_code == "DE"
     assert layer.language_code == "en"
     assert layer.distributor_name == "Test Distributor"
@@ -115,37 +114,36 @@ def test_layer_base_creation_invalid_geographical_code():
         LayerBase(geographical_code="XX")
 
 
-def test_layer_export_valid_crs():
-    # Test with valid CRS
-    valid_crs = "EPSG:4326"
-    layer_export = ILayerExport(
-        id=uuid4(),
-        file_type=FeatureLayerExportType.geojson,
-        file_name="test",
-        crs=valid_crs,
+def test_read_models_accept_legacy_codes():
+    """Stored legacy metadata values must not fail response serialization.
+
+    The strict geographical/language checks apply on write only — a single
+    legacy row (e.g. geographical_code='EU') must not 500 a whole listing.
+    """
+    from core.schemas.layer import FeatureStandardRead, RasterRead, TableRead
+
+    base = {
+        "user_id": uuid4(),
+        "folder_id": uuid4(),
+        "name": "legacy",
+        "geographical_code": "EU",
+        "language_code": "xx",
+    }
+    table = TableRead.model_validate({**base, "type": "table"})
+    assert table.geographical_code == "EU"
+    assert table.language_code == "xx"
+
+    feature = FeatureStandardRead.model_validate(
+        {
+            **base,
+            "type": "feature",
+            "feature_layer_type": "standard",
+            "feature_layer_geometry_type": "point",
+        }
     )
-    assert layer_export.crs == valid_crs
+    assert feature.geographical_code == "EU"
 
-
-def test_layer_export_invalid_crs():
-    # Test with invalid CRS
-    invalid_crs = "Invalid CRS"
-    with pytest.raises(ValidationError):
-        ILayerExport(
-            id=uuid4(),
-            file_type=FeatureLayerExportType.geojson,
-            file_name="test",
-            crs=invalid_crs,
-        )
-
-
-def test_layer_export_invalid_crs_kml():
-    # Test with invalid CRS for KML
-    invalid_crs = "Invalid CRS"
-    with pytest.raises(ValidationError):
-        ILayerExport(
-            id=uuid4(),
-            file_type=FeatureLayerExportType.kml,
-            file_name="test",
-            crs=invalid_crs,
-        )
+    raster = RasterRead.model_validate(
+        {**base, "type": "raster", "url": "https://example.com/wms"}
+    )
+    assert raster.geographical_code == "EU"

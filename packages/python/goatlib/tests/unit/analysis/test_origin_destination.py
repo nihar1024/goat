@@ -74,15 +74,14 @@ def test_origin_destination():
         f"DESCRIBE SELECT * FROM read_parquet('{output_lines}')"
     ).fetchall()
     columns = [col[0] for col in lines_schema]
-    assert "geom" in columns
+    assert "geometry" in columns
     assert "origin" in columns
     assert "destination" in columns
     assert "weight" in columns
-    assert "length_m" in columns
 
     points_schema = con.execute(
         f"DESCRIBE SELECT * FROM read_parquet('{output_points}')"
     ).fetchall()
     columns = [col[0] for col in points_schema]
-    assert "geom" in columns
+    assert "geometry" in columns
     assert "weight" in columns

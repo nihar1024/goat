@@ -6,18 +6,20 @@ and analytical processes from DuckLake/DuckDB storage.
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from goatlib.auth import JOSEError
+from goatobs import build_auth_context_middleware, setup_observability
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import JSONResponse
 
+from geoapi.catalog_events import start_subscriber, stop_subscriber
 from geoapi.config import settings
+from geoapi.deps.auth import decode_token
 from geoapi.ducklake import ducklake_manager
 from geoapi.ducklake_pool import ducklake_pool
 from geoapi.ducklake_write import ducklake_write_manager
@@ -30,10 +32,7 @@ from geoapi.routers import (
     metadata_router,
     tiles_router,
 )
-from geoapi.deps.auth import decode_token
 from geoapi.services.layer_service import layer_service
-from goatlib.auth import JOSEError
-from goatobs import build_auth_context_middleware, setup_observability
 
 # Configure logging
 logging.basicConfig(
@@ -75,15 +74,6 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             )
 
 
-# Initialize Sentry if configured
-if os.getenv("SENTRY_DSN") and os.getenv("ENVIRONMENT"):
-    sentry_sdk.init(
-        dsn=os.getenv("SENTRY_DSN"),
-        environment=os.getenv("ENVIRONMENT"),
-        traces_sample_rate=1.0 if os.getenv("ENVIRONMENT") == "prod" else 0.1,
-    )
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager.
@@ -106,6 +96,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize layer service (PostgreSQL pool for metadata)
     await layer_service.init()
 
+    # Start the cross-pod catalog-change subscriber (best-effort Redis pub/sub)
+    start_subscriber()
+
     logger.info("GeoAPI started successfully")
 
     yield
@@ -113,6 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Cleanup
     logger.info("Shutting down GeoAPI...")
     await layer_service.close()
+    stop_subscriber()
     ducklake_pool.close()
     ducklake_write_manager.close()
     ducklake_manager.close()
@@ -154,8 +148,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add compression middleware
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Add compression middleware. Level 6 over the default 9: on multi-MB items
+# responses level 9 costs ~2x the CPU for ~4% smaller output.
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 
 # Include routers

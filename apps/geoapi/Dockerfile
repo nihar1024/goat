@@ -41,9 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /tmp/tippecanoe*
 
 # ===== STAGE 3: Python environment ====
+# geoapi only uses goatlib's light "serving" surface (storage/query/models), so
+# no GDAL, routing or build toolchain is needed — all deps ship manylinux wheels.
 FROM linux-base AS python-base
-# Install debian dependencies including GDAL for building Python bindings
-RUN apt-get update && apt-get install --no-install-recommends -y build-essential cmake gettext libgdal-dev
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /usr/local/bin/uv
 
@@ -51,19 +51,17 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /usr/local/bin/uv
 COPY apps/geoapi /app/apps/geoapi
 COPY packages/python/goatlib /app/packages/python/goatlib
 COPY packages/python/goatobs /app/packages/python/goatobs
-COPY packages/cpp/routing /app/packages/cpp/routing
 COPY pyproject.toml uv.lock /app/
 
 WORKDIR /app
 
-RUN uv sync --all-extras --frozen --no-dev --no-editable --package=geoapi
+RUN uv sync --frozen --no-dev --no-editable --package=geoapi
 
 # ==== STAGE 4: Webapp environment ====
 FROM linux-base AS webapp
 
-# Install GDAL runtime library needed by Python bindings
 # Install zlib runtime needed by tippecanoe
-RUN apt-get update && apt-get install --no-install-recommends -y libgdal32 zlib1g && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install --no-install-recommends -y zlib1g && rm -rf /var/lib/apt/lists/*
 
 # Copy tippecanoe binaries (tippecanoe-overzoom for variable-depth tile pyramids)
 COPY --from=tippecanoe-builder /usr/local/bin/tippecanoe-overzoom /usr/local/bin/

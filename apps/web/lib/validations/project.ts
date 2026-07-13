@@ -151,10 +151,22 @@ export const builderConfigSchema = z.object({
       icon_color: z.string().optional(),
       font_color: z.string().optional(),
       favicon_url: z.string().default(DEFAULT_FAVICON_URL),
+      // Home-screen/PWA icon. Optional; when absent the GOAT logo is used.
+      // Deliberately independent from favicon_url (favicons are often too
+      // small to make good app icons).
+      app_icon_url: z.string().optional(),
       // Social sharing — when unset, public pages fall back to GOAT defaults
       // (see lib/metadata.ts and app/map/public/[projectId]/layout.tsx).
       og_image_url: z.string().optional(),
       meta_description: z.string().max(300).optional(),
+      // Dashboard-owned map camera settings. Namespaced for future growth
+      // (initial_state, sync_with_project, …); only zoom limits for now.
+      map_view: z
+        .object({
+          min_zoom: z.number().min(0).max(24).nullable().default(null),
+          max_zoom: z.number().min(0).max(24).nullable().default(null),
+        })
+        .default({}),
     })
     .default({}),
   interface: z.preprocess(
@@ -223,7 +235,6 @@ export const projectSchema = contentMetadataSchema.extend({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     interface: basicLayout.interface as any,
   }),
-  active_scenario_id: z.string().nullable().optional(),
   basemap: z.string().nullable().default("streets"),
   custom_basemaps: z.array(customBasemapSchema).default([]),
   updated_at: z.string().optional(),
@@ -288,7 +299,7 @@ export const projectPublicSchema = z.object({
   project_id: z.string(),
   config: projectPublicSchemaConfig,
   custom_domain_id: z.string().uuid().nullable().optional(),
-  tracking_enabled: z.boolean().optional(),
+  analytics_id: z.string().uuid().nullable().optional(),
   tracking_require_consent: z.boolean().optional(),
   analytics: projectPublicAnalyticsSchema.nullable().optional(),
 });
@@ -341,7 +352,6 @@ export const postProjectSchema = z.object({
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
   thumbnail_url: z.string().optional(),
-  active_scenario_id: z.string().optional(),
   max_extent: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional(),
   initial_view_state: projectViewStateSchema.optional(),
 });

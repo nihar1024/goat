@@ -41,6 +41,11 @@ import TabItem from '@theme/TabItem';
   <div class="content">In <code>Color Scale</code>, choose your <strong>data classification method</strong>. See all methods in the <a href="#data-classification-methods">Data Classification</a> section.</div>
 </div>
 
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">At the bottom of the <code>Color Scale</code> panel, toggle <code>No data</code> to assign a color to features where the selected field has no value. The default color is grey (<code>#CCCCCC</code>). Click the color swatch to change it.</div>
+</div>
+
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
 
   <img src={require('/img/map/styling/attribute-based-fill-color.gif').default} alt="Fill Color Styling" style={{ maxHeight: "auto", maxWidth: "20%", objectFit: "cover"}}/>
@@ -68,6 +73,11 @@ import TabItem from '@theme/TabItem';
 <div class="step">
   <div class="step-number">5</div>
   <div class="content">In <code>Color Scale</code>, choose your <strong>data classification method</strong>. See all methods in the <a href="#data-classification-methods">Data Classification</a> section.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">At the bottom of the <code>Color Scale</code> panel, toggle <code>No data</code> to assign a color to features where the selected field has no value. The default color is grey (<code>#CCCCCC</code>). Click the color swatch to change it.</div>
 </div>
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>

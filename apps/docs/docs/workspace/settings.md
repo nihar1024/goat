@@ -99,35 +99,38 @@ Under **White Label**, you can publish dashboards on your own domain and configu
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Click <code>+ Add your first domain</code> (or the add button if you already have domains).</div>
+  <div class="content">Click <code>+ Add your first domain</code> (empty state) or <code>+ Add custom domain</code>.</div>
 </div>
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">In the <strong>Add custom domain</strong> dialog, enter your <code>Domain name</code> — for example <code>dashboards.example.com</code>.</div>
+  <div class="content">In the <strong>Add custom domain</strong> dialog, enter your <code>Domain name</code> — either a subdomain (e.g. <code>dashboards.example.com</code>) or an apex domain (e.g. <code>example.com</code>). Click <code>Continue</code>.</div>
 </div>
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Click <code>Continue</code>. The <strong>Configure DNS</strong> step opens, showing the DNS record you need to create at your DNS provider:
-    <ul>
-      <li><strong>Subdomain</strong> (e.g. <code>maps.example.com</code>): create a <strong>CNAME</strong> record pointing at the provided target.</li>
-      <li><strong>Apex domain</strong> (e.g. <code>example.com</code>): create an <strong>A</strong> record pointing at the provided IP address.</li>
-    </ul>
-    The dialog includes copy buttons for each value. GOAT checks DNS propagation every 30 seconds automatically.
+  <div class="content">The <strong>Configure DNS</strong> step opens, showing the exact record to create at your DNS provider. The record depends on your domain type:
+    <br/><br/>
+    <strong>Subdomain</strong> (e.g. <code>maps.example.com</code>):
+    <table><thead><tr><th>Type</th><th>Host</th><th>Target</th><th>TTL</th></tr></thead><tbody><tr><td>CNAME</td><td>maps</td><td>cname.goat.plan4better.de</td><td>3600</td></tr></tbody></table>
+    <br/>
+    <strong>Apex domain</strong> (e.g. <code>example.com</code>):
+    <table><thead><tr><th>Type</th><th>Host</th><th>Target</th><th>TTL</th></tr></thead><tbody><tr><td>A</td><td>@</td><td>46.225.38.48</td><td>3600</td></tr></tbody></table>
+    <br/>
+    The dialog includes copy buttons for each value. GOAT checks DNS propagation every 30 seconds automatically. Click <code>Recheck now</code> to trigger an immediate check, or <code>Done</code> to close and wait in the background.
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Once DNS is verified, GOAT issues an SSL certificate from <strong>Let's Encrypt</strong> automatically — usually under 2 minutes. The domain status changes to <strong>Active</strong>.</div>
+  <div class="content">Once DNS is verified, the dialog shows a <strong>DNS verified</strong> confirmation and GOAT issues an SSL certificate from <strong>Let's Encrypt</strong> automatically — usually under 2 minutes. The domain status changes to <strong>Issuing</strong> and then <strong>Active</strong> once the certificate is ready.</div>
 </div>
 
 **Domain statuses in the list:**
 
 | Status | Description | Available actions |
 | --- | --- | --- |
-| Pending DNS | DNS record not yet detected | Show DNS, Recheck |
+| Waiting for DNS | DNS record not yet detected | Show DNS, Recheck |
 | Issuing | DNS verified, SSL certificate being issued | Details |
 | Active | Domain is live and serving dashboards | Unassign (if assigned), Delete |
 | Failed | DNS or certificate provisioning failed | Details, Retry, Delete |
@@ -138,29 +141,35 @@ To remove a domain from a project without deleting it, use the project's **Share
 
 ### Analytics
 
-**Configure analytics tracking for your published dashboards.** Tracking is opt-in per project via the Share dialog.
+**Configure analytics tracking for your published dashboards.** You can add multiple analytics instances — one per Matomo site. Tracking is opt-in per dashboard via the Share dialog.
 
-GOAT currently supports **Matomo** as the analytics provider. To set it up:
+GOAT currently supports **Matomo** as the analytics provider.
+
+**To add an analytics instance:**
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content">Select <code>Matomo</code> from the <code>Provider</code> dropdown.</div>
+  <div class="content">Click <code>+ Add analytics</code>.</div>
 </div>
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Enter your <code>Matomo URL</code> — your Matomo instance URL including trailing slash (e.g. <code>https://matomo.example.org/</code>).</div>
+  <div class="content">In the <strong>Add analytics</strong> dialog, fill in:
+    <ul>
+      <li><code>Name</code> — a label to tell instances apart, e.g. <code>Client XY Matomo</code>.</li>
+      <li><code>Provider</code> — select <code>Matomo</code>.</li>
+      <li><code>Matomo URL</code> — your Matomo instance URL including trailing slash (e.g. <code>https://matomo.example.org/</code>).</li>
+      <li><code>Site ID</code> — found in Matomo → Administration → Websites.</li>
+    </ul>
+  </div>
 </div>
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Enter your <code>Site ID</code> — found in Matomo → Administration → Websites.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
   <div class="content">Click <code>Save</code>.</div>
 </div>
+
+Each instance in the list shows the Matomo URL, Site ID, and how many published dashboards use it. You can **edit** or **remove** an instance using the icons on the right, and use **Manage dashboards** to assign or unassign dashboards to that analytics instance.
 
 :::tip
 Add each of your custom domains to your Matomo site's URL list, and configure Custom Dimension 1 as "Project ID" so per-dashboard breakdown works in Matomo.

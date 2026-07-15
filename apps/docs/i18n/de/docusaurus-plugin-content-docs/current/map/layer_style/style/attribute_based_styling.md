@@ -41,6 +41,11 @@ import TabItem from '@theme/TabItem';
   <div class="content">In <code>Farbskala</code> wählen Sie Ihre <strong>Datenklassifizierungsmethode</strong>. Alle Methoden finden Sie im Abschnitt <a href="#datenklassifizierungsmethoden">Datenklassifizierungsmethoden</a>.</div>
 </div>
 
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Am Ende des <code>Farbskala</code>-Panels können Sie <code>Keine Daten</code> aktivieren, um Features, bei denen das gewählte Feld keinen Wert hat, eine Farbe zuzuweisen. Die Standardfarbe ist Grau (<code>#CCCCCC</code>). Klicken Sie auf das Farbfeld, um sie zu ändern.</div>
+</div>
+
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/map/styling/attribute-based-fill-color.gif').default} alt="Füllfarbe Styling" style={{ maxHeight: "auto", maxWidth: "20%", objectFit: "cover"}}/>
 </div>
@@ -66,6 +71,11 @@ import TabItem from '@theme/TabItem';
 <div class="step">
   <div class="step-number">5</div>
   <div class="content">In <code>Farbskala</code>, wählen Sie Ihre <strong>Datenklassifizierungsmethode</strong>. Alle Methoden finden Sie im Abschnitt <a href="#datenklassifizierungsmethoden">Datenklassifizierungsmethoden</a>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Am Ende des <code>Farbskala</code>-Panels können Sie <code>Keine Daten</code> aktivieren, um Features, bei denen das gewählte Feld keinen Wert hat, eine Farbe zuzuweisen. Die Standardfarbe ist Grau (<code>#CCCCCC</code>). Klicken Sie auf das Farbfeld, um sie zu ändern.</div>
 </div>
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>

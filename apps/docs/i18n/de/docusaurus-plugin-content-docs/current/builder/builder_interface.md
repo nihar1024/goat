@@ -40,21 +40,25 @@ Panels sind die Hauptbereiche, in denen Sie Ihre Widgets organisieren. Sie könn
 <p></p>
 
 
-Sie können den **Panel-Stil** folgendermaßen einstellen:
-- `Standard`: Widgets füllen das Panel mit kontinuierlichem Hintergrund
-- `Abgerundet`: Widgets haben abgerundete Ecken und Rand-Abstand
-- `Schwebend`: Widgets sind separat mit abgerundeten Ecken
+Unter **Optionen** können Sie einstellen:
+- `Panelstil`: `Standard`, `Gerundet` oder `Schwebend`
+- `Einklappbares Panel`: aktivieren, damit Betrachter das Panel im Betrachter-Modus einklappen können
 
-Unter **Erscheinungsbild** können Sie ändern:
-- `Deckkraft` (0 = transparent, 1 = weiß)
-- `Hintergrund-Unschärfe` (1–20)
-- `Schatten` (0–10)
+Unter **Aussehen** können Sie ändern:
+- `Hintergrundfarbe`: Hintergrundfarbe des Panels festlegen
+- `Deckkraft` (0 = transparent, 1 = undurchsichtig)
+- `Hintergrundunschärfe`
+- `Schatten`
 
 Unter **Position** können Sie einstellen:
-- `Ausrichtung`: Anfang, Mitte, Ende
-- `Abstand`: 0–10 (Entfernung zwischen Widgets)
+- `Elemente ausrichten`: Start, Mitte oder Ende
+- `Abstand`: Entfernung zwischen Widgets
+- `Innenabstand`: innerer Abstand um den Panel-Inhalt
 
-Um ein Panel zu löschen, klicken Sie unten in den Einstellungen auf `Löschen`. 
+Unter **Größe** können Sie einstellen:
+- `Breite (px)`: feste Breite des Panels in Pixeln
+
+Um ein Panel zu löschen, klicken Sie unten in den Einstellungen auf `Panel löschen`.
 
 
 ## Widgets

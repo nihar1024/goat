@@ -37,21 +37,25 @@ Panels are the main areas where you organize your widgets. You can add, arrange,
 
 <p></p>
 
-You can set the **panel style** as:
-- <code>Default</code>: widgets fill the panel with a continuous background
-- <code>Rounded</code>: widgets have rounded corners and space at the border
-- <code>Floating</code>: widgets are separate with rounded corners
+Under **Options** you can set:
+- <code>Panel style</code>: `Default`, `Rounded`, or `Floating`
+- <code>Collapsible panel</code>: enable to let viewers collapse the panel in Viewer mode
 
-At <b>Appearance</b> you can change:
-- <code>Opacity</code> (0 = transparent, 1 = white)
-- <code>Background blur</code> (1–20)
-- <code>Shadow</code> (0–10)
+Under **Appearance** you can change:
+- <code>Background color</code>: set the panel background color
+- <code>Opacity</code> (0 = transparent, 1 = opaque)
+- <code>Background blur</code>
+- <code>Shadow</code>
 
-At <b>Position</b> you can set:
-- <code>Alignment</code>: Start, Center, End
-- <code>Spacing</code>: 0–10 (distance between widgets)
+Under **Position** you can set:
+- <code>Align items</code>: Start, Center, or End
+- <code>Spacing</code>: distance between widgets
+- <code>Padding</code>: inner spacing around the panel content
 
-To delete a panel, click <code>Delete</code> at the bottom of the settings.
+Under **Size** you can set:
+- <code>Width (px)</code>: fixed width of the panel in pixels
+
+To delete a panel, click <code>Delete Panel</code> at the bottom of the settings.
 
 ## Widgets
 

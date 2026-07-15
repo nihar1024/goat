@@ -121,6 +121,11 @@ Copy `.env.example` to `.env`. Key variables:
 - `WINDMILL_URL`, `WINDMILL_TOKEN` — Windmill workflow engine
 - `DATA_DIR` — data directory path (`/app/data` in Docker, local path otherwise)
 
+## Documentation Writing Rules
+
+- **Always check the German glossary before writing German docs.** The glossary is at `apps/docs/docs/nerdy_content/GOAT_ui_glossary.md`. Use the exact German UI terms listed there for all UI element names, buttons, and section headings. Never translate UI terms from English without verifying in the glossary first.
+- For Docusaurus docs, also check existing DE pages (e.g. `i18n/de/...`) to confirm which terms are already in use and to maintain consistency.
+
 ## Commit Convention
 
 Uses conventional commits (commitlint + commitizen + husky). Format: `type(scope): description`.

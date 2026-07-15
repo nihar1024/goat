@@ -2,36 +2,64 @@
 sidebar_position: 3
 ---
 
-
-
 # Einstellungen
 
-Im Einstellungs-Bereich können Sie **verschiedene allgemeine Funktionalitäten des Dashboards aktivieren oder deaktivieren**. Wenn Sie eine Funktionalität deaktivieren, ist sie im Betrachter-Modus nicht verfügbar.
+Im Einstellungsbereich können Sie **die Kartensteuerung, das Branding, Social Sharing und das Interaktionsverhalten Ihres Dashboards konfigurieren**. Wenn Sie eine Funktion deaktivieren, steht sie im Betrachter-Modus nicht zur Verfügung.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/builder/interface_settings_de.webp').default} alt="recent datasets" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
-</div> 
+  <img src={require('/img/builder/interface_settings_de.webp').default} alt="Dashboard-Einstellungen in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+</div>
 
-## Werkzeuge
+## Karte
 
-- <code>Standortsuche</code>: <b>Geben Sie einen Standort oder Koordinaten ein</b>, und die Karte zoomt zum angegebenen Bereich.
-- <code>Meinen Standort finden</code>: <b>Zentriert die Karte auf den Standort des Benutzers</b>. Sie müssen *den Standortzugriff in Ihrem Browser erlauben, um diese Funktionalität zu nutzen*.
-- <code>Maßstabsleiste</code>: <b>Wird sofort aktualisiert, um die realen Entfernungen bei Ihrem aktuellen Zoom-Level anzuzeigen</b>.
+- `Werkzeugleiste` — zeigt die obere Leiste mit dem GOAT-Logo, Projektnamen, Zuletzt-gespeichert-Zeitstempel und Projektinfo im Betrachter-Modus.
+- `Maßstabsleiste` — zeigt eine Skala auf der Karte, mit der Abstände von einem Punkt zum anderen gemessen werden können.
 
-## Bedienelemente
+### Steuerungslayout
 
-- <code>Zoom-Steuerung</code>: <b>Schaltflächen zum Hinein- und Herauszoomen</b>.
-- <code>Grundkarten-Umschalter</code>: <b>Wählen Sie die gewünschte Grundkarte</b> aus der Liste der verfügbaren Optionen. Sie können auch eigene Grundkarten hinzufügen — siehe <a href="../map/map_interface#kartennavigation">Kartennavigation</a> für Details.
+Steuert die Position der Kartenelemente im Betrachter-Modus. Jede Position (Oben-links, Oben-rechts, Unten-rechts) kann aufgeklappt werden, um Steuerelemente nach Bedarf hinzuzufügen oder zu entfernen.
 
-## Ansicht
+### Erlaubte Hintergrundkarten
 
-- <code>Vollbildmodus</code>: <b>Vollbild-Modus aktivieren und verlassen</b>.
-- <code>Werkzeugleiste</code>: Über das GOAT-Logo sind die Menüs <b>Anmelden, Problem melden und Datenschutzerklärung</b> verfügbar. Daneben finden Sie den <b>Projektnamen, den Zuletzt gespeichert-Zeitstempel und die Projektinfo</b>.
-- <code>Projektinfo</code>: Enthält den <b>Namen</b> und die <b>Beschreibung</b> des Projekts, die aus den Metadaten des Projekts bezogen werden.
+Legen Sie fest, welche Hintergrundkarten Betrachter verwenden können. Wählen Sie eine oder mehrere aus dem Dropdown aus — Betrachter sehen nur die hier aktivierten Optionen.
 
+---
+
+## Branding
+
+Passen Sie die visuelle Identität Ihres Dashboards für den Betrachter-Modus an.
+
+- `Schriftart` — wählen Sie eine Schriftart aus dem Dropdown. Wählen Sie `Eigene...`, um eine **Schriftdatei-URL** und einen **Schriftart**-Namen für eine eigene Schriftart einzugeben.
+- `Primärfarbe` — legen Sie die Hauptakzentfarbe für Schaltflächen und Hervorhebungen fest.
+- `Symbolfarbe` — legen Sie die Farbe für Symbole im Dashboard fest.
+- `Schriftfarbe` — legen Sie die Textfarbe im gesamten Dashboard fest.
+- `Favicon` — laden Sie ein benutzerdefiniertes Browser-Tab-Symbol hoch. Klicken Sie auf `×`, um es zu entfernen.
+
+---
+
+## Social Sharing
+
+Legen Sie fest, wie Ihr Dashboard beim Teilen in sozialen Medien oder Messenger-Apps erscheint.
+
+- **Vorschaubild** — Bild hierher ziehen oder klicken, um es hochzuladen.
+- **Beschreibung** — fügen Sie eine kurze Beschreibung hinzu, die in Social-Media-Vorschauen und Suchergebnissen verwendet wird.
+
+---
+
+## Allgemein
+
+- `Sprache` — legen Sie die Anzeigesprache des Dashboards fest. Optionen: `Automatisch (Browser)`, `English`, `Deutsch`.
+
+---
+
+## Interaktionen
+
+Klicken Sie auf `Interaktionen verwalten`, um den Interaktionseditor zu öffnen. Interaktionen verknüpfen Dashboard-Elemente miteinander — zum Beispiel kann das Klicken auf eine Layer-Gruppe den aktiven Tab in einem Widget wechseln. Klicken Sie auf `Interaktion hinzufügen`, um eine neue Interaktion zu erstellen.
+
+---
 
 ::::note
 
-Mit `Zurücksetzen` können Sie die Einstellungen auf die `Standardwerte` zurücksetzen.
+Mit `Zurücksetzen` am unteren Ende des Panels können Sie alle Einstellungen auf die Standardwerte zurücksetzen.
 
 ::::

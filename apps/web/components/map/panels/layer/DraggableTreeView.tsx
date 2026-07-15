@@ -19,6 +19,7 @@ import Collapse from "@mui/material/Collapse";
 import Typography from "@mui/material/Typography";
 import { alpha, styled } from "@mui/material/styles";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // ----------------------------------------------------------------------
 // 1. INTERFACES
@@ -220,6 +221,7 @@ const EmptyGroupPlaceholder = ({
   enableSelection?: boolean;
   disableDrag?: boolean;
 }) => {
+  const { t } = useTranslation("common");
   const { setNodeRef, isOver } = useDroppable({
     id: `placeholder-${parentId}`,
     data: { parentId: parentId },
@@ -238,14 +240,14 @@ const EmptyGroupPlaceholder = ({
           color: "text.disabled",
           fontStyle: "italic",
         }}>
-        (No items)
+        ({t("no_items")})
       </Typography>
     );
   }
   return (
     <EmptyPlaceholderBox ref={setNodeRef} className={isOver ? "is-over" : ""} style={indentStyle}>
       <Typography variant="caption" sx={{ ml: 1 }}>
-        Drag items here
+        {t("drag_items_here")}
       </Typography>
     </EmptyPlaceholderBox>
   );

@@ -42,7 +42,7 @@ This section contains **widgets that provide information about your project** la
     <li><code>Visibility toggle</code>: icon style for the show/hide control — <code>Eye</code>, <code>Checkbox</code>, or <code>Switch</code></li>
     <li><code>Visibility position</code>: <code>Left</code> or <code>Right</code></li>
     <li><code>Show search bar</code>: add a search box above the layer list</li>
-    <li>When <code>Layout style</code> is set to <code>Tabs</code>: <code>Show group name</code>, <code>Show group icons</code>, and <code>Show all toggle</code> options appear</li>
+    <li>When <code>Layout style</code> is set to <code>Tabs</code>: additional options appear — <code>Show group name</code>, <code>Show group icons</code>, and <code>Show all toggle</code>. When <code>Show all toggle</code> is enabled, a <strong>Show all</strong> row appears above the layer list in each tab, allowing viewers to toggle all layers in the active tab on or off at once. The toggle uses the same style (Eye, Checkbox, or Switch) as the per-layer visibility control.</li>
     <li><code>Hide field names</code>: hide field name labels in the widget</li>
   </ul>
   </div>

@@ -2,6 +2,8 @@
 sidebar_position: 10
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Reisekostenmatrix
 
@@ -37,14 +39,22 @@ Die Reisekostenmatrix ist für die **Massenberechnung über viele Ursprünge und
 
 ### Konfiguration
 
+<Tabs>
+<TabItem value="active-car" label="Zu Fuß / Fahrrad / Pedelec / Auto" default className="tabItemBox">
+
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie unter <code>Berechnung nach</code> die Option <code>Zeit (Min)</code> oder <code>Entfernung (m)</code> und setzen Sie das entsprechende Limit.</div>
+  <div class="content">Wählen Sie unter <code>Berechnung nach</code> die Option <code>Zeit (Min)</code> oder <code>Entfernung (m)</code>.</div>
 </div>
 
 <div class="step">
   <div class="step-number">4</div>
   <div class="content">Bei Berechnung nach <code>Zeit (Min)</code> legen Sie die <code>Reisegeschwindigkeit (km/h)</code> fest.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">5</div>
+  <div class="content">Optional können Sie <code>Erweiterte Optionen</code> aktivieren, um ein maximales Kostenlimit festzulegen: <code>Limit - Zeit (Min)</code> bei Berechnung nach Zeit oder <code>Limit - Distanz (m)</code> bei Berechnung nach Entfernung. Ohne Limit ist die Berechnung unbeschränkt (siehe Tabelle in den Technischen Details).</div>
 </div>
 
 :::tip Hinweis
@@ -53,27 +63,58 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 :::
 
-### Eingabe
+</TabItem>
+<TabItem value="flight" label="Luftlinie" className="tabItemBox">
+
+**Berechnet die geradlinige geodätische Entfernung zwischen jedem Ursprungs-Ziel-Paar.** Es wird kein Routing-Netzwerk verwendet. Für diesen Modus gibt es keine Konfigurationsfelder — wählen Sie ihn einfach aus und fahren Sie mit dem Abschnitt Eingabe fort.
+
+</TabItem>
+<TabItem value="pt" label="Öffentlicher Verkehr (ÖV)" className="tabItemBox">
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Wählen Sie unter <code>ÖV-Modi wählen</code> die gewünschten Verkehrsmittel: Bus, Straßenbahn, Bahn, U-Bahn, Fähre, Seilbahn, Gondel und/oder Standseilbahn.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Wählen Sie den <code>Tag</code> (<code>Wochentag</code>, <code>Samstag</code> oder <code>Sonntag</code>) und legen Sie <code>Startzeit</code> und <code>Endzeit</code> für das Analysezeitfenster fest.</div>
+</div>
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Wählen Sie unter <b>Origins</b> Ihren <code>Startpunkte-Layer</code> (ein Punktlayer, bei dem jedes Feature ein Startort ist) und legen Sie die <code>Herkunft-Bezeichnung</code> fest — die Spalte zur Identifikation der Startpunkte in der Ergebnismatrix.</div>
+  <div class="content">Legen Sie das <code>Reisezeitlimit (Min)</code> fest — die maximale Reisedauer, die berücksichtigt werden soll.</div>
 </div>
 
 <div class="step">
   <div class="step-number">6</div>
+  <div class="content">Optional können Sie <code>Erweiterte Optionen</code> aktivieren, um <code>Max. Umstiege</code>, <code>Zugangsart</code> und <code>Abgangsart</code> zu konfigurieren.</div>
+</div>
+
+</TabItem>
+</Tabs>
+
+### Eingabe
+
+<div class="step">
+  <div class="step-number">7</div>
+  <div class="content">Wählen Sie unter <b>Origins</b> Ihren <code>Startpunkte-Layer</code> (ein Punktlayer, bei dem jedes Feature ein Startort ist) und legen Sie die <code>Herkunft-Bezeichnung</code> fest — die Spalte zur Identifikation der Startpunkte in der Ergebnismatrix.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">8</div>
   <div class="content">Wählen Sie unter <b>Destinations</b> Ihren <code>Zielpunkte-Layer</code> (ein Punktlayer, bei dem jedes Feature ein Zielort ist) und legen Sie die <code>Ziel-Bezeichnung</code> fest — die Spalte zur Identifikation der Zielpunkte in der Ergebnismatrix.</div>
 </div>
 
 ### Ergebnis-Layer
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">9</div>
   <div class="content">Optional können Sie den <code>Namen des Zielpunkte-Layers</code> für den Ausgabe-Zielpunkte-Layer festlegen.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">10</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>.</div>
 </div>
 
@@ -85,12 +126,12 @@ Die Berechnungszeit skaliert mit der Anzahl der OD-Paare. Den Fortschritt könne
 
 ### Ergebnisse
 
-Nach Abschluss der Berechnung wird ein **Tabellen-Layer** zum Kartenpanel hinzugefügt. Jede Zeile stellt ein Ursprungs-Ziel-Paar dar, das innerhalb des festgelegten Reisekostenschwellenwerts liegt.
+Nach Abschluss der Berechnung wird ein **Tabellen-Layer** zum Kartenpanel hinzugefügt. Jede Zeile stellt ein Ursprungs-Ziel-Paar dar, das innerhalb des festgelegten Reisekostenschwellenwerts liegt. Die Spalten `origin` und `destination` enthalten die Werte aus den gewählten Bezeichnungsspalten.
 
 | Spalte | Beschreibung |
 |--------|-------------|
-| `origin_id` | Kennung des Ursprungs-Features (aus dem gewählten Ursprungs-ID-Feld) |
-| `destination_id` | Kennung des Ziel-Features (aus dem gewählten Ziel-ID-Feld) |
+| `origin` | Kennung des Ursprungs-Features (aus der gewählten Herkunft-Bezeichnung) |
+| `destination` | Kennung des Ziel-Features (aus der gewählten Ziel-Bezeichnung) |
 | `travel_cost` | Reisezeit (Minuten) oder Entfernung (Meter), je nach gewähltem Maßtyp |
 
 OD-Paare, die den maximalen Reisekostenwert überschreiten, werden aus der Ausgabe ausgeschlossen.
@@ -122,6 +163,7 @@ Wenn kein maximales Reisekostenlimit gesetzt wird, gelten folgende Grenzen basie
 | Pedelec | 100 km |
 | Auto | 300 km |
 | Öffentlicher Verkehr | 300 km |
+| Luftlinie | Kein Limit |
 
 ### Ausgabegeometrie
 

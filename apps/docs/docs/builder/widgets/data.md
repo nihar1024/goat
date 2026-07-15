@@ -35,6 +35,11 @@ This widget is an interactive element, which **allows the user to filter the dat
   <div class="content">Enable or disable the option <code>Zoom to selection</code>, which will <b>automatically pan the map view to the filtered data</b>.</div>
 </div>
 
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Enable <code>Filter by map click</code> to let viewers set the filter by clicking a feature directly on the map. When a feature is clicked, its value for the configured field is applied as the filter. If <code>Allow multiple selection</code> is enabled, clicking a feature toggles it in or out of the active selection. Not available for the <code>Range</code> layout.</div>
+</div>
+
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/builder/builder_filter.gif').default} alt="recent datasets" style={{ maxHeight: "500px", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 

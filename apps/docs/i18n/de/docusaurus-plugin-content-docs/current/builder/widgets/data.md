@@ -36,6 +36,11 @@ Dieses Widget ist ein interaktives Element, das **es Benutzern ermöglicht, Date
   <div class="content">Aktivieren oder deaktivieren Sie die Option <code>Zoomen zur Auswahl</code>, wodurch die <b>Kartenansicht automatisch zu den gefilterten Daten geschwenkt wird</b>.</div>
 </div>
 
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Aktivieren Sie <code>Filtern per Kartenklick</code>, damit Betrachter den Filter durch Klicken auf ein Feature direkt in der Karte setzen können. Beim Klick auf ein Feature wird dessen Wert für das konfigurierte Feld als Filter übernommen. Wenn <code>Mehrfachauswahl erlauben</code> aktiviert ist, kann durch Klicken ein Wert ein- oder ausgeschlossen werden. Nicht verfügbar für das Layout <code>Bereich</code>.</div>
+</div>
+
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/builder/builder_filter.gif').default} alt="recent datasets" style={{ maxHeight: "500px", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 

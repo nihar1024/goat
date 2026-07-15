@@ -197,6 +197,13 @@ Greifen Sie auf umfassende Datensatz-Verwaltungsoptionen über das <img src={req
 - <code>Teilen</code> - Zusammenarbeiten durch Teilen mit Teammitgliedern oder Organisation
 - <code>Löschen</code> - Datensätze entfernen, die Sie nicht mehr benötigen
 
+#### Datensätze herunterladen
+
+Beim Herunterladen eines räumlichen Datensatzes können Sie im Dialog Folgendes auswählen:
+
+- **Download-Typ** — das Exportdateiformat (z. B. GeoPackage, GeoJSON, Shapefile).
+- **Koordinatenreferenzsystem** — das KRS, in das die Daten vor dem Download umprojiziert werden. GOAT schlägt automatisch KRS-Optionen basierend auf der geografischen Ausdehnung des Datensatzes vor: Globale Optionen (WGS 84, Web Mercator) sind immer verfügbar, zusätzlich die passende UTM-Zone sowie relevante nationale oder regionale KRS. Der Standardwert ist **WGS 84 (EPSG:4326)**.
+
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/workspace/datasets/managing_datasets.png').default} alt="Datensatz-Verwaltungsoptionen" style={{ maxHeight: "300px", maxWidth: "300px"}}/>
 </div>

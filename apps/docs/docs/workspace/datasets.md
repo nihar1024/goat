@@ -199,6 +199,13 @@ Access comprehensive dataset management options through the <img src={require('/
 - <code>Share</code> - Collaborate by sharing datasets with team members or your organization
 - <code>Delete</code> - Remove datasets you no longer need
 
+#### Downloading datasets
+
+When downloading a spatial dataset, a dialog lets you choose:
+
+- **Download Type** — the export file format (e.g. GeoPackage, GeoJSON, Shapefile).
+- **Coordinate Reference System (CRS)** — the CRS to reproject the data into before download. GOAT automatically suggests CRS options based on the dataset's geographic extent: global options (WGS 84, Web Mercator) are always available, plus the matching UTM zone and any relevant national or regional CRS. The default is **WGS 84 (EPSG:4326)**.
+
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/workspace/datasets/managing_datasets.png').default} alt="Dataset management options" style={{ maxHeight: "auto", maxWidth: "80%"}}/>

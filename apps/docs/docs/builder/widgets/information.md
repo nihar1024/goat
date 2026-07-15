@@ -25,7 +25,13 @@ This section contains **widgets that provide information about your project** la
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Under <code>Layers</code>, select which layers to show in the widget using the checkboxes.</div>
+  <div class="content">Under <code>Layers</code>, select which layers to show in the widget using the checkboxes. For each layer, click the ⋮ icon to access per-layer settings:
+  <ul>
+    <li><code>Show in legend</code> — toggle whether the layer's legend is shown</li>
+    <li><code>Download</code> — allow viewers to download this layer's data</li>
+  </ul>
+  For groups, click the icon to <code>Change icon</code>, and click the ⓘ button to add or edit group info text (Markdown supported).
+  </div>
 </div>
 
 <div class="step">
@@ -36,6 +42,7 @@ This section contains **widgets that provide information about your project** la
     <li><code>Visibility toggle</code>: icon style for the show/hide control — <code>Eye</code>, <code>Checkbox</code>, or <code>Switch</code></li>
     <li><code>Visibility position</code>: <code>Left</code> or <code>Right</code></li>
     <li><code>Show search bar</code>: add a search box above the layer list</li>
+    <li>When <code>Layout style</code> is set to <code>Tabs</code>: <code>Show group name</code>, <code>Show group icons</code>, and <code>Show all toggle</code> options appear</li>
     <li><code>Hide field names</code>: hide field name labels in the widget</li>
   </ul>
   </div>

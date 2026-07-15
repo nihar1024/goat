@@ -26,7 +26,13 @@ Dieser Abschnitt **enthält Widgets, die Informationen über Ihre Projektlayer**
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Unter <code>Layer</code> wählen Sie mithilfe der Kontrollkästchen aus, welche Layer im Widget angezeigt werden sollen.</div>
+  <div class="content">Unter <code>Layer</code> wählen Sie mithilfe der Kontrollkästchen aus, welche Layer im Widget angezeigt werden sollen. Klicken Sie für jeden Layer auf das ⋮-Symbol, um layerspezifische Einstellungen aufzurufen:
+  <ul>
+    <li><code>In Legende anzeigen</code> — steuert, ob die Legende des Layers angezeigt wird</li>
+    <li><code>Herunterladen</code> — erlaubt Betrachtern, die Daten dieses Layers herunterzuladen</li>
+  </ul>
+  Für Gruppen können Sie auf das Symbol klicken, um das <code>Symbol zu ändern</code>, und auf die ⓘ-Schaltfläche, um Gruppeninformationen hinzuzufügen oder zu bearbeiten (Markdown unterstützt).
+  </div>
 </div>
 
 <div class="step">
@@ -37,6 +43,7 @@ Dieser Abschnitt **enthält Widgets, die Informationen über Ihre Projektlayer**
     <li><code>Schalterstil</code>: Symbol für den Ein-/Ausblenden-Schalter — <code>Augensymbol</code>, <code>Checkbox</code> oder <code>Schalter</code></li>
     <li><code>Schalter-Position</code>: <code>Links</code> oder <code>Rechts</code></li>
     <li><code>Suchleiste anzeigen</code>: Suchfeld oberhalb der Layer-Liste hinzufügen</li>
+    <li>Wenn <code>Layout-Stil</code> auf <code>Tabs</code> gesetzt ist: Es erscheinen die Optionen <code>Gruppenname anzeigen</code>, <code>Gruppen-Symbole anzeigen</code> und <code>Alle-anzeigen-Schalter</code></li>
     <li><code>Feldnamen ausblenden</code>: Feldnamen-Beschriftungen im Widget ausblenden</li>
   </ul>
   </div>

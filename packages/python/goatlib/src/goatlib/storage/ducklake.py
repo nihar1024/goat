@@ -21,6 +21,36 @@ from goatlib.storage.snapshot_pin import SnapshotPin
 
 logger = logging.getLogger(__name__)
 
+# Single source of truth for the DuckDB extensions the services need. Both
+# managers below AND the image bake step (service Dockerfiles import this list)
+# derive from it, so adding one here automatically gets it baked into the
+# images — there is no second list to keep in sync.
+REQUIRED_DUCKDB_EXTENSIONS = ["spatial", "httpfs", "postgres", "ducklake"]
+
+
+def _baked_extension_dir() -> str | None:
+    """Directory of extensions pre-baked into the image, if configured.
+
+    When ``DUCKDB_EXTENSION_DIRECTORY`` is set (the service images bake the
+    REPOSITORY extensions in at build time), DuckDB loads them from local disk
+    and must never reach out to extensions.duckdb.org — so callers point DuckDB
+    at this directory, disable autoinstall/autoload, and skip INSTALL entirely.
+    Unset in local dev, where the normal download-on-INSTALL path is used.
+    """
+    return os.environ.get("DUCKDB_EXTENSION_DIRECTORY") or None
+
+
+def _configure_baked_extensions(con: "duckdb.DuckDBPyConnection") -> bool:
+    """Point a connection at the baked extension dir. Returns True if baked."""
+    ext_dir = _baked_extension_dir()
+    if not ext_dir:
+        return False
+    con.execute(f"SET extension_directory='{ext_dir}'")
+    con.execute("SET autoinstall_known_extensions=false")
+    con.execute("SET autoload_known_extensions=false")
+    return True
+
+
 # Connection error patterns that should trigger a retry/reconnect
 CONNECTION_ERROR_PATTERNS = [
     "ssl syscall error",
@@ -154,7 +184,7 @@ class BaseDuckLakeManager:
     and SSL contexts in long-running services.
     """
 
-    REQUIRED_EXTENSIONS = ["spatial", "httpfs", "postgres", "ducklake"]
+    REQUIRED_EXTENSIONS = REQUIRED_DUCKDB_EXTENSIONS
 
     # Max age before connection is recycled. Prevents unbounded growth of
     # DuckLake metadata cache and libpq/SSL state in long-running processes.
@@ -491,6 +521,11 @@ class BaseDuckLakeManager:
     ) -> None:
         if self._extensions_installed:
             return
+        if _baked_extension_dir():
+            # Baked into the image: loaded from disk, never downloaded. The
+            # per-connection SET happens in _load_extensions.
+            self._extensions_installed = True
+            return
         for ext in self.REQUIRED_EXTENSIONS:
             try:
                 con.execute(f"INSTALL {ext}")
@@ -508,6 +543,7 @@ class BaseDuckLakeManager:
     def _load_extensions(
         self: "BaseDuckLakeManager", con: duckdb.DuckDBPyConnection
     ) -> None:
+        _configure_baked_extensions(con)
         for ext in self.REQUIRED_EXTENSIONS:
             con.execute(f"LOAD {ext}")
 
@@ -745,7 +781,7 @@ class DuckLakePool:
         pool.close()
     """
 
-    REQUIRED_EXTENSIONS = ["spatial", "httpfs", "postgres", "ducklake"]
+    REQUIRED_EXTENSIONS = REQUIRED_DUCKDB_EXTENSIONS
 
     # Max age for connections in seconds - older connections are recreated
     # This helps prevent stale PostgreSQL connections inside DuckLake
@@ -996,12 +1032,26 @@ class DuckLakePool:
         con.execute("SET allocator_flush_threshold='64MB'")
         con.execute("SET allocator_background_threads=true")
 
-        # Install and load extensions
+        # Point at baked extensions (prod images) so nothing is downloaded; in
+        # local dev this is a no-op and we fall back to INSTALL. Install ALL
+        # before loading ANY: once httpfs is loaded, later INSTALL downloads
+        # route through its TLS stack (system CA store) which slim images may
+        # lack; installing first keeps downloads on DuckDB's own bundled cert.
+        baked = _configure_baked_extensions(con)
+        if not self._extensions_installed:
+            if not baked:
+                for ext in self.REQUIRED_EXTENSIONS:
+                    try:
+                        con.execute(f"INSTALL {ext}")
+                    except duckdb.IOException as e:
+                        logger.warning(
+                            "Could not install extension %s (may already be installed): %s",
+                            ext,
+                            e,
+                        )
+            self._extensions_installed = True
         for ext in self.REQUIRED_EXTENSIONS:
-            if not self._extensions_installed:
-                con.execute(f"INSTALL {ext}")
             con.execute(f"LOAD {ext}")
-        self._extensions_installed = True
 
         # Configure S3 if needed
         if self._s3_endpoint:

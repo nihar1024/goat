@@ -57,11 +57,20 @@ WORKDIR /app
 
 RUN uv sync --frozen --no-dev --no-editable --package=geoapi
 
+# Bake DuckDB REPOSITORY extensions (spatial/httpfs/postgres/ducklake) into the
+# image so the runtime never fetches them from extensions.duckdb.org — removes
+# the egress/TLS dependency and speeds cold start. Needs ca-certificates+egress,
+# available only in this build stage.
+RUN apt-get update && apt-get install --no-install-recommends -y ca-certificates \
+    && python -c "import duckdb; from goatlib.storage.ducklake import REQUIRED_DUCKDB_EXTENSIONS as X; con=duckdb.connect(config={'extension_directory':'/opt/duckdb-extensions'}); [con.execute(f'INSTALL {e}') for e in X]" \
+    && rm -rf /var/lib/apt/lists/*
+
 # ==== STAGE 4: Webapp environment ====
 FROM linux-base AS webapp
 
-# Install zlib runtime needed by tippecanoe
-RUN apt-get update && apt-get install --no-install-recommends -y zlib1g && rm -rf /var/lib/apt/lists/*
+# Install zlib runtime needed by tippecanoe, and ca-certificates for TLS
+# (DuckDB extension downloads via httpfs verify against the system CA store).
+RUN apt-get update && apt-get install --no-install-recommends -y zlib1g ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy tippecanoe binaries (tippecanoe-overzoom for variable-depth tile pyramids)
 COPY --from=tippecanoe-builder /usr/local/bin/tippecanoe-overzoom /usr/local/bin/
@@ -73,7 +82,12 @@ COPY --from=python-base $UV_PYTHON_INSTALL_DIR $UV_PYTHON_INSTALL_DIR
 COPY --from=python-base $UV_PROJECT_ENVIRONMENT $UV_PROJECT_ENVIRONMENT
 COPY --from=python-base /app /app
 
-RUN chown -R appuser:appuser /app $UV_PROJECT_ENVIRONMENT $UV_PYTHON_INSTALL_DIR
+# DuckDB extensions baked at build time; goatlib loads them from here at runtime
+# (DUCKDB_EXTENSION_DIRECTORY), so no extension is ever downloaded.
+COPY --from=python-base /opt/duckdb-extensions /opt/duckdb-extensions
+ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb-extensions
+
+RUN chown -R appuser:appuser /app $UV_PROJECT_ENVIRONMENT $UV_PYTHON_INSTALL_DIR /opt/duckdb-extensions
 USER appuser
 
 WORKDIR /app

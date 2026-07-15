@@ -36,24 +36,35 @@ GOAT supports multiple file formats for upload: **GeoPackage**, **GeoJSON**, **S
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Select the file from your local device using the file browser.</div>
+  <div class="content">In the <strong>Select File</strong> step, choose the file from your local device. Supported formats are listed at the bottom of the dialog. Click <code>Next</code>.</div>
 </div>
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">
-    <p>Configure your dataset:</p>
-    <ul> 
-      <li><strong>Destination Folder</strong> - Choose where to organize your dataset</li>
-      <li><strong>Name</strong> - Give your dataset a descriptive name</li>
-      <li><strong>Description</strong> (optional) - Add details about your dataset's content and purpose</li>
+  <div class="content"><strong>CSV and XLSX files only — Preview &amp; Configure step:</strong> GOAT shows a preview of your tabular data so you can verify it before import.
+    <ul>
+      <li><code>Worksheet</code> — For XLSX files with multiple sheets, select which sheet to import.</li>
+      <li><code>First row is header</code> — Toggle on (default) if your file's first row contains column names. Toggle off if the first row is data — column names will be auto-generated and you can rename them later in the layer settings.</li>
     </ul>
+    The preview table shows the first rows of your file. Click <code>Next</code> when ready.
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Click <code>Upload</code> to add the dataset to your workspace.</div>
+  <div class="content">In the <strong>Destination &amp; Metadata</strong> step, configure your dataset:
+    <ul>
+      <li><strong>Destination Folder</strong> — Choose where to organize your dataset</li>
+      <li><strong>Name</strong> — Give your dataset a descriptive name</li>
+      <li><strong>Description</strong> (optional) — Add details about your dataset's content and purpose</li>
+    </ul>
+    Click <code>Next</code>.
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Review your configuration in the <strong>Confirmation</strong> step and click <code>Upload</code> to add the dataset to your workspace.</div>
 </div>
 
 ### External data sources

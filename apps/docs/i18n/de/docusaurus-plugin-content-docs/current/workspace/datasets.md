@@ -34,24 +34,35 @@ GOAT unterstützt mehrere Dateiformate zum Hochladen: **GeoPackage**, **GeoJSON*
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie die Datei von Ihrem lokalen Gerät über den Dateibrowser aus.</div>
+  <div class="content">Im Schritt <strong>Datei auswählen</strong> wählen Sie die Datei von Ihrem lokalen Gerät aus. Die unterstützten Formate sind unten im Dialog aufgelistet. Klicken Sie auf <code>Weiter</code>.</div>
 </div>
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">
-    <p>Konfigurieren Sie Ihren Datensatz:</p>
-    <ul> 
-      <li><strong>Zielordner</strong> - Wählen Sie, wo Sie Ihren Datensatz organisieren möchten</li>
-      <li><strong>Name</strong> - Geben Sie Ihrem Datensatz einen beschreibenden Namen</li>
-      <li><strong>Beschreibung</strong> (optional) - Fügen Sie Details über den Inhalt und Zweck Ihres Datensatzes hinzu</li>
+  <div class="content"><strong>Nur für CSV- und XLSX-Dateien — Schritt Vorschau &amp; Konfiguration:</strong> GOAT zeigt eine Vorschau Ihrer tabellarischen Daten an, damit Sie diese vor dem Import überprüfen können.
+    <ul>
+      <li><code>Arbeitsblatt</code> — Bei XLSX-Dateien mit mehreren Blättern wählen Sie aus, welches Blatt importiert werden soll.</li>
+      <li><code>Erste Zeile ist Kopfzeile</code> — Aktivieren (Standard), wenn die erste Zeile Ihrer Datei Spaltennamen enthält. Deaktivieren, wenn die erste Zeile Daten enthält — Spaltennamen werden dann automatisch generiert und können später in den Layer-Einstellungen umbenannt werden.</li>
     </ul>
+    Die Vorschau-Tabelle zeigt die ersten Zeilen Ihrer Datei. Klicken Sie auf <code>Weiter</code>, wenn Sie fertig sind.
   </div>
 </div>
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Klicken Sie auf <code>Hochladen</code>, um den Datensatz zu Ihrem Workspace hinzuzufügen.</div>
+  <div class="content">Im Schritt <strong>Ziel &amp; Metadaten</strong> konfigurieren Sie Ihren Datensatz:
+    <ul>
+      <li><strong>Zielordner</strong> — Wählen Sie, wo Sie Ihren Datensatz organisieren möchten</li>
+      <li><strong>Name</strong> — Geben Sie Ihrem Datensatz einen beschreibenden Namen</li>
+      <li><strong>Beschreibung</strong> (optional) — Fügen Sie Details über den Inhalt und Zweck Ihres Datensatzes hinzu</li>
+    </ul>
+    Klicken Sie auf <code>Weiter</code>.
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-number">6</div>
+  <div class="content">Überprüfen Sie Ihre Konfiguration im Schritt <strong>Bestätigung</strong> und klicken Sie auf <code>Hochladen</code>, um den Datensatz zu Ihrem Workspace hinzuzufügen.</div>
 </div>
 
 ### Externe Datenquellen

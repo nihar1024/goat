@@ -30,14 +30,12 @@ import {
   type PopupProperties,
 } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
-import type { ScenarioFeatures } from "@/lib/validations/scenario";
 
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { useFeatureEditor } from "@/hooks/map/useFeatureEditor";
 import GeocoderLayer from "@/components/map/GeocoderLayer";
 import Layers from "@/components/map/Layers";
-import ScenarioLayer from "@/components/map/ScenarioLayer";
 import ToolboxLayers from "@/components/map/ToolboxLayers";
 import UserLocationLayer from "@/components/map/UserLocationLayer";
 import DrawControl from "@/components/map/controls/Draw";
@@ -65,9 +63,10 @@ interface MapProps {
     };
   };
   maxExtent?: [number, number, number, number];
+  minZoom?: number;
+  maxZoom?: number;
   mapStyle: string | maplibregl.StyleSpecification;
   layers: ProjectLayer[] | Layer[];
-  scenarioFeatures?: ScenarioFeatures;
   onMove?: ((e: ViewStateChangeEvent) => void | undefined) | undefined;
   onMoveEnd?: ((e: ViewStateChangeEvent) => void | undefined) | undefined;
   onClick?: (e: MapLayerMouseEvent) => void;
@@ -85,7 +84,6 @@ const MapViewer: React.FC<MapProps> = ({
   initialViewState,
   mapStyle,
   layers,
-  scenarioFeatures,
   onMove,
   onMoveEnd,
   onClick,
@@ -93,6 +91,8 @@ const MapViewer: React.FC<MapProps> = ({
   dragRotate = false,
   touchZoomRotate = false,
   maxExtent,
+  minZoom,
+  maxZoom,
   children,
   containerSx,
   isEditor,
@@ -108,10 +108,44 @@ const MapViewer: React.FC<MapProps> = ({
   const popupPreview = useAppSelector((state) => state.map.popupPreview);
   const mapMode = useAppSelector((state) => state.map.mapMode);
 
-  const _selectedScenarioEditLayer = useAppSelector((state) => state.map.selectedScenarioLayer);
-  const selectedScenarioEditLayer = useMemo(() => {
-    return layers?.find((layer) => layer.id === _selectedScenarioEditLayer?.value);
-  }, [_selectedScenarioEditLayer, layers]);
+  // --- Basemap swap without tearing down project layers ---------------------
+  // react-map-gl is given the basemap once (frozen prop). Changing the basemap
+  // then goes through an imperative setStyle with transformStyle that carries
+  // the project sources/layers (stable "src-*" ids from Layers.tsx) across the
+  // style change, so MapLibre's diff leaves them mounted and their tiles are
+  // NOT refetched. Feeding the changed style through the prop instead would make
+  // react-map-gl replace the whole style, dropping and re-adding every source.
+  const initialMapStyleRef = useRef(mapStyle);
+  const appliedMapStyleRef = useRef(mapStyle);
+  useEffect(() => {
+    if (mapStyle === appliedMapStyleRef.current) return;
+    const map = mapRef?.current?.getMap();
+    if (!map) return;
+    const target = mapStyle;
+    const swap = () => {
+      map.setStyle(target, {
+        diff: true,
+        transformStyle: (previous, next) => {
+          if (!previous) return next;
+          // Carry every project source (and the layers bound to it) from the
+          // old style into the new basemap style, unchanged.
+          const sources = { ...next.sources };
+          for (const [id, src] of Object.entries(previous.sources ?? {})) {
+            if (id.startsWith("src-")) sources[id] = src;
+          }
+          const carriedLayers = (previous.layers ?? []).filter(
+            (l) => "source" in l && typeof l.source === "string" && l.source.startsWith("src-")
+          );
+          // Append on top of the basemap layers; the basemapLayerConfig effect
+          // in <Layers> re-applies any promote/restack afterwards on styledata.
+          return { ...next, sources, layers: [...next.layers, ...carriedLayers] };
+        },
+      });
+      appliedMapStyleRef.current = target;
+    };
+    if (map.isStyleLoaded()) swap();
+    else map.once("idle", swap);
+  }, [mapStyle, mapRef]);
 
   // Look up the layer that owns the currently-clicked feature. `popupInfo.layerId`
   // is set to `layer_id ?? id` at dispatch time, so we try both: ProjectLayer
@@ -341,7 +375,12 @@ const MapViewer: React.FC<MapProps> = ({
         [e.point.x + TAP_BUFFER, e.point.y + TAP_BUFFER],
       ];
       features = map.queryRenderedFeatures(bbox, {
-        layers: interactiveLayerIds,
+        // Unlike react-map-gl's event delegation (which ignores unknown ids),
+        // queryRenderedFeatures throws if ANY id is absent from the style.
+        // interactiveLayerIds includes cluster sub-layer ids that only exist in
+        // certain marker modes (and can be transiently missing during style
+        // reloads), so restrict the query to layers currently in the style.
+        layers: interactiveLayerIds.filter((id) => map.getLayer(id)),
       }) as typeof features;
     }
 
@@ -856,7 +895,7 @@ const MapViewer: React.FC<MapProps> = ({
           ref={mapRef}
           style={{ width: "100%", height: "100%" }}
           initialViewState={initialViewState}
-          mapStyle={mapStyle}
+          mapStyle={initialMapStyleRef.current}
           interactiveLayerIds={interactiveLayerIds}
           dragRotate={dragRotate}
           touchZoomRotate={touchZoomRotate}
@@ -868,32 +907,31 @@ const MapViewer: React.FC<MapProps> = ({
           onMouseMove={handleMapOverImmediate}
           onMove={_onMove}
           maxBounds={maxExtent}
+          minZoom={minZoom}
+          maxZoom={maxZoom}
           onLoad={handleMapLoad}>
           <DrawControl
             position="top-right"
             displayControlsDefault={false}
             defaultMode={MapboxDraw.constants.modes.SIMPLE_SELECT}
           />
-          <Layers
-            layers={layers}
-            highlightFeature={highlightedFeature}
-            scenarioFeatures={scenarioFeatures}
-            selectedScenarioLayer={selectedScenarioEditLayer as ProjectLayer}
-          />
-          <ScenarioLayer scenarioLayerData={scenarioFeatures} projectLayers={layers as ProjectLayer[]} />
+          <Layers layers={layers} highlightFeature={highlightedFeature} />
           <GeocoderLayer />
           <UserLocationLayer />
           <ToolboxLayers />
           <MeasureLabels />
-          {!isMobile && popupInfo && activePopupConfig && (
+          {popupInfo && activePopupConfig && (
             <>
               {/* Fixed-anchor popups are rendered by the active layout
                   via <MapFixedPopupSlot>, so they pick up the layout's
                   toolbar / panel positioning the same way Geocoder /
                   ToolboxCtrl / MeasureButton do. Only the in-place
                   variant lives inside <Map>, where it needs useMap to
-                  anchor to feature coordinates. */}
-              {activePopupConfig.layout !== "pinned" && (
+                  anchor to feature coordinates. On mobile the popup
+                  content lives in the bottom drawer instead, but the
+                  active-feature pulse below still marks the feature
+                  on the map. */}
+              {!isMobile && activePopupConfig.layout !== "pinned" && (
                 <MapFeaturePopover
                   key={highlightedFeature?.id ?? v4()}
                   layerId={popupInfo.layerId ?? ""}

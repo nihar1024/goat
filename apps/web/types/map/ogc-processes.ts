@@ -27,6 +27,7 @@ export interface OGCProcessSummary {
   links: OGCLink[];
   "x-ui-toolbox-hidden"?: boolean;
   "x-ui-category"?: string;
+  "x-ui-beta"?: boolean;
 }
 
 export interface OGCProcessList {
@@ -189,7 +190,6 @@ export type InferredInputType =
   | "time-picker" // Time picker (x-ui.widget is time-picker)
   | "starting-points" // Starting points selector (map clicks or layer)
   | "field-statistics" // Field statistics selector (operation + field)
-  | "scenario" // Scenario selector (x-ui.widget is scenario-selector)
   | "chips" // Editable chips (x-ui.widget is chips)
   | "unknown"; // Fallback
 
@@ -280,4 +280,4 @@ export const HIDDEN_INPUTS = ["user_id", "project_id", "save_results"];
 /**
  * Inputs that should be shown in advanced settings
  */
-export const ADVANCED_INPUTS = ["output_crs", "output_name", "scenario_id"];
+export const ADVANCED_INPUTS = ["output_crs", "output_name"];

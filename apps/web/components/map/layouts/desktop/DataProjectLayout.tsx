@@ -1,5 +1,5 @@
 import { Box, Stack } from "@mui/material";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
@@ -20,7 +20,6 @@ import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setGeocoderResult } from "@/lib/store/map/slice";
 import { DATA_PANEL_HEIGHT_VAR } from "@/components/map/panels/DataPanel";
-import { FeatureName } from "@/lib/validations/organization";
 import type { CustomBasemap, Project, ProjectLayerTreeUpdate } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
@@ -39,14 +38,12 @@ import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDial
 import { Fullscren } from "@/components/map/controls/Fullscreen";
 import Geocoder from "@/components/map/controls/Geocoder";
 import Scalebar from "@/components/map/controls/Scalebar";
-import { Scenario as ScenarioCtrl } from "@/components/map/controls/Scenario";
 import { Toolbox as ToolboxCtrl } from "@/components/map/controls/Toolbox";
 import { Zoom } from "@/components/map/controls/Zoom";
 import { MeasureButton, MeasureResultsPanel } from "@/components/map/controls/measure";
 import LayerSettingsPanel from "@/components/map/panels/layer/LayerSettingsPanel";
 import { MapFixedPopupSlot } from "@/components/map/popover/MapFixedPopupSlot";
 import { ProjectLayerTree } from "@/components/map/panels/layer/ProjectLayerTree";
-import Scenario from "@/components/map/panels/scenario/Scenario";
 import Toolbox from "@/components/map/panels/toolbox/CombinedToolbox";
 
 const toolbarHeight = 52;
@@ -62,7 +59,7 @@ interface DataProjectLayoutProps {
 }
 
 const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps) => {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const dispatch = useAppDispatch();
   const projectId = project.id;
 
@@ -79,7 +76,10 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
     return allProjectLayers?.filter((layer) => !SYSTEM_LAYERS_IDS.includes(layer.layer_id)) || [];
   }, [allProjectLayers]);
 
-  const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+  const { translatedBaseMaps, activeBasemap, setActiveBasemap } = useBasemap(project);
+  // When editing a non-active basemap we preview it ephemerally (Redux only, no
+  // persist); this remembers what to restore when the dialog closes.
+  const basemapBeforeEdit = useRef<string | null>(null);
 
   const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
     useCustomBasemapMutations(project, onProjectUpdate);
@@ -96,7 +96,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   const isDataPanelOpen = useAppSelector((state) => state.map.isDataPanelOpen);
   const mapMode = useAppSelector((state) => state.map.mapMode);
   const dataPanelVisible = mapMode === "data" && isDataPanelOpen;
-  const { isOrgEditor, isAppFeatureEnabled } = useAuthZ();
+  const { isOrgEditor } = useAuthZ();
   const { folders } = useFolders({});
   const projectFolder = useMemo(
     () => (project.folder_id && folders ? folders.find((f) => f.id === project.folder_id) : undefined),
@@ -224,13 +224,6 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
         name: t("tools"),
         component: <Toolbox />,
       },
-      {
-        id: MapSidebarItemID.SCENARIO,
-        icon: ICON_NAME.SCENARIO,
-        name: t("scenario"),
-        component: <Scenario projectId={projectId} />,
-        disabled: !isAppFeatureEnabled(FeatureName.SCENARIO),
-      },
     ],
   };
 
@@ -245,7 +238,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
     }
 
     // B. STANDARD TOOLS
-    return rightSidebar.topItems?.find((item) => item.id === activeRight && !item.disabled)?.component;
+    return rightSidebar.topItems?.find((item) => item.id === activeRight)?.component;
   }, [activeRight, rightSidebar.topItems, projectId, projectLayers]);
 
   // --- INTERACTION LOGIC ---
@@ -253,15 +246,6 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   const handleToolboxToggle = async (open: boolean) => {
     if (open) {
       dispatch(setActiveRightPanel(MapSidebarItemID.TOOLBOX));
-      dispatch(setSelectedLayers([])); // Clear tree
-    } else {
-      dispatch(setActiveRightPanel(undefined));
-    }
-  };
-
-  const handleScenarioToggle = async (open: boolean) => {
-    if (open) {
-      dispatch(setActiveRightPanel(MapSidebarItemID.SCENARIO));
       dispatch(setSelectedLayers([])); // Clear tree
     } else {
       dispatch(setActiveRightPanel(undefined));
@@ -346,6 +330,8 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
           }}>
           <Geocoder
             accessToken={MAPBOX_TOKEN}
+            bbox={project?.max_extent ?? undefined}
+            language={i18n.language}
             placeholder={t("enter_an_address")}
             tooltip={t("search")}
             onSelect={(result) => {
@@ -353,7 +339,6 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
             }}
           />
           {isProjectEditor && <ToolboxCtrl onToggle={handleToolboxToggle} open={activeRight === MapSidebarItemID.TOOLBOX} />}
-          {isProjectEditor && <ScenarioCtrl onToggle={handleScenarioToggle} open={activeRight === MapSidebarItemID.SCENARIO} />}
           <MeasureButton {...measureTool} />
         </Box>
       </Box>
@@ -420,16 +405,24 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
                   (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
                     (c) => c.id === id
                   ) ?? null;
+                if (target && project?.basemap !== id) {
+                  // Ephemeral preview only — reverted on close, never persisted.
+                  basemapBeforeEdit.current = project?.basemap ?? DEFAULT_BASEMAP;
+                  setActiveBasemap(id);
+                }
                 setEditing(target);
                 setDialogOpen(true);
               }}
             />
           </Stack>
-          <AttributionControl
-            extraAttribution={
-              activeBasemap.source === "custom" ? activeBasemap.attribution : null
-            }
-          />
+          {/* -10px cancels the right-overlay's 10px bottom inset (height: calc(100% - toolbarHeight - 20px) at top: toolbarHeight+10) so the strip sits flush to the map's bottom edge. */}
+          <Box sx={{ mb: "-10px" }}>
+            <AttributionControl
+              extraAttribution={
+                activeBasemap.source === "custom" ? activeBasemap.attribution : null
+              }
+            />
+          </Box>
         </Stack>
       </Stack>
       {/* Right panel + measure results — rendered separately when data panel is open so controls can be to the left */}
@@ -484,7 +477,14 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
       <CustomBasemapDialog
         open={dialogOpen}
         initial={editing}
-        onClose={() => setDialogOpen(false)}
+        projectLayers={projectLayers}
+        onClose={() => {
+          setDialogOpen(false);
+          if (basemapBeforeEdit.current !== null) {
+            setActiveBasemap(basemapBeforeEdit.current);
+            basemapBeforeEdit.current = null;
+          }
+        }}
         onSubmit={async (payload) => {
           if (editing) {
             await editCustomBasemap(editing.id, payload);

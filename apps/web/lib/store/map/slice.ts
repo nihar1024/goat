@@ -4,10 +4,14 @@ import type { MapGeoJSONFeature } from "react-map-gl/maplibre";
 
 import { BASEMAPS } from "@/lib/constants/basemaps";
 import type { UnitPreference } from "@/lib/utils/measurementUnits";
-import type { BuilderPanelSchema, BuilderWidgetSchema, Project } from "@/lib/validations/project";
-import type { Scenario } from "@/lib/validations/scenario";
+import type {
+  BasemapLayerConfig,
+  BuilderPanelSchema,
+  BuilderWidgetSchema,
+  Project,
+} from "@/lib/validations/project";
 
-import type { Basemap, SelectorItem } from "@/types/map/common";
+import type { Basemap } from "@/types/map/common";
 import { MapSidebarItemID } from "@/types/map/common";
 import type { Result } from "@/types/map/controllers";
 import type { MapPopoverEditorProps, MapPopoverInfoProps } from "@/types/map/popover";
@@ -84,14 +88,15 @@ export interface MapState {
   project: Project | undefined;
   basemaps: Basemap[];
   activeBasemap: Basemap | undefined;
+  // Ephemeral live-preview of basemap layer settings while the edit dialog is
+  // open. undefined = no preview (use the persisted activeBasemap.layer_config).
+  basemapLayerConfigOverride: BasemapLayerConfig | undefined;
   maskLayer: string | undefined; // Toolbox mask layer
   toolboxStartingPoints: [number, number][] | undefined;
   activeLeftPanel: MapSidebarItemID | undefined;
   activeRightPanel: MapSidebarItemID | undefined;
   isMapGetInfoActive: boolean;
   mapCursor: string | undefined; // Toolbox features will override this. If undefined, the map will use the default cursor with pointer on hover
-  editingScenario: Scenario | undefined;
-  selectedScenarioLayer: SelectorItem | undefined;
   highlightedFeature: MapGeoJSONFeature | undefined;
   popupInfo: MapPopoverInfoProps | undefined;
   popupEditor: MapPopoverEditorProps | undefined;
@@ -127,13 +132,12 @@ const initialState = {
   basemaps: BASEMAPS,
   maskLayer: undefined,
   activeBasemap: undefined,
+  basemapLayerConfigOverride: undefined,
   activeLeftPanel: MapSidebarItemID.LAYERS,
   toolboxStartingPoints: undefined,
   activeRightPanel: undefined,
   isMapGetInfoActive: true,
   mapCursor: undefined,
-  editingScenario: undefined,
-  selectedScenarioLayer: undefined,
   popupInfo: undefined,
   popupEditor: undefined,
   popupPreview: null,
@@ -171,6 +175,15 @@ const mapSlice = createSlice({
     setActiveBasemap: (state, action: PayloadAction<Basemap>) => {
       state.activeBasemap = action.payload;
     },
+    // Live preview of basemap layer settings (dialog edits before save). Set
+    // while the dialog is open; the map renderer prefers it over the persisted
+    // activeBasemap.layer_config. Cleared (undefined) on dialog close.
+    setBasemapLayerConfigOverride: (
+      state,
+      action: PayloadAction<BasemapLayerConfig | undefined>
+    ) => {
+      state.basemapLayerConfigOverride = action.payload;
+    },
     setActiveLeftPanel: (state, action: PayloadAction<MapSidebarItemID | undefined>) => {
       state.activeLeftPanel = action.payload;
     },
@@ -179,10 +192,6 @@ const mapSlice = createSlice({
         state.maskLayer = undefined;
         state.toolboxStartingPoints = undefined;
         state.mapCursor = undefined;
-      }
-      if (state.activeRightPanel === MapSidebarItemID.SCENARIO) {
-        state.editingScenario = undefined;
-        state.selectedScenarioLayer = undefined;
       }
       state.activeRightPanel = action.payload;
     },
@@ -209,15 +218,6 @@ const mapSlice = createSlice({
     },
     setMapCursor: (state, action: PayloadAction<string | undefined>) => {
       state.mapCursor = action.payload;
-    },
-    setEditingScenario: (state, action: PayloadAction<Scenario | undefined>) => {
-      state.editingScenario = action.payload;
-      if (action.payload === undefined) {
-        state.selectedScenarioLayer = undefined;
-      }
-    },
-    setSelectedScenarioLayer: (state, action: PayloadAction<SelectorItem | undefined>) => {
-      state.selectedScenarioLayer = action.payload;
     },
     setPopupInfo: (state, action: PayloadAction<MapPopoverInfoProps | undefined>) => {
       state.popupInfo = action.payload;
@@ -334,14 +334,13 @@ export const {
   setProject,
   updateProject,
   setActiveBasemap,
+  setBasemapLayerConfigOverride,
   setActiveLeftPanel,
   setActiveRightPanel,
   setMaskLayer,
   setToolboxStartingPoints,
   setIsMapGetInfoActive,
   setMapCursor,
-  setEditingScenario,
-  setSelectedScenarioLayer,
   setPopupInfo,
   setPopupEditor,
   setPopupPreview,

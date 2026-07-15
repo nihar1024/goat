@@ -52,13 +52,25 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
-    POSTGRES_PORT: int = int(os.getenv("POSTGRES_OUTER_PORT", "5432"))
+    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "goat")
+
+    # Direct PostgreSQL host for DuckLake attaches (long-lived,
+    # idle-in-transaction sessions that waste transaction-pooler slots).
+    # Unset = same host as POSTGRES_SERVER.
+    DUCKLAKE_POSTGRES_SERVER: str = os.getenv(
+        "DUCKLAKE_POSTGRES_SERVER", ""
+    ) or os.getenv("POSTGRES_SERVER", "localhost")
 
     @property
     def POSTGRES_DATABASE_URI(self) -> str:
         """Construct PostgreSQL connection URI for DuckLake."""
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    @property
+    def DUCKLAKE_POSTGRES_DATABASE_URI(self) -> str:
+        """PostgreSQL URI for DuckLake catalog attaches (direct, unpooled)."""
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.DUCKLAKE_POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # Schema settings
     CUSTOMER_SCHEMA: str = os.getenv("CUSTOMER_SCHEMA", "customer")
@@ -83,6 +95,15 @@ class Settings(BaseSettings):
     DUCKLAKE_S3_ACCESS_KEY: Optional[str] = os.getenv("DUCKLAKE_S3_ACCESS_KEY")
     DUCKLAKE_S3_SECRET_KEY: Optional[str] = os.getenv("DUCKLAKE_S3_SECRET_KEY")
 
+    # Pin read connections to a DuckLake snapshot and refresh off the request
+    # path. Kill-switch: DUCKLAKE_PIN_SNAPSHOT=false restores unpinned reads.
+    DUCKLAKE_PIN_SNAPSHOT: bool = (
+        os.getenv("DUCKLAKE_PIN_SNAPSHOT", "true").lower() == "true"
+    )
+    DUCKLAKE_SNAPSHOT_REFRESH_SECONDS: float = float(
+        os.getenv("DUCKLAKE_SNAPSHOT_REFRESH_SECONDS", "5")
+    )
+
     # DuckDB memory limit (e.g., "1.5GB", "512MB")
     DUCKDB_MEMORY_LIMIT: str = os.getenv("PROCESSES_DUCKDB_MEMORY_LIMIT", "1.2GB")
 
@@ -105,9 +126,7 @@ class Settings(BaseSettings):
     S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL")
     S3_ACCESS_KEY_ID: Optional[str] = os.getenv("S3_ACCESS_KEY_ID")
     S3_SECRET_ACCESS_KEY: Optional[str] = os.getenv("S3_SECRET_ACCESS_KEY")
-    S3_REGION_NAME: str = os.getenv("S3_REGION_NAME") or os.getenv(
-        "S3_REGION", "us-east-1"
-    )
+    S3_REGION_NAME: str = os.getenv("S3_REGION", "us-east-1")
     S3_BUCKET_NAME: Optional[str] = os.getenv("S3_BUCKET_NAME")
 
     # Timeout Settings (in seconds)
@@ -119,6 +138,15 @@ class Settings(BaseSettings):
     # Print worker URL (for PrintReport tool to render pages)
     PRINT_BASE_URL: str = os.getenv("PRINT_BASE_URL", "http://goat-web:3000")
 
+    # Beta tool gating: users whose email domain is allowlisted are shown beta
+    # tools in the toolbox. The allowlist lives in a Windmill variable (a
+    # comma-separated list of domains, e.g. "plan4better.de,example.org")
+    # configured on the Windmill variables page, like other operational config.
+    # When the variable is unset/empty, beta tools are hidden from everyone.
+    BETA_USER_EMAIL_DOMAINS_WM_PATH: str = os.getenv(
+        "BETA_USER_EMAIL_DOMAINS_WM_PATH", "f/goat/config/beta_user_email_domains"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -127,3 +155,18 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+
+def normalize_email_domains(raw: str | None) -> set[str]:
+    """Parse a comma-separated domain list into a normalized set.
+
+    Lowercases, trims whitespace, and strips a leading '@' so both
+    "@plan4better.de" and "plan4better.de" are accepted.
+    """
+    if not raw:
+        return set()
+    return {
+        domain.strip().lstrip("@").lower()
+        for domain in raw.split(",")
+        if domain.strip()
+    }

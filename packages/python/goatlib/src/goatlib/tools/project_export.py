@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import asyncpg
+import duckdb
 from pydantic import BaseModel, Field
 
 from goatlib.tools.base import SimpleToolRunner
@@ -95,8 +96,8 @@ class ProjectExportRunner(SimpleToolRunner):
             # 1. Project record
             project_row = await conn.fetchrow(
                 f"""
-                SELECT id, name, description, basemap, max_extent,
-                       builder_config, tags, thumbnail_url
+                SELECT id, name, description, basemap, custom_basemaps,
+                       max_extent, builder_config, tags, thumbnail_url
                 FROM {schema}.project
                 WHERE id = $1
                 """,
@@ -110,6 +111,7 @@ class ProjectExportRunner(SimpleToolRunner):
                 "name": project_row["name"],
                 "description": project_row["description"],
                 "basemap": project_row["basemap"],
+                "custom_basemaps": project_row["custom_basemaps"],
                 "max_extent": project_row["max_extent"],
                 "builder_config": project_row["builder_config"],
                 "tags": project_row["tags"],
@@ -226,23 +228,28 @@ class ProjectExportRunner(SimpleToolRunner):
                         "Excluding system layer from export: %s", layer_data.get("name")
                     )
 
-            # Serialise layer_project_links keyed by layer_id (skip excluded layers)
-            layer_project_links_dict: dict[str, dict[str, Any]] = {}
+            # Serialise layer_project_links as a list — multiple links may
+            # reference the same layer_id (same dataset rendered with
+            # different style/query), so a dict keyed by layer_id would
+            # silently collapse them.
+            layer_project_links_list: list[dict[str, Any]] = []
             for lp in lp_rows:
                 if str(lp["layer_id"]) in excluded_layer_ids:
                     continue
-                layer_project_links_dict[str(lp["layer_id"])] = {
-                    "id": lp["id"],
-                    "layer_id": str(lp["layer_id"]),
-                    "project_id": str(lp["project_id"]),
-                    "layer_project_group_id": lp["layer_project_group_id"],
-                    "order": lp["order"],
-                    "name": lp["name"],
-                    "properties": lp["properties"],
-                    "other_properties": lp["other_properties"],
-                    "query": lp["query"],
-                    "charts": lp["charts"],
-                }
+                layer_project_links_list.append(
+                    {
+                        "id": lp["id"],
+                        "layer_id": str(lp["layer_id"]),
+                        "project_id": str(lp["project_id"]),
+                        "layer_project_group_id": lp["layer_project_group_id"],
+                        "order": lp["order"],
+                        "name": lp["name"],
+                        "properties": lp["properties"],
+                        "other_properties": lp["other_properties"],
+                        "query": lp["query"],
+                        "charts": lp["charts"],
+                    }
+                )
 
             # 5. LayerProjectGroups
             group_rows = await conn.fetch(
@@ -359,7 +366,7 @@ class ProjectExportRunner(SimpleToolRunner):
             return {
                 "project_metadata": project_metadata,
                 "layers": list(layers_by_id.values()),
-                "layer_project_links": layer_project_links_dict,
+                "layer_project_links": layer_project_links_list,
                 "layer_groups": layer_groups,
                 "workflows": workflows,
                 "reports": reports,
@@ -399,19 +406,14 @@ class ProjectExportRunner(SimpleToolRunner):
 
         table_path = self.get_layer_table_path(owner_id, layer_id)
 
-        # Check table exists
+        # Check table exists. DESCRIBE probes only this table;
+        # information_schema.tables would lazily load every table in the
+        # catalog to answer.
         user_schema = f"user_{owner_id.replace('-', '')}"
         table_name = f"t_{layer_id.replace('-', '')}"
-        result = self.duckdb_con.execute(
-            f"""
-            SELECT COUNT(*) FROM information_schema.tables
-            WHERE table_catalog = 'lake'
-            AND table_schema = '{user_schema}'
-            AND table_name = '{table_name}'
-            """
-        ).fetchone()
-
-        if not result or result[0] == 0:
+        try:
+            self.duckdb_con.execute(f'DESCRIBE lake."{user_schema}"."{table_name}"')
+        except duckdb.CatalogException:
             logger.warning("DuckLake table not found: %s", table_path)
             return 0
 
@@ -467,7 +469,7 @@ class ProjectExportRunner(SimpleToolRunner):
 
         project_metadata: dict[str, Any] = metadata["project_metadata"]
         layers: list[dict[str, Any]] = metadata["layers"]
-        layer_project_links: dict[str, dict[str, Any]] = metadata["layer_project_links"]
+        layer_project_links: list[dict[str, Any]] = metadata["layer_project_links"]
         layer_groups: list[dict[str, Any]] = metadata["layer_groups"]
         workflows: list[dict[str, Any]] = metadata["workflows"]
         reports: list[dict[str, Any]] = metadata["reports"]
@@ -501,11 +503,6 @@ class ProjectExportRunner(SimpleToolRunner):
                 meta_path = layer_dir / "metadata.json"
                 self._write_json(layer, meta_path)
 
-                # project_link.json
-                link_data = layer_project_links.get(layer_id, {})
-                link_path = layer_dir / "project_link.json"
-                self._write_json(link_data, link_path)
-
                 # data.parquet (internal layers only)
                 if not is_external:
                     owner_id = layer.get("user_id", params.user_id)
@@ -526,6 +523,16 @@ class ProjectExportRunner(SimpleToolRunner):
             # 4. Write layers/index.json
             index_path = layers_dir / "index.json"
             self._write_json({"layers": layers}, index_path)
+
+            # 4b. Write layer_project_links.json (format 1.1 — list of links).
+            # Excludes any link referencing a system layer that was filtered out
+            # from `layers` (e.g. street_network).
+            kept_layer_ids = {layer["id"] for layer in layers}
+            kept_links = [
+                lk for lk in layer_project_links if lk.get("layer_id") in kept_layer_ids
+            ]
+            links_path = archive_dir / "layer_project_links.json"
+            self._write_json({"links": kept_links}, links_path)
 
             # 5. Write layer_groups.json
             groups_path = archive_dir / "layer_groups.json"

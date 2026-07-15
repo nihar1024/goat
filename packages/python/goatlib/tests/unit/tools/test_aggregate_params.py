@@ -4,8 +4,10 @@ Tests custom validation logic in AggregatePointsToolParams and AggregatePolygonT
 """
 
 import pytest
-from goatlib.analysis.schemas.aggregate import AggregationAreaType
-from goatlib.analysis.schemas.data_management import FieldStatistic
+from goatlib.analysis.schemas.aggregate import (
+    AggregateColumnStatistic,
+    AggregationAreaType,
+)
 from goatlib.tools.aggregate_points import AggregatePointsToolParams
 from goatlib.tools.aggregate_polygon import AggregatePolygonToolParams
 
@@ -18,7 +20,7 @@ class TestAggregatePointsParamsValidation:
         "user_id": "00000000-0000-0000-0000-000000000001",
         "folder_id": "00000000-0000-0000-0000-000000000002",
         "source_layer_id": "00000000-0000-0000-0000-000000000003",
-        "column_statistics": [FieldStatistic(field="value", operation="sum")],
+        "column_statistics": [AggregateColumnStatistic(field="value", operation="sum")],
     }
 
     def test_polygon_requires_area_layer(self):
@@ -87,7 +89,7 @@ class TestAggregatePolygonParamsValidation:
         "user_id": "00000000-0000-0000-0000-000000000001",
         "folder_id": "00000000-0000-0000-0000-000000000002",
         "source_layer_id": "00000000-0000-0000-0000-000000000003",
-        "column_statistics": [FieldStatistic(field="area", operation="sum")],
+        "column_statistics": [AggregateColumnStatistic(field="area", operation="sum")],
     }
 
     def test_polygon_requires_area_layer(self):

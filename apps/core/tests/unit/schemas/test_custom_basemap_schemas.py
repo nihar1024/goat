@@ -3,10 +3,8 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
-
 from core.schemas.custom_basemap import CustomBasemap
-
+from pydantic import TypeAdapter, ValidationError
 
 CUSTOM_BASEMAP_ADAPTER = TypeAdapter(CustomBasemap)
 
@@ -113,7 +111,12 @@ def test_id_is_stored_as_string_for_jsonb_compat() -> None:
 
 def test_invalid_uuid_string_rejected() -> None:
     """A non-UUID id should be rejected by the UUIDStr validator."""
-    data = {**_base_fields(), "id": "not-a-uuid", "type": "vector", "url": "https://example.com/style.json"}
+    data = {
+        **_base_fields(),
+        "id": "not-a-uuid",
+        "type": "vector",
+        "url": "https://example.com/style.json",
+    }
     with pytest.raises(ValidationError):
         CUSTOM_BASEMAP_ADAPTER.validate_python(data)
 
@@ -193,6 +196,48 @@ def test_attribution_too_long_rejected() -> None:
         "type": "vector",
         "url": "https://example.com/style.json",
         "attribution": "x" * 501,
+    }
+    with pytest.raises(ValidationError):
+        CUSTOM_BASEMAP_ADAPTER.validate_python(data)
+
+
+def test_vector_custom_basemap_accepts_layer_config():
+    data = {
+        **_base_fields(),
+        "type": "vector",
+        "url": "https://example.com/style.json",
+        "layer_config": {
+            "road_label": {"visible": True, "relation": "above", "target": "12"},
+            "water": {"visible": False, "relation": "below", "target": "all"},
+        },
+    }
+    parsed = CUSTOM_BASEMAP_ADAPTER.validate_python(data)
+    assert parsed.type == "vector"
+    assert parsed.layer_config["road_label"].relation == "above"
+    assert parsed.layer_config["road_label"].target == "12"
+    assert parsed.layer_config["water"].visible is False
+
+
+def test_vector_layer_config_applies_defaults():
+    data = {
+        **_base_fields(),
+        "type": "vector",
+        "url": "https://example.com/style.json",
+        "layer_config": {"road_label": {}},
+    }
+    parsed = CUSTOM_BASEMAP_ADAPTER.validate_python(data)
+    setting = parsed.layer_config["road_label"]
+    assert setting.visible is True
+    assert setting.relation == "below"
+    assert setting.target == "all"
+
+
+def test_vector_layer_config_rejects_invalid_relation():
+    data = {
+        **_base_fields(),
+        "type": "vector",
+        "url": "https://example.com/style.json",
+        "layer_config": {"road_label": {"relation": "sideways"}},
     }
     with pytest.raises(ValidationError):
         CUSTOM_BASEMAP_ADAPTER.validate_python(data)

@@ -9,23 +9,21 @@ Separated from GeoAPI to prevent long-running jobs from blocking tile requests.
 """
 
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from goatlib.auth import JOSEError
+from goatobs import build_auth_context_middleware, setup_observability
 from starlette.middleware.gzip import GZipMiddleware
 
 from processes.config import settings
+from processes.deps.auth import decode_token
 from processes.ducklake import ducklake_manager, preview_ducklake_manager
 from processes.models import HealthCheck
 from processes.routers import processes_router, workflows_router
-from processes.deps.auth import decode_token
 from processes.services.windmill_client import windmill_client
-from goatlib.auth import JOSEError
-from goatobs import build_auth_context_middleware, setup_observability
 
 # Configure logging
 logging.basicConfig(
@@ -33,15 +31,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-
-# Initialize Sentry if configured
-if os.getenv("SENTRY_DSN") and os.getenv("ENVIRONMENT"):
-    sentry_sdk.init(
-        dsn=os.getenv("SENTRY_DSN"),
-        environment=os.getenv("ENVIRONMENT"),
-        traces_sample_rate=1.0 if os.getenv("ENVIRONMENT") == "prod" else 0.1,
-    )
 
 
 @asynccontextmanager

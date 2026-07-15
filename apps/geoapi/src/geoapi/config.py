@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
-    POSTGRES_PORT: int = int(os.getenv("POSTGRES_OUTER_PORT", "5432"))
+    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "goat")
 
     # DuckLake settings
@@ -44,9 +44,7 @@ class Settings(BaseSettings):
     S3_ENDPOINT_URL: Optional[str] = os.getenv("S3_ENDPOINT_URL")
     S3_ACCESS_KEY_ID: Optional[str] = os.getenv("S3_ACCESS_KEY_ID")
     S3_SECRET_ACCESS_KEY: Optional[str] = os.getenv("S3_SECRET_ACCESS_KEY")
-    S3_REGION_NAME: str = os.getenv("S3_REGION_NAME") or os.getenv(
-        "S3_REGION", "us-east-1"
-    )
+    S3_REGION_NAME: str = os.getenv("S3_REGION", "us-east-1")
     S3_BUCKET_NAME: Optional[str] = os.getenv("S3_BUCKET_NAME")
 
     # Hidden fields - columns to exclude from API responses (tiles and features)
@@ -67,11 +65,25 @@ class Settings(BaseSettings):
 
     # Connection pool size for concurrent tile requests
     # Lower values reduce memory usage and idle connections that can go stale
-    DUCKLAKE_POOL_SIZE: int = int(os.getenv("GEOAPI_DUCKLAKE_POOL_SIZE", "2"))
+    DUCKLAKE_POOL_SIZE: int = int(os.getenv("GEOAPI_DUCKLAKE_POOL_SIZE", "4"))
+
+    # Pin read connections to a DuckLake snapshot and refresh off the request
+    # path. Kill-switch: DUCKLAKE_PIN_SNAPSHOT=false restores unpinned reads.
+    DUCKLAKE_PIN_SNAPSHOT: bool = (
+        os.getenv("DUCKLAKE_PIN_SNAPSHOT", "true").lower() == "true"
+    )
+    DUCKLAKE_SNAPSHOT_REFRESH_SECONDS: float = float(
+        os.getenv("DUCKLAKE_SNAPSHOT_REFRESH_SECONDS", "5")
+    )
 
     # DuckDB memory limit per connection (e.g., "1GB", "512MB")
     # Total potential memory = DUCKLAKE_POOL_SIZE * DUCKDB_MEMORY_LIMIT
     DUCKDB_MEMORY_LIMIT: str = os.getenv("GEOAPI_DUCKDB_MEMORY_LIMIT", "1GB")
+
+    # DuckDB thread count per connection. Must be pinned to the container's CPU
+    # limit: DuckDB otherwise defaults to the host core count, oversubscribing a
+    # 2-CPU container and causing scheduler throttling. Mirrors the processes app.
+    DUCKDB_THREADS: int = int(os.getenv("GEOAPI_DUCKDB_THREADS", "2"))
 
     # Timeout Settings (in seconds)
     REQUEST_TIMEOUT: int = int(os.getenv("GEOAPI_REQUEST_TIMEOUT", "30"))
@@ -96,10 +108,24 @@ class Settings(BaseSettings):
     # CORS settings
     CORS_ORIGINS: list[str] = ["*"]
 
+    # Direct PostgreSQL host for DuckLake attaches. These sessions are
+    # long-lived and idle-in-transaction, so routing them through a
+    # transaction pooler only burns its slots; point this at the primary
+    # (e.g. the CNPG rw service) to keep the pooler for app queries.
+    # Unset = same host as POSTGRES_SERVER.
+    DUCKLAKE_POSTGRES_SERVER: str = os.getenv(
+        "DUCKLAKE_POSTGRES_SERVER", ""
+    ) or os.getenv("POSTGRES_SERVER", "localhost")
+
     @property
     def POSTGRES_DATABASE_URI(self) -> str:
         """Construct PostgreSQL URI."""
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    @property
+    def DUCKLAKE_POSTGRES_DATABASE_URI(self) -> str:
+        """PostgreSQL URI for DuckLake catalog attaches (direct, unpooled)."""
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.DUCKLAKE_POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     model_config = {"env_prefix": "GEOAPI_", "case_sensitive": True}
 

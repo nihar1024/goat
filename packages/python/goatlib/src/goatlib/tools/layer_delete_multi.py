@@ -16,6 +16,7 @@ Usage:
 import logging
 from typing import Self
 
+import duckdb
 from pydantic import BaseModel, ConfigDict, Field
 
 from goatlib.analysis.schemas.ui import (
@@ -90,15 +91,16 @@ class LayerDeleteMultiRunner(SimpleToolRunner):
         full_table = f"lake.{user_schema}.{table_name}"
 
         try:
-            # Check if table exists
-            result = self.duckdb_con.execute(f"""
-                SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_catalog = 'lake'
-                AND table_schema = '{user_schema}'
-                AND table_name = '{table_name}'
-            """).fetchone()
+            # Check if table exists. DESCRIBE probes only this table;
+            # information_schema.tables would lazily load every table in
+            # the catalog to answer.
+            try:
+                self.duckdb_con.execute(f'DESCRIBE lake."{user_schema}"."{table_name}"')
+                table_exists = True
+            except duckdb.CatalogException:
+                table_exists = False
 
-            if result and result[0] > 0:
+            if table_exists:
                 self.duckdb_con.execute(f"DROP TABLE IF EXISTS {full_table}")
                 logger.info("Deleted DuckLake table: %s", full_table)
                 return True
@@ -159,8 +161,12 @@ class LayerDeleteMultiRunner(SimpleToolRunner):
             wm_labels=wm_labels,
         )
 
+        # Each DROP TABLE is a DuckLake commit whose memory cost scales with
+        # catalog size and accumulates on the connection; recycle periodically so
+        # deleting many layers against a large catalog doesn't OOM the worker.
+        recycle_every = 5
         try:
-            for layer_id in params.layer_ids:
+            for processed, layer_id in enumerate(params.layer_ids, start=1):
                 result = LayerDeleteResult(
                     layer_id=layer_id,
                 )
@@ -195,6 +201,9 @@ class LayerDeleteMultiRunner(SimpleToolRunner):
                     logger.warning("Failed to delete layer %s: %s", layer_id, e)
 
                 output.results.append(result)
+
+                if processed % recycle_every == 0:
+                    self.recycle_duckdb_connection()
 
             logger.info(
                 "Multi-layer deletion complete: total=%d, deleted=%d, failed=%d",

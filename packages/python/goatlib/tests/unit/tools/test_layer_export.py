@@ -296,13 +296,15 @@ class TestLayerExportRunner:
             ("tags", "VARCHAR[]"),
         ]
 
-        columns = runner._get_exportable_columns("lake.user_xxx.t_yyy")
+        names = [
+            col for col, _ in runner._get_exportable_columns("lake.user_xxx.t_yyy")
+        ]
 
-        assert "id" in columns
-        assert "name" in columns
-        assert "geometry" in columns
-        assert "tags" in columns
-        assert "metadata" not in columns  # STRUCT excluded
+        assert "id" in names
+        assert "name" in names
+        assert "geometry" in names
+        assert "tags" in names
+        assert "metadata" not in names  # STRUCT excluded
 
     def test_get_exportable_columns_filters_map(self, runner):
         """Test that MAP columns are excluded."""
@@ -312,15 +314,20 @@ class TestLayerExportRunner:
             ("geometry", "GEOMETRY"),
         ]
 
-        columns = runner._get_exportable_columns("lake.user_xxx.t_yyy")
+        names = [
+            col for col, _ in runner._get_exportable_columns("lake.user_xxx.t_yyy")
+        ]
 
-        assert "id" in columns
-        assert "geometry" in columns
-        assert "properties" not in columns  # MAP excluded
+        assert "id" in names
+        assert "geometry" in names
+        assert "properties" not in names  # MAP excluded
 
     def test_has_geometry_column_true(self, runner):
         """Test geometry column detection - has geometry."""
-        runner._duckdb_con.execute.return_value.fetchone.return_value = ("geometry",)
+        runner._duckdb_con.execute.return_value.fetchall.return_value = [
+            ("id", "BIGINT", "YES", None, None, None),
+            ("geometry", "GEOMETRY", "YES", None, None, None),
+        ]
 
         result = runner._has_geometry_column("lake.user_xxx.t_yyy")
 
@@ -328,7 +335,9 @@ class TestLayerExportRunner:
 
     def test_has_geometry_column_false(self, runner):
         """Test geometry column detection - no geometry."""
-        runner._duckdb_con.execute.return_value.fetchone.return_value = None
+        runner._duckdb_con.execute.return_value.fetchall.return_value = [
+            ("id", "BIGINT", "YES", None, None, None),
+        ]
 
         result = runner._has_geometry_column("lake.user_xxx.t_yyy")
 
@@ -388,7 +397,9 @@ class TestLayerExportCRS:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -414,7 +425,9 @@ class TestLayerExportCRS:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -437,7 +450,9 @@ class TestLayerExportCRS:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -461,7 +476,9 @@ class TestLayerExportCRS:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -499,7 +516,9 @@ class TestLayerExportFormats:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -520,7 +539,9 @@ class TestLayerExportFormats:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -542,7 +563,9 @@ class TestLayerExportFormats:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "geometry"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("geometry", "GEOMETRY")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=True),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),
@@ -565,7 +588,9 @@ class TestLayerExportFormats:
         with (
             patch.object(runner, "_get_table_name", return_value="lake.user_xxx.t_yyy"),
             patch.object(
-                runner, "_get_exportable_columns", return_value=["id", "name"]
+                runner,
+                "_get_exportable_columns",
+                return_value=[("id", "VARCHAR"), ("name", "VARCHAR")],
             ),
             patch.object(runner, "_has_geometry_column", return_value=False),
             patch.object(runner, "_convert_cql2_to_sql", return_value=None),

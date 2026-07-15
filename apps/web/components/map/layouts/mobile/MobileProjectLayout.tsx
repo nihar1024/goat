@@ -1,8 +1,9 @@
 import { Global } from "@emotion/react";
 import type { Theme } from "@mui/material";
-import { Box, IconButton, Stack, SwipeableDrawer, Typography, styled, useTheme } from "@mui/material";
+import { Box, IconButton, Stack, SwipeableDrawer, Typography, alpha, styled, useTheme } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useMap } from "react-map-gl/maplibre";
 import "swiper/css";
 import "swiper/css/pagination";
 import { Pagination } from "swiper/modules";
@@ -20,6 +21,7 @@ import { projectSchema } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
+import { useDashboardLanguageOverride } from "@/hooks/dashboard/useDashboardLanguageOverride";
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
@@ -42,10 +44,12 @@ import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/se
 import SimpleLayerStyle from "@/components/map/panels/style/SimpleLayerStyle";
 import { PopupContent } from "@/components/map/popover/MapFeaturePopover";
 
-import "@/styles/swiper.css";
-
 // --- Constants ---
 const drawerBleeding = 56;
+// Fraction of the viewport the open bottom drawer covers (paper +
+// puller). The paper height rule in GlobalSwiperStyles and the
+// pan-into-view logic below both derive from this.
+const drawerHeightRatio = 0.6;
 
 // --- Types ---
 type DrawerView = "default" | "layerInfo" | "basemapSelector" | "layerSettings";
@@ -80,8 +84,7 @@ const GlobalSwiperStyles = ({ open, drawerView }: { open: boolean; drawerView: D
         },
       },
       ".MuiDrawer-root > .MuiPaper-root": {
-        // Adjusted height calculation if needed, but 60% seems reasonable
-        height: `calc(60% - ${drawerBleeding}px)`,
+        height: `calc(${drawerHeightRatio * 100}% - ${drawerBleeding}px)`,
         overflow: "visible",
       },
     })}
@@ -139,9 +142,12 @@ const MobileProjectLayout = ({
   onProjectUpdate,
   viewOnly,
 }: PublicProjectLayoutProps) => {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const theme = useTheme();
   const dispatch = useAppDispatch();
+
+  // Apply dashboard language override only for public/shared view (mirrors PublicProjectLayout)
+  useDashboardLanguageOverride(_project?.builder_config?.settings?.language, viewOnly);
 
   // Layer style change hook
   const { handleStyleChange } = useLayerStyleChange(projectLayers, viewOnly);
@@ -213,7 +219,15 @@ const MobileProjectLayout = ({
   );
 
   // --- Hooks ---
-  const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+  const { translatedBaseMaps, activeBasemap, setActiveBasemap } = useBasemap(project);
+  const allowedStyles = useMemo(() => {
+    const allowed = project?.builder_config?.settings?.allowed_basemaps;
+    if (!allowed) return translatedBaseMaps;
+    return translatedBaseMaps.filter((b) => b.source === "custom" || allowed.includes(b.value));
+  }, [project?.builder_config, translatedBaseMaps]);
+  // Ephemeral preview of a non-active basemap while its edit dialog is open;
+  // restored on close (never persisted).
+  const basemapBeforeEdit = useRef<string | null>(null);
   const mapMode = useAppSelector((state) => state.map.mapMode);
   const editable = mapMode !== "public";
   const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
@@ -221,6 +235,32 @@ const MobileProjectLayout = ({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomBasemap | null>(null);
   const scrollableContentRef = useRef<HTMLDivElement | null>(null);
+
+  // --- Panel appearance (mobile) ---
+  // The bottom drawer is a single shared surface that pages through the
+  // builder panels via Swiper. Mirror the desktop PanelContainer so the
+  // configured panel background color (e.g. a branded yellow) is honored
+  // on mobile too, instead of always falling back to background.paper.
+  const panels = useMemo(
+    () =>
+      (project?.builder_config?.interface ?? []).filter(
+        (item) => item.type === "panel" && (item?.widgets?.length ?? 0) > 0
+      ),
+    [project?.builder_config?.interface]
+  );
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const getPanelBgColor = (panel: (typeof panels)[number] | undefined) =>
+    alpha(
+      panel?.config?.appearance?.backgroundColor || theme.palette.background.paper,
+      panel?.config?.appearance?.opacity ?? 1
+    );
+  // Color for the shared drawer chrome (puller + content area). Use the
+  // active panel's color while showing panels; fall back to the theme
+  // surface for utility views (basemap selector, layer settings, popup).
+  const drawerBgColor =
+    drawerView === "default"
+      ? getPanelBgColor(panels[activeSlideIndex] ?? panels[0])
+      : theme.palette.background.paper;
 
   // --- Effects ---
   // Effect to handle changes in layerInfo (feature selection/deselection)
@@ -252,6 +292,29 @@ const MobileProjectLayout = ({
     // Only react to changes in layerInfo itself
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layerInfo]);
+
+  // Keep the tapped feature visible above the drawer. The sheet covers
+  // the bottom `drawerHeightRatio` of the viewport, so a feature tapped
+  // in that band would be hidden the moment the drawer opens — ease it
+  // into the middle of the still-visible band. Features already above
+  // the drawer stay put (no gratuitous camera movement).
+  const { map } = useMap();
+  useEffect(() => {
+    if (!layerInfo || !map) return;
+    const rect = map.getContainer().getBoundingClientRect();
+    // Top edge of the open drawer (paper + puller), in map-container px.
+    const drawerTop = window.innerHeight * (1 - drawerHeightRatio) - rect.top;
+    if (drawerTop <= 0) return;
+    const lngLat: [number, number] = [layerInfo.lngLat[0], layerInfo.lngLat[1]];
+    if (map.project(lngLat).y <= drawerTop) return;
+    map.easeTo({
+      center: lngLat,
+      // Land the feature in the center of the visible band above the
+      // drawer (offset is relative to the map-container center).
+      offset: [0, drawerTop / 2 - rect.height / 2],
+      duration: 500,
+    });
+  }, [layerInfo, map]);
 
   // Effect to handle layer settings panel requests from ProjectLayerTree three dots menu
   useEffect(() => {
@@ -294,6 +357,22 @@ const MobileProjectLayout = ({
   // --- Handlers ---
   const toggleDrawer = (newOpen: boolean) => () => {
     setOpen(newOpen);
+  };
+
+  // Swipe-dismiss (SwipeableDrawer onClose). Unlike the X button, a swipe
+  // means "close the drawer" regardless of what was open before, so the
+  // drawer stays closed — but the map state must still be cleared:
+  // popupInfo left behind would block taps on other layers' features
+  // (MapViewer ignores cross-layer clicks while a popup is open).
+  const handleDrawerDismiss = () => {
+    if (drawerView === "layerInfo" && layerInfo) {
+      layerInfo.onClose();
+    }
+    if (activeRightPanel) {
+      dispatch(setActiveRightPanel(undefined));
+    }
+    setDrawerView("default");
+    setOpen(false);
   };
 
   // Handles clicks on the close ('X') button in the InfoHeader
@@ -395,6 +474,8 @@ const MobileProjectLayout = ({
               }}>
               <Geocoder
                 accessToken={MAPBOX_TOKEN}
+                bbox={project?.max_extent ?? undefined}
+                language={i18n.language}
                 placeholder={t("enter_an_address")}
                 tooltip={t("search")}
                 onSelect={(result) => {
@@ -425,7 +506,7 @@ const MobileProjectLayout = ({
             {hasControl("find_my_location") && (
               <UserLocation tooltip={t("find_location")} />
             )}
-            {hasControl("basemap") && (
+            {hasControl("basemap") && allowedStyles.length > 0 && (
               <BasemapSelectorButton
                 // Use `open` state derived from drawerView for visual indication (optional)
                 open={drawerView === "basemapSelector"}
@@ -470,7 +551,7 @@ const MobileProjectLayout = ({
             },
             keepMounted: true, // Keep content mounted for transitions/state
           }}
-          onClose={toggleDrawer(false)}
+          onClose={handleDrawerDismiss}
           onOpen={toggleDrawer(true)}
           swipeAreaWidth={drawerBleeding}
           disableSwipeToOpen={false}
@@ -487,7 +568,7 @@ const MobileProjectLayout = ({
               left: 0,
               height: drawerBleeding,
               cursor: "grab",
-              backgroundColor: theme.palette.background.paper,
+              backgroundColor: drawerBgColor,
               boxShadow: "0 -3px 6px -2px rgba(0,0,0,0.15)",
             }}>
             <Puller />
@@ -517,9 +598,9 @@ const MobileProjectLayout = ({
             sx={{
               height: "100%",
               overflow: "auto", // Hide overflow, specific content scrolls internally
-              borderTopLeftRadius: 8,
-              borderTopRightRadius: 8,
-              backgroundColor: theme.palette.background.paper,
+              // Square top: the Puller Area above already provides the sheet's
+              // rounded top, so rounding here would notch under the flat puller.
+              backgroundColor: drawerBgColor,
             }}
             // Attach touch move handler to prevent drawer swipe when scrolling content
             onTouchMove={handleContentTouchMove}>
@@ -546,7 +627,7 @@ const MobileProjectLayout = ({
 
             {drawerView === "basemapSelector" && (
               <BaseMapSelectorList
-                styles={translatedBaseMaps}
+                styles={allowedStyles}
                 active={activeBasemap.value}
                 editable={editable}
                 basemapChange={async (basemap) => {
@@ -564,6 +645,11 @@ const MobileProjectLayout = ({
                     (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
                       (c) => c.id === id
                     ) ?? null;
+                  if (target && project?.basemap !== id) {
+                    // Ephemeral preview only — reverted on close, never persisted.
+                    basemapBeforeEdit.current = project?.basemap ?? DEFAULT_BASEMAP;
+                    setActiveBasemap(id);
+                  }
                   setEditing(target);
                   setDialogOpen(true);
                 }}
@@ -601,43 +687,45 @@ const MobileProjectLayout = ({
                 style={{ height: "100%", width: "100%" }}
                 // Ensure Swiper doesn't conflict with drawer swipe
                 touchStartPreventDefault={false} // Let drawer handle swipe if needed
-              >
-                {project.builder_config.interface.map((item, index) => {
-                  if (item.type === "panel" && item?.widgets?.length > 0) {
-                    return (
-                      <SwiperSlide key={index} style={{ height: "100%", boxSizing: "border-box" }}>
-                        {/* Scrollable container for widgets */}
-                        <Box
-                          ref={scrollableContentRef}
-                          sx={{
-                            display: "flex",
-                            flexDirection: "column",
-                            height: "100%",
-                            width: "100%",
-                            overflowY: "auto", // Enable vertical scrolling for widgets
-                            overflowX: "hidden",
-                            boxSizing: "border-box",
-                            pb: 4, // Padding at the bottom
-                            touchAction: "pan-y", // Hint for browser scroll handling
-                          }}
-                          // No touch handlers needed here anymore, handled by parent Box
-                        >
-                          {item?.widgets?.map((widget) => (
-                            <Box key={widget.id} sx={{ p: 2, width: "100%", flexShrink: 0 }}>
-                              <WidgetWrapper
-                                widget={widget}
-                                projectLayers={projectLayers}
-                                projectLayerGroups={projectLayerGroups}
-                                viewOnly
-                              />
-                            </Box>
-                          ))}
+                // Track the active panel so the shared drawer chrome
+                // (puller + content area) can match its background color.
+                onSlideChange={(swiper: { activeIndex: number }) =>
+                  setActiveSlideIndex(swiper.activeIndex)
+                }>
+                {panels.map((item, index) => (
+                  <SwiperSlide key={index} style={{ height: "100%", boxSizing: "border-box" }}>
+                    {/* Scrollable container for widgets */}
+                    <Box
+                      ref={scrollableContentRef}
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        height: "100%",
+                        width: "100%",
+                        // Each slide carries its own configured panel color so
+                        // adjacent panels render correctly mid-swipe.
+                        backgroundColor: getPanelBgColor(item),
+                        overflowY: "auto", // Enable vertical scrolling for widgets
+                        overflowX: "hidden",
+                        boxSizing: "border-box",
+                        pb: 4, // Padding at the bottom
+                        touchAction: "pan-y", // Hint for browser scroll handling
+                      }}
+                      // No touch handlers needed here anymore, handled by parent Box
+                    >
+                      {item?.widgets?.map((widget) => (
+                        <Box key={widget.id} sx={{ p: 2, width: "100%", flexShrink: 0 }}>
+                          <WidgetWrapper
+                            widget={widget}
+                            projectLayers={projectLayers}
+                            projectLayerGroups={projectLayerGroups}
+                            viewOnly
+                          />
                         </Box>
-                      </SwiperSlide>
-                    );
-                  }
-                  return null;
-                })}
+                      ))}
+                    </Box>
+                  </SwiperSlide>
+                ))}
               </Swiper>
             )}
           </Box>
@@ -646,7 +734,14 @@ const MobileProjectLayout = ({
       <CustomBasemapDialog
         open={dialogOpen}
         initial={editing}
-        onClose={() => setDialogOpen(false)}
+        projectLayers={projectLayers}
+        onClose={() => {
+          setDialogOpen(false);
+          if (basemapBeforeEdit.current !== null) {
+            setActiveBasemap(basemapBeforeEdit.current);
+            basemapBeforeEdit.current = null;
+          }
+        }}
         onSubmit={async (payload) => {
           if (editing) {
             await editCustomBasemap(editing.id, payload);

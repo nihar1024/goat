@@ -2,6 +2,7 @@ import useSWR from "swr";
 
 import { apiRequestAuth, fetcher } from "@/lib/api/fetcher";
 import { PROCESSES_API_BASE_URL } from "@/lib/api/processes";
+import { useAuthedSWR } from "@/lib/api/useAuthedSWR";
 import type { GetContentQueryParams } from "@/lib/validations/common";
 import type {
   AggregationStatsQueryParams,
@@ -17,13 +18,6 @@ import type {
   ProjectPublic,
   ProjectViewState,
 } from "@/lib/validations/project";
-import type {
-  PostScenario,
-  ScenarioFeaturePost,
-  ScenarioFeatureUpdate,
-  ScenarioFeatures,
-  ScenarioResponse,
-} from "@/lib/validations/scenario";
 
 export const PROJECTS_API_BASE_URL = new URL("api/v2/project", process.env.NEXT_PUBLIC_API_URL).href;
 
@@ -57,7 +51,7 @@ export const useProject = (projectId?: string) => {
 };
 
 export const useProjectLayers = (projectId?: string) => {
-  const { data, isLoading, error, mutate, isValidating } = useSWR<ProjectLayer[]>(
+  const { data, isLoading, error, mutate, isValidating } = useAuthedSWR<ProjectLayer[]>(
     () => (projectId ? [`${PROJECTS_API_BASE_URL}/${projectId}/layer`] : null),
     fetcher
   );
@@ -79,34 +73,6 @@ export const useProjectLayerGroups = (projectId?: string) => {
 
   return {
     layerGroups: data,
-    isLoading: isLoading,
-    isError: error,
-    mutate,
-    isValidating,
-  };
-};
-
-export const useProjectScenarios = (projectId: string) => {
-  const { data, isLoading, error, mutate, isValidating } = useSWR<ScenarioResponse>(
-    [`${PROJECTS_API_BASE_URL}/${projectId}/scenario`],
-    fetcher
-  );
-  return {
-    scenarios: data,
-    isLoading: isLoading,
-    isError: error,
-    mutate,
-    isValidating,
-  };
-};
-
-export const useProjectScenarioFeatures = (projectId: string, scenarioId?: string | null) => {
-  const { data, isLoading, error, mutate, isValidating } = useSWR<ScenarioFeatures>(
-    () => (scenarioId ? [`${PROJECTS_API_BASE_URL}/${projectId}/scenario/${scenarioId}/features`] : null),
-    fetcher
-  );
-  return {
-    scenarioFeatures: data,
     isLoading: isLoading,
     isError: error,
     mutate,
@@ -379,119 +345,6 @@ export const deleteProject = async (id: string) => {
     throw Error(`deleteProject: unable to delete project with id ${id}`);
   }
   return response;
-};
-
-export const createProjectScenario = async (projectId: string, payload: PostScenario) => {
-  const response = await apiRequestAuth(`${PROJECTS_API_BASE_URL}/${projectId}/scenario`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to create project scenario");
-  }
-  return await response.json();
-};
-
-export const updateProjectScenario = async (projectId: string, scenarioId: string, payload: PostScenario) => {
-  const response = await apiRequestAuth(`${PROJECTS_API_BASE_URL}/${projectId}/scenario/${scenarioId}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to update project scenario");
-  }
-  return await response.json();
-};
-
-export const deleteProjectScenario = async (projectId: string, scenarioId: string) => {
-  try {
-    await apiRequestAuth(`${PROJECTS_API_BASE_URL}/${projectId}/scenario/${scenarioId}`, {
-      method: "DELETE",
-    });
-  } catch (error) {
-    console.error(error);
-    throw Error(`deleteProjectScenario: unable to delete scenario with id ${scenarioId}`);
-  }
-};
-
-export const deleteProjectScenarioFeature = async (
-  projectId: string,
-  project_layer_id: number,
-  scenarioId: string,
-  featureId: string | number,
-  h33?: number,
-  geom?: string
-) => {
-  let url = `${PROJECTS_API_BASE_URL}/${projectId}/layer/${project_layer_id}/scenario/${scenarioId}/features/${featureId}`;
-
-  const params = new URLSearchParams();
-  if (h33 != null) {
-    params.set("h3_3", String(h33));
-  }
-  if (geom) {
-    params.set("geom", geom);
-  }
-  const qs = params.toString();
-  if (qs) {
-    url += `?${qs}`;
-  }
-
-  const response = await apiRequestAuth(url, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) throw await response.json();
-  return response;
-};
-
-export const updateProjectScenarioFeatures = async (
-  projectId: string,
-  project_layer_id: number,
-  scenarioId: string,
-  payload: ScenarioFeatureUpdate[]
-) => {
-  const response = await apiRequestAuth(
-    `${PROJECTS_API_BASE_URL}/${projectId}/layer/${project_layer_id}/scenario/${scenarioId}/features`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to update project scenario features");
-  }
-  return await response.json();
-};
-
-export const createProjectScenarioFeatures = async (
-  projectId: string,
-  project_layer_id: number,
-  scenarioId: string,
-  payload: ScenarioFeaturePost[]
-) => {
-  const response = await apiRequestAuth(
-    `${PROJECTS_API_BASE_URL}/${projectId}/layer/${project_layer_id}/scenario/${scenarioId}/features`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-  if (!response.ok) {
-    throw new Error("Failed to create project scenario features");
-  }
-  return await response.json();
 };
 
 export const usePublicProject = (projectId: string) => {

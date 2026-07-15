@@ -443,14 +443,6 @@ class TileService:
             del self._pmtiles_exists_cache[cache_key]
             logger.debug("Invalidated PMTiles cache for %s", cache_key)
 
-    def invalidate_all_pmtiles_cache(self) -> None:
-        """Invalidate all PMTiles cache entries.
-
-        Call this on service restart or when PMTiles storage changes.
-        """
-        self._pmtiles_exists_cache.clear()
-        logger.debug("Invalidated all PMTiles cache")
-
     def _should_use_pmtiles(
         self,
         layer_info: LayerInfo,
@@ -1411,7 +1403,7 @@ class TileService:
                     FROM {table}, bounds
                     WHERE {bbox_filter}
                       AND ST_Intersects("{geom_col}", bounds.bbox4326){extra_where_sql}
-                    QUALIFY ROW_NUMBER() OVER (ORDER BY random()) <= {limit}
+                    LIMIT {limit}
                 )
                 SELECT ST_AsMVT(
                     struct_pack({struct_pack_args}),
@@ -1434,7 +1426,7 @@ class TileService:
                     SELECT {select_clause}
                     FROM {table}, bounds
                     WHERE ST_Intersects("{geom_col}", bounds.bbox4326){extra_where_sql}
-                    QUALIFY ROW_NUMBER() OVER (ORDER BY random()) <= {limit}
+                    LIMIT {limit}
                 )
                 SELECT ST_AsMVT(
                     struct_pack({struct_pack_args}),

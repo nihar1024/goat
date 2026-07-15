@@ -30,6 +30,7 @@ import {
 import { MapSidebarItemID } from "@/types/map/common";
 
 import { useDashboardFont } from "@/hooks/dashboard/useDashboardFont";
+import { useDashboardLanguageOverride } from "@/hooks/dashboard/useDashboardLanguageOverride";
 import { useLayerStyleChange } from "@/hooks/map/LayerStyleHooks";
 import { useBasemap } from "@/hooks/map/MapHooks";
 import { useCustomBasemapMutations } from "@/hooks/map/useCustomBasemapMutations";
@@ -78,17 +79,8 @@ const PublicProjectLayout = ({
   const dispatch = useAppDispatch();
 
   // Apply dashboard language override only for public/shared view
-  const dashboardLanguage = project?.builder_config?.settings?.language;
+  useDashboardLanguageOverride(project?.builder_config?.settings?.language, viewOnly);
   const dashboardFont = useDashboardFont(project);
-  useEffect(() => {
-    if (viewOnly && dashboardLanguage && dashboardLanguage !== "auto" && dashboardLanguage !== i18n.language) {
-      const prevLang = i18n.language;
-      i18n.changeLanguage(dashboardLanguage);
-      return () => {
-        i18n.changeLanguage(prevLang);
-      };
-    }
-  }, [viewOnly, dashboardLanguage, i18n]);
 
   // Layer style change hook
   const { handleStyleChange } = useLayerStyleChange(projectLayers, viewOnly);
@@ -96,7 +88,10 @@ const PublicProjectLayout = ({
   // Measure tool - using the reusable hook
   const measureTool = useMeasureTool();
 
-  const { translatedBaseMaps, activeBasemap } = useBasemap(project);
+  const { translatedBaseMaps, activeBasemap, setActiveBasemap } = useBasemap(project);
+  // Ephemeral preview of a non-active basemap while its edit dialog is open;
+  // restored on close (never persisted).
+  const basemapBeforeEdit = useRef<string | null>(null);
   const mapMode = useAppSelector((state) => state.map.mapMode);
   const editable = mapMode !== "public";
   const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
@@ -566,6 +561,8 @@ const PublicProjectLayout = ({
             <Geocoder
               key="location"
               accessToken={MAPBOX_TOKEN}
+              bbox={project?.max_extent ?? undefined}
+              language={i18n.language}
               placeholder={t("enter_an_address")}
               tooltip={t("search")}
               onSelect={(result) => {
@@ -602,6 +599,11 @@ const PublicProjectLayout = ({
                   (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
                     (c) => c.id === id
                   ) ?? null;
+                if (target && project?.basemap !== id) {
+                  // Ephemeral preview only — reverted on close, never persisted.
+                  basemapBeforeEdit.current = project?.basemap ?? DEFAULT_BASEMAP;
+                  setActiveBasemap(id);
+                }
                 setEditing(target);
                 setDialogOpen(true);
               }}
@@ -626,6 +628,7 @@ const PublicProjectLayout = ({
     },
     [
       t,
+      i18n.language,
       measureTool,
       allowedStyles,
       activeBasemap,
@@ -767,11 +770,14 @@ const PublicProjectLayout = ({
               transition: "all 0.3s",
             }}>
             {controlsByCorner["bottom-right"].map((c) => renderControl(c, "bottom-right"))}
-            <AttributionControl
-              extraAttribution={
-                activeBasemap.source === "custom" ? activeBasemap.attribution : null
-              }
-            />
+            {/* -8px pulls the strip down to sit flush with the map's bottom edge (cancels the residual bottom inset of this bottom-right control box). */}
+            <Box sx={{ mb: "-8px" }}>
+              <AttributionControl
+                extraAttribution={
+                  activeBasemap.source === "custom" ? activeBasemap.attribution : null
+                }
+              />
+            </Box>
           </Box>
 
           {/* Scalebar — bottom-left is reserved exclusively for the scalebar */}
@@ -836,7 +842,14 @@ const PublicProjectLayout = ({
       <CustomBasemapDialog
         open={dialogOpen}
         initial={editing}
-        onClose={() => setDialogOpen(false)}
+        projectLayers={projectLayers}
+        onClose={() => {
+          setDialogOpen(false);
+          if (basemapBeforeEdit.current !== null) {
+            setActiveBasemap(basemapBeforeEdit.current);
+            basemapBeforeEdit.current = null;
+          }
+        }}
         onSubmit={async (payload) => {
           if (editing) {
             await editCustomBasemap(editing.id, payload);

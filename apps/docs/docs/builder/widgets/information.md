@@ -58,9 +58,4 @@ This section contains **widgets that provide information about your project** la
   <div class="content">Under <code>Layer actions</code>, choose the <code>Action mode</code> — <code>Compact menu</code> (actions hidden behind a ⋮ icon) or <code>Direct actions</code> (actions shown inline) — and select which actions viewers can perform per layer: <code>Style</code>, <code>View data</code>, <code>Properties</code>, <code>Zoom to</code>.</div>
 </div>
 
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/builder/widget_drag.gif').default} alt="Layers widget settings" style={{ maxHeight: "auto", maxWidth: "80%", objectFit: "cover"}}/>
-</div> 
-
-<p></p>
 

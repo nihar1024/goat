@@ -59,9 +59,4 @@ Dieser Abschnitt **enthält Widgets, die Informationen über Ihre Projektlayer**
   <div class="content">Unter <code>Layer-Aktionen</code> wählen Sie den <code>Aktionsmodus</code> — <code>Kompaktmenü</code> (Aktionen hinter einem ⋮-Symbol) oder <code>Direktaktionen</code> (Aktionen direkt angezeigt) — und legen fest, welche Aktionen Betrachter pro Layer ausführen können: <code>Stil</code>, <code>Daten anzeigen</code>, <code>Eigenschaften</code>, <code>Zoomen auf</code>.</div>
 </div>
 
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/builder/builder_layer.png').default} alt="Layer-Widget Einstellungen" style={{ maxHeight: "auto", maxWidth: "80%", objectFit: "cover"}}/>
-</div>
-
-<p></p>
 

@@ -17,11 +17,27 @@ In the Settings section, **you can configure the map controls, branding, social 
 
 ### Control layout
 
-Controls the position of map controls in Viewer mode. Each position (Top-left, Top-right, Bottom-right) can be expanded to add or remove controls as needed.
+Controls the position of map controls in Viewer mode. Three positions are available: **Top-left**, **Top-right**, and **Bottom-right**. For each position, click `+` to add a control, drag chips to reorder them, and click `×` on a chip to remove it.
+
+Available controls:
+
+| Control | Description |
+|---|---|
+| `Location search` | Search bar to jump to a location on the map |
+| `Measure` | Tool to measure distances and areas on the map |
+| `Zoom controls` | Zoom in / zoom out buttons |
+| `Basemap switcher` | Dropdown to switch the background map |
+| `Fullscreen` | Toggle fullscreen mode |
+| `Find my location` | Center the map on the viewer's current location |
+| `Project info` | Show the project info panel |
 
 ### Allowed basemaps
 
-Restrict which basemaps viewers can switch to. Select one or more basemaps from the dropdown — viewers will only see the ones you enable here.
+Restrict which basemaps viewers can switch to. Select one or more basemaps from the dropdown — viewers will only see the ones you enable here. Only shown when `Basemap switcher` is placed in any position.
+
+### Zoom limits
+
+Limit how far dashboard viewers can zoom in and out. A range slider lets you set the minimum and maximum zoom level (0–22). The current map zoom is shown as a marker on the slider for reference.
 
 ---
 
@@ -29,8 +45,7 @@ Restrict which basemaps viewers can switch to. Select one or more basemaps from 
 
 Customize the visual identity of your dashboard for Viewer mode.
 
-- `Font` — select a typeface from the dropdown. Choose `Custom...` to enter a **Font file URL** and **Font Family** name for a custom typeface.
-
+- `Font` — select a typeface from the dropdown. Choose `Custom…` to enter a **Font file URL** and **Font Family** name for a custom typeface.
 - `Primary Color` — set the main accent color used for buttons and highlights.
 - `Icon Color` — set the color for icons throughout the dashboard.
 - `Font Color` — set the text color used across the dashboard.
@@ -42,8 +57,8 @@ Customize the visual identity of your dashboard for Viewer mode.
 
 Customize how your dashboard appears when shared via social media or messaging apps.
 
-- **Preview image** — drag and drop or click to upload an image.
-- **Description** — add a short description used in social previews and search results.
+- **Preview image** — drag and drop or click to upload an image (recommended: 1200×630 pixels). Falls back to the default GOAT preview when unset.
+- **Description** — add a short description (up to 300 characters) used in social previews and search results.
 
 ---
 

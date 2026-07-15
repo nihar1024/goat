@@ -403,6 +403,16 @@ class BaseDuckLakeManager:
                     continue
                 raise
 
+    @property
+    def postgres_uri(self: "BaseDuckLakeManager") -> str | None:
+        """libpq connection string of the catalog Postgres."""
+        return self._postgres_uri
+
+    @property
+    def catalog_schema(self: "BaseDuckLakeManager") -> str | None:
+        """Schema inside the catalog Postgres holding the ducklake_* tables."""
+        return self._catalog_schema
+
     def reconnect(self: "BaseDuckLakeManager") -> None:
         """Reconnect to DuckLake."""
         with self._lock:
@@ -608,15 +618,18 @@ class BaseDuckLakeManager:
     def _warm_connection(
         self: "BaseDuckLakeManager", con: duckdb.DuckDBPyConnection
     ) -> None:
-        """Force the DuckLake catalog metadata load off the request path.
+        """Force the schema-level catalog metadata load off the request path.
 
-        DuckDB does not support catalog-qualified information_schema access
-        (e.g. `lake.information_schema.tables`), so duckdb_tables() is used
-        to enumerate the attached catalog's tables and force the metadata
-        load instead.
+        Since DuckLake 1.5.x table metadata loads lazily per table (one
+        catalog query each), so enumerating tables here (duckdb_tables())
+        would issue one query per table — ~45 s on a 12k-table catalog
+        (duckdb/ducklake#1269) on every pool build/rebuild. Warming the
+        schema list keeps the expensive part of name resolution off the
+        request path while individual tables stay lazy (~tens of ms on
+        first touch).
         """
         con.execute(
-            "SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lake'"
+            "SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'lake'"
         ).fetchone()
 
     def _build_warm_and_swap(
@@ -1020,15 +1033,18 @@ class DuckLakePool:
         return con
 
     def _warm_connection(self, con: duckdb.DuckDBPyConnection) -> None:
-        """Force the DuckLake catalog metadata load off the request path.
+        """Force the schema-level catalog metadata load off the request path.
 
-        DuckDB does not support catalog-qualified information_schema access
-        (e.g. `lake.information_schema.tables`), so duckdb_tables() is used
-        to enumerate the attached catalog's tables and force the metadata
-        load instead.
+        Since DuckLake 1.5.x table metadata loads lazily per table (one
+        catalog query each), so enumerating tables here (duckdb_tables())
+        would issue one query per table — ~45 s on a 12k-table catalog
+        (duckdb/ducklake#1269) on every pool build/rebuild. Warming the
+        schema list keeps the expensive part of name resolution off the
+        request path while individual tables stay lazy (~tens of ms on
+        first touch).
         """
         con.execute(
-            "SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lake'"
+            "SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'lake'"
         ).fetchone()
 
     def _scaled_memory_limit(self) -> str | None:
@@ -1504,6 +1520,16 @@ class DuckLakePool:
             raise error_container["error"]
 
         return result_container.get("result")
+
+    @property
+    def postgres_uri(self) -> str | None:
+        """libpq connection string of the catalog Postgres."""
+        return self._postgres_uri
+
+    @property
+    def catalog_schema(self) -> str | None:
+        """Schema inside the catalog Postgres holding the ducklake_* tables."""
+        return self._catalog_schema
 
     def reconnect(self) -> None:
         """Reconnect all connections in the pool.

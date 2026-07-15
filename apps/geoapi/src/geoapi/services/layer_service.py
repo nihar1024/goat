@@ -411,20 +411,16 @@ class LayerService:
         columns = []
         try:
             with ducklake_manager.connection() as con:
-                # Get column info from DuckDB for the 'lake' attached catalog
+                # DESCRIBE loads only this table's metadata;
+                # information_schema.columns would lazily load every table
+                # in the catalog to answer.
                 result = con.execute(
-                    f"""
-                    SELECT column_name, data_type
-                    FROM information_schema.columns
-                    WHERE table_catalog = 'lake'
-                    AND table_schema = '{layer_info.schema_name}'
-                    AND table_name = '{layer_info.table_name}'
-                    ORDER BY ordinal_position
-                    """
+                    f'DESCRIBE lake."{layer_info.schema_name}"'
+                    f'."{layer_info.table_name}"'
                 ).fetchall()
 
                 for row in result:
-                    col_name, col_type = row
+                    col_name, col_type = row[0], row[1]
                     # Map DuckDB types to JSON schema types
                     json_type = self._duckdb_to_json_type(col_type)
                     columns.append(

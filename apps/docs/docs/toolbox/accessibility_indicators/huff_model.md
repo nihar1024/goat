@@ -2,8 +2,6 @@
 sidebar_position: 6
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 import MathJax from 'react-mathjax';
 
 # Huff Model
@@ -35,29 +33,9 @@ You can configure the routing type, opportunity layers (with capacity fields), d
 
 **Key difference:** Unlike the Heatmaps, which visualize accessibility per grid cell, the *Huff Model* produces a **probability per supply location** — showing what share of total demand each facility captures.
 
-import MapViewer from '@site/src/components/MapViewer';
+:::info
 
-:::info 
-
-The Huff Model is available in certain regions. Upon selecting a `Routing type`, a **geofence** will be displayed on the map to highlight supported regions.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Coverage for Huff Model", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-If you would like to perform analyses beyond this geofence, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us"). We would be happy to discuss further options.
+The Huff Model is available in certain regions. Upon selecting a `Routing type`, GOAT displays a map overlay showing the supported coverage area. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us").
 
 :::
 
@@ -90,33 +68,12 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
   <div class="content">Pick the <code>Routing Type</code> you would like to use for the analysis.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-**Considers all paths accessible by foot**. A walking speed of 5 km/h is assumed.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-**Considers all paths accessible by bicycle**. This routing mode takes into account the surface, smoothness and slope of streets while computing accessibility. A cycling speed of 15 km/h is assumed.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Considers all paths accessible by pedelec**. This routing mode takes into account the surface and smoothness of streets while computing accessibility. A pedelec speed of 23 km/h is assumed.
-
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-**Considers all paths accessible by car**. This routing mode takes into account speed limits and one-way access restrictions while computing accessibility.
-
-</TabItem>
-
-</Tabs>
+| Mode | Considers | Speed assumed |
+|------|-----------|---------------|
+| Walk | All paths accessible by foot | 5 km/h |
+| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) | 15 km/h |
+| Pedelec | All paths accessible by pedelec (surface, smoothness) | 23 km/h |
+| Car | All paths accessible by car (speed limits, one-way restrictions) | — |
 
 ### Configuration
 

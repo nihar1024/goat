@@ -71,33 +71,12 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
   <div class="content">Wählen Sie das <code>Verkehrsmittel</code>, das Sie für die Heatmap verwenden möchten.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-**Berücksichtigt alle zu Fuß erreichbaren Wege**. Für Heatmaps wird eine Gehgeschwindigkeit von 5 km/h angenommen.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Fahrrad befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche, Ebenheit und Steigung von Straßen. Für Heatmaps wird eine Fahrradgeschwindigkeit von 15 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Pedelec befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche und Ebenheit von Straßen. Für Heatmaps wird eine Pedelec-Geschwindigkeit von 23 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Auto befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit Geschwindigkeitsbegrenzungen und Einbahnstraßenbeschränkungen.
-
-</TabItem>
-
-</Tabs>
+| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
+|----------------|----------------|----------------------------|
+| Walk | Alle zu Fuß begehbaren Wege | 5 km/h |
+| Bicycle | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
+| Car | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
 
 ### Konfiguration
 
@@ -394,38 +373,9 @@ Heatmaps in GOAT nutzen **[Ubers H3-Raster](../../further_reading/glossary#h3-gr
 
 Die Auflösung und Dimensionen des verwendeten hexagonalen Rasters hängen vom gewählten *Routing-Modus* ab:
 
-<div style={{ marginLeft: '20px' }}>
-
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 10`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 11285.6 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 65.9 m`}</li>
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 174.4 m`}</li>
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 174.4 m`}</li> 
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 8`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 552995.7 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 461.4 m`}</li>
-
-</TabItem>
-
-</Tabs>
-</div>
+| Verkehrsmittel | Auflösung | Durchschnittliche Sechseckfläche | Durchschnittliche Kantenlänge |
+|----------------|-----------|----------------------------------|-------------------------------|
+| Walk | 10 | 11.285,6 m² | 65,9 m |
+| Bicycle | 9 | 78.999,4 m² | 174,4 m |
+| Pedelec | 9 | 78.999,4 m² | 174,4 m |
+| Car | 8 | 552.995,7 m² | 461,4 m |

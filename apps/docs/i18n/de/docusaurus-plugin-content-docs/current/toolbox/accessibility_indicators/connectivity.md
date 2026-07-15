@@ -3,9 +3,6 @@ sidebar_position: 4
 
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 import MathJax from 'react-mathjax';
 
 # Heatmap - Konnektivität
@@ -52,43 +49,12 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
   <div class="content">Wählen Sie das <code>Verkehrsmittel</code> für die Heatmap.</div>
 </div>
 
-### Konfiguration 
-
-<div style={{ marginLeft: '60px' }}>
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-**Berücksichtigt alle zu Fuß begehbaren Wege**. Für Heatmaps wird eine Gehgeschwindigkeit von 5 km/h angenommen.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Fahrrad befahrbaren Wege**. Dieser Verkehrsmittel berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche, Glätte und Steigung der Straßen. Für Heatmaps wird eine Fahrradgeschwindigkeit von 15 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Pedelec befahrbaren Wege**. Dieser Verkehrsmittel berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche und Glätte der Straßen. Für Heatmaps wird eine Pedelec-Geschwindigkeit von 23 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Auto befahrbaren Wege**. Dieser Verkehrsmittel berücksichtigt bei der Berechnung der Erreichbarkeit Geschwindigkeitsbegrenzungen und Einbahnstraßenbeschränkungen.
-
-</TabItem>
-
-</Tabs>
-</div>
-
-:::tip Hinweis
-
-Für weitere Einblicke in den Routing-Algorithmus besuchen Sie [Routing](../../category/routing). Darüber hinaus können Sie diese [Publikation](https://doi.org/10.1016/j.jtrangeo.2021.103080) lesen.
-
-:::
+| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
+|----------------|----------------|----------------------------|
+| Walk | Alle zu Fuß begehbaren Wege | 5 km/h |
+| Bicycle | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
+| Car | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
 
 <div class="step">
   <div class="step-number">4</div>
@@ -152,41 +118,12 @@ Heatmaps in GOAT nutzen **[Ubers H3-rasterbasierte](../../further_reading/glossa
 
 Die Auflösung und Abmessungen des verwendeten sechseckigen Rasters hängen vom gewählten *Verkehrsmittel* ab:
 
-<div style={{ marginLeft: '20px' }}>
-
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 10`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 11285.6 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseck-Kantenlänge: 65.9 m`}</li>
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseck-Kantenlänge: 174.4 m`}</li>
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseck-Kantenlänge: 174.4 m`}</li> 
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 8`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 552995.7 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseck-Kantenlänge: 461.4 m`}</li>
-
-</TabItem>
-
-</Tabs>
-</div>
+| Verkehrsmittel | Auflösung | Durchschnittliche Sechseckfläche | Durchschnittliche Kantenlänge |
+|----------------|-----------|----------------------------------|-------------------------------|
+| Walk | 10 | 11.285,6 m² | 65,9 m |
+| Bicycle | 9 | 78.999,4 m² | 174,4 m |
+| Pedelec | 9 | 78.999,4 m² | 174,4 m |
+| Car | 8 | 552.995,7 m² | 461,4 m |
 
 :::tip Tipp
 

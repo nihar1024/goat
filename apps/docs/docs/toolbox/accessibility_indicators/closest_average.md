@@ -2,8 +2,6 @@
 sidebar_position: 3
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 import MathJax from 'react-mathjax';
 
 # Heatmap - Closest Average
@@ -59,30 +57,13 @@ Heatmap computation is available across **over 30 European countries** for `Walk
   <div class="content">Pick the <code>Transport mode</code> you would like to use for the heatmap.</div>
 </div>
 
-<Tabs>
-<TabItem value="walk" label="Walk" default className="tabItemBox">
+| Mode | Considers | Speed assumed |
+|------|-----------|---------------|
+| Walk | All paths accessible by foot | 5 km/h |
+| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) | 15 km/h |
+| Pedelec | All paths accessible by pedelec (surface, smoothness) | 23 km/h |
+| Car | All paths accessible by car (speed limits, one-way restrictions) | — |
 
-#### Walk
-
-**Considers all paths accessible by foot**. For heatmaps, a walking speed of 5 km/h is assumed.
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-**Considers all paths accessible by bicycle**. This routing mode takes into account the surface, smoothness and slope of streets while computing accessibility. For heatmaps, a cycling speed of 15 km/h is assumed.
-
-</TabItem>
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Considers all paths accessible by pedelec**. This routing mode takes into account the surface and smoothness of streets while computing accessibility. For heatmaps, a pedelec speed of 23 km/h is assumed.
-
-</TabItem>
-<TabItem value="car" label="Car" className="tabItemBox">
-
-**Considers all paths accessible by car**. This routing mode takes into account speed limits and one-way access restrictions while computing accessibility.
-
-</TabItem>
-</Tabs>
 
 ### Opportunities
 
@@ -157,41 +138,12 @@ Heatmaps in GOAT utilize **[Uber's H3 grid-based](../../further_reading/glossary
 
 The resolution and dimensions of the hexagonal grid used depend on the selected *routing type*:
 
-<div style={{ marginLeft: '20px' }}>
-
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 10`}</li>
-<li parentName="ul">{`Average hexagon area: 11285.6 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 65.9 m`}</li>
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 9`}</li>
-<li parentName="ul">{`Average hexagon area: 78999.4 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 174.4 m`}</li>
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 9`}</li>
-<li parentName="ul">{`Average hexagon area: 78999.4 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 174.4 m`}</li> 
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 8`}</li>
-<li parentName="ul">{`Average hexagon area: 552995.7 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 461.4 m`}</li>
-
-</TabItem>
-
-</Tabs>
-</div>
+| Mode | Resolution | Average hexagon area | Average hexagon edge length |
+|------|-----------|----------------------|-----------------------------|
+| Walk | 10 | 11,285.6 m² | 65.9 m |
+| Bicycle | 9 | 78,999.4 m² | 174.4 m |
+| Pedelec | 9 | 78,999.4 m² | 174.4 m |
+| Car | 8 | 552,995.7 m² | 461.4 m |
 
 
 :::tip Hint

@@ -2,8 +2,6 @@
 sidebar_position: 3
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 import MathJax from 'react-mathjax';
 
 # Heatmap - Durchschnitt Reisezeit
@@ -60,33 +58,13 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
   <div class="content">Wählen Sie ein <code>Verkehrsmittel</code> welches Sie für die Heatmap anwenden möchten.</div>
 </div>
 
-<Tabs>
+| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
+|----------------|----------------|----------------------------|
+| Walk | Alle zu Fuß begehbaren Wege | 5 km/h |
+| Bicycle | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
+| Car | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
 
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-**Berücksichtigt alle Wege, die zu Fuß zugänglich sind.** Für Heatmaps wird eine Gehgeschwindigkeit von 5 km/h angenommen.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-**Berücksichtigt alle Wege, die mit dem Fahrrad zugänglich sind**. Dieser Routing-Modus berücksichtigt die Oberfläche, Glätte und Steigung der Straßen bei der Berechnung der Erreichbarkeit. Für Heatmaps wird eine Fahrradgeschwindigkeit von 15 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Berücksichtigt alle Wege, die mit dem Pedelec zugänglich sind**. Dieser Routing-Modus berücksichtigt die Oberfläche und Glätte der Straßen bei der Berechnung der Erreichbarkeit. Im Gegensatz zu normalen Fahrrädern haben Steigungen bei Pedelecs eine geringere Behinderung. Für Heatmaps wird eine Pedelec-Geschwindigkeit von 23 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-**Berücksichtigt alle Wege, die mit dem Auto zugänglich sind**. Dieser Routing-Modus berücksichtigt Geschwindigkeitsbegrenzungen und Einbahnstraßenbeschränkungen bei der Berechnung der Erreichbarkeit.
-
-</TabItem>
-
-</Tabs>
 
 ### Gelegenheiten
 
@@ -135,7 +113,7 @@ Sobald die Berechnung abgeschlossen ist, wird ein Ergebnislayer zur Karte hinzug
   <img src={require('/img/toolbox/accessibility_indicators/heatmaps/closest_average_based/clst-avg-calculation.gif').default} alt="Heatmap Durchschnitt Reisezeit Berechnung" style={{width: "auto", height: "400px", objectFit: "cover"}}/>
 </div>
 
-## 5. Technische Details
+## 4. Technische Details
 
 ### Berechnung
 
@@ -154,7 +132,7 @@ Die Formel für die durchschnittliche Reisezeit lautet:
 Für jede Zelle (**i**) summiert das Tool die Reisezeiten (**tij**) zu allen erreichbaren Gelegenheiten (**j**), bis zu **n** davon, und teilt durch **n**, um die durchschnittliche Reisezeit zu erhalten.
 
 ### Klassifizierung
-In order to classify the accessibility levels that were computed for each grid cell, a classification based on quantiles is used by default. However, various other classification methods may be used instead. Read more in the **[Datenklassifizierungsmethoden](../../map/layer_style/style/attribute_based_styling#datenklassifizierungsmethoden)** section of the *Attributbasiertes Styling* page.
+Um die berechneten Erreichbarkeitswerte für jede Rasterzelle zu klassifizieren, wird standardmäßig eine Klassifizierung auf Basis von Quantilen verwendet. Es können jedoch auch verschiedene andere Klassifizierungsmethoden eingesetzt werden. Weitere Informationen finden Sie im Abschnitt **[Datenklassifizierungsmethoden](../../map/layer_style/style/attribute_based_styling#datenklassifizierungsmethoden)** auf der Seite *Attributbasiertes Styling*.
 
 ### Visualisierung
 
@@ -162,41 +140,12 @@ Heatmaps in GOAT nutzen die **[Uber H3 Gitter-basierte](../../further_reading/gl
 
 Die Auflösung und die Dimensionen des verwendeten sechseckigen Gitters hängen vom gewählten *Verkehrsmittel* ab:
 
-<div style={{ marginLeft: '20px' }}>
-
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 10`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 11285.6 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge des Sechsecks: 65,9 m`}</li>
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge des Sechsecks: 174,4 m`}</li>
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge des Sechsecks: 174,4 m`}</li> 
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 8`}</li>
-<li parentName="ul">{`Durchschnittliche Sechseckfläche: 552995.7 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge des Sechsecks: 461,4 m`}</li>
-
-</TabItem>
-
-</Tabs>
-</div>
+| Verkehrsmittel | Auflösung | Durchschnittliche Sechseckfläche | Durchschnittliche Kantenlänge |
+|----------------|-----------|----------------------------------|-------------------------------|
+| Walk | 10 | 11.285,6 m² | 65,9 m |
+| Bicycle | 9 | 78.999,4 m² | 174,4 m |
+| Pedelec | 9 | 78.999,4 m² | 174,4 m |
+| Car | 8 | 552.995,7 m² | 461,4 m |
 
 :::tip Tipp
 

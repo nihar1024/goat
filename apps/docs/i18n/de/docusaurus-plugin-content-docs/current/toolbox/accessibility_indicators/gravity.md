@@ -68,33 +68,12 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
   <div class="content">Wählen Sie das <code>Verkehrsmittel</code> für die Heatmap aus.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-**Berücksichtigt alle Wege, die zu Fuß erreichbar sind.** Für Heatmaps wird eine Gehgeschwindigkeit von 5 km/h angenommen.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-**Berücksichtigt alle Wege, die mit dem Fahrrad erreichbar sind.** Dieser Modus berücksichtigt Oberfläche, Glätte und Steigung der Straßen. Für Heatmaps wird eine Geschwindigkeit von 15 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Berücksichtigt alle Wege, die mit dem Pedelec erreichbar sind.** Dieser Modus berücksichtigt Oberfläche und Glätte der Straßen. Für Heatmaps wird eine Geschwindigkeit von 23 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-**Berücksichtigt alle Wege, die mit dem Auto erreichbar sind.** Dieser Modus berücksichtigt Tempolimits und Einbahnstraßenregelungen.
-
-</TabItem>
-
-</Tabs>
+| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
+|----------------|----------------|----------------------------|
+| Walk | Alle zu Fuß begehbaren Wege | 5 km/h |
+| Bicycle | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
+| Car | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
 
 ### Konfiguration
 
@@ -115,29 +94,17 @@ Diese Funktion berechnet die Erreichbarkeit basierend auf einer Gaußschen Kurve
 
 Diese Funktion hält eine direkte Korrelation zwischen Reisezeit und Erreichbarkeit aufrecht, die durch das von Ihnen angegebene `Destinationspotenzial` moduliert wird. Für weitere Details siehe den Abschnitt [Technische Details](#4-technische-details).
 
-:::info Hinweis
-Diese Funktion befindet sich derzeit in Entwicklung. 🧑🏻‍💻
-:::
-
 </TabItem>
 
 <TabItem value="exponential" label="Exponential" default className="tabItemBox">
 
 Diese Funktion berechnet die Erreichbarkeit basierend auf einer exponentiellen Kurve, die von der `Sensitivität` und dem `Destinationspotenzial` beeinflusst wird. Für weitere Details siehe den Abschnitt [Technische Details](#4-technische-details).
 
-:::info Hinweis
-Diese Funktion befindet sich derzeit in Entwicklung. 🧑🏻‍💻
-:::
-
 </TabItem>
 
 <TabItem value="power" label="Potenz" default className="tabItemBox">
 
 Diese Funktion berechnet die Erreichbarkeit basierend auf einer Potenzkurve, die von der `Sensitivität` und dem `Destinationspotenzial` beeinflusst wird. Für weitere Details siehe den Abschnitt [Technische Details](#4-technische-details).
-
-:::info Hinweis
-Diese Funktion befindet sich derzeit in Entwicklung. 🧑🏻‍💻
-:::
 
 </TabItem>
 
@@ -329,41 +296,12 @@ Heatmaps in GOAT nutzen die **[Uber H3 grid-basierte](../../further_reading/glos
 
 Die Auflösung und Dimensionen des verwendeten hexagonalen Rasters hängen vom gewählten *Verkehrsmittel* ab:
 
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-- Auflösung: 10
-- Durchschnittliche Hexagonfläche: 11.285,6 m²
-- Durchschnittliche Hexagonkantenlänge: 65,9 m
-
-</TabItem>
-  
-<TabItem value="bicycle" label="Fahrrad" className="tabItemBox">
-
-- Auflösung: 9
-- Durchschnittliche Hexagonfläche: 78.999,4 m²
-- Durchschnittliche Hexagonkantenlänge: 174,4 m
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-- Auflösung: 9
-- Durchschnittliche Hexagonfläche: 78.999,4 m²
-- Durchschnittliche Hexagonkantenlänge: 174,4 m
-
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-- Auflösung: 8
-- Durchschnittliche Hexagonfläche: 552.995,7 m²
-- Durchschnittliche Hexagonkantenlänge: 461,4 m
-
-</TabItem>
-
-</Tabs>
+| Verkehrsmittel | Auflösung | Durchschnittliche Sechseckfläche | Durchschnittliche Kantenlänge |
+|----------------|-----------|----------------------------------|-------------------------------|
+| Walk | 10 | 11.285,6 m² | 65,9 m |
+| Bicycle | 9 | 78.999,4 m² | 174,4 m |
+| Pedelec | 9 | 78.999,4 m² | 174,4 m |
+| Car | 8 | 552.995,7 m² | 461,4 m |
 
 :::tip Hinweis
 

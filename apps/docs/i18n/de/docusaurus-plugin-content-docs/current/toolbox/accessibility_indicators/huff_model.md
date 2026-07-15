@@ -2,8 +2,6 @@
 sidebar_position: 6
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 import MathJax from 'react-mathjax';
 
 # Huff-Modell
@@ -34,29 +32,9 @@ Sie können den Routing-Modus, die Ziele-Layer (mit Kapazitätsfeldern), den Bed
 
 **Wesentlicher Unterschied:** Im Gegensatz zu Heatmaps, die die Erreichbarkeit pro Rasterzelle visualisieren, erzeugt das *Huff-Modell* eine **Wahrscheinlichkeit pro Angebotsstandort** – und zeigt, welchen Anteil der Gesamtnachfrage jede Einrichtung erfasst.
 
-import MapViewer from '@site/src/components/MapViewer';
+:::info
 
-:::info 
-
-Das Huff-Modell ist in bestimmten Regionen verfügbar. Bei Auswahl eines `Routing-Modus` wird ein **Geofence** auf der Karte angezeigt, um die unterstützten Regionen hervorzuheben.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Abdeckung für Huff-Modell", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, können Sie uns gerne [kontaktieren](https://plan4better.de/kontakt/ "Kontaktieren Sie uns"). Wir besprechen gerne weitere Optionen.
+Das Huff-Modell ist in bestimmten Regionen verfügbar. Nach Auswahl eines `Routing-Modus` zeigt GOAT eine Kartenüberlagerung mit der unterstützten Abdeckung an. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/kontakt/ "Kontaktieren Sie uns") gerne.
 
 :::
 
@@ -89,33 +67,12 @@ Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, können Si
   <div class="content">Wählen Sie den <code>Routing-Modus</code>, den Sie für die Analyse verwenden möchten.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-**Berücksichtigt alle zu Fuß erreichbaren Wege**. Es wird eine Gehgeschwindigkeit von 5 km/h angenommen.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Fahrrad befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche, Ebenheit und Steigung von Straßen. Es wird eine Fahrradgeschwindigkeit von 15 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Pedelec befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche und Ebenheit von Straßen. Es wird eine Pedelec-Geschwindigkeit von 23 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Auto befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit Geschwindigkeitsbegrenzungen und Einbahnstraßenbeschränkungen.
-
-</TabItem>
-
-</Tabs>
+| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
+|----------------|----------------|----------------------------|
+| Walk | Alle zu Fuß begehbaren Wege | 5 km/h |
+| Bicycle | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
+| Car | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
 
 ### Konfiguration
 

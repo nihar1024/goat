@@ -83,3 +83,85 @@ In the Billing menu, you can **view your current plan and available plans**. Thi
 Please feel free to contact the **[Support](https://plan4better.de/en/contact/ "Contact support")** anytime in case you have questions regarding your plan. 
 
 :::
+
+<p>
+</p>
+
+## White Label
+
+Under **White Label**, you can publish dashboards on your own domain and configure analytics tracking for published dashboards. White Label settings apply to the whole organization and are accessible to organization owners.
+
+### Custom Domains
+
+**Publish your dashboards on your own domain.** Each domain serves one published project. To assign a domain to a project, use the Share dialog in the Dashboard Builder.
+
+**To add a custom domain:**
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Click <code>+ Add your first domain</code> (or the add button if you already have domains).</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">In the <strong>Add custom domain</strong> dialog, enter your <code>Domain name</code> — for example <code>dashboards.example.com</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Click <code>Continue</code>. The <strong>Configure DNS</strong> step opens, showing the DNS record you need to create at your DNS provider:
+    <ul>
+      <li><strong>Subdomain</strong> (e.g. <code>maps.example.com</code>): create a <strong>CNAME</strong> record pointing at the provided target.</li>
+      <li><strong>Apex domain</strong> (e.g. <code>example.com</code>): create an <strong>A</strong> record pointing at the provided IP address.</li>
+    </ul>
+    The dialog includes copy buttons for each value. GOAT checks DNS propagation every 30 seconds automatically.
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Once DNS is verified, GOAT issues an SSL certificate from <strong>Let's Encrypt</strong> automatically — usually under 2 minutes. The domain status changes to <strong>Active</strong>.</div>
+</div>
+
+**Domain statuses in the list:**
+
+| Status | Description | Available actions |
+| --- | --- | --- |
+| Pending DNS | DNS record not yet detected | Show DNS, Recheck |
+| Issuing | DNS verified, SSL certificate being issued | Details |
+| Active | Domain is live and serving dashboards | Unassign (if assigned), Delete |
+| Failed | DNS or certificate provisioning failed | Details, Retry, Delete |
+
+To view DNS record details or troubleshoot a failed domain, click **Details** or **Show DNS** to open the domain detail drawer, which shows the current DNS and certificate status messages and a **Recheck now** button.
+
+To remove a domain from a project without deleting it, use the project's **Share** dialog. The **Unassign** button in the domain list is only shown when the domain is active and assigned.
+
+### Analytics
+
+**Configure analytics tracking for your published dashboards.** Tracking is opt-in per project via the Share dialog.
+
+GOAT currently supports **Matomo** as the analytics provider. To set it up:
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Select <code>Matomo</code> from the <code>Provider</code> dropdown.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Enter your <code>Matomo URL</code> — your Matomo instance URL including trailing slash (e.g. <code>https://matomo.example.org/</code>).</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Enter your <code>Site ID</code> — found in Matomo → Administration → Websites.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Click <code>Save</code>.</div>
+</div>
+
+:::tip
+Add each of your custom domains to your Matomo site's URL list, and configure Custom Dimension 1 as "Project ID" so per-dashboard breakdown works in Matomo.
+:::

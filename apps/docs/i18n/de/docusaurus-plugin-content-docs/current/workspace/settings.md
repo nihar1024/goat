@@ -83,3 +83,85 @@ Im Menü **Abrechnung** können Sie Ihren aktuellen Plan sowie verfügbare Plän
 Bitte zögern Sie nicht, jederzeit den **[Support](https://plan4better.de/en/contact/ "Support kontaktieren")** zu kontaktieren, falls Sie Fragen zu Ihrem Plan haben. 
 
 :::
+
+<p>
+</p>
+
+## White Label
+
+Unter **White Label** können Sie Dashboards auf Ihrer eigenen Domain veröffentlichen und Analytics-Tracking für veröffentlichte Dashboards konfigurieren. White-Label-Einstellungen gelten für die gesamte Organisation und sind für Organisationsinhaber zugänglich.
+
+### Eigene Domains
+
+**Veröffentlichen Sie Ihre Dashboards unter Ihrer eigenen Domain.** Jede Domain bedient ein veröffentlichtes Projekt. Um eine Domain einem Projekt zuzuweisen, verwenden Sie den Teilen-Dialog im Dashboard-Builder.
+
+**So fügen Sie eine eigene Domain hinzu:**
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Klicken Sie auf <code>Erste Domain hinzufügen</code> (oder auf die Hinzufügen-Schaltfläche, wenn bereits Domains vorhanden sind).</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Geben Sie im Dialog <strong>Eigene Domain hinzufügen</strong> Ihren <code>Domainnamen</code> ein — zum Beispiel <code>dashboards.example.com</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Klicken Sie auf <code>Weiter</code>. Der Schritt <strong>DNS konfigurieren</strong> öffnet sich und zeigt den DNS-Eintrag, den Sie bei Ihrem DNS-Anbieter erstellen müssen:
+    <ul>
+      <li><strong>Subdomain</strong> (z. B. <code>maps.example.com</code>): Erstellen Sie einen <strong>CNAME</strong>-Eintrag, der auf das angegebene Ziel verweist.</li>
+      <li><strong>Apex-Domain</strong> (z. B. <code>example.com</code>): Erstellen Sie einen <strong>A</strong>-Eintrag, der auf die angegebene IP-Adresse verweist.</li>
+    </ul>
+    Der Dialog enthält Kopierschaltflächen für jeden Wert. GOAT prüft die DNS-Propagierung automatisch alle 30 Sekunden.
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Sobald DNS verifiziert ist, stellt GOAT automatisch ein SSL-Zertifikat von <strong>Let's Encrypt</strong> aus — meist in unter 2 Minuten. Der Domain-Status wechselt zu <strong>Aktiv</strong>.</div>
+</div>
+
+**Domain-Status in der Liste:**
+
+| Status | Beschreibung | Verfügbare Aktionen |
+| --- | --- | --- |
+| Ausstehend (DNS) | DNS-Eintrag noch nicht erkannt | DNS anzeigen, Erneut prüfen |
+| Wird ausgestellt | DNS verifiziert, SSL-Zertifikat wird ausgestellt | Details |
+| Aktiv | Domain ist aktiv und bedient Dashboards | Zuweisung aufheben (wenn zugewiesen), Löschen |
+| Fehlgeschlagen | DNS- oder Zertifikat-Provisioning fehlgeschlagen | Details, Erneut versuchen, Löschen |
+
+Um DNS-Eintragsdetails anzuzeigen oder eine fehlgeschlagene Domain zu analysieren, klicken Sie auf **Details** oder **DNS anzeigen**, um die Domain-Detailansicht zu öffnen. Diese zeigt den aktuellen DNS- und Zertifikatstatus sowie eine Schaltfläche **Jetzt erneut prüfen**.
+
+Um eine Domain von einem Projekt zu entfernen, ohne sie zu löschen, verwenden Sie den **Teilen**-Dialog des Projekts. Die Schaltfläche **Zuweisung aufheben** in der Domain-Liste wird nur angezeigt, wenn die Domain aktiv und zugewiesen ist.
+
+### Analytics
+
+**Konfigurieren Sie Analytics-Tracking für Ihre veröffentlichten Dashboards.** Das Tracking erfolgt per Opt-in pro Projekt über den Teilen-Dialog.
+
+GOAT unterstützt derzeit **Matomo** als Analytics-Anbieter. So richten Sie es ein:
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Wählen Sie <code>Matomo</code> aus dem <code>Anbieter</code>-Dropdown.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Geben Sie Ihre <code>Matomo-URL</code> ein — die URL Ihrer Matomo-Instanz inklusive abschließendem Schrägstrich (z. B. <code>https://matomo.example.org/</code>).</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Geben Sie Ihre <code>Site-ID</code> ein — zu finden in Matomo → Administration → Websites.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Klicken Sie auf <code>Speichern</code>.</div>
+</div>
+
+:::tip
+Fügen Sie jede Ihrer eigenen Domains zur URL-Liste Ihrer Matomo-Site hinzu und konfigurieren Sie benutzerdefinierte Dimension 1 als "Project ID", damit eine projektweise Auswertung in Matomo funktioniert.
+:::

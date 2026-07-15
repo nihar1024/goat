@@ -19,30 +19,10 @@ Der Heatmap - Konnektivität Indikator **erstellt eine farbkodierte Karte zur Vi
 
 Die Heatmap verwendet ein farbkodiertes sechseckiges Gitter, um **zu zeigen, wie gut verschiedene Gebiete miteinander verbunden sind.** Als Eingabeparameter werden ein **Interessengebiet** (AOI), ein **Verkehrsmittel** (zu Fuß, Radfahren usw.) und ein **Reisezeitlimit** benötigt. Unter Berücksichtigung der realen Verkehrs- und Straßennetze berechnet sie die Konnektivität jedes Sechsecks innerhalb der AOI.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps sind in bestimmten Regionen verfügbar. Bei der Auswahl eines `Verkehrsmittels` wird auf der Karte ein **Geofence** angezeigt, um die unterstützten Regionen hervorzuheben.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Abdeckung für konnektivitätsbasierte Heatmaps", color: "#ffffff" }
-      ]}
-  />
-</div>
-
-
-Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, wenden Sie sich bitte an uns. Wir besprechen mit Ihnen gerne weitere Möglichkeiten. [Kontaktieren Sie uns](https://plan4better.de/en/contact/ "Kontaktieren Sie uns").
+Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/en/contact/) gerne.
 
 :::
 

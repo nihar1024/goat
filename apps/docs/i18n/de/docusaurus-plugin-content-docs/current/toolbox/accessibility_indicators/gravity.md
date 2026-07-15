@@ -32,25 +32,10 @@ Beeinflusst durch all diese Eigenschaften kann **die Erreichbarkeit eines Punkte
 
 **Wichtiger Unterschied:** Im Gegensatz zur *Heatmap Durchschnitt Reisezeit*, die den Reiseaufwand misst, zeigt die *Gravity-basierte Heatmap* die **Attraktivität** – also wie erreichbar und anziehend Ziele sind, wenn sowohl Entfernung als auch Qualität berücksichtigt werden.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps sind in bestimmten Regionen verfügbar. Nach Auswahl eines `Verkehrsmittels` wird eine **Geofence** auf der Karte angezeigt, um unterstützte Regionen hervorzuheben.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={["https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[{ label: "Abdeckung für Gravity-basierte Heatmaps", color: "#ffffff" }]}
-  />
-</div> 
-
-Wenn Sie Analysen außerhalb dieses Geofence durchführen möchten, [kontaktieren Sie uns](https://plan4better.de/en/contact/ "Kontakt"). Wir besprechen gerne weitere Optionen.
+Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/en/contact/) gerne.
 
 :::
 

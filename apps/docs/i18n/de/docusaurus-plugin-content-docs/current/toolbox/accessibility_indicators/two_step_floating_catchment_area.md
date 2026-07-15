@@ -37,29 +37,10 @@ Sie können den **Routing-Modus**, **Ziele-Layer** (mit Kapazitätsfeld), **Beda
 
 **Wesentlicher Unterschied:** Im Gegensatz zur *Gravitationsbasierten Heatmap*, die die allgemeine Erreichbarkeit von Zielen misst, modelliert die *2SFCA Heatmap* explizit das **Gleichgewicht von Angebot und Nachfrage** – und zeigt, wo die Kapazität im Verhältnis zur bedürftigen Bevölkerung ausreichend oder unzureichend ist.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps sind in bestimmten Regionen verfügbar. Bei Auswahl eines `Routing-Modus` wird ein **Geofence** auf der Karte angezeigt, um die unterstützten Regionen hervorzuheben.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Abdeckung für 2SFCA Heatmaps", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, können Sie uns gerne [kontaktieren](https://plan4better.de/kontakt/ "Kontaktieren Sie uns"). Wir besprechen gerne weitere Optionen.
+Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/en/contact/) gerne.
 
 :::
 

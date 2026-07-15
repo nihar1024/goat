@@ -31,30 +31,10 @@ Influenced by all these properties, **the accessibility of a point can model com
 
 **Key difference:** Unlike the *Closest-Average* heatmap, which measures travel effort, the *Gravity-based Heatmap* measures **attractiveness** — showing how accessible and appealing destinations are when both distance and quality are considered.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps are available in certain regions. Upon selecting a `Routing type`, a **geofence** will be displayed on the map to highlight supported regions.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Coverage for Gravity-based Heatmaps", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-
-If you would like to perform analyses beyond this geofence, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us"). We would be happy to discuss further options.
+Heatmap computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll discuss further options.
 
 :::
 

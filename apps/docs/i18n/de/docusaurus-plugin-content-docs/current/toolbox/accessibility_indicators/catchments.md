@@ -162,8 +162,17 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um die <code>Darstellung der Schritte</code> festzulegen.</div>
+  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um weitere Einstellungen vorzunehmen.</div>
 </div>
+
+#### Form der Geometrien
+
+*(Nur für Zu Fuß, Fahrrad und Pedelec — sichtbar wenn die Form des Einzugsgebiets auf Polygon gesetzt ist)*
+
+Wählen Sie, wie die Polygone bei mehreren Startpunkten geformt werden:
+
+- **Zusammengefasst über Startpunkte** *(Standard)* — alle Startpunkte werden pro Schritt zu einem gemeinsamen Einzugsgebietspolygon zusammengeführt.
+- **Getrennt nach Startpunkt** — jeder Startpunkt erhält pro Schritt ein eigenes individuelles Einzugsgebietspolygon.
 
 #### Darstellung der Schritte
 
@@ -256,9 +265,8 @@ Der Ergebnislayer wird automatisch mit einer Farbskala von der kürzesten bis zu
 
 | Routing-Modus | Maximale Startpunkte |
 | --- | --- |
-| Zu Fuß / Fahrrad / Pedelec | 1.000 |
-| Auto | 50 |
-| Öffentlicher Verkehr | 5 |
+| Zu Fuß / Fahrrad / Pedelec / Auto | 1.000 |
+| Öffentlicher Verkehr | 100 |
 
 ### Visualisierung
 

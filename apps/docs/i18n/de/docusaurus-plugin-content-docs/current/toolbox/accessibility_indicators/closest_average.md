@@ -24,32 +24,10 @@ Die **Anzahl der Ziele setzt die Berechnung der durchschnittlichen Reisezeit auf
 
 **Hauptunterschied:** Heatmaps zeigen den *Zugang* von vielen Ausgangspunkten zu spezifischen Zielen, während Einzugsgebiete die *Reichweite* von spezifischen Ausgangspunkten zu vielen Zielen zeigen.
 
-import MapViewer from '@site/src/components/MapViewer'; 
 
-:::info 
+:::info
 
-Heatmaps sind in bestimmten Regionen verfügbar. Beim Auswählen eines `Verkehrsmittels` wird auf der Karte ein **Geofence** angezeigt, um die unterstützten Regionen hervorzuheben.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '500px', margin: '0 auto' }}>
-  <div style={{ width: '100%', maxWidth: '400px' }}>
-    <MapViewer
-        geojsonUrls={[
-          "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-        ]}
-        styleOptions={{
-          fillColor: "#808080",
-          outlineColor: "#808080",
-          fillOpacity: 0.8
-        }}
-        legendItems={[
-          { label: "Heatmap-Abdeckung der Durchschnittsreisezeit", color: "#ffffff" }
-        ]}
-        style={{ width: '100%', maxWidth: '400px' }}
-    />
-  </div>
-</div> 
-
-Wenn Sie Analysen außerhalb dieses Geofence durchführen möchten, kontaktieren Sie uns bitte [hier](https://plan4better.de/de/contact/ "Kontaktieren Sie uns").
+Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/en/contact/) gerne.
 
 :::
 

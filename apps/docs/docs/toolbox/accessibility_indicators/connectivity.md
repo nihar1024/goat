@@ -18,30 +18,10 @@ The Heatmap - Connectivity indicator, **produces a color-coded map to visualize 
 
 The heatmap uses a color-coded hexagonal grid to show **how well-connected different areas are.** It takes an **Area of Interest** (AOI), a **routing type** (walking, cycling, etc.), and a **travel time limit** as inputs. Considering real-world transport and street networks, it calculates the connectivity of each hexagon within the AOI.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps are available in certain regions. Upon selecting a `Routing type`, a **geofence** will be displayed on the map to highlight supported regions.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Coverage for Connectivity-based Heatmaps", color: "#ffffff" }
-      ]}
-  />
-</div>
-
-
-If you would like to perform analyses beyond this geofence, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us"). We would be happy to discuss further options.
+Heatmap computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll discuss further options.
 
 :::
 

@@ -2,8 +2,6 @@
 sidebar_position: 10
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 # Travel Cost Matrix
 
@@ -34,22 +32,19 @@ The Travel Cost Matrix is designed for **batch computation across many origins a
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Select the <code>Routing Type</code> to use for travel cost computation.</div>
+  <div class="content">Select the <code>Transport mode</code> to use for travel cost computation.</div>
 </div>
 
-<Tabs>
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-**Considers all paths accessible by foot.**
+### Configuration
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Choose whether to calculate the travel cost based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit.</div>
+  <div class="content">Under <code>Calculate by</code>, select <code>Time (min)</code> or <code>Distance (m)</code> and set the corresponding limit.</div>
 </div>
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">If choosing <code>Time</code>, you can also set the <code>Speed</code>.</div>
+  <div class="content">If calculating by <code>Time (min)</code>, set the <code>Travel speed (km/h)</code>.</div>
 </div>
 
 :::tip Hint
@@ -58,84 +53,27 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 
 :::
 
-</TabItem>
-
-<TabItem value="cycling" label="Bicycle/Pedelec" className="tabItemBox">
-
-**Considers all bicycle-accessible paths.** Accounts for surface quality, smoothness, and slope. For Pedelec, slopes have lower impedance than standard bicycles.
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Choose whether to calculate the travel cost based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">If choosing <code>Time</code>, you can also set the <code>Speed</code>.</div>
-</div>
-
-:::tip Hint
-
-For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
-
-:::
-
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-**Considers all car-accessible paths.** Accounts for speed limits and one-way restrictions.
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Choose whether to calculate the travel cost based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit.</div>
-</div>
-
-</TabItem>
-
-<TabItem value="public transport" label="Public Transport (PT)" className="tabItemBox">
-
-**Considers all locations accessible by public transport**, including inter-modal transfers and station access/egress.
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Select the <code>Public transport modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular. Then you can select the <code>Day</code>, <code>Start Time</code>, and <code>End Time</code> for the analysis time window. </div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Optionally, click on <code>Advanced Configurations</code> to set the <code>Maximum Transfers</code> and configure the <code>Access mode</code> and <code>Egress mode</code>.</div>
-</div>
-
-</TabItem>
-</Tabs>
-
-### Origins
+### Input
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Select your <code>Origins Layer</code>. This should be a <strong>point layer</strong> where each feature represents a starting location.</div>
+  <div class="content">Under <b>Origins</b>, select your <code>Origins layer</code> (a point layer where each feature is a starting location) and set the <code>Origins label</code> — the column used to identify origins in the result matrix.</div>
 </div>
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Select the <code>Origin ID Field</code>. This field uniquely identifies each origin in the output table.</div>
+  <div class="content">Under <b>Destinations</b>, select your <code>Destinations layer</code> (a point layer where each feature is a target location) and set the <code>Destinations label</code> — the column used to identify destinations in the result matrix.</div>
 </div>
 
-### Destinations
+### Result layer
 
 <div class="step">
   <div class="step-number">7</div>
-  <div class="content">Select your <code>Destinations Layer</code>. This should be a <strong>point layer</strong> where each feature represents a target location.</div>
+  <div class="content">Optionally, set the <code>Destinations layer name</code> for the output destinations point layer.</div>
 </div>
 
 <div class="step">
   <div class="step-number">8</div>
-  <div class="content">Select the <code>Destination ID Field</code>. This field uniquely identifies each destination in the output table.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">9</div>
   <div class="content">Click on <code>Run</code>.</div>
 </div>
 
@@ -172,6 +110,18 @@ Travel costs are computed using the **same routing engine as the Catchment Area 
 - The number of calculations scales as **O × D** (number of origins × number of destinations). Large datasets with many origins and destinations will take longer to process.
 - Using a realistic **maximum travel cost** limit significantly reduces computation time and output size.
 - For **Public Transport**, the travel cost represents the average travel time for all feasible trips departing within the specified time window.
+
+### Unbounded calculation limits
+
+When no maximum travel cost is set, the following limits apply based on the bounding-box diagonal of all origin–destination pairs:
+
+| Routing mode | Maximum O-D extent (bounding-box diagonal) |
+|---|---|
+| Walk | 100 km |
+| Bicycle | 100 km |
+| Pedelec | 100 km |
+| Car | 300 km |
+| Public Transport | 300 km |
 
 ### Output geometry
 

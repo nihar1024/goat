@@ -162,14 +162,23 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Optionally, click on <code>Advanced Options</code> to set the <code>Steps style</code>.</div>
+  <div class="content">Optionally, click on <code>Advanced Options</code> to configure additional settings.</div>
 </div>
+
+#### Shape style
+
+*(Walk, Bicycle, and Pedelec only — visible when Catchment area shape is set to Polygon)*
+
+Choose how polygons are shaped when there are multiple starting points:
+
+- **Combined across origins** *(default)* — all starting points are merged into a single shared catchment polygon per step.
+- **Separated by origin** — each starting point gets its own individual catchment polygon per step.
 
 #### Steps style
 
 Choose how the isochrone steps are displayed:
 
-- **Separate steps** — each step shows only the area reachable *between* that step and the previous one.
+- **Separated steps** — each step shows only the area reachable *between* that step and the previous one.
 - **Cumulative steps** — each step shows the *full area reachable up to* that travel cost.
 
 <p></p>
@@ -257,9 +266,8 @@ The result layer is automatically styled with a color scale ranging from the sho
 
 | Routing mode | Maximum starting points |
 | --- | --- |
-| Walk / Bicycle / Pedelec | 1,000 |
-| Car | 50 |
-| Public Transport | 5 |
+| Walk / Bicycle / Pedelec / Car | 1,000 |
+| Public Transport | 100 |
 
 ### Visualization
 

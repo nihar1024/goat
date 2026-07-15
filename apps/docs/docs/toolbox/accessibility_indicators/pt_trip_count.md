@@ -2,7 +2,7 @@
 sidebar_position: 8
 ---
 
-# PT Trip Count
+# Trip Count Platform
 
 This indicator displays the **average number of public transport departures** per hour for each public transport stop.
 
@@ -12,7 +12,7 @@ This indicator displays the **average number of public transport departures** pe
 
 ## 1. Explanation
 
-The Public Transport (PT) Trip Count shows the **average number of departures per hour for a selected time interval at each public transport stop**. You can view the sum for all modes or focus on a specific mode (e.g., bus, tram, metro, rail).
+The **Trip Count Platform** shows the **average number of departures per hour for a selected time interval at each public transport stop**. You can view the sum for all modes or focus on a specific mode (e.g., bus, tram, metro, rail).
 
 This indicator is the foundation for the [ÖV-Güteklassen](./oev_gueteklassen.md) and is useful for **weak point analyses of local transport plans** (see, among others, [Guideline for Local Transport Planning in Bavaria](https://www.demografie-leitfaden-bayern.de/index.html)).
 
@@ -55,7 +55,7 @@ In case you need to perform analysis beyond this geofence, feel free to contact 
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Under <code>Accessibility Indicators</code>, select <code>PT Trip Count</code> to open the settings menu.</div>
+  <div class="content">Under <code>Accessibility Indicators</code>, select <code>Trip Count Platform</code> to open the settings menu.</div>
 </div>
 
 ### Calculation Time

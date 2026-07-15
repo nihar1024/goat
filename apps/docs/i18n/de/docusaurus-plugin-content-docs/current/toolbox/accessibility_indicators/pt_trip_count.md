@@ -1,9 +1,9 @@
 ---
-sidebar_position: 6
+sidebar_position: 8
 ---
 
 
-# Abfahrten ÖPNV
+# Anzahl Abfahrten
 
 Dieser Indikator zeigt die **durchschnittliche Anzahl der Abfahrten öffentlicher Verkehrsmittel** pro Stunde für jede Haltestelle des öffentlichen Verkehrs an.
 
@@ -13,14 +13,14 @@ Dieser Indikator zeigt die **durchschnittliche Anzahl der Abfahrten öffentliche
 
 ## 1. Erklärung
 
-Die ÖPNV-Abfahrten zeigen die **durchschnittliche Anzahl der Abfahrten pro Stunde für ein ausgewähltes Zeitintervall an jeder Haltestelle des öffentlichen Verkehrs**. Sie können die Summe für alle Verkehrsmittel anzeigen oder sich auf ein bestimmtes Verkehrsmittel konzentrieren (z.B. Bus, Straßenbahn, U-Bahn, Bahn).
+**Anzahl Abfahrten** zeigt die **durchschnittliche Anzahl der Abfahrten pro Stunde für ein ausgewähltes Zeitintervall an jeder Haltestelle des öffentlichen Verkehrs**. Sie können die Summe für alle Verkehrsmittel anzeigen oder sich auf ein bestimmtes Verkehrsmittel konzentrieren (z.B. Bus, Straßenbahn, U-Bahn, Bahn).
 
 Dieser Indikator ist die Grundlage für die [ÖV-Güteklassen](./oev_gueteklassen.md) und ist nützlich für **Schwachstellenanalysen von lokalen Verkehrsplänen** (siehe unter anderem [Richtlinie für die Nahverkehrsplanung in Bayern](https://www.demografie-leitfaden-bayern.de/index.html)).
 
 import MapViewer from '@site/src/components/MapViewer';
 
 :::info 
-Die ÖPNV-Abfahrten sind nur in Gebieten verfügbar, in denen das Verkehrsnetz in GOAT integriert ist.
+Anzahl Abfahrten ist nur in Gebieten verfügbar, in denen das Verkehrsnetz in GOAT integriert ist.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
     <MapViewer
@@ -56,7 +56,7 @@ Falls Sie Analysen außerhalb dieses Geofences durchführen müssen, kontaktiere
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Unter <code>Erreichbarkeitsindikatoren</code> wählen Sie <code>Abfahrten ÖPNV</code>, um das Einstellungsmenü zu öffnen.</div>
+  <div class="content">Unter <code>Erreichbarkeitsindikatoren</code> wählen Sie <code>Anzahl Abfahrten</code>, um das Einstellungsmenü zu öffnen.</div>
 </div>
 
 ### Berechnungszeit

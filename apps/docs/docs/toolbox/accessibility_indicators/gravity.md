@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 2
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -22,6 +22,8 @@ You can specify the **routing type**, **opportunity layer**, **travel time limit
 - The **Opportunity layer contains point-based destination data** (such as POIs, transit stops, schools, amenities, or custom points). You can select multiple opportunity layers, which will be combined into a single unified heatmap.
 
 - The **Sensitivity controls how quickly accessibility decreases with increasing travel time**, while the **Destination potential lets you give more weight to destinations with higher capacity or quality** (e.g., a larger supermarket or a bus stop with more departures). Together with the chosen **Impedance function, these settings define how accessibility is calculated**.
+
+- The **Destination Potential Type** determines how each opportunity's weight is derived: use **Constant** to apply the same value to all opportunities, **Field** to use a numeric attribute from the opportunity layer (e.g., number of departures), or **Expression** to derive the potential from polygon geometry (area or perimeter) — useful when the size of a polygon represents capacity.
 
 - Using **Destination potential helps prioritize certain opportunities over others**. For example, a larger but farther supermarket can be valued more than a smaller nearby one. This allows you to include qualitative information—such as size, frequency, or service level—when computing accessibility, resulting in a more realistic heatmap.
 
@@ -180,7 +182,13 @@ Need help choosing a suitable travel time limit for various common amenities? Th
 
 <div class="step">
   <div class="step-number">7</div>
-  <div class="content">If required, choose a <code>Destination Potential Field</code>. This must be a numeric field from your <i>Opportunity Layer</i> which will be used as a coefficient by the accessibility function.</div>
+  <div class="content">Choose a <code>Destination Potential Type</code> to define how each opportunity is weighted:
+    <ul>
+      <li><b>Constant</b> — all opportunities have the same weight. Set the <code>Destination Potential Constant</code> value (default: 1.0).</li>
+      <li><b>Field</b> — use a numeric field from the <i>Opportunity Layer</i> as the weight (e.g. number of departures, seats, or capacity). Select the field from <code>Destination Potential Field</code>.</li>
+      <li><b>Expression</b> — derive the weight from the geometry of polygon opportunity layers using <code>area</code> or <code>perimeter</code>. Only available when the opportunity layer contains polygons.</li>
+    </ul>
+  </div>
 </div>
 
 

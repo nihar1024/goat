@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 2
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -23,6 +23,8 @@ Sie können das **Verkehrsmittel**, den **Ziel-Layer**, das **Reisezeitlimit** s
 - Der **Ziel-Layer enthält punktbasierte Ziel-Daten** (wie POIs, Haltestellen, Schulen, Einrichtungen oder benutzerdefinierte Punkte). Sie können mehrere Ziel-Layer auswählen, die zu einer einzigen Heatmap kombiniert werden.
 
 - Die **Sensitivität steuert, wie schnell die Erreichbarkeit mit zunehmender Reisezeit abnimmt**, während das **Destinationspotenzial es ermöglicht, Zielen mit höherer Kapazität oder Qualität mehr Gewicht zu geben** (z. B. ein größerer Supermarkt oder eine Haltestelle mit mehr Abfahrten). Zusammen mit der gewählten **Widerstandsfunktion definieren diese Einstellungen, wie die Erreichbarkeit berechnet wird**.
+
+- Der **Destinationspotenzial-Typ** bestimmt, wie das Gewicht jedes Ziels abgeleitet wird: Mit **Konstant** wird allen Zielen der gleiche Wert zugewiesen, mit **Feld** wird ein numerisches Attribut aus dem Ziel-Layer verwendet (z. B. Abfahrten, Plätze oder Kapazität), und mit **Ausdruck** wird das Potenzial aus der Geometrie von Polygon-Layern berechnet (Fläche oder Umfang) – nützlich, wenn die Größe eines Polygons die Kapazität widerspiegelt.
 
 - Mit dem **Destinationspotenzial können bestimmte Ziele priorisiert werden**. Zum Beispiel kann ein größerer, aber weiter entfernter Supermarkt höher bewertet werden als ein kleinerer in der Nähe. So können qualitative Informationen – wie Größe, Frequenz oder Servicelevel – in die Berechnung einfließen, was zu einer realistischeren Heatmap führt.
 
@@ -176,7 +178,13 @@ Benötigen Sie Hilfe bei der Wahl eines geeigneten Reisezeitlimits für verschie
 
 <div class="step">
   <div class="step-number">7</div>
-  <div class="content">Falls erforderlich, wählen Sie ein <code>Destinationspotenzial-Feld</code>. Dies muss ein numerisches Feld aus Ihrem <i>Ziel-Layer</i> sein und wird als Koeffizient von der Erreichbarkeitsfunktion verwendet.</div>
+  <div class="content">Wählen Sie den <code>Destinationspotenzial-Typ</code>, um zu bestimmen, wie jedes Ziel gewichtet wird:
+    <ul>
+      <li><b>Konstant</b> — alle Ziele erhalten das gleiche Gewicht. Legen Sie den <code>Destinationspotenzial-Konstante</code>-Wert fest (Standard: 1.0).</li>
+      <li><b>Feld</b> — verwenden Sie ein numerisches Feld aus dem <i>Ziel-Layer</i> als Gewicht (z. B. Anzahl der Abfahrten, Sitzplätze oder Kapazität). Wählen Sie das Feld unter <code>Zielpotenzialfeld</code>.</li>
+      <li><b>Ausdruck</b> — berechnet das Gewicht aus der Geometrie von Polygon-Ziel-Layern mittels <code>Fläche</code> oder <code>Umfang</code>. Nur verfügbar, wenn der Ziel-Layer Polygone enthält.</li>
+    </ul>
+  </div>
 </div>
 
 <div class="step">

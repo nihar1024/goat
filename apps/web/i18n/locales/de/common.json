@@ -2022,7 +2022,7 @@
   "total_rows": "Anzahl Zeilen",
   "total_values": "Anzahl",
   "transfer_ownership": "Rechte übertragen",
-  "travel_cost_matrix": "Reisezeitmatrix",
+  "travel_cost_matrix": "Reisekostenmatrix",
   "travel_cost_matrix_description": "Berechnung von Reisezeiten und -entfernungen zwischen Start- und Zielpunkt-Layern.",
   "travel_time_distance": "Reiseentfernung",
   "travel_time_limit": "Reisezeitlimit",

@@ -1069,7 +1069,7 @@
       "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können."
     },
     "travel_cost_matrix": {
-      "title": "Reisezeitmatrix",
+      "title": "Reisekostenmatrix",
       "description": "Berechnet Reisezeiten und Entfernungen zwischen Start- und Zielpunkt-Layern."
     },
     "merge": {
@@ -1128,7 +1128,7 @@
     "geocoding": "Geokodierung",
     "clustered_features": "Clusterzuordnung",
     "cluster_summary": "Cluster-Zusammenfassung",
-    "travel_cost_matrix": "Reisezeitmatrix",
+    "travel_cost_matrix": "Reisekostenmatrix",
     "travel_cost_matrix_destinations": "Zielpunkte"
   },
   "two_sfca_type": {

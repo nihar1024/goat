@@ -114,7 +114,7 @@ Wenn Sie Analysen außerhalb dieses Geofence durchführen möchten, kontaktieren
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Wählen Sie Ihre <code>Gelegenheitsdaten</code> aus dem Dropdown-Menü aus. Dies kann ein zuvor ersteller Layer sein, die punktbasierte Daten enthält.</div>
+  <div class="content">Wählen Sie Ihren <code>Eingabe-Layer</code> aus dem Dropdown-Menü. Dies kann jeder zuvor erstellte Layer mit punktbasierten Daten sein.</div>
 </div>
 
 <div class="step">
@@ -135,6 +135,16 @@ Brauchen Sie Hilfe bei der Wahl eines geeigneten Reisezeitlimits für verschiede
 
 <div class="step">
   <div class="step-number">7</div>
+  <div class="content">Optional können Sie auf <code>+ Hinzufügen Gelegenheiten</code> klicken, um weitere Gelegenheits-Layer hinzuzufügen. Jeder Layer kann unterschiedliche Reisezeitlimits und Anzahl der Ziele für eine Multi-Kriterien-Analyse haben.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">8</div>
+  <div class="content">Optional können Sie unter <code>Erweiterte Optionen</code> ein <code>Referenzgebiet</code> auswählen — einen Polygon-Layer, der das vollständige Untersuchungsgebiet definiert. Wenn festgelegt, erweitert sich die Heatmap auf alle H3-Zellen innerhalb dieses Polygons; Zellen außerhalb der berechneten Erreichbarkeit werden als <code>NULL</code> dargestellt und zeigen so Versorgungslücken und unterversorgte Gebiete auf.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">9</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>, um die Berechnung der Heatmap zu beginnen.</div>
 </div>
 

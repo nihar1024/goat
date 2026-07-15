@@ -23,7 +23,7 @@ You can specify the **routing type**, **opportunity layer**, **travel time limit
 
 - The **Sensitivity controls how quickly accessibility decreases with increasing travel time**, while the **Destination potential lets you give more weight to destinations with higher capacity or quality** (e.g., a larger supermarket or a bus stop with more departures). Together with the chosen **Impedance function, these settings define how accessibility is calculated**.
 
-- The **Destination Potential Type** determines how each opportunity's weight is derived: use **Constant** to apply the same value to all opportunities, **Field** to use a numeric attribute from the opportunity layer (e.g., number of departures), or **Expression** to derive the potential from polygon geometry (area or perimeter) — useful when the size of a polygon represents capacity.
+- The **Potential Type** determines how each opportunity's weight is derived: use **Constant** to apply the same value to all opportunities, or **Field** to use a numeric attribute from the input layer (e.g., number of departures, seats, or capacity).
 
 - Using **Destination potential helps prioritize certain opportunities over others**. For example, a larger but farther supermarket can be valued more than a smaller nearby one. This allows you to include qualitative information—such as size, frequency, or service level—when computing accessibility, resulting in a more realistic heatmap.
 
@@ -84,7 +84,7 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Pick the <code>Routing Type</code> you would like to use for the heatmap.</div>
+  <div class="content">Pick the <code>Transport mode</code> you would like to use for the heatmap.</div>
 </div>
 
 <Tabs>
@@ -166,12 +166,12 @@ This feature is currently under development. 🧑🏻‍💻
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Select your <code>Opportunity Layer</code> from the drop-down menu. This can be any previously created layer containing point-based data.</div>
+  <div class="content">Select your <code>Input Layer</code> from the drop-down menu. This can be any previously created layer containing point-based data.</div>
 </div>
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Choose a <code>Travel Time Limit</code> for your heatmap. This will be used in the context of your previously selected <i>Routing Type</i>.</div>
+  <div class="content">Choose a <code>Travel Time Limit</code> for your heatmap. This will be used in the context of your previously selected <i>Transport mode</i>.</div>
 </div>
 
 :::tip Hint
@@ -182,11 +182,10 @@ Need help choosing a suitable travel time limit for various common amenities? Th
 
 <div class="step">
   <div class="step-number">7</div>
-  <div class="content">Choose a <code>Destination Potential Type</code> to define how each opportunity is weighted:
+  <div class="content">Choose a <code>Potential Type</code> to define how each opportunity is weighted:
     <ul>
-      <li><b>Constant</b> — all opportunities have the same weight. Set the <code>Destination Potential Constant</code> value (default: 1.0).</li>
-      <li><b>Field</b> — use a numeric field from the <i>Opportunity Layer</i> as the weight (e.g. number of departures, seats, or capacity). Select the field from <code>Destination Potential Field</code>.</li>
-      <li><b>Expression</b> — derive the weight from the geometry of polygon opportunity layers using <code>area</code> or <code>perimeter</code>. Only available when the opportunity layer contains polygons.</li>
+      <li><b>Constant</b> — all opportunities have the same weight. Enter a numeric value (default: 1.0).</li>
+      <li><b>Field</b> — use a numeric field from the <i>Input Layer</i> as the weight (e.g. number of departures, seats, or capacity).</li>
     </ul>
   </div>
 </div>
@@ -213,6 +212,11 @@ For a visual explanation of how sensitivity affects the calculation, see the **[
 
 <div class="step">
   <div class="step-number">9</div>
+  <div class="content">Optionally, expand <code>Advanced Options</code> and select a <code>Reference Area</code> — a polygon layer that defines the full study area. When set, the heatmap extends to cover all H3 cells within that polygon, with cells outside the computed reach shown as <code>NULL</code> to expose coverage gaps and underserved areas.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">10</div>
   <div class="content">Click <code>Run</code> to start the calculation of the heatmap.</div>
 </div>
 

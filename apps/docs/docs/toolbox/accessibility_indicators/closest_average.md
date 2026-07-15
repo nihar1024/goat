@@ -77,7 +77,7 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Pick the <code>Routing Type</code> you would like to use for the heatmap.</div>
+  <div class="content">Pick the <code>Transport mode</code> you would like to use for the heatmap.</div>
 </div>
 
 <Tabs>
@@ -109,12 +109,12 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
 
 <div class="step">
   <div class="step-number">4</div>
-  <div class="content">Select your <code>Opportunity Layer</code> from the drop-down menu. This can be any previously created layer containing point-based data.</div>
+  <div class="content">Select your <code>Input Layer</code> from the drop-down menu. This can be any previously created layer containing point-based data.</div>
 </div>
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Choose a <code>Travel Time Limit</code> for your heatmap. This will be used in the context of your previously selected <code>Routing Type</code>.</div>
+  <div class="content">Choose a <code>Travel Time Limit</code> for your heatmap. This will be used in the context of your previously selected <code>Transport mode</code>.</div>
 </div>
 
 :::tip Hint
@@ -130,11 +130,16 @@ Need help choosing a suitable travel time limit for various common amenities? Th
 
 <div class="step">
   <div class="step-number">7</div>
-  <div class="content">(Optional) Click <code>+ Add Opportunity</code> to include additional point layers. Each layer can have different travel time limits and destination counts for multi-criteria analysis.</div>
+  <div class="content">Optionally, click <code>+ Add Opportunities</code> to include additional opportunity layers. Each layer can have different travel time limits and destination counts for multi-criteria analysis.</div>
 </div>
 
 <div class="step">
   <div class="step-number">8</div>
+  <div class="content">Optionally, expand <code>Advanced Options</code> and select a <code>Reference Area</code> — a polygon layer that defines the full study area. When set, the heatmap extends to cover all H3 cells within that polygon, with cells outside the computed reach shown as <code>NULL</code> to expose coverage gaps and underserved areas.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">9</div>
   <div class="content">Click <code>Run</code> to start the calculation of the heatmap.</div>
 </div>
 

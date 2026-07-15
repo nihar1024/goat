@@ -87,7 +87,7 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Pick the <code>Routing Type</code> you would like to use for the heatmap.</div>
+  <div class="content">Pick the <code>Transport mode</code> you would like to use for the heatmap.</div>
 </div>
 
 <Tabs>
@@ -202,17 +202,22 @@ Calculates weights using a power function. The sensitivity parameter controls th
 
 <div class="step">
   <div class="step-number">8</div>
-  <div class="content">Select your <code>Opportunity Layer</code> from the drop-down menu. This layer should contain facility locations (e.g., hospitals, schools, shops).</div>
+  <div class="content">Select your <code>Input Layer</code> from the drop-down menu. This layer should contain facility locations (e.g., hospitals, schools, shops).</div>
 </div>
 
 <div class="step">
   <div class="step-number">9</div>
-  <div class="content">Choose the <code>Capacity Field</code> — a numeric field representing the supply capacity of each facility (e.g., number of beds, seats, or square meters).</div>
+  <div class="content">Set the <code>Travel Time Limit</code> defining the maximum catchment area in minutes.</div>
 </div>
 
 <div class="step">
   <div class="step-number">10</div>
-  <div class="content">Set the <code>Travel Time Limit</code> defining the maximum catchment area in minutes.</div>
+  <div class="content">Choose a <code>Potential Type</code> to define how each facility's capacity is determined:
+    <ul>
+      <li><b>Constant</b> — all facilities have the same capacity. Enter a numeric value (default: 1.0).</li>
+      <li><b>Field</b> — use a numeric field from the <i>Input Layer</i> as the capacity (e.g., number of beds, seats, or square meters).</li>
+    </ul>
+  </div>
 </div>
 
 :::tip Hint
@@ -228,11 +233,16 @@ Need help choosing a suitable travel time limit for various common amenities? Th
 
 <div class="step">
   <div class="step-number">12</div>
-  <div class="content">Optionally, add more opportunity layers by clicking <code>+ Add Opportunity</code>. Multiple facility types can be combined into a single analysis.</div>
+  <div class="content">Optionally, add more opportunity layers by clicking <code>+ Add Opportunities</code>. Multiple facility types can be combined into a single analysis.</div>
 </div>
 
 <div class="step">
   <div class="step-number">13</div>
+  <div class="content">Optionally, expand <code>Advanced Options</code> and select a <code>Reference Area</code> — a polygon layer that defines the full study area. When set, the heatmap extends to cover all H3 cells within that polygon, with cells outside the computed reach shown as <code>NULL</code> to expose coverage gaps and underserved areas.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">14</div>
   <div class="content">Click <code>Run</code> to start the calculation.</div>
 </div>
 

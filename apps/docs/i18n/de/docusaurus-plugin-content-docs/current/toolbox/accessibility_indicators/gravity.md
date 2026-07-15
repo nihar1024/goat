@@ -24,7 +24,7 @@ Sie können das **Verkehrsmittel**, den **Ziel-Layer**, das **Reisezeitlimit** s
 
 - Die **Sensitivität steuert, wie schnell die Erreichbarkeit mit zunehmender Reisezeit abnimmt**, während das **Destinationspotenzial es ermöglicht, Zielen mit höherer Kapazität oder Qualität mehr Gewicht zu geben** (z. B. ein größerer Supermarkt oder eine Haltestelle mit mehr Abfahrten). Zusammen mit der gewählten **Widerstandsfunktion definieren diese Einstellungen, wie die Erreichbarkeit berechnet wird**.
 
-- Der **Destinationspotenzial-Typ** bestimmt, wie das Gewicht jedes Ziels abgeleitet wird: Mit **Konstant** wird allen Zielen der gleiche Wert zugewiesen, mit **Feld** wird ein numerisches Attribut aus dem Ziel-Layer verwendet (z. B. Abfahrten, Plätze oder Kapazität), und mit **Ausdruck** wird das Potenzial aus der Geometrie von Polygon-Layern berechnet (Fläche oder Umfang) – nützlich, wenn die Größe eines Polygons die Kapazität widerspiegelt.
+- Der **Potenzialtyp** bestimmt, wie das Gewicht jedes Ziels abgeleitet wird: Mit **Constant** wird allen Zielen der gleiche Wert zugewiesen, oder mit **Field** wird ein numerisches Attribut aus dem Eingabe-Layer verwendet (z. B. Abfahrten, Sitzplätze oder Kapazität).
 
 - Mit dem **Destinationspotenzial können bestimmte Ziele priorisiert werden**. Zum Beispiel kann ein größerer, aber weiter entfernter Supermarkt höher bewertet werden als ein kleinerer in der Nähe. So können qualitative Informationen – wie Größe, Frequenz oder Servicelevel – in die Berechnung einfließen, was zu einer realistischeren Heatmap führt.
 
@@ -162,7 +162,7 @@ Diese Funktion befindet sich derzeit in Entwicklung. 🧑🏻‍💻
 
 <div class="step">
   <div class="step-number">5</div>
-  <div class="content">Wählen Sie Ihren <code>Ziel-Layer</code> aus dem Dropdown-Menü. Dies kann jeder zuvor erstellte Layer mit punktbasierten Daten sein.</div>
+  <div class="content">Wählen Sie Ihren <code>Eingabe-Layer</code> aus dem Dropdown-Menü. Dies kann jeder zuvor erstellte Layer mit punktbasierten Daten sein.</div>
 </div>
 
 <div class="step">
@@ -178,11 +178,10 @@ Benötigen Sie Hilfe bei der Wahl eines geeigneten Reisezeitlimits für verschie
 
 <div class="step">
   <div class="step-number">7</div>
-  <div class="content">Wählen Sie den <code>Destinationspotenzial-Typ</code>, um zu bestimmen, wie jedes Ziel gewichtet wird:
+  <div class="content">Wählen Sie den <code>Potenzialtyp</code>, um zu bestimmen, wie jedes Ziel gewichtet wird:
     <ul>
-      <li><b>Konstant</b> — alle Ziele erhalten das gleiche Gewicht. Legen Sie den <code>Destinationspotenzial-Konstante</code>-Wert fest (Standard: 1.0).</li>
-      <li><b>Feld</b> — verwenden Sie ein numerisches Feld aus dem <i>Ziel-Layer</i> als Gewicht (z. B. Anzahl der Abfahrten, Sitzplätze oder Kapazität). Wählen Sie das Feld unter <code>Zielpotenzialfeld</code>.</li>
-      <li><b>Ausdruck</b> — berechnet das Gewicht aus der Geometrie von Polygon-Ziel-Layern mittels <code>Fläche</code> oder <code>Umfang</code>. Nur verfügbar, wenn der Ziel-Layer Polygone enthält.</li>
+      <li><b>Constant</b> — alle Ziele erhalten das gleiche Gewicht. Geben Sie einen numerischen Wert ein (Standard: 1.0).</li>
+      <li><b>Field</b> — verwenden Sie ein numerisches Feld aus dem <i>Eingabe-Layer</i> als Gewicht (z. B. Anzahl der Abfahrten, Sitzplätze oder Kapazität).</li>
     </ul>
   </div>
 </div>
@@ -207,6 +206,11 @@ Eine visuelle Erklärung, wie die Sensitivität die Berechnung beeinflusst, find
 
 <div class="step">
   <div class="step-number">9</div>
+  <div class="content">Optional können Sie unter <code>Erweiterte Optionen</code> ein <code>Referenzgebiet</code> auswählen — einen Polygon-Layer, der das vollständige Untersuchungsgebiet definiert. Wenn festgelegt, erweitert sich die Heatmap auf alle H3-Zellen innerhalb dieses Polygons; Zellen außerhalb der berechneten Erreichbarkeit werden als <code>NULL</code> dargestellt und zeigen so Versorgungslücken und unterversorgte Gebiete auf.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">10</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>, um die Berechnung der Heatmap zu starten.</div>
 </div>
 

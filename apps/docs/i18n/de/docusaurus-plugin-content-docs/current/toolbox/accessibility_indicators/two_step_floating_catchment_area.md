@@ -87,7 +87,7 @@ Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, können Si
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie den <code>Routing-Modus</code>, den Sie für die Heatmap verwenden möchten.</div>
+  <div class="content">Wählen Sie das <code>Verkehrsmittel</code>, das Sie für die Heatmap verwenden möchten.</div>
 </div>
 
 <Tabs>
@@ -190,7 +190,7 @@ Berechnet Gewichte unter Verwendung einer Potenzfunktion. Der Sensitivitätspara
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Wählen Sie Ihren <code>Bedarfs-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Bevölkerungs- oder Nutzerdaten enthalten (z. B. Zensusdaten mit Einwohnerzahlen).</div>
+  <div class="content">Wählen Sie Ihren <code>Nachfrage-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Bevölkerungs- oder Nutzerdaten enthalten (z. B. Zensusdaten mit Einwohnerzahlen).</div>
 </div>
 
 <div class="step">
@@ -202,17 +202,22 @@ Berechnet Gewichte unter Verwendung einer Potenzfunktion. Der Sensitivitätspara
 
 <div class="step">
   <div class="step-number">8</div>
-  <div class="content">Wählen Sie Ihren <code>Ziele-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Standorte von Einrichtungen enthalten (z. B. Krankenhäuser, Schulen, Geschäfte).</div>
+  <div class="content">Wählen Sie Ihren <code>Eingabe-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Standorte von Einrichtungen enthalten (z. B. Krankenhäuser, Schulen, Geschäfte).</div>
 </div>
 
 <div class="step">
   <div class="step-number">9</div>
-  <div class="content">Wählen Sie das <code>Kapazitätsfeld</code> – ein numerisches Feld, das die Angebotskapazität jeder Einrichtung darstellt (z. B. Anzahl der Betten, Sitze oder Quadratmeter).</div>
+  <div class="content">Legen Sie das <code>Reisezeitlimit</code> fest, das das maximale Einzugsgebiet in Minuten definiert.</div>
 </div>
 
 <div class="step">
   <div class="step-number">10</div>
-  <div class="content">Legen Sie das <code>Reisezeitlimit</code> fest, das das maximale Einzugsgebiet in Minuten definiert.</div>
+  <div class="content">Wählen Sie einen <code>Potenzialtyp</code>, um festzulegen, wie die Kapazität jeder Einrichtung bestimmt wird:
+    <ul>
+      <li><b>Constant</b> — alle Einrichtungen haben die gleiche Kapazität. Geben Sie einen numerischen Wert ein (Standard: 1.0).</li>
+      <li><b>Field</b> — verwenden Sie ein numerisches Feld aus dem <i>Eingabe-Layer</i> als Kapazität (z. B. Anzahl der Betten, Sitze oder Quadratmeter).</li>
+    </ul>
+  </div>
 </div>
 
 :::tip Hinweis
@@ -228,11 +233,16 @@ Benötigen Sie Hilfe bei der Auswahl einer geeigneten Reisezeitgrenze für versc
 
 <div class="step">
   <div class="step-number">12</div>
-  <div class="content">Optional können Sie weitere Ziele-Layer hinzufügen, indem Sie auf <code>+ Ziele hinzufügen</code> klicken. Mehrere Einrichtungstypen können in einer einzigen Analyse kombiniert werden.</div>
+  <div class="content">Optional können Sie weitere Gelegenheiten hinzufügen, indem Sie auf <code>+ Hinzufügen Gelegenheiten</code> klicken. Mehrere Einrichtungstypen können in einer einzigen Analyse kombiniert werden.</div>
 </div>
 
 <div class="step">
   <div class="step-number">13</div>
+  <div class="content">Optional können Sie unter <code>Erweiterte Optionen</code> ein <code>Referenzgebiet</code> auswählen — einen Polygon-Layer, der das vollständige Untersuchungsgebiet definiert. Wenn festgelegt, erweitert sich die Heatmap auf alle H3-Zellen innerhalb dieses Polygons; Zellen außerhalb der berechneten Erreichbarkeit werden als <code>NULL</code> dargestellt und zeigen so Versorgungslücken und unterversorgte Gebiete auf.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">14</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>, um die Berechnung zu starten.</div>
 </div>
 

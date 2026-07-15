@@ -22,6 +22,7 @@ from core.db.models.organization import Organization
 if TYPE_CHECKING:
     from core.db.models.organization import Organization
 
+    from .dataset_package import DatasetPackage
     from .layer import Layer
     from .project import Project
     from .role import Role
@@ -763,4 +764,128 @@ sa.Index(
     "idx_resource_grant_grantee",
     ResourceGrant.__table__.c.grantee_type,
     ResourceGrant.__table__.c.grantee_id,
+)
+
+
+class DatasetPackageLayerLink(SQLModel, table=True):
+    """Membership of a layer within a dataset package, tagged with the role the
+    layer plays in it (e.g. 'edges', 'stops').
+
+    One package per layer (``UNIQUE(layer_id)``) and at most one layer per
+    ``(dataset_package_id, role)`` — Postgres treats NULL roles as distinct, so
+    unassigned members are allowed while each named role is filled once. Both FKs
+    cascade, so deleting either side drops the membership row.
+    """
+
+    __tablename__ = "dataset_package_layer"
+    __table_args__ = (
+        UniqueConstraint("layer_id", name="uq_dataset_package_layer_layer"),
+        UniqueConstraint(
+            "dataset_package_id", "role", name="uq_dataset_package_layer_role"
+        ),
+        {"schema": settings.SCHEMA},
+    )
+
+    id: Optional[int] = Field(
+        sa_column=Column(Integer, primary_key=True, autoincrement=True)
+    )
+    dataset_package_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    layer_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.layer.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    role: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description="Role the layer plays within the package (a spec role key)",
+    )
+
+    # Relationships
+    dataset_package: "DatasetPackage" = Relationship(back_populates="layer_links")
+    layer: "Layer" = Relationship(
+        back_populates="dataset_package_link",
+        sa_relationship_kwargs={"uselist": False},
+    )
+
+
+sa.Index(
+    "idx_dataset_package_layer_package",
+    DatasetPackageLayerLink.__table__.c.dataset_package_id,
+)
+
+
+class DatasetPackageDependencyLink(SQLModel, table=True):
+    """A dependency of one dataset package on another.
+
+    e.g. a GTFS package depends on a street network package to build its routable
+    graph and stop-to-street mapping. One dependency per
+    ``(dataset_package_id, dependency_kind)``; both FKs point at
+    ``dataset_package`` and cascade.
+    """
+
+    __tablename__ = "dataset_package_dependency"
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset_package_id",
+            "dependency_kind",
+            name="uq_dataset_package_dependency_kind",
+        ),
+        {"schema": settings.SCHEMA},
+    )
+
+    id: Optional[int] = Field(
+        sa_column=Column(Integer, primary_key=True, autoincrement=True)
+    )
+    dataset_package_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        description="The dependent package (e.g. the GTFS package)",
+    )
+    depends_on_package_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        description="The package depended on (e.g. the street network package)",
+    )
+    dependency_kind: str = Field(
+        sa_column=Column(Text, nullable=False),
+        description="Dependency slot (a spec dependency kind, e.g. 'street_network')",
+    )
+
+    # Two FKs to dataset_package -> relationships must name their foreign key.
+    dataset_package: "DatasetPackage" = Relationship(
+        back_populates="dependency_links",
+        sa_relationship_kwargs={
+            "foreign_keys": "[DatasetPackageDependencyLink.dataset_package_id]"
+        },
+    )
+    depends_on_package: "DatasetPackage" = Relationship(
+        back_populates="dependent_links",
+        sa_relationship_kwargs={
+            "foreign_keys": "[DatasetPackageDependencyLink.depends_on_package_id]"
+        },
+    )
+
+
+sa.Index(
+    "idx_dataset_package_dependency_package",
+    DatasetPackageDependencyLink.__table__.c.dataset_package_id,
+)
+sa.Index(
+    "idx_dataset_package_dependency_depends_on",
+    DatasetPackageDependencyLink.__table__.c.depends_on_package_id,
 )

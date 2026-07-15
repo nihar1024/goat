@@ -26,10 +26,15 @@ ROLES = [
     {"name": "project-owner", "resource_type": "project"},
     {"name": "project-editor", "resource_type": "project"},
     {"name": "project-viewer", "resource_type": "project"},
+    {"name": "dataset-package-owner", "resource_type": "dataset_package"},
+    {"name": "dataset-package-editor", "resource_type": "dataset_package"},
+    {"name": "dataset-package-viewer", "resource_type": "dataset_package"},
 ]
 
 PERMISSIONS = [
     "manage-folder",
+    "read-dataset-package",
+    "manage-dataset-package",
     "manage-asset",
     "create-layer",
     "read-layer",
@@ -77,6 +82,7 @@ ROLE_PERMISSIONS = {
     ],
     "organization-editor": [
         "manage-folder",
+        "manage-dataset-package",
         "manage-asset",
         "create-job",
         "read-job",
@@ -94,6 +100,7 @@ ROLE_PERMISSIONS = {
         "read-organization",
         "manage-user",
         "read-billing",
+        "read-dataset-package",
     ],
     "team-owner": ["update-team", "delete-team"],
     "team-member": [
@@ -180,6 +187,20 @@ RESOURCES_PERMISSIONS = [
         "method": ["GET", "POST", "PUT", "DELETE"],
         "permissions": [
             "manage-folder",
+        ],
+    },
+    {
+        "url_pattern": "dataset-package",
+        "method": ["GET"],
+        "permissions": [
+            "read-dataset-package",
+        ],
+    },
+    {
+        "url_pattern": "dataset-package",
+        "method": ["POST", "PUT", "DELETE"],
+        "permissions": [
+            "manage-dataset-package",
         ],
     },
     {

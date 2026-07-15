@@ -11,6 +11,7 @@ DECLARE
     layer_id_loop       UUID;
     status_check        BOOLEAN := FALSE;
     folder_grant_role   TEXT;
+    dataset_package_grant_role TEXT;
     resource_method_arr TEXT[];
 BEGIN
 
@@ -176,6 +177,71 @@ BEGIN
         END IF;
 
         IF folder_grant_role = 'folder-viewer'
+           AND resource_method_arr IS NOT NULL
+           AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
+        THEN
+            status_check := TRUE;
+            CONTINUE;
+        END IF;
+
+        /* 9. Dataset-package grant
+         *
+         *  Layers that belong to a dataset package are never shared
+         *  individually — they inherit the package's sharing. Access is derived
+         *  from the package rather than from the layer's own grant rows:
+         *    - the package owner always has full access to its member layers;
+         *    - if the package is shared (resource_grant, resource_type
+         *      'dataset_package') with a team/organisation the user belongs to,
+         *      the package role decides (mirrors the folder block above):
+         *        dataset-package-editor → full access (any HTTP method)
+         *        dataset-package-viewer → read-only (resource must not include
+         *                                 POST / PUT / DELETE / PATCH)
+         */
+        IF EXISTS (
+            SELECT 1
+            FROM   customer.dataset_package_layer dpl
+            JOIN   customer.dataset_package       dp ON dp.id = dpl.dataset_package_id
+            WHERE  dpl.layer_id = layer_id_loop
+              AND  dp.user_id   = user_id_input
+        ) THEN
+            status_check := TRUE;
+            CONTINUE;
+        END IF;
+
+        SELECT r.name
+        INTO   dataset_package_grant_role
+        FROM   customer.dataset_package_layer dpl
+        JOIN   customer.resource_grant   rg
+            ON rg.resource_type = 'dataset_package'
+           AND rg.resource_id   = dpl.dataset_package_id
+        JOIN   customer.role             r  ON r.id = rg.role_id
+        WHERE  dpl.layer_id = layer_id_loop
+          AND  (
+               (    rg.grantee_type = 'team'
+                AND EXISTS (
+                        SELECT 1
+                        FROM   customer.user_team ut
+                        WHERE  ut.team_id = rg.grantee_id
+                          AND  ut.user_id = user_id_input
+                    )
+               )
+            OR (    rg.grantee_type = 'organization'
+                AND EXISTS (
+                        SELECT 1
+                        FROM   customer."user" u
+                        WHERE  u.id              = user_id_input
+                          AND  u.organization_id = rg.grantee_id
+                    )
+               )
+          )
+        LIMIT 1;
+
+        IF dataset_package_grant_role = 'dataset-package-editor' THEN
+            status_check := TRUE;
+            CONTINUE;
+        END IF;
+
+        IF dataset_package_grant_role = 'dataset-package-viewer'
            AND resource_method_arr IS NOT NULL
            AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
         THEN

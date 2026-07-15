@@ -1,4 +1,4 @@
-from typing import List
+from typing import TYPE_CHECKING, List
 from uuid import UUID
 
 from sqlalchemy import ForeignKey
@@ -9,6 +9,9 @@ from core.core.config import settings
 from core.db.models._base_class import DateTimeBase
 from core.db.models.layer import Layer
 from core.db.models.user import User
+
+if TYPE_CHECKING:
+    from core.db.models.dataset_package import DatasetPackage
 
 
 class Folder(DateTimeBase, table=True):
@@ -41,6 +44,10 @@ class Folder(DateTimeBase, table=True):
     # Relationships
     user: "User" = Relationship(back_populates="folders")
     layers: List["Layer"] = Relationship(
+        back_populates="folder",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    dataset_packages: List["DatasetPackage"] = Relationship(
         back_populates="folder",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )

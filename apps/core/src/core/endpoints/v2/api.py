@@ -4,6 +4,7 @@ from . import (
     asset,
     billing,
     custom_domain_lookup,
+    dataset_package,
     datasets,
     folder,
     layer,
@@ -35,6 +36,9 @@ router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 
 router.include_router(folder.router, prefix="/folder", tags=["Folder"])
+router.include_router(
+    dataset_package.router, prefix="/dataset-package", tags=["Dataset Package"]
+)
 router.include_router(layer.router, prefix="/layer", tags=["Layer"])
 router.include_router(project.router, prefix="/project", tags=["Project"])
 router.include_router(

@@ -37,7 +37,12 @@ from core.db.models._base_class import (
 if TYPE_CHECKING:
     from core.db.models.folder import Folder
 
-    from ._link_model import LayerOrganizationLink, LayerProjectLink, LayerTeamLink
+    from ._link_model import (
+        DatasetPackageLayerLink,
+        LayerOrganizationLink,
+        LayerProjectLink,
+        LayerTeamLink,
+    )
     from .data_store import DataStore
 
 
@@ -447,6 +452,10 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
         back_populates="layer", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
     folder: "Folder" = Relationship(back_populates="layers")
+    dataset_package_link: "DatasetPackageLayerLink" = Relationship(
+        back_populates="layer",
+        sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"},
+    )
     organization_links: List["LayerOrganizationLink"] = Relationship(
         back_populates="layer", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )

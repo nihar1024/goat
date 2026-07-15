@@ -18,6 +18,7 @@ from core.db.models._base_class import UUIDServerDefaultBase
 
 if TYPE_CHECKING:
     from ._link_model import UserRoleLink, UserTeamLink
+    from .dataset_package import DatasetPackage
     from .folder import Folder
     from .organization import Organization
     from .system_setting import SystemSetting
@@ -50,6 +51,9 @@ class User(UUIDServerDefaultBase, UserBase, table=True):
 
     # Relationships
     folders: List["Folder"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    dataset_packages: List["DatasetPackage"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
     system_setting: "SystemSetting" = Relationship(

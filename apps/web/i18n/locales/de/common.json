@@ -551,7 +551,7 @@
   "end": "Ende",
   "enums": {
     "gravity_decay": {
-      "gaussian": "GaPuß",
+      "gaussian": "Gauß",
       "exponential": "Exponentiell",
       "linear": "Linear",
       "power": "Potenz"

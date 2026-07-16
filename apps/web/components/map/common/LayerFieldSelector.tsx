@@ -46,7 +46,8 @@ export const FieldTypeColors = {
   date: [43, 179, 129],
 };
 
-export const fieldTagKey = (field: { type: string; kind?: string }): string => field.type;
+export const fieldTagKey = (field: { type: string; kind?: string }): string =>
+  field.kind === "datetime" ? "date" : field.type;
 
 export const FieldTypeTag = styled("div")<{ fieldType: string }>(({ fieldType }) => ({
   backgroundColor: `rgba(${FieldTypeColors[fieldType]}, 0.1)`,

@@ -297,6 +297,8 @@ export default function WorkflowNodeSettings({
     }
   }, [process, sections]);
 
+  // The oev_gueteklassen schema doesn't expose station_config as an input, so seed
+  // the default here and render a fallback control (same special-casing as GenericTool).
   useEffect(() => {
     if (processId !== "oev_gueteklassen") {
       return;

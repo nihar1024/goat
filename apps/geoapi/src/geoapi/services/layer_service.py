@@ -444,7 +444,10 @@ class LayerService:
 
     @staticmethod
     def _duckdb_to_json_format(duckdb_type: str) -> str | None:
-        """TIMESTAMP/TIMESTAMPTZ/DATE -> "date-time"; TIME and non-temporal -> None."""
+        """TIMESTAMP/TIMESTAMPTZ/DATE -> "date-time"; TIME and non-temporal -> None.
+
+        DATE deliberately collapses into the single datetime field kind.
+        """
         type_lower = duckdb_type.lower()
         if "timestamp" in type_lower:
             return "date-time"

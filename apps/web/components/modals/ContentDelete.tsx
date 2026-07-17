@@ -12,6 +12,11 @@ import { Trans } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
+import {
+  DATASET_PACKAGES_API_BASE_URL,
+  deleteDatasetPackage,
+  isDatasetPackageTile,
+} from "@/lib/api/dataset-packages";
 import { LAYERS_API_BASE_URL, deleteLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { PROJECTS_API_BASE_URL, deleteProject } from "@/lib/api/projects";
@@ -40,10 +45,18 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
   const dispatch = useAppDispatch();
   const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
 
+  const isDatasetPackage = isDatasetPackageTile(content);
+
   const handleDelete = async () => {
     try {
       if (!content) return;
-      if (type === "layer") {
+      if (isDatasetPackage) {
+        // Dataset package: one call removes the package + all its member layers
+        // (backend cascades DuckLake cleanup). Refresh the packages list.
+        await deleteDatasetPackage(content.id);
+        mutate((key) => key === DATASET_PACKAGES_API_BASE_URL);
+        toast.success(t("delete_dataset_package_success"));
+      } else if (type === "layer") {
         // Optimistic update: immediately remove layer from cache
         mutate(
           (key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL,
@@ -72,10 +85,18 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
       }
     } catch {
       // Revert optimistic update on error by revalidating
-      if (type === "layer") {
+      if (isDatasetPackage) {
+        mutate((key) => key === DATASET_PACKAGES_API_BASE_URL);
+      } else if (type === "layer") {
         mutate((key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL);
       }
-      toast.error(type === "layer" ? t("delete_layer_error") : t("delete_project_error"));
+      toast.error(
+        isDatasetPackage
+          ? t("delete_dataset_package_error")
+          : type === "layer"
+            ? t("delete_layer_error")
+            : t("delete_project_error")
+      );
     }
 
     onDelete?.();
@@ -83,10 +104,22 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogTitle>{type === "layer" ? t("delete_layer") : t("delete_project")}</DialogTitle>
+      <DialogTitle>
+        {isDatasetPackage
+          ? t("delete_dataset_package")
+          : type === "layer"
+            ? t("delete_layer")
+            : t("delete_project")}
+      </DialogTitle>
       <DialogContent>
         <DialogContentText>
-          {type === "layer" ? (
+          {isDatasetPackage ? (
+            <Trans
+              i18nKey="common:are_you_sure_to_delete_dataset_package"
+              values={{ name: content?.name }}
+              components={{ b: <b /> }}
+            />
+          ) : type === "layer" ? (
             <Trans
               i18nKey="common:are_you_sure_to_delete_layer"
               values={{ layer: content?.name }}

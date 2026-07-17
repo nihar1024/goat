@@ -543,6 +543,17 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
         toolbox_hidden=True,
     ),
     ToolDefinition(
+        name="dataset_package_import",
+        display_name="Dataset Package Import",
+        description="Import an uploaded source (e.g. GTFS) as a dataset package",
+        module_path="goatlib.tools.dataset_package_import",
+        params_class_name="DatasetPackageImportParams",
+        windmill_path="f/goat/tools/dataset_package_import",
+        category="data",
+        keywords=("import", "dataset", "package", "gtfs", "data"),
+        toolbox_hidden=True,
+    ),
+    ToolDefinition(
         name="layer_delete",
         display_name="Layer Delete",
         description="Delete a layer from DuckLake storage and PostgreSQL metadata",

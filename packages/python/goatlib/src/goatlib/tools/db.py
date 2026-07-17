@@ -18,6 +18,10 @@ from typing import Any, Literal, Self
 import asyncpg
 from pydantic import BaseModel, Field, model_validator
 
+from goatlib.models.dataset_package import (
+    DatasetPackageStatus,
+    DatasetPackageTypeName,
+)
 from goatlib.tools.style import get_default_style
 
 logger = logging.getLogger(__name__)
@@ -255,6 +259,76 @@ class ToolDatabaseService:
             f"with {feature_count} features, size={size} bytes"
         )
         return properties
+
+    async def create_dataset_package(
+        self: Self,
+        package_id: str,
+        user_id: str,
+        folder_id: str,
+        name: str,
+        dataset_package_type: "DatasetPackageTypeName | str",
+        description: str | None = None,
+        properties: dict[str, Any] | None = None,
+    ) -> None:
+        """Create a dataset package record in customer.dataset_package."""
+        type_value = getattr(dataset_package_type, "value", dataset_package_type)
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.dataset_package (
+                id, user_id, folder_id, name, description,
+                dataset_package_type, properties, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+            """,
+            uuid_module.UUID(package_id),
+            uuid_module.UUID(user_id),
+            uuid_module.UUID(folder_id),
+            name,
+            description,
+            type_value,
+            json.dumps(properties) if properties else None,
+        )
+        logger.info(
+            f"Created dataset package: {package_id} ({name}) "
+            f"type={type_value} in folder {folder_id}"
+        )
+
+    async def update_package_status(
+        self: Self,
+        package_id: str,
+        status: "DatasetPackageStatus | str",
+    ) -> None:
+        """Update a dataset package's processing status."""
+        status_value = getattr(status, "value", status)
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.dataset_package
+            SET status = $2, updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(package_id),
+            status_value,
+        )
+        logger.info(f"Dataset package {package_id} status -> {status_value}")
+
+    async def add_layer_to_package(
+        self: Self,
+        package_id: str,
+        layer_id: str,
+        role: str | None = None,
+    ) -> None:
+        """Link a layer to a dataset package with its role
+        (customer.dataset_package_layer)."""
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.dataset_package_layer (
+                dataset_package_id, layer_id, role
+            ) VALUES ($1, $2, $3)
+            """,
+            uuid_module.UUID(package_id),
+            uuid_module.UUID(layer_id),
+            role,
+        )
+        logger.info(f"Linked layer {layer_id} to package {package_id} as role={role}")
 
     async def add_to_project(
         self: Self,

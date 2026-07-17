@@ -39,6 +39,15 @@ class DatasetPackageArtifactStatus(str, Enum):
     failed = "failed"
 
 
+class DatasetPackageStatus(str, Enum):
+    """Processing lifecycle of a dataset package (e.g. during import)."""
+
+    pending = "pending"
+    processing = "processing"
+    ready = "ready"
+    failed = "failed"
+
+
 class RoleSpec(BaseModel):
     """A member-layer role within a dataset package type."""
 

@@ -51,6 +51,14 @@ import {
   useOrganizationAnalytics,
 } from "@/lib/api/organizationAnalytics";
 import {
+  DATASET_PACKAGES_API_BASE_URL,
+  deleteDatasetPackageGrant,
+  isDatasetPackageTile,
+  shareDatasetPackageGrant,
+  useDatasetPackageGrants,
+  type DatasetPackageRole,
+} from "@/lib/api/dataset-packages";
+import {
   FOLDERS_API_BASE_URL,
   deleteFolderGrant,
   shareFolderGrant,
@@ -619,6 +627,9 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
   const { organization: organization } = useOrganization();
   const { teams: teamsList } = useTeams();
 
+  // Dataset packages share like folders (grant-based), not like layers.
+  const isDatasetPackage = isDatasetPackageTile(content);
+
   const sharedWithContent = "shared_with" in content ? content.shared_with : undefined;
   const [sharedWith, setSharedWith] = useState(() => {
     const { teams = [], organizations = [] } = sharedWithContent || {};
@@ -634,15 +645,26 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
     type === "folder" && open ? content.id : null
   );
 
-  // For layers and projects: fetch the folder's grants to show inherited access read-only
+  // For dataset packages: same grant model as folders.
+  const { data: datasetPackageGrants } = useDatasetPackageGrants(
+    isDatasetPackage && open ? content.id : null
+  );
+
+  // For layers and projects: fetch the folder's grants to show inherited access
+  // read-only. Packages flow through as type "layer" but share by their own
+  // grants, so they are excluded here.
   const itemFolderId =
-    type === "layer"
-      ? (content as Layer).folder_id
-      : type === "project"
-        ? (content as Project).folder_id
-        : null;
+    isDatasetPackage
+      ? null
+      : type === "layer"
+        ? (content as Layer).folder_id
+        : type === "project"
+          ? (content as Project).folder_id
+          : null;
   const { data: layerFolderGrants, error: layerFolderGrantsError } = useFolderGrants(
-    (type === "layer" || type === "project") && open && itemFolderId ? itemFolderId : null
+    !isDatasetPackage && (type === "layer" || type === "project") && open && itemFolderId
+      ? itemFolderId
+      : null
   );
   const grantsLoaded = useRef(false);
   useEffect(() => {
@@ -658,6 +680,19 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
       grantsLoaded.current = true;
     }
   }, [type, folderGrants]);
+  useEffect(() => {
+    if (isDatasetPackage && datasetPackageGrants && !grantsLoaded.current) {
+      setSharedWith({
+        teams: datasetPackageGrants.grants
+          .filter((g) => g.grantee_type === "team")
+          .map((g) => ({ id: g.grantee_id, role: g.role })),
+        organizations: datasetPackageGrants.grants
+          .filter((g) => g.grantee_type === "organization")
+          .map((g) => ({ id: g.grantee_id, role: g.role })),
+      });
+      grantsLoaded.current = true;
+    }
+  }, [isDatasetPackage, datasetPackageGrants]);
 
   const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
@@ -721,16 +756,50 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
   }, [teamsList, sharedWith, layerFolderGrants]);
 
   const roleOptions = useMemo(() => {
+    if (isDatasetPackage) return ["dataset-package-editor", "dataset-package-viewer", ""];
     if (type === "layer") return [...layerShareRoleEnum.options, ""] as string[];
     if (type === "project") return [...projectShareRoleEnum.options, ""] as string[];
     if (type === "folder") return [...folderShareRoleEnum.options, ""] as string[];
     return [];
-  }, [type]);
+  }, [type, isDatasetPackage]);
 
   const handleSubmit = async () => {
     try {
       setIsBusy(true);
-      if (type === "project") {
+      if (isDatasetPackage) {
+        // Grant-based, like folders: apply the added/changed grants, then remove
+        // any that were cleared.
+        const oldGrants = datasetPackageGrants?.grants ?? [];
+        const newTeams = (sharedWith.teams ?? []).filter((t) => t.role !== "");
+        const newOrgs = (sharedWith.organizations ?? []).filter((o) => o.role !== "");
+        const newTeamIds = new Set(newTeams.map((t) => t.id));
+        const newOrgIds = new Set(newOrgs.map((o) => o.id));
+        for (const team of newTeams) {
+          await shareDatasetPackageGrant(content.id, {
+            grantee_type: "team",
+            grantee_id: team.id,
+            role: team.role as DatasetPackageRole,
+          });
+        }
+        for (const org of newOrgs) {
+          await shareDatasetPackageGrant(content.id, {
+            grantee_type: "organization",
+            grantee_id: org.id,
+            role: org.role as DatasetPackageRole,
+          });
+        }
+        for (const grant of oldGrants) {
+          if (grant.grantee_type === "team" && !newTeamIds.has(grant.grantee_id)) {
+            await deleteDatasetPackageGrant(content.id, "team", grant.grantee_id);
+          } else if (grant.grantee_type === "organization" && !newOrgIds.has(grant.grantee_id)) {
+            await deleteDatasetPackageGrant(content.id, "organization", grant.grantee_id);
+          }
+        }
+        mutate(
+          (key) =>
+            typeof key === "string" && key.startsWith(DATASET_PACKAGES_API_BASE_URL)
+        );
+      } else if (type === "project") {
         await shareProject(content.id, sharedWith);
         mutate((key) => Array.isArray(key) && key[0] === PROJECTS_API_BASE_URL);
       } else if (type === "layer") {
@@ -848,7 +917,13 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
           <Trans
             i18nKey="common:manage_share_access_for_content"
             values={{
-              content_type: type === "layer" ? t("layer") : type === "project" ? t("project") : t("folder_label"),
+              content_type: isDatasetPackage
+                ? t("dataset_package")
+                : type === "layer"
+                  ? t("layer")
+                  : type === "project"
+                    ? t("project")
+                    : t("folder_label"),
               content_name: content.name,
             }}
           />
@@ -886,7 +961,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                         items={organizationsAccessLevel}
                         roleOptions={roleOptions}
                         onRoleChange={handleOrganizationRoleChange}
-                        disableInherited={type === "layer" || type === "project"}
+                        disableInherited={!isDatasetPackage && (type === "layer" || type === "project")}
                       />
                     </>
                   )}
@@ -906,7 +981,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
                         items={teamsAccessLevel}
                         roleOptions={roleOptions}
                         onRoleChange={handleTeamRoleChange}
-                        disableInherited={type === "layer" || type === "project"}
+                        disableInherited={!isDatasetPackage && (type === "layer" || type === "project")}
                       />
                     </>
                   )}

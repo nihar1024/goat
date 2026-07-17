@@ -11,6 +11,7 @@ export type { Job, JobStatusType, JobType, GetJobsQueryParams, JobsResponse } fr
 // Job type enum for runtime validation (matches processID values)
 export const jobTypeValues = [
   "layer_import",
+  "dataset_package_import",
   "layer_export",
   "layer_update",
   "layer_delete",
@@ -59,6 +60,7 @@ export function isJobFailed(status: string): boolean {
 export const jobTypeEnum = {
   Enum: {
     layer_import: "layer_import",
+    dataset_package_import: "dataset_package_import",
     layer_export: "layer_export",
     layer_update: "layer_update",
     layer_delete: "layer_delete",

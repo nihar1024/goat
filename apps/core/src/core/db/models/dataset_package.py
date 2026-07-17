@@ -5,6 +5,7 @@ Dataset Package Model
 from typing import TYPE_CHECKING, Any, Dict, List
 from uuid import UUID
 
+from goatlib.models.dataset_package import DatasetPackageStatus
 from pydantic import field_serializer
 from sqlalchemy import ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -79,6 +80,13 @@ class DatasetPackage(ContentBaseAttributes, DateTimeBase, table=True):
         sa_column=Column(JSONB, nullable=True),
         description="Dataset-level metadata conforming to the type's structure",
     )
+    status: DatasetPackageStatus = Field(
+        default=DatasetPackageStatus.ready,
+        sa_column=Column(
+            Text, nullable=False, server_default=DatasetPackageStatus.ready
+        ),
+        description="Processing lifecycle status (import sets processing → ready/failed)",
+    )
 
     # Relationships
     user: "User" = Relationship(back_populates="dataset_packages")
@@ -111,8 +119,6 @@ class DatasetPackage(ContentBaseAttributes, DateTimeBase, table=True):
         },
     )
 
-    @field_serializer("dataset_package_type")
-    def serialize_dataset_package_type(
-        self, value: "DatasetPackageTypeName | str | None"
-    ) -> "str | None":
+    @field_serializer("dataset_package_type", "status")
+    def serialize_enums(self, value: object) -> "str | None":
         return serialize_str_enum(value)

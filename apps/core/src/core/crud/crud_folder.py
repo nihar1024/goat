@@ -54,7 +54,6 @@ class CRUDFolder(CRUDBase[Folder, FolderCreate, FolderUpdate]):
             )
             await delete_layers_via_geoapi(
                 ducklake_layer_ids,
-                str(user_id),
                 access_token,
             )
 

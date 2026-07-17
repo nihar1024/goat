@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { isDatasetPackageTile } from "@/lib/api/dataset-packages";
 import type { Layer } from "@/lib/validations/layer";
 
 import type { ContentActions } from "@/types/common";
@@ -81,6 +82,8 @@ const DataSection = (props: DataSectionProps) => {
               lg: index > 3 ? "none" : "block",
             }}
             onClick={() => {
+              // Dataset package tiles have no detail page yet — view-only.
+              if (isDatasetPackageTile(item)) return;
               if (item && item.id) {
                 router.push(`/datasets/${item.id}`);
               }

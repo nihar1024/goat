@@ -1,12 +1,11 @@
 "use client";
 
 import { Box, Button, Container, Divider, Stack, Typography } from "@mui/material";
-import React from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import { useLayers } from "@/lib/api/layers";
+import { useDatasets } from "@/lib/api/datasets";
 import { useProjects } from "@/lib/api/projects";
 import type { PaginatedQueryParams } from "@/lib/validations/common";
 import type { Layer } from "@/lib/validations/layer";
@@ -35,14 +34,15 @@ const Home = () => {
   });
   const {
     mutate,
-    layers,
+    datasets,
     isLoading: isLayerLoading,
     isError: _isLayerError,
-  } = useLayers({
-    ...queryParams,
-  });
+  } = useDatasets({ ...queryParams });
 
   useJobStatus(mutate, mutate);
+
+  // Layers and dataset packages come back merged + sorted from the datasets API.
+  const dataTiles = (datasets?.items as Layer[]) ?? [];
 
   const { isOrgEditor } = useAuthZ();
 
@@ -76,7 +76,7 @@ const Home = () => {
           />
         </Stack>
         <DataSection
-          layers={(layers?.items as Layer[]) ?? []}
+          layers={dataTiles}
           isLoading={isLayerLoading}
           hideCreate={!isOrgEditor}
         />

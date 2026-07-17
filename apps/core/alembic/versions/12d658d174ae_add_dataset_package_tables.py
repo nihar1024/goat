@@ -52,6 +52,7 @@ def upgrade():
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('dataset_package_type', sa.Text(), nullable=False),
     sa.Column('properties', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('status', sa.Text(), server_default='ready', nullable=False),
     sa.ForeignKeyConstraint(['dataset_package_type'], ['customer.dataset_package_type.type'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['folder_id'], ['customer.folder.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['user_id'], ['customer.user.id'], ondelete='CASCADE'),

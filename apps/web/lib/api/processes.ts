@@ -86,6 +86,7 @@ export type JobType =
   | "project_export"
   | "project_import"
   | "layer_create"
+  | "dataset_package_import"
   | "layer_create_filtered";
 
 /**

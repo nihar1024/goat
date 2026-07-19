@@ -48,7 +48,11 @@ import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/se
 import { ActiveFeaturePulseLayer } from "@/components/map/popover/ActiveFeaturePulseLayer";
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
 import { normalizePopup } from "@/components/map/popover/normalizePopup";
-import { shouldClosePopupForHiddenLayer } from "@/components/map/popover/popupVisibility";
+import {
+  layerHighlightsActiveFeature,
+  shouldClosePopupForHiddenLayer,
+  shouldHighlightActivePopupFeature,
+} from "@/components/map/popover/popupVisibility";
 
 maplibregl.addProtocol("cog", cogProtocol);
 
@@ -586,9 +590,21 @@ const MapViewer: React.FC<MapProps> = ({
       for (const feature of features) {
         const matchedLayer = layers?.find((l) => l.id.toString() === feature.layer.id);
         if (matchedLayer) {
-          // Only highlight if the popup block didn't already handle it
+          // Only highlight if the popup block didn't already handle it — and
+          // only when this layer's popup enables the active-feature highlight.
+          // Otherwise click-to-filter would recolor the feature even for layers
+          // whose popup (and thus "Highlight active feature") is off, leaving a
+          // highlight with no popup. Filtering below still runs regardless.
           if (!didHighlight) {
-            dispatch(setHighlightedFeature(feature));
+            const props = matchedLayer.properties as
+              | { popup?: PopupProperties; interaction?: { type?: string; content?: never[] } }
+              | undefined;
+            const cfg = props?.popup
+              ? normalizePopup(props.popup)
+              : normalizePopup(seedPopupFromInteraction(props?.interaction));
+            if (layerHighlightsActiveFeature(cfg.enabled, cfg.highlight_active_feature)) {
+              dispatch(setHighlightedFeature(feature));
+            }
           }
           dispatch(
             setClickedFeatureForFilter({
@@ -932,16 +948,18 @@ const MapViewer: React.FC<MapProps> = ({
           <Layers
             layers={layers}
             // "Highlight active feature" (popup.highlight_active_feature) must
-            // govern ALL active-object highlighting, not just the pulsing dot.
-            // When a popup is active but its highlight toggle is off, suppress
-            // the feature-recolor highlight too. Non-popup highlights
-            // (click-to-filter, hover-to-highlight, data table, geocoder) set
-            // highlightedFeature without an active popupInfo, so they are
-            // unaffected.
+            // govern ALL active-object highlighting, not just the pulsing dot:
+            // when a popup is active but its highlight toggle is off, the
+            // feature-recolor highlight is suppressed too. Non-popup highlights
+            // (click-to-filter, hover-to-highlight, data table, geocoder) run
+            // without an active popupInfo, so they are unaffected.
             highlightFeature={
-              popupInfo && activePopupConfig && !activePopupConfig.highlight_active_feature
-                ? undefined
-                : highlightedFeature
+              shouldHighlightActivePopupFeature(
+                Boolean(popupInfo && activePopupConfig),
+                activePopupConfig?.highlight_active_feature,
+              )
+                ? highlightedFeature
+                : undefined
             }
           />
           <GeocoderLayer />

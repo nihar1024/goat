@@ -49,3 +49,41 @@ export function shouldClosePopupForHiddenLayer(
   if (!layer) return true; // owning layer was removed from the project
   return (layer.properties?.visibility ?? true) === false;
 }
+
+/**
+ * Whether the feature-recolor highlight should be drawn for the feature whose
+ * popup is currently open.
+ *
+ * "Highlight active feature" (`popup.highlight_active_feature`) governs ALL
+ * active-object highlighting — the pulsing dot AND the feature recolor — so the
+ * recolor must mirror the pulse's on/off state (both read the same flag; an
+ * unset flag counts as off, exactly like the pulse's `visible` prop).
+ *
+ * Returns true when no popup config is active, so the shared `highlightedFeature`
+ * state driven by other sources (click-to-filter, hover-to-highlight, the data
+ * table, the geocoder) is left untouched.
+ */
+export function shouldHighlightActivePopupFeature(
+  hasActivePopupConfig: boolean,
+  highlightActiveFeature: boolean | undefined,
+): boolean {
+  if (!hasActivePopupConfig) return true;
+  return Boolean(highlightActiveFeature);
+}
+
+/**
+ * Whether a clicked feature on a given layer may be recolored as the "active
+ * object". Highlighting requires BOTH that the layer's popup is enabled and its
+ * "highlight active feature" option is on.
+ *
+ * This gates the click-to-filter highlight (builder/public map modes), which
+ * fires on every click regardless of popup settings and would otherwise recolor
+ * features even for layers whose popup — and therefore highlight — is off. Keeps
+ * the promise "no popup ⇒ no highlight" while click-to-filter still filters.
+ */
+export function layerHighlightsActiveFeature(
+  popupEnabled: boolean | undefined,
+  highlightActiveFeature: boolean | undefined,
+): boolean {
+  return Boolean(popupEnabled) && Boolean(highlightActiveFeature);
+}

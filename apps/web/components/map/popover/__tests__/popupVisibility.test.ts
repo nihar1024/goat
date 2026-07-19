@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { findPopupLayer, shouldClosePopupForHiddenLayer } from "../popupVisibility";
+import {
+  findPopupLayer,
+  layerHighlightsActiveFeature,
+  shouldClosePopupForHiddenLayer,
+  shouldHighlightActivePopupFeature,
+} from "../popupVisibility";
 
 // Minimal layer shapes matching how popupInfo.layerId is resolved:
 // popupInfo.layerId is set to `layer_id ?? id` at dispatch time.
@@ -57,5 +62,43 @@ describe("shouldClosePopupForHiddenLayer", () => {
 
   it("does not act when there is no owning layerId", () => {
     expect(shouldClosePopupForHiddenLayer(undefined, [projectLayer()])).toBe(false);
+  });
+});
+
+describe("shouldHighlightActivePopupFeature", () => {
+  it("shows the recolor highlight when a popup is active and highlight is on", () => {
+    expect(shouldHighlightActivePopupFeature(true, true)).toBe(true);
+  });
+
+  it("suppresses the recolor highlight when a popup is active but highlight is off", () => {
+    expect(shouldHighlightActivePopupFeature(true, false)).toBe(false);
+  });
+
+  it("treats an unset highlight flag as off, mirroring the pulse's visible prop", () => {
+    expect(shouldHighlightActivePopupFeature(true, undefined)).toBe(false);
+  });
+
+  it("leaves non-popup highlights (click-to-filter, hover, table) untouched", () => {
+    // No active popup config → the shared highlightedFeature is passed through
+    // regardless of any popup toggle.
+    expect(shouldHighlightActivePopupFeature(false, false)).toBe(true);
+    expect(shouldHighlightActivePopupFeature(false, undefined)).toBe(true);
+  });
+});
+
+describe("layerHighlightsActiveFeature", () => {
+  it("highlights only when the popup is enabled AND highlight is on", () => {
+    expect(layerHighlightsActiveFeature(true, true)).toBe(true);
+  });
+
+  it("does not highlight when the popup is disabled (no popup ⇒ no highlight)", () => {
+    expect(layerHighlightsActiveFeature(false, true)).toBe(false);
+    expect(layerHighlightsActiveFeature(false, false)).toBe(false);
+    expect(layerHighlightsActiveFeature(undefined, true)).toBe(false);
+  });
+
+  it("does not highlight when the popup is enabled but highlight is off/unset", () => {
+    expect(layerHighlightsActiveFeature(true, false)).toBe(false);
+    expect(layerHighlightsActiveFeature(true, undefined)).toBe(false);
   });
 });

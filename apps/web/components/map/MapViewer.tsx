@@ -48,6 +48,7 @@ import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/se
 import { ActiveFeaturePulseLayer } from "@/components/map/popover/ActiveFeaturePulseLayer";
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
 import { normalizePopup } from "@/components/map/popover/normalizePopup";
+import { shouldClosePopupForHiddenLayer } from "@/components/map/popover/popupVisibility";
 
 maplibregl.addProtocol("cog", cogProtocol);
 
@@ -292,6 +293,19 @@ const MapViewer: React.FC<MapProps> = ({
     dispatch(setHighlightedFeature(undefined));
     hoverPopupKeyRef.current = undefined;
   };
+
+  // Close a feature popup when its owning layer is hidden or removed. popupInfo
+  // lives in Redux independently of layer visibility, so toggling the layer off
+  // in the Layers panel (or deleting it) would otherwise leave the popup and its
+  // active-feature pulse stranded on the map. This runs in MapViewer — mounted
+  // by every layout — so it covers all popup hosts (the in-place popup here, the
+  // pinned popup rendered by MapFixedPopupSlot, and the mobile bottom sheet),
+  // which all read the same popupInfo.
+  useEffect(() => {
+    if (popupInfo && shouldClosePopupForHiddenLayer(popupInfo.layerId, layers)) {
+      popupInfo.onClose();
+    }
+  }, [popupInfo, layers]);
 
   // Tracks the (layerId-featureId) key of the popup currently shown via
   // hover trigger. Used to avoid re-dispatching on every mousemove while
@@ -915,7 +929,21 @@ const MapViewer: React.FC<MapProps> = ({
             displayControlsDefault={false}
             defaultMode={MapboxDraw.constants.modes.SIMPLE_SELECT}
           />
-          <Layers layers={layers} highlightFeature={highlightedFeature} />
+          <Layers
+            layers={layers}
+            // "Highlight active feature" (popup.highlight_active_feature) must
+            // govern ALL active-object highlighting, not just the pulsing dot.
+            // When a popup is active but its highlight toggle is off, suppress
+            // the feature-recolor highlight too. Non-popup highlights
+            // (click-to-filter, hover-to-highlight, data table, geocoder) set
+            // highlightedFeature without an active popupInfo, so they are
+            // unaffected.
+            highlightFeature={
+              popupInfo && activePopupConfig && !activePopupConfig.highlight_active_feature
+                ? undefined
+                : highlightedFeature
+            }
+          />
           <GeocoderLayer />
           <UserLocationLayer />
           <ToolboxLayers />

@@ -551,6 +551,15 @@ const MobileProjectLayout = ({
             },
             keepMounted: true, // Keep content mounted for transitions/state
           }}
+          // While the drawer is closed, MUI forces an inline
+          // `style={{ pointerEvents: 'none' }}` on the Paper (see
+          // SwipeableDrawer source). That inline style beats the
+          // `& .MuiPaper-root` sx rule below, so on desktop the puller's
+          // click-to-open handler never fires (mouse produces no touch swipe).
+          // Override it via PaperProps.style — MUI merges PaperProps.style
+          // AFTER its computed value, so this wins and keeps the puller
+          // clickable when closed. Touch swipe is unaffected.
+          PaperProps={{ style: { pointerEvents: "auto" } }}
           onClose={handleDrawerDismiss}
           onOpen={toggleDrawer(true)}
           swipeAreaWidth={drawerBleeding}
@@ -558,6 +567,13 @@ const MobileProjectLayout = ({
           disableDiscovery={false}>
           {/* Puller Area */}
           <Box
+            // Click-to-toggle for pointer devices. MUI's SwipeableDrawer only
+            // opens/closes via touch gestures, so on desktop (a narrow window
+            // renders this mobile layout) there is otherwise no way to pull the
+            // sheet up with a mouse. Only toggle in the default view — special
+            // views (layerInfo / basemap / layerSettings) own an explicit X
+            // close button in the InfoHeader, so a bar click must not hijack it.
+            onClick={drawerView === "default" ? () => setOpen((o) => !o) : undefined}
             sx={{
               position: "absolute",
               top: -drawerBleeding,
@@ -567,7 +583,7 @@ const MobileProjectLayout = ({
               right: 0,
               left: 0,
               height: drawerBleeding,
-              cursor: "grab",
+              cursor: drawerView === "default" ? "pointer" : "grab",
               backgroundColor: drawerBgColor,
               boxShadow: "0 -3px 6px -2px rgba(0,0,0,0.15)",
             }}>
@@ -588,8 +604,10 @@ const MobileProjectLayout = ({
                   onClose={handleCloseView}
                 />
               )}
-              {/* Pagination container, visibility controlled by GlobalSwiperStyles */}
-              <div id="swiper-pagination-container" />
+              {/* Pagination container, visibility controlled by GlobalSwiperStyles.
+                  Stop clicks on the page dots from bubbling to the puller's
+                  click-to-toggle handler (which would close the sheet). */}
+              <div id="swiper-pagination-container" onClick={(e) => e.stopPropagation()} />
             </Box>
           </Box>
 

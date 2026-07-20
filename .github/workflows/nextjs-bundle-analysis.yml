@@ -73,37 +73,18 @@ jobs:
           cd apps/web
           ls -laR .next/analyze/base && npx -p nextjs-bundle-analysis compare
 
-      - name: 💬 Get comment body
-        id: get-comment-body
-        if: success() && github.event.number && !github.event.pull_request.head.repo.fork
+      # Commenting happens in nextjs-bundle-comment.yml (workflow_run), which has
+      # write permissions even for fork PRs. This job only exports what it needs.
+      - name: 📤 Save PR number for the comment workflow
+        if: success() && github.event.number
         run: |
-          cd apps/web
-          body=$(cat .next/analyze/__bundle_analysis_comment.txt)
-          body="${body//'%'/'%25'}"
-          body="${body//$'\n'/'%0A'}"
-          body="${body//$'\r'/'%0D'}"
-          echo ::set-output name=body::$body
+          echo "${{ github.event.number }}" > apps/web/.next/analyze/__pr_number
 
-      - name: 💬 Find Comment
-        uses: peter-evans/find-comment@v4
-        if: success() && github.event.number && !github.event.pull_request.head.repo.fork
-        id: fc
+      - name: 📤 Upload comment artifact
+        if: success() && github.event.number
+        uses: actions/upload-artifact@v4
         with:
-          issue-number: ${{ github.event.number }}
-          body-includes: "<!-- __NEXTJS_BUNDLE_@p4b/web -->"
-
-      - name: 💬 Create Comment
-        uses: peter-evans/create-or-update-comment@v5
-        if: success() && github.event.number && !github.event.pull_request.head.repo.fork && steps.fc.outputs.comment-id == 0
-        with:
-          issue-number: ${{ github.event.number }}
-          body: ${{ steps.get-comment-body.outputs.body }}
-
-      - name: 💬 Update Comment
-        uses: peter-evans/create-or-update-comment@v5
-        if: success() && github.event.number && !github.event.pull_request.head.repo.fork && steps.fc.outputs.comment-id != 0
-        with:
-          issue-number: ${{ github.event.number }}
-          body: ${{ steps.get-comment-body.outputs.body }}
-          comment-id: ${{ steps.fc.outputs.comment-id }}
-          edit-mode: replace
+          name: bundle-comment
+          path: |
+            ${{ github.workspace }}/apps/web/.next/analyze/__bundle_analysis_comment.txt
+            ${{ github.workspace }}/apps/web/.next/analyze/__pr_number

@@ -3,8 +3,6 @@ name: "PR"
 on:
   pull_request:
     branches: [main]
-  pull_request_target:
-    branches: [main]
   push:
     branches: [main]
   merge_group:
@@ -18,17 +16,6 @@ jobs:
   file-changes:
     name: file-changes
     uses: ./.github/workflows/checks.yml
-    secrets: inherit
-
-  pr-base:
-    name: pr-base
-    # PR-only: this posts PR comments and has no meaning on a push to main.
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
-    uses: "plan4better/.github/.github/workflows/reusable-pr-base.yml@main"
-    permissions:
-      contents: none
-      issues: read
-      pull-requests: write
     secrets: inherit
 
   lint:

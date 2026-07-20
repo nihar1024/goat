@@ -36,7 +36,7 @@ jobs:
       - name: 🏗️ Keycloak build
         shell: bash
         run: |
-          cd ${{github.workspace}}/packages/keycloak-theme
+          cd ${{github.workspace}}/packages/js/keycloak-theme
           KEYCLOAKIFY_ARTIFACT_ID="${{ inputs.keycloak-theme-artifact-id }}" KEYCLOAKIFY_GROUP_ID="com.plan4better.auth.keycloak" pnpm run build-keycloak-theme
           mv build_keycloak/target/*.jar build_keycloak/target/${{inputs.keycloak-theme-artifact-id}}.jar
 
@@ -52,5 +52,5 @@ jobs:
         if: ${{ inputs.push }}
         shell: bash
         run: |
-          cd ${{github.workspace}}/packages/keycloak-theme
+          cd ${{github.workspace}}/packages/js/keycloak-theme
           aws s3 cp build_keycloak/target/${{inputs.keycloak-theme-artifact-id}}.jar s3://plan4better-assets/other/keycloak/

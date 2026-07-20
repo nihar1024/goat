@@ -75,7 +75,7 @@ jobs:
 
       - name: 💬 Get comment body
         id: get-comment-body
-        if: success() && github.event.number
+        if: success() && github.event.number && !github.event.pull_request.head.repo.fork
         run: |
           cd apps/web
           body=$(cat .next/analyze/__bundle_analysis_comment.txt)
@@ -85,23 +85,23 @@ jobs:
           echo ::set-output name=body::$body
 
       - name: 💬 Find Comment
-        uses: peter-evans/find-comment@v1
-        if: success() && github.event.number
+        uses: peter-evans/find-comment@v4
+        if: success() && github.event.number && !github.event.pull_request.head.repo.fork
         id: fc
         with:
           issue-number: ${{ github.event.number }}
           body-includes: "<!-- __NEXTJS_BUNDLE_@p4b/web -->"
 
       - name: 💬 Create Comment
-        uses: peter-evans/create-or-update-comment@v1.4.4
-        if: success() && github.event.number && steps.fc.outputs.comment-id == 0
+        uses: peter-evans/create-or-update-comment@v5
+        if: success() && github.event.number && !github.event.pull_request.head.repo.fork && steps.fc.outputs.comment-id == 0
         with:
           issue-number: ${{ github.event.number }}
           body: ${{ steps.get-comment-body.outputs.body }}
 
       - name: 💬 Update Comment
-        uses: peter-evans/create-or-update-comment@v1.4.4
-        if: success() && github.event.number && steps.fc.outputs.comment-id != 0
+        uses: peter-evans/create-or-update-comment@v5
+        if: success() && github.event.number && !github.event.pull_request.head.repo.fork && steps.fc.outputs.comment-id != 0
         with:
           issue-number: ${{ github.event.number }}
           body: ${{ steps.get-comment-body.outputs.body }}

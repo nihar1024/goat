@@ -9,7 +9,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  # Key on PR number, not head_ref: fork branches often share names (several
+  # contributors PR from their fork's `main`), and equal groups would cancel
+  # each other's CI.
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

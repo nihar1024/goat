@@ -41,7 +41,7 @@ jobs:
           mv build_keycloak/target/*.jar build_keycloak/target/${{inputs.keycloak-theme-artifact-id}}.jar
 
       - name: 📥 Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         if: ${{ inputs.push }}
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}

@@ -159,7 +159,7 @@ jobs:
     uses: ./.github/workflows/keycloak-build.yml
     secrets: inherit
     with:
-      keycloak-theme-artifact-id: "p4b-keyclok-theme-${{ needs.file-changes.outputs.sha-short}}"
+      keycloak-theme-artifact-id: "p4b-keycloak-theme-${{ needs.file-changes.outputs.sha-short}}"
       push: true
 
   # Windmill images - server and workers

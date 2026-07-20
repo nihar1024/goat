@@ -1,4 +1,6 @@
-name: "Next.js bundle analysis"
+# Keep this FILENAME stable: the base-branch stats download below and the PR
+# runs' artifact lookup reference nextjs-bundle-analysis.yml by name.
+name: "Bundle analysis"
 
 on:
   workflow_call:
@@ -14,6 +16,7 @@ jobs:
     with:
       web: true
   analyze:
+    name: web (bundle size)
     needs: build
     if: always()
     runs-on: ubuntu-latest

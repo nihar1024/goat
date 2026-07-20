@@ -60,15 +60,15 @@ jobs:
         || needs.file-changes.outputs.storybook == 'true' }}
       keycloak-theme: ${{ needs.file-changes.outputs.keycloak-theme == 'true' }}
 
-  analyze-goat:
-    name: analyze-goat
+  analyze:
+    name: analyze
     needs: [file-changes, build]
     if: ${{ needs.file-changes.outputs.web == 'true' || needs.file-changes.outputs.storybook == 'true' }}
     uses: ./.github/workflows/nextjs-bundle-analysis.yml
     secrets: inherit
 
   required:
-    needs: [lint, test, build, analyze-goat]
+    needs: [lint, test, build, analyze]
     if: always()
     runs-on: ubuntu-latest
     steps:

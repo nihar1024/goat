@@ -43,6 +43,8 @@ import { buildLayerIcon } from "@/components/map/panels/layer/legend/LayerIcon";
 import { seedPopupFromInteraction } from "@/components/map/panels/style/popup/seedFromLegacy";
 import SimpleLayerStyle from "@/components/map/panels/style/SimpleLayerStyle";
 import { PopupContent } from "@/components/map/popover/MapFeaturePopover";
+import { normalizePopup } from "@/components/map/popover/normalizePopup";
+import { findPopupLayer } from "@/components/map/popover/popupVisibility";
 
 // --- Constants ---
 const drawerBleeding = 56;
@@ -187,19 +189,16 @@ const MobileProjectLayout = ({
 
   // Resolve the popup config + layer for the currently-clicked feature.
   // Mirrors the resolution used by `MapViewer` / `MapFixedPopupSlot`:
+  //  - resolve the owning layer by the clicked ProjectLayer's own id (the
+  //    same dataset can back several project layers), dataset id as fallback
   //  - prefer the new `popup` block on the layer
   //  - fall back to a default seeded from the legacy `interaction`
   // Layers without either still get a sensible "show all fields"
   // popup courtesy of seedPopupFromInteraction.
-  const clickedPopupLayer = useMemo(() => {
-    if (!layerInfo?.layerId) return undefined;
-    const target = layerInfo.layerId;
-    return projectLayers.find(
-      (l) =>
-        (l as { layer_id?: string }).layer_id === target ||
-        l.id.toString() === target,
-    );
-  }, [layerInfo?.layerId, projectLayers]);
+  const clickedPopupLayer = useMemo(
+    () => findPopupLayer(layerInfo?.layerId, projectLayers, layerInfo?.projectLayerId),
+    [layerInfo?.layerId, layerInfo?.projectLayerId, projectLayers],
+  );
   const activePopupConfig = useMemo<PopupProperties | undefined>(() => {
     if (!clickedPopupLayer) return undefined;
     const props = clickedPopupLayer.properties as
@@ -208,8 +207,8 @@ const MobileProjectLayout = ({
           interaction?: { type?: string; content?: never[] };
         }
       | undefined;
-    if (props?.popup) return props.popup;
-    return seedPopupFromInteraction(props?.interaction);
+    if (props?.popup) return normalizePopup(props.popup);
+    return normalizePopup(seedPopupFromInteraction(props?.interaction));
   }, [clickedPopupLayer]);
   // Layer-style icon for the popup header (same look as the Layers panel
   // and the desktop popup).

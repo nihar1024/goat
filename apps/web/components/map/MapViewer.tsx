@@ -49,6 +49,7 @@ import { ActiveFeaturePulseLayer } from "@/components/map/popover/ActiveFeatureP
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
 import { normalizePopup } from "@/components/map/popover/normalizePopup";
 import {
+  findPopupLayer,
   layerHighlightsActiveFeature,
   shouldClosePopupForHiddenLayer,
   shouldHighlightActivePopupFeature,
@@ -152,18 +153,17 @@ const MapViewer: React.FC<MapProps> = ({
     else map.once("idle", swap);
   }, [mapStyle, mapRef]);
 
-  // Look up the layer that owns the currently-clicked feature. `popupInfo.layerId`
-  // is set to `layer_id ?? id` at dispatch time, so we try both: ProjectLayer
-  // stores the dataset id on `layer_id` while plain Layer uses `id`.
-  const clickedPopupLayer = useMemo(() => {
-    if (!popupInfo?.layerId || !layers) return undefined;
-    const target = popupInfo.layerId;
-    return layers.find(
-      (l) =>
-        (l as { layer_id?: string }).layer_id === target ||
-        l.id.toString() === target,
-    );
-  }, [popupInfo?.layerId, layers]);
+  // Look up the layer that owns the currently-clicked feature. The clicked
+  // ProjectLayer's own id (`projectLayerId`) wins — the same dataset can back
+  // several project layers with different popup configs — with a fallback to
+  // the dataset-id match for popups dispatched without one.
+  const clickedPopupLayer = useMemo(
+    // Explicit type argument: `layers` is a union of arrays
+    // (ProjectLayer[] | Layer[]), which generic inference can't unify.
+    () =>
+      findPopupLayer<ProjectLayer | Layer>(popupInfo?.layerId, layers, popupInfo?.projectLayerId),
+    [popupInfo?.layerId, popupInfo?.projectLayerId, layers],
+  );
 
   // `popup` only exists on feature-layer property variants; non-feature layers
   // (raster/table/etc) carry differently-shaped properties. Narrow once here so
@@ -306,7 +306,10 @@ const MapViewer: React.FC<MapProps> = ({
   // pinned popup rendered by MapFixedPopupSlot, and the mobile bottom sheet),
   // which all read the same popupInfo.
   useEffect(() => {
-    if (popupInfo && shouldClosePopupForHiddenLayer(popupInfo.layerId, layers)) {
+    if (
+      popupInfo &&
+      shouldClosePopupForHiddenLayer(popupInfo.layerId, layers, popupInfo.projectLayerId)
+    ) {
       popupInfo.onClose();
     }
   }, [popupInfo, layers]);
@@ -565,6 +568,7 @@ const MapViewer: React.FC<MapProps> = ({
               (interactiveLayer as { layer_id?: string }).layer_id ??
               interactiveLayer.id
             )?.toString(),
+            projectLayerId: interactiveLayer.id?.toString(),
             ...(hasFieldList && {
               fieldLabels,
               fieldOrder,
@@ -730,6 +734,7 @@ const MapViewer: React.FC<MapProps> = ({
           layerId: (
             (hoverLayer as { layer_id?: string }).layer_id ?? hoverLayer.id
           )?.toString(),
+          projectLayerId: hoverLayer.id?.toString(),
           // The new MapFeaturePopover uses featureProperties for token
           // substitution. `properties` is kept (same payload) so the
           // legacy renderer still works if it ever picks up a hover.

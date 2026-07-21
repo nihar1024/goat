@@ -348,6 +348,9 @@ class CRUDDatasets:
                     name=d.get("name"),
                     folder_id=d.get("folder_id"),
                     type=enum_value(d.get("type")),
+                    feature_layer_geometry_type=enum_value(
+                        d.get("feature_layer_geometry_type")
+                    ),
                     data_type=enum_value(d.get("data_type")),
                     thumbnail_url=d.get("thumbnail_url"),
                     owned_by=d.get("owned_by"),

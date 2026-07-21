@@ -20,8 +20,8 @@ import { toast } from "react-toastify";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { useDatasets } from "@/lib/api/datasets";
 import { useFolders } from "@/lib/api/folders";
-import { useLayers } from "@/lib/api/layers";
 import { addProjectLayers, useProject, useProjectLayers } from "@/lib/api/projects";
 import { useTeams } from "@/lib/api/teams";
 import { useOrganization } from "@/lib/api/users";
@@ -103,11 +103,14 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
     return datasetSchema;
   }, [datasetSchema, queryParams.team_id, queryParams.organization_id, homeFolder]);
 
+  // Layers + dataset packages from the unified datasets API (same source as the
+  // main pages). Package tiles are shown but not selectable as a project layer —
+  // TileGrid skips onClick for them (isDatasetPackageTile guard).
   const {
-    layers: datasets,
+    datasets,
     isLoading: isDatasetLoading,
     isError: _isDatasetError,
-  } = useLayers(queryParams, effectiveDatasetSchema);
+  } = useDatasets(queryParams, effectiveDatasetSchema);
 
   const [isBusy, setIsBusy] = useState(false);
   const { mutate: mutateProjectLayers } = useProjectLayers(projectId);

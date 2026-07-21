@@ -56,6 +56,9 @@ class DatasetContentTile(ThumbnailUrlMixin):
     type: Optional[str] = Field(
         None, description="Layer type or dataset package type"
     )
+    feature_layer_geometry_type: Optional[str] = Field(
+        None, description="Geometry type for feature layers (null for packages)"
+    )
     data_type: Optional[str] = None
     dataset_package_type: Optional[str] = None
     status: Optional[str] = None

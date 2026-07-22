@@ -4,7 +4,9 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-FieldKind = Literal["string", "number", "area", "perimeter", "length"]
+FieldKind = Literal[
+    "string", "number", "area", "perimeter", "length", "datetime", "boolean"
+]
 
 # --- Feature Write Models ---
 
@@ -89,7 +91,9 @@ COLUMN_TYPE_MAP: dict[str, str] = {
     "boolean": "BOOLEAN",
     "bool": "BOOLEAN",
     "date": "DATE",
-    "timestamp": "TIMESTAMP",
+    "timestamp": "TIMESTAMP WITH TIME ZONE",
+    "timestamptz": "TIMESTAMP WITH TIME ZONE",
+    "datetime": "TIMESTAMP WITH TIME ZONE",
     "json": "JSON",
 }
 

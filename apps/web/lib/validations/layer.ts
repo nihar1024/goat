@@ -59,6 +59,7 @@ const layerFieldType = z.object({
   $ref: z.string().optional(),
   name: z.string(),
   type: z.string(),
+  format: z.string().optional(),
   // D2: computed-field metadata exposed by the queryables endpoint
   kind: z.string().optional(),
   is_computed: z.boolean().optional(),
@@ -788,6 +789,8 @@ export const fieldKindSchema = z.enum([
   "area",
   "perimeter",
   "length",
+  "datetime",
+  "boolean",
 ]);
 export type FieldKind = z.infer<typeof fieldKindSchema>;
 
@@ -811,6 +814,10 @@ export const perimeterDisplayConfigSchema = numericFormatSchema.extend({
 export const lengthDisplayConfigSchema = numericFormatSchema.extend({
   unit: lengthLikeUnitSchema.default("auto"),
 }).strict();
+export const datetimeDisplayConfigSchema = z.object({
+  tz: z.string().default("UTC"),
+  format: z.string().nullish(),
+}).strict();
 
 export const displayConfigSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("string"), config: stringDisplayConfigSchema }),
@@ -818,6 +825,7 @@ export const displayConfigSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("area"), config: areaDisplayConfigSchema }),
   z.object({ kind: z.literal("perimeter"), config: perimeterDisplayConfigSchema }),
   z.object({ kind: z.literal("length"), config: lengthDisplayConfigSchema }),
+  z.object({ kind: z.literal("datetime"), config: datetimeDisplayConfigSchema }),
 ]);
 
 export const fieldDefinitionSchema = z.object({
@@ -854,12 +862,12 @@ export type CreateEmptyLayerInput = z.infer<typeof createEmptyLayerSchema>;
 
 // Map of geometry types to allowed kinds for the Add-Field dropdown
 export const ALLOWED_KINDS_BY_GEOM_TYPE: Record<string, FieldKind[]> = {
-  point: ["string", "number"],
-  multipoint: ["string", "number"],
-  line: ["string", "number", "length"],
-  multiline: ["string", "number", "length"],
-  polygon: ["string", "number", "area", "perimeter"],
-  multipolygon: ["string", "number", "area", "perimeter"],
+  point: ["string", "number", "datetime", "boolean"],
+  multipoint: ["string", "number", "datetime", "boolean"],
+  line: ["string", "number", "length", "datetime", "boolean"],
+  multiline: ["string", "number", "length", "datetime", "boolean"],
+  polygon: ["string", "number", "area", "perimeter", "datetime", "boolean"],
+  multipolygon: ["string", "number", "area", "perimeter", "datetime", "boolean"],
 };
 
 export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([

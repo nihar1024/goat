@@ -39,6 +39,8 @@ const UNIT_OPTIONS_BY_KIND: Record<FieldKind, string[]> = {
   area: ["auto", "mm²", "cm²", "m²", "ha", "km²"],
   perimeter: ["auto", "mm", "cm", "m", "km"],
   length: ["auto", "mm", "cm", "m", "km"],
+  datetime: [],
+  boolean: [],
 };
 
 const PREVIEW_VALUES_BY_KIND: Record<FieldKind, number[]> = {
@@ -47,6 +49,8 @@ const PREVIEW_VALUES_BY_KIND: Record<FieldKind, number[]> = {
   area: [42500, 12.35],
   perimeter: [4250, 12.35],
   length: [4250, 12.35],
+  datetime: [],
+  boolean: [],
 };
 
 interface FieldEditorProps {
@@ -80,6 +84,8 @@ const FIELD_TYPE_ICON: Record<FieldKind, ICON_NAME> = {
   area: ICON_NAME.RULES_COMBINED,
   perimeter: ICON_NAME.RULER_HORIZONTAL,
   length: ICON_NAME.RULER_HORIZONTAL,
+  datetime: ICON_NAME.CALENDAR,
+  boolean: ICON_NAME.CIRCLECHECK,
 };
 
 const ALL_FIELD_TYPE_ITEMS: Record<FieldKind, SelectorItem> = {
@@ -88,7 +94,11 @@ const ALL_FIELD_TYPE_ITEMS: Record<FieldKind, SelectorItem> = {
   area: { value: "area", label: "Area", icon: ICON_NAME.RULES_COMBINED },
   perimeter: { value: "perimeter", label: "Perimeter", icon: ICON_NAME.RULER_HORIZONTAL },
   length: { value: "length", label: "Length", icon: ICON_NAME.RULER_HORIZONTAL },
+  datetime: { value: "datetime", label: "Date", icon: ICON_NAME.CALENDAR },
+  boolean: { value: "boolean", label: "Boolean", icon: ICON_NAME.CIRCLECHECK },
 };
+
+const NUMERIC_KINDS: FieldKind[] = ["number", "area", "perimeter", "length"];
 
 // --- Sortable field row ---
 
@@ -255,8 +265,8 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
   const selectedField = fields.find((f) => f.id === selectedFieldId) ?? null;
 
   const availableKinds: FieldKind[] = geometryType
-    ? ALLOWED_KINDS_BY_GEOM_TYPE[geometryType] ?? ["string", "number"]
-    : ["string", "number"];
+    ? ALLOWED_KINDS_BY_GEOM_TYPE[geometryType] ?? ["string", "number", "datetime", "boolean"]
+    : ["string", "number", "datetime", "boolean"];
 
   const fieldTypeItems: SelectorItem[] = availableKinds.map((k) => ALL_FIELD_TYPE_ITEMS[k]);
   const hasFields = fields.length > 0;
@@ -490,7 +500,7 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
               abbreviate?: boolean;
               always_show_sign?: boolean;
             };
-            const showFormat = selectedField.kind !== "string";
+            const showFormat = NUMERIC_KINDS.includes(selectedField.kind);
             const unitOptions = UNIT_OPTIONS_BY_KIND[selectedField.kind];
             const previewValues = PREVIEW_VALUES_BY_KIND[selectedField.kind];
             return (

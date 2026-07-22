@@ -43,7 +43,12 @@ export const FieldTypeColors = {
   string: [140, 210, 205],
   number: [248, 194, 28],
   object: [255, 138, 101],
+  date: [43, 179, 129],
+  boolean: [149, 117, 205],
 };
+
+export const fieldTagKey = (field: { type: string; kind?: string }): string =>
+  field.kind === "datetime" ? "date" : field.type;
 
 export const FieldTypeTag = styled("div")<{ fieldType: string }>(({ fieldType }) => ({
   backgroundColor: `rgba(${FieldTypeColors[fieldType]}, 0.1)`,
@@ -57,6 +62,8 @@ export const FieldTypeTag = styled("div")<{ fieldType: string }>(({ fieldType })
   marginRight: "10px",
   textAlign: "center",
   width: "50px",
+  whiteSpace: "nowrap",
+  boxSizing: "border-box",
   lineHeight: "20px",
 }));
 
@@ -122,7 +129,17 @@ const LayerFieldSelector = (props: SelectorProps) => {
         multiple={props.multiple ? true : false}
         disabled={props.disabled}
         IconComponent={() => null}
-        sx={{ pr: 1 }}
+        sx={{
+          pr: 1,
+          // Let the value area shrink and truncate instead of pushing the
+          // clear button out of the box when many fields are selected.
+          "& .MuiSelect-select": {
+            minWidth: "0 !important",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          },
+        }}
         displayEmpty
         value={selectedValue as unknown}
         defaultValue={props.multiple ? EMPTY_FIELDS : ""}
@@ -165,8 +182,10 @@ const LayerFieldSelector = (props: SelectorProps) => {
             {!props.multiple &&
               selectedField &&
               !Array.isArray(selectedField) &&
-              FieldTypeColors[selectedField.type] && (
-                <FieldTypeTag fieldType={selectedField.type}>{selectedField.type}</FieldTypeTag>
+              FieldTypeColors[fieldTagKey(selectedField)] && (
+                <FieldTypeTag fieldType={fieldTagKey(selectedField)}>
+                  {fieldTagKey(selectedField)}
+                </FieldTypeTag>
               )}
           </>
         }
@@ -196,17 +215,17 @@ const LayerFieldSelector = (props: SelectorProps) => {
             return <Typography variant="body2">{t("select_field")}</Typography>;
           if (props.multiple && Array.isArray(selectedField) && selectedField.length === 0)
             return <Typography variant="body2">{t("select_fields")}</Typography>;
-          return (
-            <>
-              {selectedField && (
-                <Typography variant="body2" fontWeight="bold">
-                  {props.multiple && Array.isArray(selectedField)
-                    ? selectedField.map((f) => f.name).join(", ")
-                    : selectedField.name}
-                </Typography>
-              )}
-            </>
-          );
+          let displayText: string | undefined;
+          if (props.multiple && Array.isArray(selectedField)) {
+            displayText = selectedField.map((f) => f.name).join(", ");
+          } else if (selectedField && !Array.isArray(selectedField)) {
+            displayText = selectedField.name;
+          }
+          return displayText ? (
+            <Typography variant="body2" fontWeight="bold" noWrap>
+              {displayText}
+            </Typography>
+          ) : null;
         }}>
         <ListSubheader sx={{ px: 2, pt: 1 }}>
           <TextField
@@ -287,7 +306,9 @@ const LayerFieldSelector = (props: SelectorProps) => {
               />
             )}
 
-            {FieldTypeColors[field.type] && <FieldTypeTag fieldType={field.type}>{field.type}</FieldTypeTag>}
+            {FieldTypeColors[fieldTagKey(field)] && (
+              <FieldTypeTag fieldType={fieldTagKey(field)}>{fieldTagKey(field)}</FieldTypeTag>
+            )}
             <Typography
               variant="body2"
               fontWeight="bold"

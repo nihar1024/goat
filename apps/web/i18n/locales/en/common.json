@@ -175,13 +175,34 @@
   "basemap_layer_all_my_layers": "All my layers",
   "basemap_layer_below": "Below",
   "basemap_layer_categories": {
-    "buildings": { "title": "Buildings", "subtitle": "Building footprints" },
-    "labels": { "title": "Labels", "subtitle": "Street & place names" },
-    "landuse": { "title": "Land use", "subtitle": "Forest, parks, fields" },
-    "other": { "title": "Other", "subtitle": "Remaining layers" },
-    "poi": { "title": "Points of interest", "subtitle": "Shops, services" },
-    "roads": { "title": "Roads", "subtitle": "Road network, paths" },
-    "water": { "title": "Water", "subtitle": "Rivers, lakes, coasts" }
+    "buildings": {
+      "title": "Buildings",
+      "subtitle": "Building footprints"
+    },
+    "labels": {
+      "title": "Labels",
+      "subtitle": "Street & place names"
+    },
+    "landuse": {
+      "title": "Land use",
+      "subtitle": "Forest, parks, fields"
+    },
+    "other": {
+      "title": "Other",
+      "subtitle": "Remaining layers"
+    },
+    "poi": {
+      "title": "Points of interest",
+      "subtitle": "Shops, services"
+    },
+    "roads": {
+      "title": "Roads",
+      "subtitle": "Road network, paths"
+    },
+    "water": {
+      "title": "Water",
+      "subtitle": "Rivers, lakes, coasts"
+    }
   },
   "basemap_layer_hidden": "Hidden",
   "basemap_layer_no_layers": "No style layers available.",
@@ -668,6 +689,7 @@
     "is_between": "Is between",
     "is_blank": "Is blank",
     "is_empty_string": "Is empty string",
+    "is_false": "Is false",
     "is_greater_than": "Is greater than",
     "is_less_than": "Is less than",
     "is_not": "Is not",
@@ -676,6 +698,7 @@
     "is_not_empty_string": "Is not empty string",
     "is_not_on": "Is not on",
     "is_on": "Is on",
+    "is_true": "Is true",
     "not_in_the_last": "Not in the last",
     "starts_with": "Starts with",
     "select_operator": "Select operator",
@@ -2330,6 +2353,21 @@
   "field_kind_area": "Area",
   "field_kind_perimeter": "Perimeter",
   "field_kind_length": "Length",
+  "field_kind_date": "Date",
+  "field_kind_datetime": "Date & time",
+  "field_kind_time": "Time",
+  "select_date": "Select date",
+  "select_time": "Select time",
+  "number_of_days": "Number of days",
+  "calendar": "Calendar",
+  "picker": "Picker",
+  "granularity": "Granularity",
+  "minute": "Minute",
+  "hour": "Hour",
+  "day": "Day",
+  "week": "Week",
+  "month": "Month",
+  "time_series": "Timeline filter",
   "write": "Write",
   "popup_type": "Popup type",
   "popup_placement": "Popup placement",

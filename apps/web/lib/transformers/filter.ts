@@ -1,4 +1,7 @@
+import dayjs from "dayjs";
 import { v4 } from "uuid";
+
+import { TEMPORAL_VALUE_FORMAT } from "@p4b/ui/components/temporalFormats";
 
 import { type Expression, FilterType } from "@/lib/validations/filter";
 
@@ -62,6 +65,14 @@ export function does_not_contains_the_text(key: string, value: string) {
   return createNestedCondition("not", key, `%${value}%`, "like");
 }
 
+export function is_true(key: string) {
+  return `{"op":"=","args":[{"property":"${key}"},true]}`;
+}
+
+export function is_false(key: string) {
+  return `{"op":"=","args":[{"property":"${key}"},false]}`;
+}
+
 export function is_blank(key: string) {
   return `{
     "op": "isNull",
@@ -113,6 +124,72 @@ export function s_intersects(geom: string, geomProperty: string = "geom") {
   return `{"op":"s_intersects","args":[{"property":"${geomProperty}"},${geom}]}`;
 }
 
+function formatDateLiteral(d: dayjs.Dayjs): string {
+  return d.format(TEMPORAL_VALUE_FORMAT);
+}
+
+export function toIsoLiteral(value: string): string {
+  const d = dayjs(value);
+  if (!d.isValid()) return value;
+  return formatDateLiteral(d);
+}
+
+// "is on" for temporal values means "on that calendar day", not equality on
+// the exact second — exact equality would almost never match timestamp data.
+export function date_is_on(key: string, value: string) {
+  const d = dayjs(value);
+  if (!d.isValid()) return is(key, value);
+  return date_is_between(
+    key,
+    formatDateLiteral(d.startOf("day")),
+    formatDateLiteral(d.endOf("day"))
+  );
+}
+
+export function date_is_not_on(key: string, value: string) {
+  const d = dayjs(value);
+  if (!d.isValid()) return is_not(key, value);
+  return date_is_not_between(
+    key,
+    formatDateLiteral(d.startOf("day")),
+    formatDateLiteral(d.endOf("day"))
+  );
+}
+
+export function date_is_between(key: string, from: string, to: string) {
+  return and_operator([
+    createComparisonCondition(">=", key, from),
+    createComparisonCondition("<=", key, to),
+  ]);
+}
+
+export function date_is_not_between(key: string, from: string, to: string) {
+  return or_operator([
+    createComparisonCondition("<", key, from),
+    createComparisonCondition(">", key, to),
+  ]);
+}
+
+export function date_in_the_last(key: string, days: number) {
+  const now = dayjs();
+  const lower = formatDateLiteral(now.subtract(days, "day"));
+  const upper = formatDateLiteral(now);
+  return and_operator([
+    createComparisonCondition(">=", key, lower),
+    createComparisonCondition("<=", key, upper),
+  ]);
+}
+
+export function date_not_in_the_last(key: string, days: number) {
+  const now = dayjs();
+  const lower = formatDateLiteral(now.subtract(days, "day"));
+  const upper = formatDateLiteral(now);
+  return or_operator([
+    createComparisonCondition("<", key, lower),
+    createComparisonCondition(">", key, upper),
+  ]);
+}
+
 export function and_operator(args: string[]) {
   return `{"op":"and","args": [${args.map((arg) => `${arg}`)}]}`;
 }
@@ -124,15 +201,14 @@ export function or_operator(args: string[]) {
 
 export function createTheCQLBasedOnExpression(
   expressions,
-  layerFields: { name: string; type: string }[],
+  layerFields: { name: string; type: string; kind?: string }[],
   logicalOperator?: "and" | "or"
 ) {
   const queries = expressions
     .filter((exp) => exp.expression && exp.attribute)
     .map((expression) => {
-      const attributeType = layerFields.filter((field) => field.name === expression.attribute).length
-        ? layerFields.filter((field) => field.name === expression.attribute)[0].type
-        : undefined;
+      const matchedField = layerFields.find((field) => field.name === expression.attribute);
+      const attributeType = matchedField?.type;
 
       switch (expression.expression) {
         case "is":
@@ -163,6 +239,10 @@ export function createTheCQLBasedOnExpression(
           } else {
             return excludes(expression.attribute, expression.value.map(Number));
           }
+        case "is_true":
+          return is_true(expression.attribute);
+        case "is_false":
+          return is_false(expression.attribute);
         case "is_blank":
           return is_blank(expression.attribute);
         case "is_not_blank":
@@ -175,7 +255,40 @@ export function createTheCQLBasedOnExpression(
           return contains_the_text(expression.attribute, expression.value);
         case "does_not_contains_the_text":
           return does_not_contains_the_text(expression.attribute, expression.value);
+        case "is_on":
+          return date_is_on(expression.attribute, expression.value);
+        case "is_not_on":
+          return date_is_not_on(expression.attribute, expression.value);
+        case "is_before":
+          return createComparisonCondition(
+            "<",
+            expression.attribute,
+            toIsoLiteral(expression.value)
+          );
+        case "is_after":
+          return createComparisonCondition(
+            ">",
+            expression.attribute,
+            toIsoLiteral(expression.value)
+          );
+        case "in_the_last":
+          return date_in_the_last(expression.attribute, Number(expression.value));
+        case "not_in_the_last":
+          return date_not_in_the_last(expression.attribute, Number(expression.value));
+        case "is_not_between":
+          return date_is_not_between(
+            expression.attribute,
+            toIsoLiteral(expression.value[0]),
+            toIsoLiteral(expression.value[1])
+          );
         case "is_between":
+          if (attributeType === "date") {
+            return date_is_between(
+              expression.attribute,
+              toIsoLiteral(expression.value[0]),
+              toIsoLiteral(expression.value[1])
+            );
+          }
           return is_between(
             expression.attribute,
             parseInt(expression.value.split("-")[0]),

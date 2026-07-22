@@ -417,6 +417,8 @@ def _resolve_kind_to_sql(
             return "VARCHAR", None, [], False
         if kind == "datetime":
             return "TIMESTAMP WITH TIME ZONE", None, [], False
+        if kind == "boolean":
+            return "BOOLEAN", None, [], False
         raise ValueError(f"Unknown kind: {kind!r}")
     if legacy_type is not None:
         # Reuse the existing _resolve_duckdb_type via the service path.

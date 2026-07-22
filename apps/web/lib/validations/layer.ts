@@ -790,6 +790,7 @@ export const fieldKindSchema = z.enum([
   "perimeter",
   "length",
   "datetime",
+  "boolean",
 ]);
 export type FieldKind = z.infer<typeof fieldKindSchema>;
 
@@ -861,12 +862,12 @@ export type CreateEmptyLayerInput = z.infer<typeof createEmptyLayerSchema>;
 
 // Map of geometry types to allowed kinds for the Add-Field dropdown
 export const ALLOWED_KINDS_BY_GEOM_TYPE: Record<string, FieldKind[]> = {
-  point: ["string", "number", "datetime"],
-  multipoint: ["string", "number", "datetime"],
-  line: ["string", "number", "length", "datetime"],
-  multiline: ["string", "number", "length", "datetime"],
-  polygon: ["string", "number", "area", "perimeter", "datetime"],
-  multipolygon: ["string", "number", "area", "perimeter", "datetime"],
+  point: ["string", "number", "datetime", "boolean"],
+  multipoint: ["string", "number", "datetime", "boolean"],
+  line: ["string", "number", "length", "datetime", "boolean"],
+  multiline: ["string", "number", "length", "datetime", "boolean"],
+  polygon: ["string", "number", "area", "perimeter", "datetime", "boolean"],
+  multipolygon: ["string", "number", "area", "perimeter", "datetime", "boolean"],
 };
 
 export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([

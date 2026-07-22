@@ -44,6 +44,7 @@ export const FieldTypeColors = {
   number: [248, 194, 28],
   object: [255, 138, 101],
   date: [43, 179, 129],
+  boolean: [149, 117, 205],
 };
 
 export const fieldTagKey = (field: { type: string; kind?: string }): string =>

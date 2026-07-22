@@ -1,14 +1,18 @@
 import { Box, Slider, Stack, Typography, useTheme } from "@mui/material";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
 import TemporalPicker from "@p4b/ui/components/TemporalPicker";
+import { TEMPORAL_VALUE_FORMAT } from "@p4b/ui/components/temporalFormats";
 
 import { useDatasetCollectionItems } from "@/lib/api/layers";
 import { useProjectLayerHistogramStats } from "@/lib/api/projects";
 import type { HistogramStatsQueryParams } from "@/lib/validations/project";
+
+dayjs.extend(utc);
 
 type Granularity = "minute" | "hour" | "day" | "week" | "month";
 
@@ -20,7 +24,7 @@ const LABEL_FORMAT: Record<Granularity, string> = {
   month: "MMM YYYY",
 };
 
-const ISO = "YYYY-MM-DDTHH:mm:ss";
+const ISO = TEMPORAL_VALUE_FORMAT;
 
 interface TemporalRangeInputProps {
   /** "range" = data-driven slider, "picker" = free From/To pickers */
@@ -62,8 +66,10 @@ export default function TemporalRangeInput({
     const minVal = minData?.features?.[0]?.properties?.[fieldName];
     const maxVal = maxData?.features?.[0]?.properties?.[fieldName];
     if (minVal == null || maxVal == null) return null;
-    const base = dayjs(String(minVal)).startOf(unit);
-    const end = dayjs(String(maxVal));
+    // All slider math happens in UTC: serialized values are UTC instants and
+    // the emitted literals are interpreted as UTC by the backend.
+    const base = dayjs.utc(String(minVal)).startOf(unit);
+    const end = dayjs.utc(String(maxVal));
     if (!base.isValid() || !end.isValid()) return null;
     return {
       steps: Math.max(0, end.startOf(unit).diff(base, unit)),
@@ -107,7 +113,7 @@ export default function TemporalRangeInput({
   const sliderToLiterals = (value: [number, number]): [string, string] =>
     domain ? [domain.literal(value[0], false), domain.literal(value[1], true)] : ["", ""];
 
-  const literalToEpoch = (lit: string): number => (lit ? dayjs(lit).unix() : NaN);
+  const literalToEpoch = (lit: string): number => (lit ? dayjs.utc(lit).unix() : NaN);
 
   const activeLiterals: [string, string] = isPicker
     ? (selectedRange ?? ["", ""])

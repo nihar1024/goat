@@ -32,6 +32,8 @@ def _kind_from_json_type(json_type: str, json_format: str | None = None) -> str:
         return "datetime"
     if json_type in ("number", "integer"):
         return "number"
+    if json_type == "boolean":
+        return "boolean"
     return "string"
 
 

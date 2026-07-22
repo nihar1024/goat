@@ -1,8 +1,27 @@
 """Tests for the single `datetime` temporal field-kind."""
 
+from typing import get_args
+
+import pytest
+from goatlib.computed_columns import validate_display_config
+
+from geoapi.models.write import ColumnCreate, FieldKind
 from geoapi.routers.features_write import _resolve_kind_to_sql
 from geoapi.routers.metadata import _kind_from_json_type
 from geoapi.services.layer_service import LayerService
+
+# One row per public field kind: (kind, geometry_type needed to resolve it).
+# The single source of truth for this test module — adding a kind to the
+# codebase without extending this table fails the completeness test below.
+ALL_KINDS: list[tuple[str, str | None]] = [
+    ("string", None),
+    ("number", None),
+    ("datetime", None),
+    ("boolean", None),
+    ("area", "polygon"),
+    ("perimeter", "polygon"),
+    ("length", "line"),
+]
 
 
 class TestDuckDBFormat:
@@ -42,6 +61,27 @@ class TestKindFromJsonType:
 
     def test_string_without_format(self):
         assert _kind_from_json_type("string") == "string"
+
+
+class TestKindWhitelistsAgree:
+    """The request model's FieldKind Literal, the resolver, and the
+    display-config registry are maintained separately — a kind present in one
+    but missing from another surfaces only as a runtime 422/500, which the
+    function-level tests below cannot catch.
+    """
+
+    def test_table_covers_the_literal(self):
+        assert {k for k, _ in ALL_KINDS} == set(get_args(FieldKind))
+
+    @pytest.mark.parametrize(("kind", "geom"), ALL_KINDS)
+    def test_kind_passes_every_gate(self, kind: str, geom: str | None):
+        # 1. FastAPI body validation (the gate that rejected kind="boolean")
+        ColumnCreate(name="col", kind=kind)  # type: ignore[arg-type]
+        # 2. Kind -> DuckDB type resolution
+        duckdb_type, _, _, _ = _resolve_kind_to_sql(kind, None, geom)
+        assert duckdb_type
+        # 3. Display-config validation (raises ValueError on unknown kind)
+        validate_display_config(kind, None)
 
 
 class TestResolveKindToSql:

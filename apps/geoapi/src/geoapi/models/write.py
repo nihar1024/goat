@@ -5,7 +5,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 FieldKind = Literal[
-    "string", "number", "area", "perimeter", "length", "datetime"
+    "string", "number", "area", "perimeter", "length", "datetime", "boolean"
 ]
 
 # --- Feature Write Models ---

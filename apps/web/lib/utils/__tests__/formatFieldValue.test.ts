@@ -31,6 +31,18 @@ describe("formatFieldValue", () => {
     it("returns the raw value when unparseable", () => {
       expect(formatFieldValue("not-a-date", "datetime", {})).toBe("not-a-date");
     });
+    it("renders booleans as True/False", () => {
+      expect(formatFieldValue(true, "boolean", {})).toBe("True");
+      expect(formatFieldValue(false, "boolean", {})).toBe("False");
+    });
+    it("renders UTC instants in UTC, not the local timezone", () => {
+      expect(formatFieldValue("2024-06-15T14:30:00.000000Z", "datetime", {})).toBe(
+        "2024-06-15 14:30"
+      );
+      expect(formatFieldValue("2024-06-15T14:30:00+02:00", "datetime", {})).toBe(
+        "2024-06-15 12:30"
+      );
+    });
   });
 
   describe("number kind", () => {

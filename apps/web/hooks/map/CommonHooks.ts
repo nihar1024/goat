@@ -43,7 +43,8 @@ const useLayerFields = (
             normalizedType === "string" ||
             normalizedType === "number" ||
             normalizedType === "object" ||
-            normalizedType === "date"
+            normalizedType === "date" ||
+            normalizedType === "boolean"
           );
         }
       })

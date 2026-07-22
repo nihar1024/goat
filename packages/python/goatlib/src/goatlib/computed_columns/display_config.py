@@ -66,6 +66,10 @@ class LengthDisplayConfig(_NumericFormatConfig):
     unit: Literal["auto", "mm", "cm", "m", "km"] = "auto"
 
 
+class BooleanDisplayConfig(_BaseDisplayConfig):
+    """No display config for boolean columns yet."""
+
+
 class DatetimeDisplayConfig(_BaseDisplayConfig):
     """Datetime columns — IANA ``tz`` (default UTC) + optional display format."""
 
@@ -80,6 +84,7 @@ _DISPLAY_CONFIG_MODELS: dict[str, type[_BaseDisplayConfig]] = {
     "perimeter": PerimeterDisplayConfig,
     "length": LengthDisplayConfig,
     "datetime": DatetimeDisplayConfig,
+    "boolean": BooleanDisplayConfig,
 }
 
 

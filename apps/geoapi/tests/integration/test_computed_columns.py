@@ -343,9 +343,13 @@ class TestApplyFieldConfigToProperties:
         assert _kind_from_json_type("number") == "number"
         assert _kind_from_json_type("integer") == "number"
 
+    def test_kind_from_json_type_boolean(self) -> None:
+        """boolean JSON type maps to kind 'boolean'."""
+        assert _kind_from_json_type("boolean") == "boolean"
+
     def test_kind_from_json_type_string_fallback(self) -> None:
-        """Any non-numeric JSON type maps to kind 'string'."""
-        for t in ("string", "boolean", "object", "geometry"):
+        """JSON types without a dedicated kind map to kind 'string'."""
+        for t in ("string", "object", "geometry"):
             assert _kind_from_json_type(t) == "string", f"Failed for type={t!r}"
 
     def test_augments_with_explicit_field_config(self) -> None:

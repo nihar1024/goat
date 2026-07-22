@@ -684,17 +684,24 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       // (data table feature pages, queryables) so newly written values
       // — including recomputed columns like area/perimeter — show up.
       const itemsPrefix = `${COLLECTIONS_API_BASE_URL}/${activeLayerId}`;
-      globalMutate(
-        (key) => {
-          if (typeof key === "string") return key.startsWith(itemsPrefix);
-          if (Array.isArray(key) && typeof key[0] === "string") {
-            return key[0].startsWith(itemsPrefix);
-          }
-          return false;
-        },
-        undefined,
-        { revalidate: true },
-      );
+      const revalidateCollection = () =>
+        globalMutate(
+          (key) => {
+            if (typeof key === "string") return key.startsWith(itemsPrefix);
+            if (Array.isArray(key) && typeof key[0] === "string") {
+              return key[0].startsWith(itemsPrefix);
+            }
+            return false;
+          },
+          undefined,
+          { revalidate: true },
+        );
+      revalidateCollection();
+      // The read pool serves a pinned DuckLake snapshot whose post-write
+      // refresh runs on a background thread (~1s) — the immediate revalidate
+      // can race it and fetch the pre-write snapshot, so revalidate once
+      // more after the pin has had time to advance.
+      setTimeout(revalidateCollection, 2500);
     } catch (error) {
       console.error("Failed to save features:", error);
       toast.error(t("error_saving_features"));

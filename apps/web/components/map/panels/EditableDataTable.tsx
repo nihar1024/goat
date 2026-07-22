@@ -10,8 +10,11 @@ import EditIcon from "@mui/icons-material/Edit";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import LockIcon from "@mui/icons-material/Lock";
 import bbox from "@turf/bbox";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+import { TEMPORAL_VALUE_FORMAT } from "@p4b/ui/components/temporalFormats";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import SearchIcon from "@mui/icons-material/Search";
@@ -53,6 +56,7 @@ import {
   useLayerQueryables,
 } from "@/lib/api/layers";
 import type { FieldKind } from "@/lib/validations/layer";
+import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
@@ -78,6 +82,8 @@ import ColumnStatsPanel from "@/components/map/panels/ColumnStatsPanel";
 import QuickFilterPopover from "@/components/map/panels/QuickFilterPopover";
 import ConfirmModal from "@/components/modals/Confirm";
 import EditFieldsModal from "@/components/modals/EditFields";
+
+dayjs.extend(utc);
 
 type SortDirection = "asc" | "desc";
 type EditingCell = { rowId: string; column: string } | null;
@@ -205,11 +211,17 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
       // Infer kind from JSON type if not explicitly provided by the backend
       const rawKind = (prop as { kind?: string }).kind;
       const kind: FieldKind =
-        rawKind === "area" || rawKind === "length" || rawKind === "perimeter"
+        rawKind === "area" ||
+        rawKind === "length" ||
+        rawKind === "perimeter" ||
+        rawKind === "datetime" ||
+        rawKind === "boolean"
           ? rawKind
           : rawKind === "number" || prop.type === "number" || prop.type === "integer"
             ? "number"
-            : "string";
+            : prop.type === "boolean"
+              ? "boolean"
+              : "string";
       const isComputed = !!(prop as { is_computed?: boolean }).is_computed;
       const displayConfig = ((prop as { display_config?: Record<string, unknown> }).display_config) ?? {};
       meta[fieldName] = { kind, isComputed, displayConfig };
@@ -415,21 +427,42 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
     if (!isEditing) return; // Cells are only editable in edit mode
     // Computed columns are always read-only — never enter edit mode
     if (columnMeta[column]?.isComputed) return;
-    const isAlreadySelected = selectedCell?.rowId === rowId && selectedCell?.column === column;
-    if (isAlreadySelected) {
-      // Second click — enter edit mode
-      setEditingCell({ rowId, column });
-      const displayValue = getCellValue(rowId, column, value);
-      setEditValue(displayValue === null || displayValue === undefined ? "" : String(displayValue));
-    } else {
-      // First click — select only
-      setSelectedCell({ rowId, column });
+    // Already editing this cell: ignore. Clicks inside the editor bubble up
+    // to the cell through the React tree — including clicks on the boolean
+    // select's menu, which renders in a portal — and re-entering edit mode
+    // here would reseed editValue with the stored value, so the later blur
+    // commit would silently undo the selection the user just made.
+    if (editingCell?.rowId === rowId && editingCell?.column === column) return;
+    // First click on a row only selects it; a click within the already
+    // selected row opens that cell's editor directly. selectedRowId still
+    // holds the pre-click value here (selectRow ran in the same event), so
+    // this compares against the row that was selected before the click.
+    if (selectedRowId !== rowId) {
+      setSelectedCell(null);
       setEditingCell(null);
+      return;
+    }
+    setSelectedCell({ rowId, column });
+    setEditingCell({ rowId, column });
+    const displayValue = getCellValue(rowId, column, value);
+    if (displayValue === null || displayValue === undefined) {
+      setEditValue("");
+    } else if (columnMeta[column]?.kind === "datetime") {
+      // The native datetime-local input needs the UTC wall time without
+      // offset suffix, not the serialized "...Z" form
+      const parsed = dayjs.utc(String(displayValue));
+      setEditValue(parsed.isValid() ? parsed.format(TEMPORAL_VALUE_FORMAT) : String(displayValue));
+    } else {
+      setEditValue(String(displayValue));
     }
   };
 
-  const handleCellBlur = () => {
+  // Commits the current edit. `rawValue` overrides the editValue state for
+  // editors that commit synchronously on change (boolean select) instead of
+  // on blur, where the state update would not be visible yet.
+  const commitCellEdit = (rawValue?: string) => {
     if (!editingCell) return;
+    const editedValue = rawValue ?? editValue;
 
     const { rowId, column } = editingCell;
     const feature = collectionData?.features.find((f, i) => `${f.id}-${page}-${i}` === rowId);
@@ -438,15 +471,24 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
 
     // Parse the value based on field type
     const field = displayFields.find((f) => f.name === column);
-    let parsedValue: unknown = editValue;
+    let parsedValue: unknown = editedValue;
     if (field?.type === "number" || field?.type === "integer") {
-      parsedValue = editValue === "" ? null : Number(editValue);
-    } else if (editValue === "") {
+      parsedValue = editedValue === "" ? null : Number(editedValue);
+    } else if (columnMeta[column]?.kind === "boolean") {
+      parsedValue = parseBooleanInput(editedValue);
+    } else if (editedValue === "") {
       parsedValue = null;
     }
 
-    // Check if value actually changed
-    const unchanged = parsedValue === originalValue || (parsedValue === null && (originalValue === null || originalValue === undefined));
+    // Check if value actually changed. Datetimes compare as instants: the
+    // editor holds "YYYY-MM-DDTHH:mm:ss" while the stored value may carry
+    // fractional seconds and a "Z" suffix for the same point in time.
+    const isSameDatetime =
+      columnMeta[column]?.kind === "datetime" &&
+      typeof parsedValue === "string" &&
+      typeof originalValue === "string" &&
+      dayjs.utc(parsedValue).valueOf() === dayjs.utc(originalValue).valueOf();
+    const unchanged = parsedValue === originalValue || isSameDatetime || (parsedValue === null && (originalValue === null || originalValue === undefined));
     if (unchanged) {
       setDirtyCells((prev) => {
         const next = new Map(prev);
@@ -493,6 +535,8 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
     setEditingCell(null);
     setSelectedCell(null);
   };
+
+  const handleCellBlur = () => commitCellEdit();
 
   const handleCellKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -1035,6 +1079,40 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                             handleCellClick(rowId, field.name, originalValue);
                           }}>
                           {isEditing ? (
+                            fieldKind === "boolean" ? (
+                              <TextField
+                                select
+                                autoFocus
+                                fullWidth
+                                size="small"
+                                value={editValue}
+                                onChange={(e) => commitCellEdit(e.target.value)}
+                                onBlur={handleCellBlur}
+                                variant="outlined"
+                                SelectProps={{ defaultOpen: true, displayEmpty: true }}
+                                sx={{
+                                  "& .MuiInputBase-root": {
+                                    fontSize: "0.875rem",
+                                    borderRadius: 0,
+                                  },
+                                  // Match the 6px/16px padding of a small
+                                  // TableCell so entering edit mode never
+                                  // changes the row height
+                                  "& .MuiInputBase-input": {
+                                    py: "6px",
+                                    px: "16px",
+                                  },
+                                  "& .MuiOutlinedInput-notchedOutline": {
+                                    border: "none",
+                                  },
+                                }}>
+                                {BOOLEAN_SELECT_ITEMS.map((item) => (
+                                  <MenuItem key={item.value} value={item.value}>
+                                    {item.label}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                            ) : (
                             <TextField
                               autoFocus
                               fullWidth
@@ -1043,18 +1121,32 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                               onChange={(e) => setEditValue(e.target.value)}
                               onBlur={handleCellBlur}
                               onKeyDown={handleCellKeyDown}
-                              type={field.type === "number" || field.type === "integer" ? "number" : "text"}
+                              type={
+                                fieldKind === "datetime"
+                                  ? "datetime-local"
+                                  : field.type === "number" || field.type === "integer"
+                                    ? "number"
+                                    : "text"
+                              }
                               variant="outlined"
                               sx={{
                                 "& .MuiInputBase-root": {
                                   fontSize: "0.875rem",
                                   borderRadius: 0,
                                 },
+                                // Match the 6px/16px padding of a small
+                                // TableCell so entering edit mode never
+                                // changes the row height
+                                "& .MuiInputBase-input": {
+                                  py: "6px",
+                                  px: "16px",
+                                },
                                 "& .MuiOutlinedInput-notchedOutline": {
                                   border: "none",
                                 },
                               }}
                             />
+                            )
                           ) : (
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                               <Typography
@@ -1092,6 +1184,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           layerId={layerId}
           columnName={statsColumn}
           columnType={displayFields.find((f) => f.name === statsColumn)?.type ?? "string"}
+          columnKind={columnMeta[statsColumn]?.kind}
           cqlFilter={cqlFilter}
           onClose={() => setStatsColumn(null)}
           onPrev={() => {

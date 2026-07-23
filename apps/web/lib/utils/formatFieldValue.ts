@@ -119,6 +119,13 @@ export function formatFieldValue(
     return formatNumber(value, cfg, 2, true);
   }
 
+  // Only the dimensioned kinds get unit formatting; anything else (including
+  // an unresolved "formula" kind — callers should resolve it to the formula's
+  // output kind first) falls back to the raw value.
+  if (kind !== "area" && kind !== "perimeter" && kind !== "length") {
+    return String(value);
+  }
+
   // Dimensioned kinds: area, perimeter, length
   const isArea = kind === "area";
   const factors = isArea ? AREA_FACTORS : LENGTH_FACTORS;

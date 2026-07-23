@@ -791,8 +791,17 @@ export const fieldKindSchema = z.enum([
   "length",
   "datetime",
   "boolean",
+  "formula",
 ]);
 export type FieldKind = z.infer<typeof fieldKindSchema>;
+
+/** The kind used to FORMAT a field's values: formula fields format as their
+ * inferred result kind (number/string/boolean/datetime). */
+export const resolveDisplayKind = (field: {
+  kind?: string;
+  output_kind?: string;
+}): string | undefined =>
+  field.kind === "formula" ? (field.output_kind ?? "string") : field.kind;
 
 const numericFormatSchema = z.object({
   decimals: z.union([z.literal("auto"), z.number().int().min(0).max(10)])
@@ -834,6 +843,9 @@ export const fieldDefinitionSchema = z.object({
   kind: fieldKindSchema,
   is_computed: z.boolean().default(false),
   display_config: z.record(z.string(), z.unknown()).default({}),
+  // Formula fields only: the SQL expression and its inferred result kind
+  formula: z.string().optional(),
+  output_kind: z.string().optional(),
 });
 
 export const RESERVED_FIELD_NAMES = ["id", "geometry", "geom", "__duckdb_row_id"];
@@ -862,16 +874,19 @@ export type CreateEmptyLayerInput = z.infer<typeof createEmptyLayerSchema>;
 
 // Map of geometry types to allowed kinds for the Add-Field dropdown
 export const ALLOWED_KINDS_BY_GEOM_TYPE: Record<string, FieldKind[]> = {
-  point: ["string", "number", "datetime", "boolean"],
-  multipoint: ["string", "number", "datetime", "boolean"],
-  line: ["string", "number", "length", "datetime", "boolean"],
-  multiline: ["string", "number", "length", "datetime", "boolean"],
-  polygon: ["string", "number", "area", "perimeter", "datetime", "boolean"],
-  multipolygon: ["string", "number", "area", "perimeter", "datetime", "boolean"],
+  point: ["string", "number", "datetime", "boolean", "formula"],
+  multipoint: ["string", "number", "datetime", "boolean", "formula"],
+  line: ["string", "number", "length", "datetime", "boolean", "formula"],
+  multiline: ["string", "number", "length", "datetime", "boolean", "formula"],
+  polygon: ["string", "number", "area", "perimeter", "datetime", "boolean", "formula"],
+  multipolygon: ["string", "number", "area", "perimeter", "datetime", "boolean", "formula"],
 };
 
+// Kinds whose VALUES are computed by the backend (read-only in editors).
+// Formula belongs here: its values are derived, only its expression is edited.
 export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([
   "area",
   "perimeter",
   "length",
+  "formula",
 ]);

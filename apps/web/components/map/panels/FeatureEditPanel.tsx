@@ -18,6 +18,7 @@ import useLayerFields from "@/hooks/map/CommonHooks";
 
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import type { FieldKind } from "@/lib/validations/layer";
+import { resolveDisplayKind } from "@/lib/validations/layer";
 
 import TemporalPicker from "@p4b/ui/components/TemporalPicker";
 
@@ -185,7 +186,7 @@ const FeatureEditPanel: React.FC = () => {
               if (raw != null && raw !== "") {
                 displayValue = formatFieldValue(
                   raw,
-                  (field.kind as FieldKind) ?? "number",
+                  (resolveDisplayKind(field) as FieldKind) ?? "number",
                   field.display_config ?? {},
                 );
               } else if (mode === "draw") {

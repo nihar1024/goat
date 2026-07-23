@@ -55,6 +55,8 @@ const useLayerFields = (
           format?: string;
           is_computed?: boolean;
           display_config?: Record<string, unknown>;
+          formula?: string;
+          output_kind?: string;
         };
         return {
           name: key,
@@ -62,6 +64,8 @@ const useLayerFields = (
           kind: v.kind,
           is_computed: v.is_computed ?? false,
           display_config: v.display_config ?? {},
+          formula: v.formula,
+          output_kind: v.output_kind,
         };
       });
 

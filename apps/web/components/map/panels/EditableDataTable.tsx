@@ -934,6 +934,13 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                 backgroundColor: (theme) => emphasize(theme.palette.background.paper, 0.03),
                 zIndex: 3,
               },
+              // Corner cell (over the row numbers) must stick horizontally too
+              // and paint above the column headers scrolling underneath it.
+              // Declared here because this selector outranks the cell's own sx.
+              "& .MuiTableCell-stickyHeader:first-of-type": {
+                left: 0,
+                zIndex: 4,
+              },
             }}>
             <TableHead>
               <TableRow>
@@ -1029,7 +1036,10 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                         position: "sticky",
                         left: 0,
                         zIndex: 1,
-                        backgroundColor: isSelected ? "action.selected" : "action.hover",
+                        // Must be opaque (action.selected/hover are translucent):
+                        // scrolled data cells slide underneath and would show through
+                        backgroundColor: (theme) =>
+                          emphasize(theme.palette.background.paper, isSelected ? 0.08 : 0.03),
                         textAlign: "center",
                         px: 0,
                       }}>

@@ -5,9 +5,10 @@ import { Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } f
 import React, { useMemo, useState } from "react";
 
 import type { DatasetCollectionItems, FieldKind } from "@/lib/validations/layer";
+import { resolveDisplayKind } from "@/lib/validations/layer";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 
-import { FieldTypeTag, fieldTagKey } from "@/components/map/common/LayerFieldSelector";
+import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import NoValuesFound from "@/components/map/common/NoValuesFound";
 
 const TWO_LINE_CLAMP_SX = {
@@ -24,7 +25,7 @@ const TWO_LINE_CLAMP_SX = {
 
 const formatCellValue = (
   value: unknown,
-  field?: { kind?: string; display_config?: Record<string, unknown> }
+  field?: { kind?: string; output_kind?: string; display_config?: Record<string, unknown> }
 ): string => {
   if (value === null || value === undefined) {
     return "";
@@ -32,8 +33,9 @@ const formatCellValue = (
   if (typeof value === "object") {
     return JSON.stringify(value);
   }
-  if (field?.kind && field.kind !== "string") {
-    return formatFieldValue(value, field.kind as FieldKind, field.display_config ?? {});
+  const displayKind = field ? resolveDisplayKind(field) : undefined;
+  if (displayKind && displayKind !== "string") {
+    return formatFieldValue(value, displayKind as FieldKind, field?.display_config ?? {});
   }
   return String(value);
 };
@@ -88,11 +90,11 @@ const Row = ({ row, fields }) => {
 
                   return (
                     <React.Fragment key={field.name}>
-                      <Stack direction="column" spacing={1} sx={{ py: 1, pl: 4 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ py: 1, pl: 4 }}>
+                        <FieldKindIcon kind={fieldIndicatorKind(field)} />
                         <Typography variant="body2" fontWeight="bold">
                           {field.name}
                         </Typography>
-                        <FieldTypeTag fieldType={fieldTagKey(field)}>{fieldTagKey(field)}</FieldTypeTag>
                       </Stack>
                       {isJsonDataArrayOfObjects ? (
                         <Table size="small" aria-label="purchases" key={field.name}>
@@ -170,11 +172,11 @@ const DatasetTable: React.FC<DatasetTableProps> = ({
                 .filter((field) => field.type !== "object")
                 .map((field) => (
                   <TableCell key={field.name}>
-                    <Stack direction="column" spacing={1} sx={{ py: 1 }}>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ py: 1 }}>
+                      <FieldKindIcon kind={fieldIndicatorKind(field)} />
                       <Typography variant="body2" fontWeight="bold" sx={TWO_LINE_CLAMP_SX}>
                         {field.name}
                       </Typography>
-                      <FieldTypeTag fieldType={fieldTagKey(field)}>{fieldTagKey(field)}</FieldTypeTag>
                     </Stack>
                   </TableCell>
                 ))}

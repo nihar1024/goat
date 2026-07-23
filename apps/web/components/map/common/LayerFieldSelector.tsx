@@ -1,6 +1,7 @@
 import ClearIcon from "@mui/icons-material/Clear";
 import SearchIcon from "@mui/icons-material/Search";
 import {
+  Box,
   Checkbox,
   FormControl,
   IconButton,
@@ -12,7 +13,6 @@ import {
   Stack,
   TextField,
   Typography,
-  styled,
   useTheme,
 } from "@mui/material";
 import { useMemo, useState } from "react";
@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LayerFieldType } from "@/lib/validations/layer";
 
+import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import FormLabelHelper from "@/components/common/FormLabelHelper";
 
 export type SelectorProps<T extends boolean = false> = {
@@ -38,34 +39,6 @@ export type SelectorProps<T extends boolean = false> = {
 
 export const containsText = (text: string, searchText: string) =>
   text.toLowerCase().indexOf(searchText.toLowerCase()) > -1;
-
-export const FieldTypeColors = {
-  string: [140, 210, 205],
-  number: [248, 194, 28],
-  object: [255, 138, 101],
-  date: [43, 179, 129],
-  boolean: [149, 117, 205],
-};
-
-export const fieldTagKey = (field: { type: string; kind?: string }): string =>
-  field.kind === "datetime" ? "date" : field.type;
-
-export const FieldTypeTag = styled("div")<{ fieldType: string }>(({ fieldType }) => ({
-  backgroundColor: `rgba(${FieldTypeColors[fieldType]}, 0.1)`,
-  borderRadius: 4,
-  border: `1px solid rgb(${FieldTypeColors[fieldType]})`,
-  color: `rgb(${FieldTypeColors[fieldType]})`,
-  display: "inline-block",
-  fontSize: 10,
-  fontWeight: "bold",
-  padding: "0 5px",
-  marginRight: "10px",
-  textAlign: "center",
-  width: "50px",
-  whiteSpace: "nowrap",
-  boxSizing: "border-box",
-  lineHeight: "20px",
-}));
 
 // Empty array constant to avoid creating new references
 const EMPTY_FIELDS: LayerFieldType[] = [];
@@ -178,15 +151,12 @@ const LayerFieldSelector = (props: SelectorProps) => {
         onBlur={() => setFocused(false)}
         startAdornment={
           <>
-            {/* Only show field type tag for single select mode */}
-            {!props.multiple &&
-              selectedField &&
-              !Array.isArray(selectedField) &&
-              FieldTypeColors[fieldTagKey(selectedField)] && (
-                <FieldTypeTag fieldType={fieldTagKey(selectedField)}>
-                  {fieldTagKey(selectedField)}
-                </FieldTypeTag>
-              )}
+            {/* Only show field type indicator for single select mode */}
+            {!props.multiple && selectedField && !Array.isArray(selectedField) && (
+              <Box component="span" sx={{ mr: 1.5, display: "inline-flex" }}>
+                <FieldKindIcon kind={fieldIndicatorKind(selectedField)} />
+              </Box>
+            )}
           </>
         }
         endAdornment={
@@ -306,9 +276,9 @@ const LayerFieldSelector = (props: SelectorProps) => {
               />
             )}
 
-            {FieldTypeColors[fieldTagKey(field)] && (
-              <FieldTypeTag fieldType={fieldTagKey(field)}>{fieldTagKey(field)}</FieldTypeTag>
-            )}
+            <Box component="span" sx={{ mr: 1.5, display: "inline-flex" }}>
+              <FieldKindIcon kind={fieldIndicatorKind(field)} />
+            </Box>
             <Typography
               variant="body2"
               fontWeight="bold"

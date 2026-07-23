@@ -107,6 +107,10 @@
     }
   },
   "fields": {
+    "pt_network_bundle_id": {
+      "label": "ÖPNV-Netz-Bundle",
+      "description": "Wählen Sie ein benutzerdefiniertes ÖPNV-Netz-Bundle für das Routing. Wenn nicht gesetzt, wird das Standard-Bundle verwendet."
+    },
     "routing_mode": {
       "label": "Verkehrsmittel",
       "description": "Wählen Sie das Verkehrsmittel für die Erreichbarkeitsanalyse"

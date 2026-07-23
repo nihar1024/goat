@@ -291,6 +291,32 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
+    pt_network_bundle_id: str | None = Field(
+        default=None,
+        description=(
+            "Choose a custom Public Transport Network bundle to use for routing. "
+            "If unset, the default bundle will be used."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=18,
+            label_key="pt_network_bundle_id",
+            widget="bundle-selector",
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"show_advanced": True},
+                ]
+            },
+            # The selector lists only public-transport bundles that have a ready
+            # routing graph.
+            widget_options={
+                "bundle_type": "pt_network_gtfs",
+                "artifact_kind": "pt_network_graph",
+            },
+        ),
+    )
+
     # =========================================================================
     # Starting Points Section
     # =========================================================================
@@ -1131,6 +1157,21 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             output_format=params.output_format,
             output_path=str(output_path),
         )
+
+        # A selected PT bundle's routing graph overrides the global network.
+        if (
+            params.routing_mode == CatchmentAreaRoutingMode.pt
+            and params.pt_network_bundle_id
+        ):
+            timetable = self.download_bundle_artifact(
+                params.pt_network_bundle_id, "pt_network_graph", temp_dir
+            )
+            if not timetable:
+                raise ValueError(
+                    "The selected public-transport bundle has no ready routing "
+                    "graph yet."
+                )
+            analysis_params.timetable_path = timetable
 
         tool = self.tool_class()
         try:

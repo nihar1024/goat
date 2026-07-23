@@ -194,14 +194,21 @@ class GtfsImporter(BundleImporter):
         ``all_varchar`` disables type auto-detection — GTFS ids/codes/names are
         strings and must not be coerced to numbers. DuckDB streams the file, so
         this is memory-safe for large tables (e.g. stop_times).
+
+        GTFS is RFC4180 CSV, so the dialect is set explicitly rather than sniffed:
+        ``read_csv_auto`` infers it from an early sample, which misparses quoted
+        fields with embedded commas (e.g. a stop_headsign "Town, Street") when
+        they first appear past the sample. ``strict_mode=false`` also tolerates
+        the minor RFC deviations real-world feeds commonly have.
         """
         src = txt_path.replace("'", "''")
         dst = out_path.replace("'", "''")
         con = duckdb.connect()
         try:
             con.execute(
-                f"COPY (SELECT * FROM read_csv_auto('{src}', all_varchar=true, "
-                f"header=true)) TO '{dst}' (FORMAT parquet)"
+                f"COPY (SELECT * FROM read_csv('{src}', all_varchar=true, "
+                f"header=true, delim=',', quote='\"', escape='\"', "
+                f"strict_mode=false)) TO '{dst}' (FORMAT parquet)"
             )
         finally:
             con.close()

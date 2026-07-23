@@ -158,7 +158,8 @@ class CatchmentAreaToolV2(AnalysisTool):
 
         # PT settings
         if params.routing_mode == RoutingMode.pt:
-            cfg.timetable_path = str(self._timetable_path)
+            # A bundle's routing graph overrides the global default network.
+            cfg.timetable_path = str(params.timetable_path or self._timetable_path)
             cfg.departure_time = self._pt_departure_unix_minutes(params)
             cfg.max_transfers = params.max_transfers
             cfg.access_mode = access_mode_map[params.access_mode]

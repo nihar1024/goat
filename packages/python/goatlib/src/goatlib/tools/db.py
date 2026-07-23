@@ -371,6 +371,23 @@ class ToolDatabaseService:
         )
         logger.info(f"Artifact {artifact_id} status -> {status_value}")
 
+    async def get_bundle_artifact_s3_key(
+        self: Self, bundle_id: str, kind: str
+    ) -> str | None:
+        """S3 key of a bundle's ready artifact of the given kind (or None)."""
+        kind_value = getattr(kind, "value", kind)
+        row = await self.pool.fetchrow(
+            f"""
+            SELECT s3_key FROM {self.schema}.bundle_artifact
+            WHERE bundle_id = $1 AND kind = $2 AND status = 'ready'
+              AND s3_key IS NOT NULL
+            LIMIT 1
+            """,
+            uuid_module.UUID(bundle_id),
+            kind_value,
+        )
+        return row["s3_key"] if row else None
+
     async def add_layer_to_package(
         self: Self,
         bundle_id: str,

@@ -145,6 +145,17 @@ export interface BundleGrantsResponse {
   grants: BundleGrant[];
 }
 
+/** List bundles the user can access. Optionally restrict by `bundleType` and/or
+ *  to bundles with a ready artifact of `artifactKind` (e.g. "pt_network_gtfs" +
+ *  "pt_network_graph" for routable PT bundles). */
+export const useBundles = (opts?: { bundleType?: string; artifactKind?: string }) => {
+  const params = new URLSearchParams();
+  if (opts?.bundleType) params.set("bundle_type", opts.bundleType);
+  if (opts?.artifactKind) params.set("artifact_kind", opts.artifactKind);
+  const qs = params.toString();
+  return useSWR<BundleRead[]>(`${BUNDLES_API_BASE_URL}${qs ? `?${qs}` : ""}`, fetcher);
+};
+
 /** Fetch the grants (team/org access) on a bundle. Owner only. */
 export const useBundleGrants = (bundleId: string | null) =>
   useSWR<BundleGrantsResponse>(

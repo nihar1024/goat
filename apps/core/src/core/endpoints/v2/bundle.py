@@ -3,7 +3,7 @@ import tempfile
 from typing import List, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from goatlib.bundles.importers import get_importer
 from goatlib.models.bundle import (
     BundleStatus,
@@ -24,6 +24,7 @@ from core.db.models._link_model import (
     UserTeamLink,
 )
 from core.db.models.bundle import Bundle
+from core.db.models.bundle_artifact import BundleArtifact
 from core.db.models.folder import Folder
 from core.db.models.layer import Layer
 from core.db.models.organization import Organization
@@ -365,6 +366,14 @@ async def list_bundles(
     *,
     async_session: AsyncSession = Depends(get_db),
     user_id: UUID4 = Depends(get_user_id),
+    bundle_type: str | None = Query(
+        None, description="Only bundles of this type (e.g. pt_network_gtfs)"
+    ),
+    artifact_kind: str | None = Query(
+        None,
+        description="Only bundles that have a ready artifact of this kind "
+        "(e.g. pt_network_graph for routable PT bundles)",
+    ),
 ) -> List[BundleRead]:
     """List bundles the caller owns or has been shared."""
     team_ids, org_id = await _user_teams_and_org(async_session, user_id)
@@ -386,6 +395,16 @@ async def list_bundles(
         )
     else:
         stmt = stmt.where(Bundle.user_id == user_id)
+    if bundle_type:
+        stmt = stmt.where(Bundle.bundle_type == bundle_type)
+    if artifact_kind:
+        # Restrict to bundles with a ready artifact of the requested kind
+        # (e.g. only PT bundles whose routing graph is built).
+        ready_ids = select(BundleArtifact.bundle_id).where(
+            BundleArtifact.kind == artifact_kind,
+            BundleArtifact.status == "ready",
+        )
+        stmt = stmt.where(Bundle.id.in_(ready_ids))
     stmt = stmt.order_by(Bundle.updated_at.desc())
     rows = (await async_session.execute(stmt)).all()
     return [

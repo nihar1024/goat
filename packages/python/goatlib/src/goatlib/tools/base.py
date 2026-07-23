@@ -962,6 +962,27 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         logger.info(f"Filtered temp layer written to: {temp_path}")
         return temp_path
 
+    def download_bundle_artifact(
+        self: Self, bundle_id: str, kind: str, dest_dir: Path
+    ) -> str | None:
+        """Download a bundle's ready artifact of ``kind`` into ``dest_dir`` and
+        return its local path, or ``None`` if the bundle has no ready artifact of
+        that kind. Shared by tools that route off a bundle's artifacts (e.g. a PT
+        timetable graph); the caller decides whether a missing artifact is fatal
+        or falls back to a default."""
+        if self.db_service is None:
+            return None
+        s3_key = _get_or_create_event_loop().run_until_complete(
+            self.db_service.get_bundle_artifact_s3_key(bundle_id, kind)
+        )
+        if not s3_key:
+            return None
+        local_path = str(Path(dest_dir) / os.path.basename(s3_key))
+        self.settings.get_s3_client().download_file(
+            self.settings.s3_bucket_name, s3_key, local_path
+        )
+        return local_path
+
     def export_layer_to_parquet(
         self: Self,
         layer_id: str,

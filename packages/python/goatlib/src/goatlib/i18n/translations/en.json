@@ -107,6 +107,10 @@
     }
   },
   "fields": {
+    "pt_network_bundle_id": {
+      "label": "Public Transport Network bundle",
+      "description": "Choose a custom Public Transport Network bundle to use for routing. If unset, the default bundle will be used."
+    },
     "routing_mode": {
       "label": "Transport mode",
       "description": "Select the transport mode for accessibility analysis"

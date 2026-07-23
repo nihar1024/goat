@@ -3,7 +3,7 @@ import logging
 
 import core._dotenv  # noqa: E402, F401, I001
 from core.core.config import settings
-from core.db.seed_dataset_package_types import seed_dataset_package_types
+from core.db.seed_bundle_types import seed_bundle_types
 from core.db.seed_default import seed_default_user_org
 from core.db.seed_roles import seed_roles
 from core.db.session import session_manager
@@ -31,7 +31,7 @@ async def main() -> None:
         async with session_manager.session() as session:
             await seed_roles(session)
         async with session_manager.session() as session:
-            await seed_dataset_package_types(session)
+            await seed_bundle_types(session)
         if settings.AUTH is False:
             async with session_manager.session() as session:
                 await seed_default_user_org(session)

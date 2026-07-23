@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.crud.crud_share import share as crud_share
-from core.db.models._link_model import DatasetPackageLayerLink
+from core.db.models._link_model import BundleLayerLink
 from core.deps.auth import auth_z, user_token
 from core.endpoints.deps import get_db
 from core.schemas.share import ShareLayerSchema, ShareProjectSchema
@@ -41,13 +41,13 @@ async def share_orgs_teams_for_layer(
     """
     Share layer with organizations and teams
     """
-    # Layers that belong to a dataset package are never shared individually —
-    # they inherit the package's sharing. Reject the attempt and point the
-    # caller at the package share endpoint.
+    # Layers that belong to a bundle are never shared individually —
+    # they inherit the bundle's sharing. Reject the attempt and point the
+    # caller at the bundle share endpoint.
     in_package = (
         await db.execute(
-            select(DatasetPackageLayerLink.id)
-            .where(DatasetPackageLayerLink.layer_id == layer_id)
+            select(BundleLayerLink.id)
+            .where(BundleLayerLink.layer_id == layer_id)
             .limit(1)
         )
     ).scalar_one_or_none()
@@ -55,8 +55,8 @@ async def share_orgs_teams_for_layer(
         raise HTTPException(
             status_code=409,
             detail=(
-                "This layer belongs to a dataset package and cannot be shared "
-                "individually. Share the dataset package instead."
+                "This layer belongs to a bundle and cannot be shared "
+                "individually. Share the bundle instead."
             ),
         )
 

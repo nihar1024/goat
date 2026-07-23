@@ -13,10 +13,10 @@ import { toast } from "react-toastify";
 import { mutate } from "swr";
 
 import {
-  DATASET_PACKAGES_API_BASE_URL,
-  deleteDatasetPackage,
-  isDatasetPackageTile,
-} from "@/lib/api/dataset-packages";
+  BUNDLES_API_BASE_URL,
+  deleteBundle,
+  isBundleTile,
+} from "@/lib/api/bundles";
 import { LAYERS_API_BASE_URL, deleteLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { PROJECTS_API_BASE_URL, deleteProject } from "@/lib/api/projects";
@@ -45,17 +45,17 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
   const dispatch = useAppDispatch();
   const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
 
-  const isDatasetPackage = isDatasetPackageTile(content);
+  const isBundle = isBundleTile(content);
 
   const handleDelete = async () => {
     try {
       if (!content) return;
-      if (isDatasetPackage) {
-        // Dataset package: one call removes the package + all its member layers
-        // (backend cascades DuckLake cleanup). Refresh the packages list.
-        await deleteDatasetPackage(content.id);
-        mutate((key) => key === DATASET_PACKAGES_API_BASE_URL);
-        toast.success(t("delete_dataset_package_success"));
+      if (isBundle) {
+        // Bundle: one call removes the bundle + all its member layers
+        // (backend cascades DuckLake cleanup). Refresh the bundles list.
+        await deleteBundle(content.id);
+        mutate((key) => key === BUNDLES_API_BASE_URL);
+        toast.success(t("delete_bundle_success"));
       } else if (type === "layer") {
         // Optimistic update: immediately remove layer from cache
         mutate(
@@ -85,14 +85,14 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
       }
     } catch {
       // Revert optimistic update on error by revalidating
-      if (isDatasetPackage) {
-        mutate((key) => key === DATASET_PACKAGES_API_BASE_URL);
+      if (isBundle) {
+        mutate((key) => key === BUNDLES_API_BASE_URL);
       } else if (type === "layer") {
         mutate((key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL);
       }
       toast.error(
-        isDatasetPackage
-          ? t("delete_dataset_package_error")
+        isBundle
+          ? t("delete_bundle_error")
           : type === "layer"
             ? t("delete_layer_error")
             : t("delete_project_error")
@@ -105,17 +105,17 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
   return (
     <Dialog open={open} onClose={onClose}>
       <DialogTitle>
-        {isDatasetPackage
-          ? t("delete_dataset_package")
+        {isBundle
+          ? t("delete_bundle")
           : type === "layer"
             ? t("delete_layer")
             : t("delete_project")}
       </DialogTitle>
       <DialogContent>
         <DialogContentText>
-          {isDatasetPackage ? (
+          {isBundle ? (
             <Trans
-              i18nKey="common:are_you_sure_to_delete_dataset_package"
+              i18nKey="common:are_you_sure_to_delete_bundle"
               values={{ name: content?.name }}
               components={{ b: <b /> }}
             />

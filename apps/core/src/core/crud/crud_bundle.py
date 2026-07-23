@@ -8,11 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.core.config import settings
 from core.crud.base import CRUDBase
 from core.db.models._link_model import ResourceGrant
-from core.db.models.dataset_package import DatasetPackage
+from core.db.models.bundle import Bundle
 from core.db.models.layer import Layer, LayerType
-from core.schemas.dataset_package import (
-    DatasetPackageCreate,
-    DatasetPackageUpdate,
+from core.schemas.bundle import (
+    BundleCreate,
+    BundleUpdate,
 )
 from core.services.geoapi import delete_layers_via_geoapi
 from core.services.s3 import s3_service
@@ -20,8 +20,8 @@ from core.services.s3 import s3_service
 logger = logging.getLogger(__name__)
 
 
-class CRUDDatasetPackage(
-    CRUDBase[DatasetPackage, DatasetPackageCreate, DatasetPackageUpdate]
+class CRUDBundle(
+    CRUDBase[Bundle, BundleCreate, BundleUpdate]
 ):
     async def delete(
         self,
@@ -31,28 +31,28 @@ class CRUDDatasetPackage(
         user_id: UUID,
         access_token: str,
     ) -> bool:
-        """Delete a package together with its member layers, cleaning up their
+        """Delete a bundle together with its member layers, cleaning up their
         DuckLake data.
 
-        Membership lives in ``dataset_package_layer``, so removing the package
+        Membership lives in ``bundle_layer``, so removing the bundle
         only cascades the link rows — the member layers are deleted explicitly
-        here (a package "stays together"). Their DuckLake tables are dropped via
+        here (a bundle "stays together"). Their DuckLake tables are dropped via
         GeoAPI and the derived artifacts' object-storage blobs are removed too.
-        Returns False if no package with this id is owned by the user.
+        Returns False if no bundle with this id is owned by the user.
         """
-        dataset_packages = await self.get_by_multi_keys(
+        bundles = await self.get_by_multi_keys(
             async_session,
             keys={"id": id, "user_id": user_id},
-            extra_fields=[DatasetPackage.layer_links, DatasetPackage.artifacts],
+            extra_fields=[Bundle.layer_links, Bundle.artifacts],
         )
-        if len(dataset_packages) == 0:
+        if len(bundles) == 0:
             return False
 
-        dataset_package = dataset_packages[0]
-        member_layer_ids = [link.layer_id for link in dataset_package.layer_links]
+        bundle = bundles[0]
+        member_layer_ids = [link.layer_id for link in bundle.layer_links]
         # Artifact blobs live in object storage; the rows cascade with the
-        # package but the S3 objects must be removed explicitly.
-        artifact_s3_keys = [a.s3_key for a in dataset_package.artifacts if a.s3_key]
+        # bundle but the S3 objects must be removed explicitly.
+        artifact_s3_keys = [a.s3_key for a in bundle.artifacts if a.s3_key]
 
         # Only feature/table layers have DuckLake tables — resolve types by id
         # without pulling full ORM objects into the session.
@@ -69,20 +69,20 @@ class CRUDDatasetPackage(
                 if ltype in (LayerType.feature, LayerType.table)
             ]
 
-        # Delete the package (cascades the link/artifact/dependency rows), then
+        # Delete the bundle (cascades the link/artifact/dependency rows), then
         # the member layer records (cascades their remaining links/share links).
-        await async_session.delete(dataset_package)
+        await async_session.delete(bundle)
         await async_session.flush()
         if member_layer_ids:
             await async_session.execute(
                 sql_delete(Layer).where(Layer.id.in_(member_layer_ids))
             )
-        # Sharing grants live in resource_grant, which has no FK to the package
+        # Sharing grants live in resource_grant, which has no FK to the bundle
         # (resource_id is a generic UUID), so they don't cascade — remove them
         # explicitly to avoid orphaned grants.
         await async_session.execute(
             sql_delete(ResourceGrant).where(
-                ResourceGrant.resource_type == "dataset_package",
+                ResourceGrant.resource_type == "bundle",
                 ResourceGrant.resource_id == id,
             )
         )
@@ -90,7 +90,7 @@ class CRUDDatasetPackage(
 
         if ducklake_layer_ids:
             logger.info(
-                "Deleting DuckLake data for %d layers from dataset package %s",
+                "Deleting DuckLake data for %d layers from bundle %s",
                 len(ducklake_layer_ids),
                 id,
             )
@@ -103,7 +103,7 @@ class CRUDDatasetPackage(
                 s3_service.delete_file(settings.S3_BUCKET_NAME, key)
             except Exception as e:
                 logger.warning(
-                    "Failed to delete artifact blob %s for dataset package %s: %s",
+                    "Failed to delete artifact blob %s for bundle %s: %s",
                     key,
                     id,
                     e,
@@ -111,4 +111,4 @@ class CRUDDatasetPackage(
         return True
 
 
-dataset_package = CRUDDatasetPackage(DatasetPackage)
+bundle = CRUDBundle(Bundle)

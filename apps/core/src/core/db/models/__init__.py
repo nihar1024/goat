@@ -1,6 +1,6 @@
 from ._link_model import (
-    DatasetPackageDependencyLink,
-    DatasetPackageLayerLink,
+    BundleDependencyLink,
+    BundleLayerLink,
     LayerOrganizationLink,
     LayerProjectLink,
     LayerTeamLink,
@@ -15,12 +15,12 @@ from ._link_model import (
     UserRoleLink,
 )
 from .asset import UploadedAsset
+from .bundle import Bundle
+from .bundle_artifact import BundleArtifact
+from .bundle_type import BundleType
 from .cost import Cost
 from .credit_usage import CreditUsage
 from .data_store import DataStore
-from .dataset_package import DatasetPackage
-from .dataset_package_artifact import DatasetPackageArtifact
-from .dataset_package_type import DatasetPackageType
 from .folder import Folder
 from .invitation import Invitation
 from .layer import Layer

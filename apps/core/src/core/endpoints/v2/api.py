@@ -3,8 +3,8 @@ from fastapi import APIRouter
 from . import (
     asset,
     billing,
+    bundle,
     custom_domain_lookup,
-    dataset_package,
     datasets,
     folder,
     layer,
@@ -37,7 +37,7 @@ router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 
 router.include_router(folder.router, prefix="/folder", tags=["Folder"])
 router.include_router(
-    dataset_package.router, prefix="/dataset-package", tags=["Dataset Package"]
+    bundle.router, prefix="/bundle", tags=["Bundle"]
 )
 router.include_router(layer.router, prefix="/layer", tags=["Layer"])
 router.include_router(project.router, prefix="/project", tags=["Project"])

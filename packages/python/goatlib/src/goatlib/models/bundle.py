@@ -1,10 +1,10 @@
-"""Dataset package type specifications.
+"""Bundle type specifications.
 
-Code is the source of truth for the set of dataset package types, the member
+Code is the source of truth for the set of bundle types, the member
 layer roles each one expects, the derived artifacts it produces, and the other
-packages it depends on. Core projects these specs into the
-``dataset_package_type`` table's ``structure`` column (via
-``seed_dataset_package_types``) and validates against them.
+bundles it depends on. Core projects these specs into the
+``bundle_type`` table's ``structure`` column (via
+``seed_bundle_types``) and validates against them.
 """
 
 from enum import Enum
@@ -15,21 +15,21 @@ from pydantic import BaseModel
 GeometryKind = Literal["point", "line", "polygon", "none"]
 
 
-class DatasetPackageTypeName(str, Enum):
-    """Supported dataset package types (the vocabulary shared across services)."""
+class BundleTypeName(str, Enum):
+    """Supported bundle types (the vocabulary shared across services)."""
 
     street_network = "street_network"
     pt_network_gtfs = "pt_network_gtfs"
 
 
-class DatasetPackageArtifactKind(str, Enum):
-    """Derived artifacts a dataset package can produce (e.g. a routable graph)."""
+class BundleArtifactKind(str, Enum):
+    """Derived artifacts a bundle can produce (e.g. a routable graph)."""
 
     routing_graph = "routing_graph"
     stop_to_street_mapping = "stop_to_street_mapping"
 
 
-class DatasetPackageArtifactStatus(str, Enum):
+class BundleArtifactStatus(str, Enum):
     """Build state of a derived artifact."""
 
     pending = "pending"
@@ -39,8 +39,8 @@ class DatasetPackageArtifactStatus(str, Enum):
     failed = "failed"
 
 
-class DatasetPackageStatus(str, Enum):
-    """Processing lifecycle of a dataset package (e.g. during import)."""
+class BundleStatus(str, Enum):
+    """Processing lifecycle of a bundle (e.g. during import)."""
 
     pending = "pending"
     processing = "processing"
@@ -49,7 +49,7 @@ class DatasetPackageStatus(str, Enum):
 
 
 class RoleSpec(BaseModel):
-    """A member-layer role within a dataset package type."""
+    """A member-layer role within a bundle type."""
 
     key: str
     label: str
@@ -63,27 +63,27 @@ class RoleSpec(BaseModel):
 
 
 class DependencySpec(BaseModel):
-    """A dependency of one dataset package on another.
+    """A dependency of one bundle on another.
 
-    e.g. a GTFS package depends on a street network package to build its routable
+    e.g. a GTFS bundle depends on a street network bundle to build its routable
     graph and stop-to-street mapping.
     """
 
     kind: str  # slot identifier, e.g. "street_network"
-    package_type: DatasetPackageTypeName  # required type of the linked package
+    bundle_type: BundleTypeName  # required type of the linked bundle
     required: bool = False
     description: Optional[str] = None
 
 
-class DatasetPackageTypeSpec(BaseModel):
-    """Structure of a dataset package type: member roles, derived artifacts, and
-    dependencies on other packages."""
+class BundleTypeSpec(BaseModel):
+    """Structure of a bundle type: member roles, derived artifacts, and
+    dependencies on other bundles."""
 
-    type: DatasetPackageTypeName
+    type: BundleTypeName
     name: str
     description: str
     roles: Tuple[RoleSpec, ...]
-    artifacts: Tuple[DatasetPackageArtifactKind, ...] = ()
+    artifacts: Tuple[BundleArtifactKind, ...] = ()
     dependencies: Tuple[DependencySpec, ...] = ()
 
     def role(self, key: str) -> Optional[RoleSpec]:
@@ -99,9 +99,9 @@ class DatasetPackageTypeSpec(BaseModel):
         return next((d for d in self.dependencies if d.kind == kind), None)
 
     def to_structure(self) -> Dict[str, Any]:
-        """Descriptive projection of the type for the ``dataset_package_type``
+        """Descriptive projection of the type for the ``bundle_type``
         table / frontend. Describes the roles, artifacts and dependencies —
-        membership itself lives in the ``dataset_package_layer`` link table."""
+        membership itself lives in the ``bundle_layer`` link table."""
         return {
             "type": self.type.value,
             "name": self.name,
@@ -121,7 +121,7 @@ class DatasetPackageTypeSpec(BaseModel):
             "dependencies": [
                 {
                     "kind": d.kind,
-                    "package_type": d.package_type.value,
+                    "bundle_type": d.bundle_type.value,
                     "required": d.required,
                     "description": d.description,
                 }
@@ -130,9 +130,9 @@ class DatasetPackageTypeSpec(BaseModel):
         }
 
 
-SPECS: Dict[DatasetPackageTypeName, DatasetPackageTypeSpec] = {
-    DatasetPackageTypeName.street_network: DatasetPackageTypeSpec(
-        type=DatasetPackageTypeName.street_network,
+SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
+    BundleTypeName.street_network: BundleTypeSpec(
+        type=BundleTypeName.street_network,
         name="Street Network",
         description=(
             "A routable street network made up of edge segments and, optionally, "
@@ -154,10 +154,10 @@ SPECS: Dict[DatasetPackageTypeName, DatasetPackageTypeSpec] = {
                 description="Network nodes connecting the edges.",
             ),
         ),
-        artifacts=(DatasetPackageArtifactKind.routing_graph,),
+        artifacts=(BundleArtifactKind.routing_graph,),
     ),
-    DatasetPackageTypeName.pt_network_gtfs: DatasetPackageTypeSpec(
-        type=DatasetPackageTypeName.pt_network_gtfs,
+    BundleTypeName.pt_network_gtfs: BundleTypeSpec(
+        type=BundleTypeName.pt_network_gtfs,
         name="Public Transport Network (GTFS)",
         description=(
             "A public-transport network imported from a GTFS feed. Member layers "
@@ -175,13 +175,13 @@ SPECS: Dict[DatasetPackageTypeName, DatasetPackageTypeSpec] = {
             RoleSpec(key="shapes", label="Shapes", geometry="line"),
         ),
         artifacts=(
-            DatasetPackageArtifactKind.routing_graph,
-            DatasetPackageArtifactKind.stop_to_street_mapping,
+            BundleArtifactKind.routing_graph,
+            BundleArtifactKind.stop_to_street_mapping,
         ),
         dependencies=(
             DependencySpec(
                 kind="street_network",
-                package_type=DatasetPackageTypeName.street_network,
+                bundle_type=BundleTypeName.street_network,
                 required=True,
                 description=(
                     "Street network used to build the routable graph and to map "
@@ -193,6 +193,6 @@ SPECS: Dict[DatasetPackageTypeName, DatasetPackageTypeSpec] = {
 }
 
 
-def get_spec(type_: "DatasetPackageTypeName | str") -> DatasetPackageTypeSpec:
+def get_spec(type_: "BundleTypeName | str") -> BundleTypeSpec:
     """Return the spec for a type name (raises KeyError/ValueError if unknown)."""
-    return SPECS[DatasetPackageTypeName(type_)]
+    return SPECS[BundleTypeName(type_)]

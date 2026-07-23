@@ -22,7 +22,7 @@ from core.db.models.organization import Organization
 if TYPE_CHECKING:
     from core.db.models.organization import Organization
 
-    from .dataset_package import DatasetPackage
+    from .bundle import Bundle
     from .layer import Layer
     from .project import Project
     from .role import Role
@@ -767,21 +767,21 @@ sa.Index(
 )
 
 
-class DatasetPackageLayerLink(SQLModel, table=True):
-    """Membership of a layer within a dataset package, tagged with the role the
+class BundleLayerLink(SQLModel, table=True):
+    """Membership of a layer within a bundle, tagged with the role the
     layer plays in it (e.g. 'edges', 'stops').
 
-    One package per layer (``UNIQUE(layer_id)``) and at most one layer per
-    ``(dataset_package_id, role)`` — Postgres treats NULL roles as distinct, so
+    One bundle per layer (``UNIQUE(layer_id)``) and at most one layer per
+    ``(bundle_id, role)`` — Postgres treats NULL roles as distinct, so
     unassigned members are allowed while each named role is filled once. Both FKs
     cascade, so deleting either side drops the membership row.
     """
 
-    __tablename__ = "dataset_package_layer"
+    __tablename__ = "bundle_layer"
     __table_args__ = (
-        UniqueConstraint("layer_id", name="uq_dataset_package_layer_layer"),
+        UniqueConstraint("layer_id", name="uq_bundle_layer_layer"),
         UniqueConstraint(
-            "dataset_package_id", "role", name="uq_dataset_package_layer_role"
+            "bundle_id", "role", name="uq_bundle_layer_role"
         ),
         {"schema": settings.SCHEMA},
     )
@@ -789,10 +789,10 @@ class DatasetPackageLayerLink(SQLModel, table=True):
     id: Optional[int] = Field(
         sa_column=Column(Integer, primary_key=True, autoincrement=True)
     )
-    dataset_package_id: UUID = Field(
+    bundle_id: UUID = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),
-            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
             nullable=False,
         )
     )
@@ -806,38 +806,38 @@ class DatasetPackageLayerLink(SQLModel, table=True):
     role: Optional[str] = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
-        description="Role the layer plays within the package (a spec role key)",
+        description="Role the layer plays within the bundle (a spec role key)",
     )
 
     # Relationships
-    dataset_package: "DatasetPackage" = Relationship(back_populates="layer_links")
+    bundle: "Bundle" = Relationship(back_populates="layer_links")
     layer: "Layer" = Relationship(
-        back_populates="dataset_package_link",
+        back_populates="bundle_link",
         sa_relationship_kwargs={"uselist": False},
     )
 
 
 sa.Index(
-    "idx_dataset_package_layer_package",
-    DatasetPackageLayerLink.__table__.c.dataset_package_id,
+    "idx_bundle_layer_bundle",
+    BundleLayerLink.__table__.c.bundle_id,
 )
 
 
-class DatasetPackageDependencyLink(SQLModel, table=True):
-    """A dependency of one dataset package on another.
+class BundleDependencyLink(SQLModel, table=True):
+    """A dependency of one bundle on another.
 
-    e.g. a GTFS package depends on a street network package to build its routable
+    e.g. a GTFS bundle depends on a street network bundle to build its routable
     graph and stop-to-street mapping. One dependency per
-    ``(dataset_package_id, dependency_kind)``; both FKs point at
-    ``dataset_package`` and cascade.
+    ``(bundle_id, dependency_kind)``; both FKs point at
+    ``bundle`` and cascade.
     """
 
-    __tablename__ = "dataset_package_dependency"
+    __tablename__ = "bundle_dependency"
     __table_args__ = (
         UniqueConstraint(
-            "dataset_package_id",
+            "bundle_id",
             "dependency_kind",
-            name="uq_dataset_package_dependency_kind",
+            name="uq_bundle_dependency_kind",
         ),
         {"schema": settings.SCHEMA},
     )
@@ -845,47 +845,47 @@ class DatasetPackageDependencyLink(SQLModel, table=True):
     id: Optional[int] = Field(
         sa_column=Column(Integer, primary_key=True, autoincrement=True)
     )
-    dataset_package_id: UUID = Field(
+    bundle_id: UUID = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),
-            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        description="The dependent package (e.g. the GTFS package)",
+        description="The dependent bundle (e.g. the GTFS bundle)",
     )
-    depends_on_package_id: UUID = Field(
+    depends_on_bundle_id: UUID = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),
-            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        description="The package depended on (e.g. the street network package)",
+        description="The bundle depended on (e.g. the street network bundle)",
     )
     dependency_kind: str = Field(
         sa_column=Column(Text, nullable=False),
         description="Dependency slot (a spec dependency kind, e.g. 'street_network')",
     )
 
-    # Two FKs to dataset_package -> relationships must name their foreign key.
-    dataset_package: "DatasetPackage" = Relationship(
+    # Two FKs to bundle -> relationships must name their foreign key.
+    bundle: "Bundle" = Relationship(
         back_populates="dependency_links",
         sa_relationship_kwargs={
-            "foreign_keys": "[DatasetPackageDependencyLink.dataset_package_id]"
+            "foreign_keys": "[BundleDependencyLink.bundle_id]"
         },
     )
-    depends_on_package: "DatasetPackage" = Relationship(
+    depends_on_bundle: "Bundle" = Relationship(
         back_populates="dependent_links",
         sa_relationship_kwargs={
-            "foreign_keys": "[DatasetPackageDependencyLink.depends_on_package_id]"
+            "foreign_keys": "[BundleDependencyLink.depends_on_bundle_id]"
         },
     )
 
 
 sa.Index(
-    "idx_dataset_package_dependency_package",
-    DatasetPackageDependencyLink.__table__.c.dataset_package_id,
+    "idx_bundle_dependency_bundle",
+    BundleDependencyLink.__table__.c.bundle_id,
 )
 sa.Index(
-    "idx_dataset_package_dependency_depends_on",
-    DatasetPackageDependencyLink.__table__.c.depends_on_package_id,
+    "idx_bundle_dependency_depends_on",
+    BundleDependencyLink.__table__.c.depends_on_bundle_id,
 )

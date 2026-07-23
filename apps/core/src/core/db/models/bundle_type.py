@@ -1,10 +1,10 @@
 """
-Dataset Package Type Model
+Bundle Type Model
 """
 
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from goatlib.models.dataset_package import DatasetPackageTypeName
+from goatlib.models.bundle import BundleTypeName
 from pydantic import field_serializer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, Field, Relationship, Text
@@ -13,53 +13,53 @@ from core.core.config import settings
 from core.db.models._base_class import DateTimeBase, serialize_str_enum
 
 if TYPE_CHECKING:
-    from .dataset_package import DatasetPackage
+    from .bundle import Bundle
 
 # Re-exported for callers that import the vocabulary from the model module; the
 # spec registry in goatlib is the source of truth.
-__all__ = ["DatasetPackageType", "DatasetPackageTypeName"]
+__all__ = ["BundleType", "BundleTypeName"]
 
 
-class DatasetPackageType(DateTimeBase, table=True):
-    """Reference table describing a kind of dataset package.
+class BundleType(DateTimeBase, table=True):
+    """Reference table describing a kind of bundle.
 
     Holds the type identifier plus a ``structure`` projection (roles, derived
     artifacts and dependencies) generated from the goatlib spec. Seeded by
-    ``seed_dataset_package_types`` and referenced by
-    ``dataset_package.dataset_package_type``.
+    ``seed_bundle_types`` and referenced by
+    ``bundle.bundle_type``.
     """
 
-    __tablename__ = "dataset_package_type"
+    __tablename__ = "bundle_type"
     __table_args__ = {"schema": settings.SCHEMA}
 
-    type: DatasetPackageTypeName = Field(
+    type: BundleTypeName = Field(
         sa_column=Column(Text, primary_key=True, nullable=False),
-        description="Dataset package type identifier (natural primary key)",
+        description="Bundle type identifier (natural primary key)",
     )
     name: str = Field(
         sa_column=Column(Text, nullable=False),
-        description="Human-readable dataset package type name",
+        description="Human-readable bundle type name",
         max_length=255,
     )
     description: str | None = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
-        description="Dataset package type description",
+        description="Bundle type description",
     )
     structure: Dict[str, Any] = Field(
         sa_column=Column(JSONB, nullable=False),
         description=(
             "Descriptive projection of the type's goatlib spec: its member roles, "
-            "derived artifacts and package dependencies (membership itself lives "
-            "in dataset_package_layer)"
+            "derived artifacts and bundle dependencies (membership itself lives "
+            "in bundle_layer)"
         ),
     )
 
     # Relationships
-    packages: List["DatasetPackage"] = Relationship(back_populates="type_definition")
+    bundles: List["Bundle"] = Relationship(back_populates="type_definition")
 
     @field_serializer("type")
     def serialize_type(
-        self, value: "DatasetPackageTypeName | str | None"
+        self, value: "BundleTypeName | str | None"
     ) -> "str | None":
         return serialize_str_enum(value)

@@ -13,9 +13,9 @@ export const DATASETS_API_BASE_URL = new URL(
 ).href;
 
 /**
- * List the caller's datasets — layers and dataset packages combined — from the
+ * List the caller's datasets — layers and bundles combined — from the
  * unified datasets API. Items share one shape, discriminated by `content_type`
- * ("layer" | "dataset_package").
+ * ("layer" | "bundle").
  */
 export const useDatasets = (
   queryParams?: PaginatedQueryParams,

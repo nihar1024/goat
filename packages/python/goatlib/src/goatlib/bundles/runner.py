@@ -1,7 +1,7 @@
-"""Dataset-package import runner.
+"""Dataset-bundle import runner.
 
 Ingests a validated source into DuckLake as member layers and creates the
-dataset package + membership rows. Reuses ``SimpleToolRunner``'s ingest
+bundle + membership rows. Reuses ``SimpleToolRunner``'s ingest
 primitives (DuckLake connection, ``_ingest_to_ducklake``, postgres pool) and the
 per-type importer plugin — so it stays type-agnostic and runs wherever the tools
 run (Windmill, or any env with DuckLake + Postgres configured).
@@ -18,12 +18,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from goatlib.dataset_packages.importers import get_importer
-from goatlib.dataset_packages.importers.base import ValidationResult
+from goatlib.bundles.importers import get_importer
+from goatlib.bundles.importers.base import ValidationResult
 from goatlib.io.converter import IOConverter
-from goatlib.models.dataset_package import (
-    DatasetPackageStatus,
-    DatasetPackageTypeName,
+from goatlib.models.bundle import (
+    BundleStatus,
+    BundleTypeName,
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
@@ -32,7 +32,7 @@ from goatlib.tools.db import ToolDatabaseService
 logger = logging.getLogger(__name__)
 
 
-class DatasetPackageValidationError(Exception):
+class BundleValidationError(Exception):
     """Raised when the uploaded source fails validation against the type spec."""
 
     def __init__(self, validation: ValidationResult) -> None:
@@ -50,14 +50,14 @@ class ImportedLayer(BaseModel):
     feature_count: int = 0
 
 
-class DatasetPackageImportResult(BaseModel):
-    package_id: str
-    dataset_package_type: str
+class BundleImportResult(BaseModel):
+    bundle_id: str
+    bundle_type: str
     layers: List[ImportedLayer]
 
 
-class DatasetPackageImportRunner(BaseToolRunner):
-    """Multi-output ingest: source → member layers in DuckLake + package rows.
+class BundleImportRunner(BaseToolRunner):
+    """Multi-output ingest: source → member layers in DuckLake + bundle rows.
 
     Subclasses ``BaseToolRunner`` to reuse its ingest primitives
     (``_ingest_to_ducklake`` etc.), but drives them directly from
@@ -67,7 +67,7 @@ class DatasetPackageImportRunner(BaseToolRunner):
 
     def process(self, params: Any, temp_dir: Path) -> "tuple[Path, DatasetMetadata]":
         raise NotImplementedError(
-            "DatasetPackageImportRunner uses run_import(), not the single-output "
+            "BundleImportRunner uses run_import(), not the single-output "
             "run()/process() lifecycle."
         )
 
@@ -98,18 +98,18 @@ class DatasetPackageImportRunner(BaseToolRunner):
         db: ToolDatabaseService,
         *,
         source_path: str,
-        dataset_package_type: "DatasetPackageTypeName | str",
+        bundle_type: "BundleTypeName | str",
         user_id: str,
         folder_id: str,
-        package_id: str,
+        bundle_id: str,
     ) -> List[ImportedLayer]:
         """Extract, ingest to DuckLake, and link each member layer. Assumes the
-        package row already exists (FK target for the membership links).
+        bundle row already exists (FK target for the membership links).
 
         Member creation isn't a single transaction (DuckLake tables + separate
         Postgres rows), so on any failure we roll back the layers created so far
         to avoid orphaned tables/rows, then re-raise."""
-        importer = get_importer(dataset_package_type)
+        importer = get_importer(bundle_type)
         converter = IOConverter()
         imported: List[ImportedLayer] = []
         created_layer_ids: List[str] = []
@@ -153,7 +153,7 @@ class DatasetPackageImportRunner(BaseToolRunner):
                         size=info.get("size", 0),
                     )
                     await db.add_layer_to_package(
-                        package_id=package_id, layer_id=layer_id, role=extracted.role
+                        bundle_id=bundle_id, layer_id=layer_id, role=extracted.role
                     )
 
                     imported.append(
@@ -178,48 +178,48 @@ class DatasetPackageImportRunner(BaseToolRunner):
         self,
         *,
         source_path: str,
-        dataset_package_type: "DatasetPackageTypeName | str",
+        bundle_type: "BundleTypeName | str",
         user_id: str,
         folder_id: str,
         name: str,
         description: Optional[str] = None,
         properties: Optional[Dict[str, Any]] = None,
-        package_id: Optional[str] = None,
-    ) -> DatasetPackageImportResult:
-        """Full import: validate, create the package, and ingest its layers.
-        Used for direct/CLI runs where the package doesn't yet exist."""
+        bundle_id: Optional[str] = None,
+    ) -> BundleImportResult:
+        """Full import: validate, create the bundle, and ingest its layers.
+        Used for direct/CLI runs where the bundle doesn't yet exist."""
         assert self.settings is not None, "init_from_env()/init() must run first"
 
-        type_value = DatasetPackageTypeName(dataset_package_type).value
-        importer = get_importer(dataset_package_type)
+        type_value = BundleTypeName(bundle_type).value
+        importer = get_importer(bundle_type)
 
         validation = importer.validate(source_path)
         if not validation.valid:
-            raise DatasetPackageValidationError(validation)
+            raise BundleValidationError(validation)
 
-        package_id = package_id or str(uuid4())
+        bundle_id = bundle_id or str(uuid4())
         pool = await self.get_postgres_pool()
         db = ToolDatabaseService(pool, schema=self.settings.customer_schema)
         try:
-            await db.create_dataset_package(
-                package_id=package_id,
+            await db.create_bundle(
+                bundle_id=bundle_id,
                 user_id=user_id,
                 folder_id=folder_id,
                 name=name,
-                dataset_package_type=type_value,
+                bundle_type=type_value,
                 description=description,
                 properties=properties,
             )
             imported = await self._ingest_layers(
                 db,
                 source_path=source_path,
-                dataset_package_type=dataset_package_type,
+                bundle_type=bundle_type,
                 user_id=user_id,
                 folder_id=folder_id,
-                package_id=package_id,
+                bundle_id=bundle_id,
             )
-            return DatasetPackageImportResult(
-                package_id=package_id, dataset_package_type=type_value, layers=imported
+            return BundleImportResult(
+                bundle_id=bundle_id, bundle_type=type_value, layers=imported
             )
         finally:
             await pool.close()
@@ -228,14 +228,14 @@ class DatasetPackageImportRunner(BaseToolRunner):
     async def ingest_into_package(
         self,
         *,
-        package_id: str,
+        bundle_id: str,
         source_path: str,
-        dataset_package_type: "DatasetPackageTypeName | str",
+        bundle_type: "BundleTypeName | str",
         user_id: str,
         folder_id: str,
-    ) -> DatasetPackageImportResult:
-        """Ingest a validated source into an ALREADY-CREATED package (member
-        layers), then flip the package's terminal status.
+    ) -> BundleImportResult:
+        """Ingest a validated source into an ALREADY-CREATED bundle (member
+        layers), then flip the bundle's terminal status.
 
         This runs as the Windmill job kicked off by core's import endpoint (core
         created the shell as ``processing``). Because the job completes
@@ -243,7 +243,7 @@ class DatasetPackageImportRunner(BaseToolRunner):
         (``ready``/``failed``) is written here."""
         assert self.settings is not None, "init_from_env()/init() must run first"
 
-        type_value = DatasetPackageTypeName(dataset_package_type).value
+        type_value = BundleTypeName(bundle_type).value
         pool = await self.get_postgres_pool()
         db = ToolDatabaseService(pool, schema=self.settings.customer_schema)
         try:
@@ -251,48 +251,48 @@ class DatasetPackageImportRunner(BaseToolRunner):
                 imported = await self._ingest_layers(
                     db,
                     source_path=source_path,
-                    dataset_package_type=dataset_package_type,
+                    bundle_type=bundle_type,
                     user_id=user_id,
                     folder_id=folder_id,
-                    package_id=package_id,
+                    bundle_id=bundle_id,
                 )
             except Exception:
                 await db.update_package_status(
-                    package_id=package_id, status=DatasetPackageStatus.failed
+                    bundle_id=bundle_id, status=BundleStatus.failed
                 )
                 raise
             await db.update_package_status(
-                package_id=package_id, status=DatasetPackageStatus.ready
+                bundle_id=bundle_id, status=BundleStatus.ready
             )
-            return DatasetPackageImportResult(
-                package_id=package_id, dataset_package_type=type_value, layers=imported
+            return BundleImportResult(
+                bundle_id=bundle_id, bundle_type=type_value, layers=imported
             )
         finally:
             await pool.close()
             self.cleanup()
 
 
-async def import_dataset_package(
+async def import_bundle(
     *,
     source_path: str,
-    dataset_package_type: "DatasetPackageTypeName | str",
+    bundle_type: "BundleTypeName | str",
     user_id: str,
     folder_id: str,
     name: str,
     description: Optional[str] = None,
     properties: Optional[Dict[str, Any]] = None,
-    package_id: Optional[str] = None,
-) -> DatasetPackageImportResult:
+    bundle_id: Optional[str] = None,
+) -> BundleImportResult:
     """Convenience entry point: build a runner from the environment and import."""
-    runner = DatasetPackageImportRunner()
+    runner = BundleImportRunner()
     runner.init_from_env()
     return await runner.run_import(
         source_path=source_path,
-        dataset_package_type=dataset_package_type,
+        bundle_type=bundle_type,
         user_id=user_id,
         folder_id=folder_id,
         name=name,
         description=description,
         properties=properties,
-        package_id=package_id,
+        bundle_id=bundle_id,
     )

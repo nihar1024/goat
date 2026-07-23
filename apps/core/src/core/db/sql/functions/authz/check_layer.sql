@@ -11,7 +11,7 @@ DECLARE
     layer_id_loop       UUID;
     status_check        BOOLEAN := FALSE;
     folder_grant_role   TEXT;
-    dataset_package_grant_role TEXT;
+    bundle_grant_role TEXT;
     resource_method_arr TEXT[];
 BEGIN
 
@@ -184,23 +184,23 @@ BEGIN
             CONTINUE;
         END IF;
 
-        /* 9. Dataset-package grant
+        /* 9. Dataset-bundle grant
          *
-         *  Layers that belong to a dataset package are never shared
-         *  individually — they inherit the package's sharing. Access is derived
-         *  from the package rather than from the layer's own grant rows:
-         *    - the package owner always has full access to its member layers;
-         *    - if the package is shared (resource_grant, resource_type
-         *      'dataset_package') with a team/organisation the user belongs to,
-         *      the package role decides (mirrors the folder block above):
-         *        dataset-package-editor → full access (any HTTP method)
-         *        dataset-package-viewer → read-only (resource must not include
+         *  Layers that belong to a bundle are never shared
+         *  individually — they inherit the bundle's sharing. Access is derived
+         *  from the bundle rather than from the layer's own grant rows:
+         *    - the bundle owner always has full access to its member layers;
+         *    - if the bundle is shared (resource_grant, resource_type
+         *      'bundle') with a team/organisation the user belongs to,
+         *      the bundle role decides (mirrors the folder block above):
+         *        bundle-editor → full access (any HTTP method)
+         *        bundle-viewer → read-only (resource must not include
          *                                 POST / PUT / DELETE / PATCH)
          */
         IF EXISTS (
             SELECT 1
-            FROM   customer.dataset_package_layer dpl
-            JOIN   customer.dataset_package       dp ON dp.id = dpl.dataset_package_id
+            FROM   customer.bundle_layer dpl
+            JOIN   customer.bundle       dp ON dp.id = dpl.bundle_id
             WHERE  dpl.layer_id = layer_id_loop
               AND  dp.user_id   = user_id_input
         ) THEN
@@ -209,11 +209,11 @@ BEGIN
         END IF;
 
         SELECT r.name
-        INTO   dataset_package_grant_role
-        FROM   customer.dataset_package_layer dpl
+        INTO   bundle_grant_role
+        FROM   customer.bundle_layer dpl
         JOIN   customer.resource_grant   rg
-            ON rg.resource_type = 'dataset_package'
-           AND rg.resource_id   = dpl.dataset_package_id
+            ON rg.resource_type = 'bundle'
+           AND rg.resource_id   = dpl.bundle_id
         JOIN   customer.role             r  ON r.id = rg.role_id
         WHERE  dpl.layer_id = layer_id_loop
           AND  (
@@ -236,12 +236,12 @@ BEGIN
           )
         LIMIT 1;
 
-        IF dataset_package_grant_role = 'dataset-package-editor' THEN
+        IF bundle_grant_role = 'bundle-editor' THEN
             status_check := TRUE;
             CONTINUE;
         END IF;
 
-        IF dataset_package_grant_role = 'dataset-package-viewer'
+        IF bundle_grant_role = 'bundle-viewer'
            AND resource_method_arr IS NOT NULL
            AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
         THEN

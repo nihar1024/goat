@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.core.content import build_shared_with_object, create_query_shared_content
 from core.crud.base import CRUDBase
 from core.db.models._link_model import (
-    DatasetPackageLayerLink,
+    BundleLayerLink,
     LayerOrganizationLink,
     LayerTeamLink,
     ResourceGrant,
@@ -130,10 +130,10 @@ class CRUDLayer(CRUDBase):
         else:
             filters.append(Layer.in_catalog == bool(True))
 
-        # Layers that belong to a dataset package are surfaced via the package,
+        # Layers that belong to a bundle are surfaced via the bundle,
         # not as standalone datasets — exclude them from content listings.
         filters.append(
-            Layer.id.notin_(select(DatasetPackageLayerLink.layer_id))
+            Layer.id.notin_(select(BundleLayerLink.layer_id))
         )
 
         # Add search filter

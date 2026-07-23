@@ -1,9 +1,9 @@
-"""Windmill entrypoint for dataset package import.
+"""Windmill entrypoint for bundle import.
 
 Ingests an uploaded source (e.g. a GTFS zip) into an already-created dataset
-package: downloads it from object storage, then runs the goatlib
-``DatasetPackageImportRunner`` to create the member layers and flip the package
-status to ready/failed. Core creates the package shell (status=processing) and
+bundle: downloads it from object storage, then runs the goatlib
+``BundleImportRunner`` to create the member layers and flip the bundle
+status to ready/failed. Core creates the bundle shell (status=processing) and
 triggers this job via the processes service.
 """
 
@@ -13,32 +13,32 @@ from typing import Any, Dict
 
 from pydantic import Field
 
-from goatlib.dataset_packages.runner import DatasetPackageImportRunner
+from goatlib.bundles.runner import BundleImportRunner
 from goatlib.tools.base import _get_or_create_event_loop
 from goatlib.tools.schemas import ToolInputBase
 
 
-class DatasetPackageImportParams(ToolInputBase):
-    """Inputs for the dataset package import tool. ``user_id`` and ``folder_id``
+class BundleImportParams(ToolInputBase):
+    """Inputs for the bundle import tool. ``user_id`` and ``folder_id``
     are inherited from ``ToolInputBase``."""
 
-    package_id: str = Field(
-        ..., description="Pre-created dataset package id to ingest layers into"
+    bundle_id: str = Field(
+        ..., description="Pre-created bundle id to ingest layers into"
     )
     s3_key: str = Field(
         ..., description="Object-storage key of the uploaded source (e.g. gtfs.zip)"
     )
-    dataset_package_type: str = Field(
-        ..., description="Dataset package type (e.g. pt_network_gtfs)"
+    bundle_type: str = Field(
+        ..., description="Bundle type (e.g. pt_network_gtfs)"
     )
 
 
-def main(params: DatasetPackageImportParams) -> Dict[str, Any]:
-    """Windmill entry point for the dataset package import tool."""
+def main(params: BundleImportParams) -> Dict[str, Any]:
+    """Windmill entry point for the bundle import tool."""
     if not params.folder_id:
-        raise ValueError("folder_id is required for dataset package import")
+        raise ValueError("folder_id is required for bundle import")
 
-    runner = DatasetPackageImportRunner()
+    runner = BundleImportRunner()
     runner.init_from_env()
     assert runner.settings is not None
 
@@ -49,9 +49,9 @@ def main(params: DatasetPackageImportParams) -> Dict[str, Any]:
         )
         result = _get_or_create_event_loop().run_until_complete(
             runner.ingest_into_package(
-                package_id=params.package_id,
+                bundle_id=params.bundle_id,
                 source_path=tmp_path,
-                dataset_package_type=params.dataset_package_type,
+                bundle_type=params.bundle_type,
                 user_id=params.user_id,
                 folder_id=params.folder_id,
             )

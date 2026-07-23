@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
-import { isDatasetPackageTile } from "@/lib/api/dataset-packages";
+import { isBundleTile } from "@/lib/api/bundles";
 import type { Layer } from "@/lib/validations/layer";
 import type { Project } from "@/lib/validations/project";
 import type { Folder } from "@/lib/validations/folder";
@@ -32,10 +32,10 @@ export const useContentMoreMenu = () => {
     // hiding menu options before auth resolves; enableActions gates the button itself.
     const isOwner = !currentUserId || item.owned_by?.id === currentUserId;
 
-    // Dataset packages get their own action set (they are not real layers); the
-    // package is the unit for these actions (move/share/delete cascade to its
+    // Bundles get their own action set (they are not real layers); the
+    // bundle is the unit for these actions (move/share/delete cascade to its
     // member layers). Owner only for now.
-    if (isDatasetPackageTile(item)) {
+    if (isBundleTile(item)) {
       return isOwner
         ? [
             {

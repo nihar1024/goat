@@ -1,28 +1,28 @@
-"""Seed the ``dataset_package_type`` reference table.
+"""Seed the ``bundle_type`` reference table.
 
 The table is a projection of the code spec registry
-(``goatlib.models.dataset_package.SPECS``): each row's ``name``/``description``/
+(``goatlib.models.bundle.SPECS``): each row's ``name``/``description``/
 ``structure`` is generated from the spec. Idempotent — safe to re-run on every
 deploy; rows are inserted when missing and refreshed to match the specs.
 """
 
 import asyncio
 
-from goatlib.models.dataset_package import SPECS
+from goatlib.models.bundle import SPECS
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.core.config import settings
-from core.db.models import DatasetPackageType
+from core.db.models import BundleType
 from core.db.session import session_manager
 
 
-async def seed_dataset_package_types(session: AsyncSession) -> None:
-    """Insert missing dataset package types and refresh their definitions from
+async def seed_bundle_types(session: AsyncSession) -> None:
+    """Insert missing bundle types and refresh their definitions from
     the goatlib spec registry."""
     existing = {
         str(row.type): row
-        for row in (await session.execute(select(DatasetPackageType))).scalars()
+        for row in (await session.execute(select(BundleType))).scalars()
     }
     for spec in SPECS.values():
         payload = {
@@ -33,7 +33,7 @@ async def seed_dataset_package_types(session: AsyncSession) -> None:
         }
         row = existing.get(spec.type.value)
         if row is None:
-            session.add(DatasetPackageType(**payload))
+            session.add(BundleType(**payload))
         else:
             row.name = payload["name"]
             row.description = payload["description"]
@@ -45,7 +45,7 @@ async def main() -> None:
     session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
     try:
         async with session_manager.session() as session:
-            await seed_dataset_package_types(session)
+            await seed_bundle_types(session)
     finally:
         await session_manager.close()
 

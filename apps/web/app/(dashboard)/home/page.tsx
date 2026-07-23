@@ -41,7 +41,7 @@ const Home = () => {
 
   useJobStatus(mutate, mutate);
 
-  // Layers and dataset packages come back merged + sorted from the datasets API.
+  // Layers and bundles come back merged + sorted from the datasets API.
   const dataTiles = (datasets?.items as Layer[]) ?? [];
 
   const { isOrgEditor } = useAuthZ();

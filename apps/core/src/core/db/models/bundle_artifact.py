@@ -1,13 +1,13 @@
 """
-Dataset Package Artifact Model
+Bundle Artifact Model
 """
 
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from goatlib.models.dataset_package import (
-    DatasetPackageArtifactKind,
-    DatasetPackageArtifactStatus,
+from goatlib.models.bundle import (
+    BundleArtifactKind,
+    BundleArtifactStatus,
 )
 from pydantic import field_serializer
 from sqlalchemy import ForeignKey, Text
@@ -19,22 +19,22 @@ from core.core.config import settings
 from core.db.models._base_class import DateTimeBase, serialize_str_enum
 
 if TYPE_CHECKING:
-    from .dataset_package import DatasetPackage
+    from .bundle import Bundle
 
 
-class DatasetPackageArtifact(DateTimeBase, table=True):
-    """A derived, regenerable artifact of a dataset package (e.g. the routable
+class BundleArtifact(DateTimeBase, table=True):
+    """A derived, regenerable artifact of a bundle (e.g. the routable
     graph ``.bin`` or a stop-to-street mapping).
 
     The artifact is not a layer — it is a build product stored in object storage
     (``s3_key``) and rebuilt on demand. At most one artifact per
-    ``(dataset_package_id, kind)``.
+    ``(bundle_id, kind)``.
     """
 
-    __tablename__ = "dataset_package_artifact"
+    __tablename__ = "bundle_artifact"
     __table_args__ = (
         UniqueConstraint(
-            "dataset_package_id", "kind", name="uq_dataset_package_artifact_kind"
+            "bundle_id", "kind", name="uq_bundle_artifact_kind"
         ),
         {"schema": settings.SCHEMA},
     )
@@ -49,23 +49,23 @@ class DatasetPackageArtifact(DateTimeBase, table=True):
         ),
         description="Artifact ID",
     )
-    dataset_package_id: UUID = Field(
+    bundle_id: UUID = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),
-            ForeignKey(f"{settings.SCHEMA}.dataset_package.id", ondelete="CASCADE"),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
-        description="Dataset package this artifact was derived from",
+        description="Bundle this artifact was derived from",
     )
-    kind: DatasetPackageArtifactKind = Field(
+    kind: BundleArtifactKind = Field(
         sa_column=Column(Text, nullable=False),
         description="Artifact kind (e.g. routing_graph, stop_to_street_mapping)",
     )
-    status: DatasetPackageArtifactStatus = Field(
-        default=DatasetPackageArtifactStatus.pending,
+    status: BundleArtifactStatus = Field(
+        default=BundleArtifactStatus.pending,
         sa_column=Column(
-            Text, nullable=False, server_default=DatasetPackageArtifactStatus.pending
+            Text, nullable=False, server_default=BundleArtifactStatus.pending
         ),
         description="Build state of the artifact",
     )
@@ -86,7 +86,7 @@ class DatasetPackageArtifact(DateTimeBase, table=True):
     )
 
     # Relationships
-    dataset_package: "DatasetPackage" = Relationship(back_populates="artifacts")
+    bundle: "Bundle" = Relationship(back_populates="artifacts")
 
     @field_serializer("kind", "status")
     def serialize_enums(self, value: object) -> "str | None":

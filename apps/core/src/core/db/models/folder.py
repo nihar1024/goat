@@ -11,7 +11,7 @@ from core.db.models.layer import Layer
 from core.db.models.user import User
 
 if TYPE_CHECKING:
-    from core.db.models.dataset_package import DatasetPackage
+    from core.db.models.bundle import Bundle
 
 
 class Folder(DateTimeBase, table=True):
@@ -47,7 +47,7 @@ class Folder(DateTimeBase, table=True):
         back_populates="folder",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
-    dataset_packages: List["DatasetPackage"] = Relationship(
+    bundles: List["Bundle"] = Relationship(
         back_populates="folder",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )

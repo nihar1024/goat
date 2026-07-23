@@ -9,8 +9,8 @@ from core.crud.crud_datasets import datasets as crud_datasets
 from core.db.session import AsyncSession
 from core.deps.auth import auth_z
 from core.endpoints.deps import get_db, get_user_id
+from core.schemas.bundle import DatasetContentTile
 from core.schemas.common import OrderEnum
-from core.schemas.dataset_package import DatasetContentTile
 from core.schemas.datasets import DatasetImportRequest, PresignedPostResponse
 from core.schemas.error import HTTPErrorHandler
 from core.schemas.layer import ILayerGet
@@ -22,12 +22,12 @@ router = APIRouter()
 
 @router.post(
     "",
-    summary="List datasets — layers and dataset packages combined",
+    summary="List datasets — layers and bundles combined",
     description=(
         "Return the caller's datasets as one paginated, sorted result: layers "
-        "and dataset packages unified into a single content-tile shape "
-        "(discriminated by `content_type`). Member layers of a package are "
-        "hidden — the package is surfaced instead."
+        "and bundles unified into a single content-tile shape "
+        "(discriminated by `content_type`). Member layers of a bundle are "
+        "hidden — the bundle is surfaced instead."
     ),
     response_model=Page[DatasetContentTile],
     response_model_exclude_none=True,
@@ -50,7 +50,7 @@ async def read_datasets(
     ),
     order: OrderEnum = Query("descendent", description="ascendent or descendent"),
 ) -> Page:
-    """List layers and dataset packages merged into one paginated tile result."""
+    """List layers and bundles merged into one paginated tile result."""
     with HTTPErrorHandler():
         if team_id is not None and organization_id is not None:
             raise ValueError("Only one of team_id and organization_id can be set.")

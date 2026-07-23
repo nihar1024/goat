@@ -91,7 +91,7 @@ const Datasets = () => {
     datasets,
     isLoading: isDatasetLoading,
     isError: _isDatasetError,
-    // Layers and dataset packages, merged + sorted + paginated by the backend.
+    // Layers and bundles, merged + sorted + paginated by the backend.
   } = useDatasets(queryParams, effectiveDatasetSchema);
 
   useJobStatus(mutate, mutate);

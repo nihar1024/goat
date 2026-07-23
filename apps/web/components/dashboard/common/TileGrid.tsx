@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
-import { isDatasetPackageTile } from "@/lib/api/dataset-packages";
+import { isBundleTile } from "@/lib/api/bundles";
 import type { Layer } from "@/lib/validations/layer";
 import type { Folder } from "@/lib/validations/folder";
 import type { Project } from "@/lib/validations/project";
@@ -154,8 +154,8 @@ const TileGrid = (props: TileGridProps) => {
               <Grid
                 item
                 onClick={() => {
-                  // Dataset packages are shown as tiles but have no detail page.
-                  if (props.onClick && !isDatasetPackageTile(item)) {
+                  // Bundles are shown as tiles but have no detail page.
+                  if (props.onClick && !isBundleTile(item)) {
                     props.onClick(item);
                   }
                 }}

@@ -103,9 +103,9 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
     return datasetSchema;
   }, [datasetSchema, queryParams.team_id, queryParams.organization_id, homeFolder]);
 
-  // Layers + dataset packages from the unified datasets API (same source as the
-  // main pages). Package tiles are shown but not selectable as a project layer —
-  // TileGrid skips onClick for them (isDatasetPackageTile guard).
+  // Layers + bundles from the unified datasets API (same source as the
+  // main pages). Bundle tiles are shown but not selectable as a project layer —
+  // TileGrid skips onClick for them (isBundleTile guard).
   const {
     datasets,
     isLoading: isDatasetLoading,

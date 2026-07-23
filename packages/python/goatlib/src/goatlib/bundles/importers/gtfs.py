@@ -1,4 +1,4 @@
-"""GTFS importer: a gtfs.zip → member layers for a ``pt_network_gtfs`` package.
+"""GTFS importer: a gtfs.zip → member layers for a ``pt_network_gtfs`` bundle.
 
 Role → file and per-role column requirements are GTFS-specific and live here;
 which roles are *required* comes from the spec. Geometry roles (stops, shapes)
@@ -16,13 +16,13 @@ from typing import Dict, List, Optional, Set
 
 import duckdb
 
-from goatlib.dataset_packages.importers.base import (
-    DatasetPackageImporter,
+from goatlib.bundles.importers.base import (
+    BundleImporter,
     ExtractedLayer,
     ValidationResult,
     register_importer,
 )
-from goatlib.models.dataset_package import DatasetPackageTypeName
+from goatlib.models.bundle import BundleTypeName
 
 # role -> GTFS file
 _GTFS_FILE: Dict[str, str] = {
@@ -47,8 +47,8 @@ _REQUIRED_COLUMNS: Dict[str, Set[str]] = {
 }
 
 
-class GtfsImporter(DatasetPackageImporter):
-    package_type = DatasetPackageTypeName.pt_network_gtfs
+class GtfsImporter(BundleImporter):
+    bundle_type = BundleTypeName.pt_network_gtfs
 
     # -- validation --------------------------------------------------------
 

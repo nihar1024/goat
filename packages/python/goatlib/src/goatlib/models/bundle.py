@@ -25,8 +25,10 @@ class BundleTypeName(str, Enum):
 class BundleArtifactKind(str, Enum):
     """Derived artifacts a bundle can produce (e.g. a routable graph)."""
 
-    routing_graph = "routing_graph"
-    stop_to_street_mapping = "stop_to_street_mapping"
+    pt_network_graph = "pt_network_graph"
+    pt_network_linkage = "pt_network_linkage"
+    # Produced by street_network bundles (builder added down the line).
+    street_network_graph = "street_network_graph"
 
 
 class BundleArtifactStatus(str, Enum):
@@ -154,7 +156,7 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 description="Network nodes connecting the edges.",
             ),
         ),
-        artifacts=(BundleArtifactKind.routing_graph,),
+        artifacts=(BundleArtifactKind.street_network_graph,),
     ),
     BundleTypeName.pt_network_gtfs: BundleTypeSpec(
         type=BundleTypeName.pt_network_gtfs,
@@ -175,8 +177,8 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
             RoleSpec(key="shapes", label="Shapes", geometry="line"),
         ),
         artifacts=(
-            BundleArtifactKind.routing_graph,
-            BundleArtifactKind.stop_to_street_mapping,
+            BundleArtifactKind.pt_network_graph,
+            BundleArtifactKind.pt_network_linkage,
         ),
         dependencies=(
             DependencySpec(

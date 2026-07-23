@@ -60,7 +60,7 @@ class BundleArtifact(DateTimeBase, table=True):
     )
     kind: BundleArtifactKind = Field(
         sa_column=Column(Text, nullable=False),
-        description="Artifact kind (e.g. routing_graph, stop_to_street_mapping)",
+        description="Artifact kind (e.g. pt_network_graph, pt_network_linkage)",
     )
     status: BundleArtifactStatus = Field(
         default=BundleArtifactStatus.pending,

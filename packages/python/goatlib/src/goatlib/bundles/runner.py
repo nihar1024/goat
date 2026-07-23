@@ -18,12 +18,17 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
+from goatlib.bundles.artifacts import (
+    ArtifactBuilderUnavailableError,
+    get_artifact_builder,
+)
 from goatlib.bundles.importers import get_importer
 from goatlib.bundles.importers.base import ValidationResult
 from goatlib.io.converter import IOConverter
 from goatlib.models.bundle import (
     BundleStatus,
     BundleTypeName,
+    get_spec,
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
@@ -224,6 +229,68 @@ class BundleImportRunner(BaseToolRunner):
             len(imported),
         )
 
+    async def _build_artifacts(
+        self,
+        db: ToolDatabaseService,
+        *,
+        bundle_id: str,
+        bundle_type: "BundleTypeName | str",
+        source_path: str,
+        user_id: str,
+    ) -> None:
+        """Build and store the bundle type's derived artifacts (per spec).
+
+        Each artifact is written to a temp file, uploaded to S3, and recorded as
+        a ``bundle_artifact`` row (building → ready). A build failure propagates
+        so the caller marks the bundle failed; a missing toolchain is skipped
+        with a warning (the import still completes)."""
+        assert self.settings is not None
+        spec = get_spec(bundle_type)
+        builder = get_artifact_builder(bundle_type)
+        if not spec.artifacts or builder is None:
+            return
+
+        with tempfile.TemporaryDirectory() as workdir:
+            try:
+                built = builder.build(source_path=source_path, workdir=workdir)
+            except ArtifactBuilderUnavailableError as e:
+                logger.warning(
+                    "Skipping artifact build for bundle %s: %s", bundle_id, e
+                )
+                return
+
+            for art in built:
+                kind_value = getattr(art.kind, "value", art.kind)
+                artifact_id = await db.create_artifact(
+                    bundle_id=bundle_id, kind=kind_value, status="building"
+                )
+                try:
+                    s3_key = (
+                        f"users/{user_id}/bundles/{bundle_id}"
+                        f"/artifacts/{kind_value}.bin"
+                    )
+                    self.settings.get_s3_client().upload_file(
+                        art.local_path, self.settings.s3_bucket_name, s3_key
+                    )
+                    await db.update_artifact_status(
+                        artifact_id=artifact_id,
+                        status="ready",
+                        s3_key=s3_key,
+                        size=art.size,
+                    )
+                    logger.info(
+                        "Artifact %s for bundle %s stored at %s (%d bytes)",
+                        kind_value,
+                        bundle_id,
+                        s3_key,
+                        art.size,
+                    )
+                except Exception:
+                    await db.update_artifact_status(
+                        artifact_id=artifact_id, status="failed"
+                    )
+                    raise
+
     async def run_import(
         self,
         *,
@@ -272,6 +339,13 @@ class BundleImportRunner(BaseToolRunner):
                 folder_id=folder_id,
                 bundle_id=bundle_id,
             )
+            await self._build_artifacts(
+                db,
+                bundle_id=bundle_id,
+                bundle_type=bundle_type,
+                source_path=source_path,
+                user_id=user_id,
+            )
             if project_id:
                 await self._add_bundle_to_project(
                     db, project_id=project_id, bundle_id=bundle_id, imported=imported
@@ -317,6 +391,15 @@ class BundleImportRunner(BaseToolRunner):
                     user_id=user_id,
                     folder_id=folder_id,
                     bundle_id=bundle_id,
+                )
+                # Artifacts gate readiness: the bundle stays "processing" until
+                # its derived artifacts (e.g. the routing .bin) are built.
+                await self._build_artifacts(
+                    db,
+                    bundle_id=bundle_id,
+                    bundle_type=bundle_type,
+                    source_path=source_path,
+                    user_id=user_id,
                 )
             except Exception:
                 await db.update_package_status(

@@ -318,6 +318,59 @@ class ToolDatabaseService:
         )
         logger.info(f"Bundle {bundle_id} status -> {status_value}")
 
+    async def create_artifact(
+        self: Self,
+        bundle_id: str,
+        kind: str,
+        status: str = "building",
+        job_id: str | None = None,
+    ) -> str:
+        """Create a bundle_artifact row (one per (bundle_id, kind)). Returns id."""
+        kind_value = getattr(kind, "value", kind)
+        status_value = getattr(status, "value", status)
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO {self.schema}.bundle_artifact (
+                bundle_id, kind, status, job_id, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            RETURNING id
+            """,
+            uuid_module.UUID(bundle_id),
+            kind_value,
+            status_value,
+            uuid_module.UUID(job_id) if job_id else None,
+        )
+        logger.info(
+            f"Created artifact {row['id']} ({kind_value}) for bundle {bundle_id}"
+        )
+        return str(row["id"])
+
+    async def update_artifact_status(
+        self: Self,
+        artifact_id: str,
+        status: str,
+        s3_key: str | None = None,
+        size: int | None = None,
+    ) -> None:
+        """Update an artifact's build status and (on success) its stored blob."""
+        status_value = getattr(status, "value", status)
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle_artifact
+            SET status = $2,
+                s3_key = COALESCE($3, s3_key),
+                size = COALESCE($4, size),
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(artifact_id),
+            status_value,
+            s3_key,
+            size,
+        )
+        logger.info(f"Artifact {artifact_id} status -> {status_value}")
+
     async def add_layer_to_package(
         self: Self,
         bundle_id: str,

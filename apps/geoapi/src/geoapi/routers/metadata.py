@@ -72,6 +72,11 @@ def _apply_field_config_to_properties(
         prop["kind"] = entry.get("kind") or _kind_from_json_type(json_type, json_format)
         prop["is_computed"] = entry.get("is_computed", False)
         prop["display_config"] = entry.get("display_config", {})
+        if entry.get("kind") == "formula":
+            # The expression (for the editor) and the result kind (drives
+            # value formatting and formatting options in the frontend).
+            prop["formula"] = entry.get("formula")
+            prop["output_kind"] = entry.get("output_kind", "string")
 
 
 # OGC conformance classes

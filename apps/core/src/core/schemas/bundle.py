@@ -76,11 +76,14 @@ class BundleRead(BundleBase, ThumbnailUrlMixin):
     user_id: UUID = Field(..., description="Bundle owner ID")
     folder_id: UUID = Field(..., description="Folder the bundle lives in")
     status: str = Field("ready", description="Processing lifecycle status")
-    # Bundles have no thumbnail of their own yet; the mixin falls back to the
-    # standard dataset image (same logic as layers). validate_default lets the
-    # mixin's before-validator run even when no value is supplied.
+    # The mixin turns the stored value into a presigned URL and falls back to the
+    # standard dataset image when unset (same logic as layers). validate_default
+    # lets the mixin's before-validator run even when no value is supplied.
     thumbnail_url: Optional[str] = Field(
         None, description="Thumbnail URL", validate_default=True
+    )
+    records: Dict[str, Any] | None = Field(
+        None, description="Structured records associated with the bundle"
     )
     owned_by: Dict[str, Any] | None = Field(
         None, description="Owner info ({id, firstname, lastname, avatar}) for tiles"
@@ -122,6 +125,10 @@ class BundleImportRequest(BaseModel):
     street_network_bundle_id: UUID | None = Field(
         None,
         description="Street network bundle to link as a dependency (PT networks)",
+    )
+    project_id: UUID | None = Field(
+        None,
+        description="If uploading from within a project, add the bundle to it",
     )
 
 

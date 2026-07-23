@@ -14,6 +14,8 @@ export interface BundleImportRequest {
   description?: string;
   /** Street network bundle to link as a dependency (PT networks). */
   street_network_bundle_id?: string;
+  /** If uploading from within a project, add the bundle to it once imported. */
+  project_id?: string;
 }
 
 export interface BundleRead {

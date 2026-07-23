@@ -424,6 +424,10 @@ class ILayerProjectGroupCreate(BaseModel):
     name: str
     properties: dict[str, Any] | None = None
     parent_id: Optional[int] = None
+    bundle_id: Optional[UUID4] = Field(
+        None,
+        description="Set when the group holds a bundle's layers (locked membership)",
+    )
 
 
 class ILayerProjectGroupUpdate(BaseModel):

@@ -244,6 +244,8 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
           folder_id: selectedFolder?.id as string,
           name: values.name,
           description: values.description || undefined,
+          // Uploading from within a project → add the bundle to it once imported.
+          ...(projectId && { project_id: projectId }),
         });
         jobId = response.job_id;
       } else {

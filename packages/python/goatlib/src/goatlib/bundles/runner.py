@@ -27,7 +27,8 @@ from goatlib.models.bundle import (
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
-from goatlib.tools.db import ToolDatabaseService
+from goatlib.tools.db import ToolDatabaseService, normalize_geometry_type
+from goatlib.tools.style import get_default_style
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,10 @@ class BundleImportRunner(BaseToolRunner):
         converter = IOConverter()
         imported: List[ImportedLayer] = []
         created_layer_ids: List[str] = []
+        # Prefix member-layer names with the bundle name (e.g. "gtfs_fr Stops") so
+        # they read cleanly and stay unique across bundles whose members share
+        # standard names (stops, calendar, …).
+        bundle_name = await db.get_bundle_name(bundle_id)
         with tempfile.TemporaryDirectory() as workdir:
             layers = importer.extract_layers(source_path, workdir)
             try:
@@ -138,11 +143,16 @@ class BundleImportRunner(BaseToolRunner):
                         user_id=user_id, layer_id=layer_id, parquet_path=parquet_path
                     )
 
+                    layer_name = (
+                        f"{bundle_name} {extracted.name}"
+                        if bundle_name
+                        else extracted.name
+                    )
                     await db.create_layer(
                         layer_id=layer_id,
                         user_id=user_id,
                         folder_id=folder_id,
-                        name=extracted.name,
+                        name=layer_name,
                         layer_type=extracted.layer_type,
                         feature_layer_type=(
                             "standard" if extracted.layer_type == "feature" else None
@@ -160,7 +170,7 @@ class BundleImportRunner(BaseToolRunner):
                         ImportedLayer(
                             role=extracted.role,
                             layer_id=layer_id,
-                            name=extracted.name,
+                            name=layer_name,
                             layer_type=extracted.layer_type,
                             geometry_type=info.get("geometry_type"),
                             feature_count=info.get("feature_count", 0),
@@ -174,6 +184,46 @@ class BundleImportRunner(BaseToolRunner):
                 raise
         return imported
 
+    async def _add_bundle_to_project(
+        self,
+        db: ToolDatabaseService,
+        *,
+        project_id: str,
+        bundle_id: str,
+        imported: List[ImportedLayer],
+    ) -> None:
+        """Place the freshly-imported member layers into a locked bundle-backed
+        group in the given project (the upload-from-within-a-project flow).
+
+        Each project layer gets the same default style the member layer was
+        created with, so it matches adding the bundle to a project manually."""
+        bundle_name = await db.get_bundle_name(bundle_id) or "Bundle"
+        group_id = await db.create_bundle_project_group(
+            project_id=project_id, bundle_id=bundle_id, name=bundle_name
+        )
+        try:
+            for layer in imported:
+                geom = normalize_geometry_type(layer.geometry_type)
+                properties = get_default_style(geom) if geom else None
+                await db.add_to_project(
+                    layer_id=layer.layer_id,
+                    project_id=project_id,
+                    name=layer.name,
+                    properties=properties,
+                    group_id=group_id,
+                )
+        except Exception:
+            # Roll back the partially-populated group (cascades its links) so a
+            # failure never leaves a half-filled locked bundle group behind.
+            await db.delete_layer_project_group(group_id)
+            raise
+        logger.info(
+            "Added bundle %s to project %s (%d member layers)",
+            bundle_id,
+            project_id,
+            len(imported),
+        )
+
     async def run_import(
         self,
         *,
@@ -185,9 +235,13 @@ class BundleImportRunner(BaseToolRunner):
         description: Optional[str] = None,
         properties: Optional[Dict[str, Any]] = None,
         bundle_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> BundleImportResult:
         """Full import: validate, create the bundle, and ingest its layers.
-        Used for direct/CLI runs where the bundle doesn't yet exist."""
+        Used for direct/CLI runs where the bundle doesn't yet exist.
+
+        When ``project_id`` is given, the imported bundle is also added to that
+        project as a locked bundle-backed group."""
         assert self.settings is not None, "init_from_env()/init() must run first"
 
         type_value = BundleTypeName(bundle_type).value
@@ -218,6 +272,10 @@ class BundleImportRunner(BaseToolRunner):
                 folder_id=folder_id,
                 bundle_id=bundle_id,
             )
+            if project_id:
+                await self._add_bundle_to_project(
+                    db, project_id=project_id, bundle_id=bundle_id, imported=imported
+                )
             return BundleImportResult(
                 bundle_id=bundle_id, bundle_type=type_value, layers=imported
             )
@@ -233,9 +291,13 @@ class BundleImportRunner(BaseToolRunner):
         bundle_type: "BundleTypeName | str",
         user_id: str,
         folder_id: str,
+        project_id: Optional[str] = None,
     ) -> BundleImportResult:
         """Ingest a validated source into an ALREADY-CREATED bundle (member
         layers), then flip the bundle's terminal status.
+
+        When ``project_id`` is given (upload from within a project), the bundle
+        is also added to that project as a locked bundle-backed group.
 
         This runs as the Windmill job kicked off by core's import endpoint (core
         created the shell as ``processing``). Because the job completes
@@ -264,6 +326,22 @@ class BundleImportRunner(BaseToolRunner):
             await db.update_package_status(
                 bundle_id=bundle_id, status=BundleStatus.ready
             )
+            # Add to the originating project (best-effort: the bundle is a valid,
+            # ready import even if the project association fails).
+            if project_id:
+                try:
+                    await self._add_bundle_to_project(
+                        db,
+                        project_id=project_id,
+                        bundle_id=bundle_id,
+                        imported=imported,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Bundle %s imported but could not be added to project %s",
+                        bundle_id,
+                        project_id,
+                    )
             return BundleImportResult(
                 bundle_id=bundle_id, bundle_type=type_value, layers=imported
             )

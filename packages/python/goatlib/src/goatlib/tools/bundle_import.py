@@ -31,6 +31,10 @@ class BundleImportParams(ToolInputBase):
     bundle_type: str = Field(
         ..., description="Bundle type (e.g. pt_network_gtfs)"
     )
+    project_id: str | None = Field(
+        None,
+        description="If set, add the imported bundle to this project as a group",
+    )
 
 
 def main(params: BundleImportParams) -> Dict[str, Any]:
@@ -54,6 +58,7 @@ def main(params: BundleImportParams) -> Dict[str, Any]:
                 bundle_type=params.bundle_type,
                 user_id=params.user_id,
                 folder_id=params.folder_id,
+                project_id=params.project_id,
             )
         )
         return result.model_dump()

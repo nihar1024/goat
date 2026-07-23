@@ -277,6 +277,8 @@ export const projectLayerGroupSchema = z.object({
   order: z.number().optional(),
   project_id: z.string().uuid(),
   parent_id: z.number().nullable().optional(),
+  // Set when this group holds a bundle's layers; its membership is locked.
+  bundle_id: z.string().uuid().nullable().optional(),
   children: z.array(z.union([z.lazy(() => projectLayerGroupSchema), projectLayerSchema])).optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
@@ -312,6 +314,8 @@ export const projectLayerTreeNodeSchema = z.object({
   parent_id: z.number().nullable().optional(),
   order: z.number(),
   extent: z.string().default(DEFAULT_WKT_EXTENT),
+  // Set on group nodes backed by a bundle (locked membership).
+  bundle_id: z.string().uuid().nullable().optional(),
   // Layer Specifics (Nullable for groups)
   layer_id: z.string().uuid().nullable().optional(),
   layer_type: z.string().nullable().optional(),

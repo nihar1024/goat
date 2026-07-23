@@ -36,6 +36,13 @@ export interface BaseTreeItem {
   isVisible?: boolean; // Add this property for visibility styling
   labelInfo?: string; // Add missing property
   canExpand?: boolean; // Add missing property
+  /** Item cannot be dragged (e.g. a bundle group's member layers). */
+  dragDisabled?: boolean;
+  /** Item cannot be a drop target (e.g. a bundle group and its members, so
+   *  layers can't be dropped into a locked bundle group). */
+  dropDisabled?: boolean;
+  /** Group that is backed by a bundle (locked membership). */
+  isBundleGroup?: boolean;
 }
 
 interface DraggableTreeViewProps<T extends BaseTreeItem> {
@@ -286,7 +293,10 @@ const RecursiveTreeItemInner = <T extends BaseTreeItem>({
 }) => {
   const children = allData.filter((i) => i.parentId === item.id);
   const isSelected = selectedIds.includes(item.id);
-  const isDragDisabled = !enableSelection || disableDrag || isOverlay;
+  const isDragDisabled = !enableSelection || disableDrag || isOverlay || !!item.dragDisabled;
+  // Locked bundle groups (and their members) reject drops so layers can't be
+  // moved into a bundle group.
+  const isDropDisabled = isDragDisabled || !!item.dropDisabled;
 
   const hasLegend = !!item.legendContent;
   const isExpanded = !item.collapsed;
@@ -303,7 +313,7 @@ const RecursiveTreeItemInner = <T extends BaseTreeItem>({
   });
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: item.id,
-    disabled: isDragDisabled,
+    disabled: isDropDisabled,
     data: item,
   });
 
@@ -582,8 +592,14 @@ export function DraggableTreeView<T extends BaseTreeItem>(props: DraggableTreeVi
     if (!enableSelection || disableDrag || !over) return;
     const activeIdStr = String(active.id);
     const overIdStr = String(over.id);
+    // Never move a layer into a bundle-backed group (locked membership).
+    const isBundleGroupId = (pid?: string | null) =>
+      items.some((i) => i.id === pid && i.isBundleGroup);
+    const activeItemEarly = items.find((i) => i.id === activeIdStr);
+    if (activeItemEarly?.dragDisabled) return;
     if (overIdStr.startsWith("placeholder-")) {
       const targetParentId = overIdStr.replace("placeholder-", "");
+      if (isBundleGroupId(targetParentId)) return;
       const oldIndex = items.findIndex((i) => i.id === activeIdStr);
       if (oldIndex > -1) {
         const newItems = [...items];
@@ -596,6 +612,9 @@ export function DraggableTreeView<T extends BaseTreeItem>(props: DraggableTreeVi
       const activeItem = items.find((i) => i.id === activeIdStr);
       const overItem = items.find((i) => i.id === overIdStr);
       if (activeItem && overItem) {
+        // Dropping would adopt the target's parent; block if that parent is a
+        // locked bundle group.
+        if (isBundleGroupId(overItem.parentId)) return;
         const oldIndex = items.findIndex((i) => i.id === activeIdStr);
         const targetIndex = items.findIndex((i) => i.id === overIdStr);
         const newItems = [...items];

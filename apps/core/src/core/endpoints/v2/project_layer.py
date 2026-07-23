@@ -1,19 +1,25 @@
 from typing import Any, Dict, List, Union
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import UUID4
 
 from core.crud.crud_layer_project import layer_project as crud_layer_project
+from core.crud.crud_layer_project_group import (
+    layer_project_group as crud_layer_project_group,
+)
 from core.crud.crud_project import project as crud_project
-from core.db.models._link_model import LayerProjectLink
+from core.db.models._link_model import LayerProjectGroup, LayerProjectLink
 from core.db.models.project import Project
 from core.db.session import AsyncSession
 from core.deps.auth import auth_z
-from core.endpoints.deps import get_db
+from core.endpoints.deps import get_db, get_user_id
+from core.endpoints.v2.bundle import authorize_bundle
 from core.schemas.project import (
     IFeatureStandardProjectRead,
     IFeatureStreetNetworkProjectRead,
     IFeatureToolProjectRead,
+    ILayerProjectGroupRead,
     IRasterProjectRead,
     ITableProjectRead,
 )
@@ -65,6 +71,36 @@ async def add_layers_to_project(
     assert isinstance(layers_project, List)
 
     return layers_project
+
+
+@router.post(
+    "/{project_id}/bundle/{bundle_id}",
+    summary="Add a bundle to a project",
+    response_model=ILayerProjectGroupRead,
+    status_code=201,
+    dependencies=[Depends(auth_z)],
+)
+async def add_bundle_to_project(
+    async_session: AsyncSession = Depends(get_db),
+    project_id: UUID4 = Path(..., description="The project to add the bundle to"),
+    bundle_id: UUID4 = Path(..., description="The bundle to add"),
+    user_id: UUID = Depends(get_user_id),
+) -> ILayerProjectGroupRead:
+    """Add a bundle to a project.
+
+    Creates a bundle-backed layer group and places all of the bundle's member
+    layers into it. The group's membership is locked (layers can't be dragged
+    in/out or removed individually); removing the whole group removes the bundle
+    from the project.
+    """
+    # Project write access is enforced by auth_z; the caller also needs at least
+    # read access to the bundle.
+    await authorize_bundle(async_session, bundle_id, user_id, "read")
+
+    group, _ = await crud_layer_project_group.add_bundle(
+        async_session, project_id=project_id, bundle_id=bundle_id
+    )
+    return group
 
 
 @router.get(
@@ -240,6 +276,21 @@ async def delete_layer_from_project(
         )
     assert type(layer_project) is LayerProjectLink
     assert isinstance(layer_project.id, int)
+
+    # Layers belonging to a bundle-backed group can't be removed individually —
+    # the bundle is the unit; remove the whole group instead.
+    if layer_project.layer_project_group_id is not None:
+        group = await async_session.get(
+            LayerProjectGroup, layer_project.layer_project_group_id
+        )
+        if group is not None and group.bundle_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Layers in a bundle can't be removed individually; "
+                    "remove the bundle from the project instead."
+                ),
+            )
 
     # Delete layer from project
     await crud_layer_project.delete(

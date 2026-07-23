@@ -123,6 +123,19 @@ class LayerProjectGroup(DateTimeBase, table=True):
         ),
     )
 
+    # Bundle-backed group: when set, this group holds a bundle's member layers and
+    # its membership is locked (layers cannot be dragged in/out or removed
+    # individually). CASCADE so deleting the bundle removes the group everywhere.
+    bundle_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
+            nullable=True,
+            index=True,
+        ),
+    )
+
     # Relationships
     project: "Project" = Relationship(back_populates="layer_groups")
 

@@ -27,6 +27,7 @@ from core.db.models.bundle import Bundle
 from core.db.models.folder import Folder
 from core.db.models.layer import Layer
 from core.db.models.organization import Organization
+from core.db.models.project import Project
 from core.db.models.role import Role
 from core.db.models.team import Team
 from core.db.models.user import User
@@ -255,6 +256,15 @@ async def import_bundle(
             status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
         )
 
+    # When adding to a project, the caller must own it (guards the project_id
+    # that the background job later uses to attach the bundle).
+    if payload.project_id is not None:
+        project = await async_session.get(Project, payload.project_id)
+        if project is None or project.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+            )
+
     # Synchronous validation: download and check the source against the spec.
     tmp_path = tempfile.NamedTemporaryFile(suffix=".zip", delete=False).name
     try:
@@ -323,6 +333,13 @@ async def import_bundle(
                 "s3_key": payload.s3_key,
                 "bundle_type": bundle_type.value,
                 "folder_id": str(payload.folder_id),
+                # When uploading from within a project, add the bundle to it once
+                # its member layers are ingested.
+                **(
+                    {"project_id": str(payload.project_id)}
+                    if payload.project_id
+                    else {}
+                ),
             },
             access_token=access_token,
         )

@@ -292,6 +292,14 @@ class ToolDatabaseService:
             f"type={type_value} in folder {folder_id}"
         )
 
+    async def get_bundle_name(self: Self, bundle_id: str) -> str | None:
+        """Return the bundle's display name (customer.bundle.name)."""
+        row = await self.pool.fetchrow(
+            f"SELECT name FROM {self.schema}.bundle WHERE id = $1",
+            uuid_module.UUID(bundle_id),
+        )
+        return row["name"] if row else None
+
     async def update_package_status(
         self: Self,
         bundle_id: str,
@@ -337,6 +345,7 @@ class ToolDatabaseService:
         name: str,
         properties: dict[str, Any] | None = None,
         other_properties: dict[str, Any] | None = None,
+        group_id: int | None = None,
     ) -> int:
         """Link a layer to a project.
 
@@ -349,6 +358,8 @@ class ToolDatabaseService:
             name: Display name for the layer in this project
             properties: Layer properties for this project context
             other_properties: Additional properties
+            group_id: Layer group to place the link in (e.g. a bundle-backed
+                group); None leaves the layer at the project root
 
         Returns:
             layer_project_id: The ID of the created link record
@@ -371,9 +382,9 @@ class ToolDatabaseService:
             f"""
             INSERT INTO {self.schema}.layer_project (
                 layer_id, project_id, name, "order", properties, other_properties,
-                created_at, updated_at
+                layer_project_group_id, created_at, updated_at
             )
-            VALUES ($1, $2, $3, 0, $4::jsonb, $5::jsonb, NOW(), NOW())
+            VALUES ($1, $2, $3, 0, $4::jsonb, $5::jsonb, $6, NOW(), NOW())
             RETURNING id
             """,
             record.layer_id,
@@ -381,6 +392,7 @@ class ToolDatabaseService:
             record.name,
             properties_json,
             other_props_json,
+            group_id,
         )
         layer_project_id = row["id"]
 
@@ -401,6 +413,45 @@ class ToolDatabaseService:
             f"(layer_project_id={layer_project_id})"
         )
         return layer_project_id
+
+    async def create_bundle_project_group(
+        self: Self, project_id: str, bundle_id: str, name: str
+    ) -> int:
+        """Create a bundle-backed layer group in a project (locked membership),
+        placed after existing groups. Returns the new group's id."""
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO {self.schema}.layer_project_group (
+                project_id, bundle_id, name, "order", created_at, updated_at
+            )
+            VALUES (
+                $1, $2, $3,
+                COALESCE(
+                    (SELECT MAX("order") + 1 FROM {self.schema}.layer_project_group
+                     WHERE project_id = $1),
+                    0
+                ),
+                NOW(), NOW()
+            )
+            RETURNING id
+            """,
+            uuid_module.UUID(project_id),
+            uuid_module.UUID(bundle_id),
+            name,
+        )
+        logger.info(
+            f"Created bundle group {row['id']} for bundle {bundle_id} "
+            f"in project {project_id}"
+        )
+        return row["id"]
+
+    async def delete_layer_project_group(self: Self, group_id: int) -> None:
+        """Delete a project layer group (cascades its layer_project links). Used
+        to roll back a partially-created bundle group on failure."""
+        await self.pool.execute(
+            f"DELETE FROM {self.schema}.layer_project_group WHERE id = $1",
+            int(group_id),
+        )
 
     async def delete_layer(self: Self, layer_id: str) -> None:
         """Delete a layer record from customer.layer.

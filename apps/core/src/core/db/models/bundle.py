@@ -80,6 +80,16 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
         sa_column=Column(JSONB, nullable=True),
         description="Dataset-level metadata conforming to the type's structure",
     )
+    thumbnail_url: str | None = Field(
+        default=settings.DEFAULT_LAYER_THUMBNAIL,
+        sa_column=Column(Text, nullable=True),
+        description="Bundle thumbnail URL",
+    )
+    records: Dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+        description="Structured records associated with the bundle",
+    )
     status: BundleStatus = Field(
         default=BundleStatus.ready,
         sa_column=Column(

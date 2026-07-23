@@ -271,11 +271,16 @@ async def get_queryables(
     if_none_match: str | None = Header(default=None, alias="if-none-match"),
 ) -> Queryables | Response:
     """Get queryable properties for a collection."""
+    # field_config lives in PG, not DuckLake: editing it (kind, formula,
+    # display_config) rotates neither the layer version nor the pinned
+    # snapshot, so it must be part of the fingerprint itself — otherwise
+    # a 304 would serve stale field metadata forever.
+    field_config = await _load_field_config(layer_info)
     etag = build_query_etag(
         layer_info.layer_id,
         get_layer_version(layer_info.layer_id),
         ducklake_pool.pinned_snapshot_id,
-        params={"kind": "queryables"},
+        params={"kind": "queryables", "field_config": field_config},
     )
     if cached := not_modified(if_none_match, etag):
         return cached
@@ -306,7 +311,6 @@ async def get_queryables(
             properties[col_name] = prop
 
     # Augment each property with field-config metadata (kind, is_computed, display_config).
-    field_config = await _load_field_config(layer_info)
     _apply_field_config_to_properties(properties, field_config)
 
     apply_cache_headers(response, etag)

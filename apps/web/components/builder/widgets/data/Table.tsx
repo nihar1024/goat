@@ -12,6 +12,7 @@ import { PROCESSES_API_BASE_URL } from "@/lib/api/processes";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import { formatNumber } from "@/lib/utils/format-number";
 import type { FieldKind } from "@/lib/validations/layer";
+import { resolveDisplayKind } from "@/lib/validations/layer";
 import type { DatasetCollectionItems, GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { AggregationStatsQueryParams, ProjectLayer } from "@/lib/validations/project";
 import { aggregationStatsQueryParams } from "@/lib/validations/project";
@@ -213,7 +214,7 @@ export const TableDataWidget = ({
   const fieldMetaByName = useMemo(() => {
     const meta: Record<string, { kind?: string; display_config?: Record<string, unknown> }> = {};
     for (const f of layerFields) {
-      meta[f.name] = { kind: f.kind, display_config: f.display_config };
+      meta[f.name] = { kind: resolveDisplayKind(f), display_config: f.display_config };
     }
     return meta;
   }, [layerFields]);

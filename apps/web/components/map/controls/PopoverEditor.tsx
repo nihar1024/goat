@@ -13,6 +13,7 @@ import useLayerFields from "@/hooks/map/CommonHooks";
 
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import type { FieldKind } from "@/lib/validations/layer";
+import { resolveDisplayKind } from "@/lib/validations/layer";
 
 import {
   BOOLEAN_SELECT_ITEMS,
@@ -136,7 +137,7 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                     if (raw !== undefined && raw !== null && raw !== "") {
                       displayValue = formatFieldValue(
                         raw,
-                        (field.kind as FieldKind) ?? "number",
+                        (resolveDisplayKind(field) as FieldKind) ?? "number",
                         field.display_config ?? {},
                       );
                     } else if (editMode === EditorModes.DRAW) {

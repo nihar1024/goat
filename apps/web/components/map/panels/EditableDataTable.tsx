@@ -58,6 +58,7 @@ import {
 import type { FieldKind } from "@/lib/validations/layer";
 import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
+import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
@@ -205,11 +206,19 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   // Per-column metadata from queryables: kind, is_computed, display_config
   // Keyed by field name for O(1) lookup during rendering
   const columnMeta = useMemo(() => {
-    const meta: Record<string, { kind: FieldKind; isComputed: boolean; displayConfig: Record<string, unknown> }> = {};
+    const meta: Record<
+      string,
+      { kind: FieldKind; iconKind: FieldKind; isComputed: boolean; displayConfig: Record<string, unknown> }
+    > = {};
     if (!queryables?.properties) return meta;
     for (const [fieldName, prop] of Object.entries(queryables.properties)) {
-      // Infer kind from JSON type if not explicitly provided by the backend
-      const rawKind = (prop as { kind?: string }).kind;
+      // Infer kind from JSON type if not explicitly provided by the backend.
+      // Formula columns format and edit as their inferred result kind.
+      const declaredKind = (prop as { kind?: string }).kind;
+      const rawKind =
+        declaredKind === "formula"
+          ? ((prop as { output_kind?: string }).output_kind ?? "string")
+          : declaredKind;
       const kind: FieldKind =
         rawKind === "area" ||
         rawKind === "length" ||
@@ -224,7 +233,10 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
               : "string";
       const isComputed = !!(prop as { is_computed?: boolean }).is_computed;
       const displayConfig = ((prop as { display_config?: Record<string, unknown> }).display_config) ?? {};
-      meta[fieldName] = { kind, isComputed, displayConfig };
+      // The header icon shows the declared kind (a formula column keeps the
+      // formula icon), while `kind` drives value formatting and editing.
+      const iconKind: FieldKind = declaredKind === "formula" ? "formula" : kind;
+      meta[fieldName] = { kind, iconKind, isComputed, displayConfig };
     }
     return meta;
   }, [queryables]);
@@ -922,6 +934,13 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                 backgroundColor: (theme) => emphasize(theme.palette.background.paper, 0.03),
                 zIndex: 3,
               },
+              // Corner cell (over the row numbers) must stick horizontally too
+              // and paint above the column headers scrolling underneath it.
+              // Declared here because this selector outranks the cell's own sx.
+              "& .MuiTableCell-stickyHeader:first-of-type": {
+                left: 0,
+                zIndex: 4,
+              },
             }}>
             <TableHead>
               <TableRow>
@@ -958,12 +977,10 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                         }),
                       }}
                       onClick={(e) => handleColumnMenuOpen(e, field.name)}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <FieldKindIcon kind={columnMeta[field.name]?.iconKind ?? fieldIndicatorKind(field)} />
                         <Typography variant="body2" fontWeight="bold" noWrap sx={{ flex: 1 }}>
                           {field.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
-                          {field.type}
                         </Typography>
                       </Box>
                       {/* Resize handle */}
@@ -1019,7 +1036,10 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                         position: "sticky",
                         left: 0,
                         zIndex: 1,
-                        backgroundColor: isSelected ? "action.selected" : "action.hover",
+                        // Must be opaque (action.selected/hover are translucent):
+                        // scrolled data cells slide underneath and would show through
+                        backgroundColor: (theme) =>
+                          emphasize(theme.palette.background.paper, isSelected ? 0.08 : 0.03),
                         textAlign: "center",
                         px: 0,
                       }}>

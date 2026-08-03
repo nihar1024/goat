@@ -24,6 +24,9 @@ on:
       processes:
         type: boolean
         default: false
+      catalog:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -174,3 +177,26 @@ jobs:
       - name: 🧪 pytest
         run: uv run --no-sync pytest tests/
         working-directory: apps/processes
+
+  catalog:
+    name: catalog (pytest)
+    if: ${{ inputs.catalog }}
+    runs-on: ubuntu-latest
+    # REQUIRED. Suite runs against generated parquet fixtures — no services
+    # needed; DuckDB extensions (spatial/fts) are fetched on first run and
+    # cached by setup-uv's cache thereafter.
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      - name: 📥 Checkout PR
+        uses: plan4better/.github/.github/actions/pr-git-checkout@main
+      - name: 🐍 Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.2"
+          enable-cache: true
+      - name: 🐍 Install dependencies
+        run: uv sync --frozen --all-packages --all-extras --no-install-package gdal
+      - name: 🧪 pytest
+        run: uv run --no-sync pytest tests/
+        working-directory: apps/catalog

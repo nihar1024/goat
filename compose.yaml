@@ -5,7 +5,7 @@
 #   - (none): Infrastructure only (db, minio, rabbitmq, redis, windmill-server,
 #             windmill-worker-default)
 #   - dev: + devcontainer, tools worker with local goatlib mount, print worker
-#   - prod: + core, geoapi, web, processes, tools/print workers, init scripts
+#   - prod: + core, geoapi, web, processes, catalog, tools/print workers, init scripts
 #
 # Usage:
 #   docker compose up                    # Infrastructure only
@@ -604,6 +604,27 @@ services:
         condition: service_completed_successfully
       windmill-server:
         condition: service_started
+
+  catalog:
+    profiles: [prod]
+    image: ghcr.io/plan4better/goat/catalog:latest
+    build:
+      context: .
+      dockerfile: apps/catalog/Dockerfile
+    container_name: goat-catalog
+    restart: always
+    networks:
+      - goat
+    ports:
+      - 8400:8400
+    environment:
+      AUTH: ${AUTH}
+      DATA_DIR: ${DATA_DIR:-/app/data}
+      CATALOG_ENABLE_MCP: ${CATALOG_ENABLE_MCP:-true}
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL:-https://auth.dev.plan4better.de}
+      REALM_NAME: ${REALM_NAME:-p4b}
+    volumes:
+      - goat-data:/app/data:ro
 
   web:
     profiles: [prod]

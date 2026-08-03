@@ -31,6 +31,7 @@ dev = [
 package = false
 
 [tool.uv.sources]
+catalog = { workspace = true }
 core = { workspace = true }
 geoapi = { workspace = true }
 goatlib = { workspace = true }
@@ -42,6 +43,7 @@ members = [
     "apps/geoapi",
     "apps/core",
     "apps/processes",
+    "apps/catalog",
     "packages/python/goatlib",
     "packages/python/goatobs",
 ]

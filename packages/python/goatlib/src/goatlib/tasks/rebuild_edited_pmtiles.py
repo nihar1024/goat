@@ -114,21 +114,27 @@ def main(params: RebuildEditedPMTilesParams = RebuildEditedPMTilesParams()) -> d
             rows = con.execute(query).fetchall()
 
         if not rows:
-            return {"status": "ok", "rebuilt": 0, "message": "No recently-edited layers found"}
+            return {
+                "status": "ok",
+                "rebuilt": 0,
+                "message": "No recently-edited layers found",
+            }
 
         # Filter to layers actually missing PMTiles
         candidates = []
         for layer_id, user_id, schema_name, table_name, geom_col, snapshot_id in rows:
             user_id_clean = user_id.replace("-", "")
             if not generator.pmtiles_exists(user_id_clean, layer_id):
-                candidates.append({
-                    "layer_id": layer_id,
-                    "user_id": user_id_clean,
-                    "schema_name": schema_name,
-                    "table_name": table_name,
-                    "geometry_column": geom_col,
-                    "snapshot_id": snapshot_id,
-                })
+                candidates.append(
+                    {
+                        "layer_id": layer_id,
+                        "user_id": user_id_clean,
+                        "schema_name": schema_name,
+                        "table_name": table_name,
+                        "geometry_column": geom_col,
+                        "snapshot_id": snapshot_id,
+                    }
+                )
 
         if not candidates:
             return {

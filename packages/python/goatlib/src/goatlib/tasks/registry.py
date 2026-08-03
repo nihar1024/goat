@@ -105,6 +105,33 @@ TASK_REGISTRY: tuple[TaskDefinition, ...] = (
         worker_tag="tools",
     ),
     TaskDefinition(
+        name="sync_catalog",
+        display_name="Sync Catalog",
+        description=(
+            "Build the apps/catalog mirror from the published items.parquet "
+            "+ collections.parquet on S3 into the shared data volume "
+            "(ETag-skip when unchanged)."
+        ),
+        module_path="goatlib.tasks.sync_catalog",
+        params_class_name="SyncCatalogParams",
+        windmill_path="f/goat/tasks/sync_catalog",
+        schedule="0 */5 * * * *",  # Every 5 minutes
+        worker_tag="tools",
+    ),
+    TaskDefinition(
+        name="sync_nuts",
+        display_name="Sync NUTS",
+        description=(
+            "Build nuts.parquet from the Eurostat GISCO release into the "
+            "shared data volume (apps/catalog's spatial filter). No schedule: "
+            "NUTS releases every three years, run it when one lands."
+        ),
+        module_path="goatlib.tasks.sync_nuts",
+        params_class_name="SyncNutsParams",
+        windmill_path="f/goat/tasks/sync_nuts",
+        worker_tag="tools",
+    ),
+    TaskDefinition(
         name="ducklake_compact",
         display_name="DuckLake Compaction",
         description=(

@@ -60,6 +60,7 @@
     "apps/geoapi/tests",
     "apps/processes/tests",
     "apps/core/tests",
+    "apps/catalog/tests",
   ],
   "python.testing.cwd": "${workspaceFolder}",
   // Vitest testing for web app

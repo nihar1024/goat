@@ -148,8 +148,14 @@ const CatalogDetailView = ({
           onBack={() =>
             // A member goes up to its bundle; anything else goes back to the list
             // it came from, filters and all.
+            //
+            // `replace`, not `push`: the member is *inside* the bundle, so going
+            // up should not deepen the history. Pushing left the bundle sitting on
+            // top of the member, and the bundle's own Back — a `router.back()`,
+            // which is what preserves the list's filters — returned to the member
+            // it had just come from instead of to the list.
             parentIsBundle && parent
-              ? router.push(`/catalog/${encodeURIComponent(parent.id)}`)
+              ? router.replace(`/catalog/${encodeURIComponent(parent.id)}`)
               : backToList()
           }
           backLabel={parentIsBundle ? (parent?.title || undefined) : undefined}

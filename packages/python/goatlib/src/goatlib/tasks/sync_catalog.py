@@ -92,7 +92,7 @@ REQUIRED_ITEM_COLUMNS: tuple[str, ...] = tuple(
 ) + ("id", "geometry", "member_count")
 REQUIRED_COLLECTION_COLUMNS: tuple[str, ...] = tuple(
     name for name, _type in GUARANTEED_COLLECTION_COLUMNS
-) + ("id", "geometry", "member_count", "goat:geometryType")
+) + ("id", "geometry", "member_count", "goat:geometryType", "thumbnail_item")
 
 #: The mirror is two files, mirroring how the catalog is published and how the
 #: service relates them: item queries never touch collection rows and vice

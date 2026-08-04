@@ -94,7 +94,11 @@ __all__ = [
 #: v5: `goat:geometryType` on a Collection — its layers' geometry type where
 #:     they agree on one, so a dataset card can show what shape the data is
 #:     without fetching its members.
-MIRROR_FORMAT_VERSION = 5
+#: v6: a Collection's temporal interval is its LAYERS' dates unless its own
+#:     `extent.temporal` states a closed one.
+#: v7: `thumbnail_item` — which layer's thumbnail stands for the dataset, so a
+#:     dataset card has a picture without fetching its members.
+MIRROR_FORMAT_VERSION = 7
 
 ITEMS_FILENAME = "items.parquet"
 COLLECTIONS_FILENAME = "collections.parquet"
@@ -676,12 +680,64 @@ def build_mirror(
             _opt(items, "goat:geometryType", 'i."goat:geometryType"'),
             "i",
         )
+        # A Collection publishes no thumbnail of its own -- 3,834 of them carry
+        # only the `collection-mirror` asset -- while 1,021 of the 10,793 layers
+        # do. So a dataset borrows one of its layers': `thumbnail_item` records
+        # which, and the API turns that into an asset href pointing at the layer
+        # that owns the object.
+        #
+        # `min` rather than "the first": a parquet has no row order, so anything
+        # else would let two builds of the same data disagree about which picture
+        # a card shows.
+        member_thumbnail = _probe(
+            con, items_path, _opt(items, "assets", "i.assets.thumbnail.href"), "i"
+        )
+        # A dataset's period: its own `extent.temporal` when that states a CLOSED
+        # interval, otherwise the envelope of its layers' dates.
+        #
+        # Both halves are needed, and which wins is decided by the shape of the
+        # published value rather than by the spec's hierarchy:
+        #
+        # * An open-ended extent -- `[start, null]` on 3,766 of 3,834 collections,
+        #   with the start in the harvest year on 799 -- is not a statement about
+        #   coverage. Trusting it made a single-layer dataset from 2001 announce
+        #   itself as "since 2001" and a 2021 dataset claim it had been collected
+        #   since 2026. Its layers' dates are the reference dates of the data
+        #   (1,554 distinct values from 1801 to 2026), so they answer instead.
+        # * A closed extent IS such a statement, and 44 of the 64 that exist are
+        #   wider than their layers' span: `Seismik NRW` covers 1935-2025 where its
+        #   one layer is dated 1935, and `HWRM-Karten 1. Zyklus Hamburg` 2013-2019
+        #   where its layer is dated 2013. Reading the layers there would throw the
+        #   dataset's actual coverage away.
+        #
+        # Same values the filter uses, so a card cannot show one period while
+        # `?datetime=` matches another.
+        member_start, member_end = (
+            _probe(con, items_path, expr, "i")
+            for expr in _temporal_interval(items, "i")
+        )
         counted_collections = f"""
             SELECT
-                c.*,
+                c.* EXCLUDE (datetime, datetime_start, datetime_end),
                 {_envelope_columns("c.geometry")},
                 coalesce(m.member_count, 0)                     AS member_count,
-                m.member_geometry_type                          AS "goat:geometryType"
+                m.member_geometry_type                          AS "goat:geometryType",
+                m.thumbnail_item                                AS thumbnail_item,
+                CASE
+                    WHEN c.datetime_start IS NOT NULL AND c.datetime_end IS NOT NULL
+                    THEN c.datetime_start
+                    ELSE coalesce(m.member_start, c.datetime_start)
+                END                                             AS datetime_start,
+                CASE
+                    WHEN c.datetime_start IS NOT NULL AND c.datetime_end IS NOT NULL
+                    THEN c.datetime_end
+                    ELSE coalesce(m.member_end, c.datetime_end)
+                END                                             AS datetime_end,
+                CASE
+                    WHEN c.datetime_start IS NOT NULL AND c.datetime_end IS NOT NULL
+                    THEN c.datetime_end
+                    ELSE coalesce(m.member_end, m.member_start, c.datetime_start)
+                END                                             AS datetime
             FROM ({collection_select}) c
             LEFT JOIN (
                 SELECT
@@ -691,9 +747,18 @@ def build_mirror(
                         WHEN count(DISTINCT geometry_type) = 1
                              AND count(geometry_type) = count(*)
                         THEN any_value(geometry_type)
-                    END AS member_geometry_type
+                    END AS member_geometry_type,
+                    min(member_start) AS member_start,
+                    max(member_end) AS member_end,
+                    min(thumbnail_id) AS thumbnail_item
                 FROM (
-                    SELECT i.collection, {member_geometry} AS geometry_type
+                    SELECT
+                        i.collection,
+                        {member_geometry} AS geometry_type,
+                        {member_start} AS member_start,
+                        {member_end} AS member_end,
+                        CASE WHEN {member_thumbnail} IS NOT NULL THEN i.id END
+                            AS thumbnail_id
                     FROM read_parquet('{items_path.as_posix()}') i
                 )
                 WHERE collection IS NOT NULL

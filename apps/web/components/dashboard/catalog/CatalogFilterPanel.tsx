@@ -417,9 +417,6 @@ const CatalogFilterPanel = ({
             floating label treatment, same clear affordance as every other field
             in the product. The catalog had grown its own. */}
         <Stack spacing={2} sx={{ px: 2 }}>
-          <Typography variant="caption" color="text.secondary">
-            {t("catalog_date_range_hint")}
-          </Typography>
           <TextFieldInput
             type="date"
             label={t("catalog_date_from")}

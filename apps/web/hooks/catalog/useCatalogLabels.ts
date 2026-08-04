@@ -30,6 +30,34 @@ export const useCatalogLabels = () => {
     [i18n, t]
   );
 
+  const year = (iso: string) => String(new Date(iso).getUTCFullYear());
+  const sameDay = (a: string, b: string) => a === b;
+  /**
+   * A value that is a year with a day bolted on: 1 January, midnight, UTC — which
+   * is how the harvester writes a year-precision date, on 4,689 of 10,793 layers.
+   *
+   * Tested in UTC even though the day is *rendered* in the reader's timezone.
+   * Each rule sits where its truth is: whether the stored value carries only a
+   * year is a fact about the value, and which day it falls on is a question for
+   * the reader's clock. Testing this locally would make the answer depend on the
+   * viewer — 2015-01-01T00:00:00Z is 01:00 in Berlin, and no longer midnight.
+   */
+  const yearOnly = (iso: string) => {
+    const at = new Date(iso);
+    return (
+      at.getUTCMonth() === 0 &&
+      at.getUTCDate() === 1 &&
+      at.getUTCHours() === 0 &&
+      at.getUTCMinutes() === 0
+    );
+  };
+  const exactDay = (iso: string, locale: string) =>
+    new Date(iso).toLocaleDateString(locale, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
   return useMemo(
     () => ({
       /**
@@ -102,27 +130,69 @@ export const useCatalogLabels = () => {
         iso ? new Date(iso).toLocaleDateString(i18n.language) : undefined,
 
       /**
-       * A period as one line: "12/03/2021", "2015", "2014 – 2021", "since 2020".
+       * A period as one line, for a card: "10 Jun 2001", "2001", "2014 – 2021".
        *
-       * Precision follows what the period actually pins down. A single day is a
-       * date. A span is years — "01/01/2014 – 31/12/2021" says "2014 – 2021"
-       * with four times the ink, and a span inside one year is that year rather
-       * than its first day, which would read as an instant it is not. An open
-       * bound is stated as open rather than dropped: "since 2020" and "2020"
-       * mean different things and the dataset published the difference.
+       * A real date is shown as a real date, in the reader's locale with the month
+       * spelled short — `10 Jun 2001` rather than `6/10/2001`, which reads as
+       * 6 October to half of Europe. Rendered in the reader's own timezone, which
+       * is what recovers the intended day: these values are local midnights
+       * published as UTC (`2001-06-10T22:00:00Z` is 11 June in Berlin).
+       *
+       * A value of 1 January at midnight is a year with a day bolted on -- 4,689
+       * of 10,793 layers are dated that way -- so it prints as its year. A span
+       * prints as its two years, since the days at either end of a multi-year
+       * period are noise.
+       *
+       * The open-ended forms remain for an Item that publishes `start_datetime`
+       * with no end. A *dataset* cannot reach them: its period is the envelope of
+       * its layers' dates (mirror v6), so it has two real bounds or none.
        */
       formatPeriod: (period?: CatalogPeriod) => {
         if (!period) return undefined;
         const { start, end } = period;
         if (!start && !end) return undefined;
-        const year = (iso: string) => String(new Date(iso).getUTCFullYear());
         if (start && end) {
-          if (start === end) return new Date(start).toLocaleDateString(i18n.language);
-          return year(start) === year(end) ? year(start) : `${year(start)} – ${year(end)}`;
+          if (year(start) !== year(end)) return `${year(start)} – ${year(end)}`;
+          if (!sameDay(start, end)) return year(start);
+          return yearOnly(start) ? year(start) : exactDay(start, i18n.language);
         }
         return start
           ? t("common:catalog_period_since", { year: year(start) })
           : t("common:catalog_period_until", { year: year(end as string) });
+      },
+
+      /**
+       * The same period for a detail sidebar, with the heading it deserves.
+       *
+       * The heading follows the **value**, not the container: a single date is a
+       * reference year (the app's own field name for it, `data_reference_year`),
+       * and a span is a period. Binding it to the layer count instead would
+       * mislabel both ends of the catalog -- 3,818 of 3,834 datasets have every
+       * layer on one date, bundles included, and 70 single layers carry a range
+       * of their own.
+       *
+       * A single value states the year here, not the day, because that is what
+       * the heading claims and what the source reliably knows. The card has the
+       * room to be more precise; a labelled row should not be more precise than
+       * its label.
+       */
+      periodField: (period?: CatalogPeriod) => {
+        if (!period) return undefined;
+        const { start, end } = period;
+        if (!start && !end) return undefined;
+        if (start && end && year(start) === year(end)) {
+          return {
+            labelKey: "common:metadata.headings.data_reference_year",
+            value: year(start),
+          };
+        }
+        const value =
+          start && end
+            ? `${year(start)} – ${year(end)}`
+            : start
+              ? t("common:catalog_period_since", { year: year(start) })
+              : t("common:catalog_period_until", { year: year(end as string) });
+        return { labelKey: "common:catalog_datetime", value };
       },
 
       formatCount: (count?: number | null) =>

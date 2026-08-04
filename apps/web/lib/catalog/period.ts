@@ -31,13 +31,17 @@ export const itemPeriod = (item: CatalogItem): CatalogPeriod | undefined => {
 };
 
 /**
- * When a dataset's data is from: its own `extent.temporal`, falling back to its
- * layers.
+ * When a dataset's data is from: the envelope of its layers' dates.
  *
- * The Collection's extent is the authority — it is the dataset's own statement,
- * and the only one available when the layers are not in hand. The fallback
- * covers a Collection that states nothing: every one of them did until
- * 2026-08-04 (`[[null, null]]` on all 3,834), and four still do.
+ * The served `extent.temporal` is already that envelope — the mirror derives it
+ * from the members and keeps the published extent only as a fallback (mirror v6),
+ * because a Collection's own extent is `[start, null]` on 3,766 of 3,834 rows
+ * with the start in the harvest year on 799 of them. Reading it directly made a
+ * single-layer dataset from 2001 render as "since 2001".
+ *
+ * `members` still matters where they are in hand and the row is not: a bundle
+ * page has the layers, and a period computed from them cannot disagree with the
+ * dates listed beneath it.
  */
 export const datasetPeriod = (
   collection: CatalogCollection | undefined,

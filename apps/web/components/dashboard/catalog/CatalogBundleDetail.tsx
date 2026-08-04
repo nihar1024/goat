@@ -66,7 +66,7 @@ const CatalogBundleDetail = ({
    * When the dataset's data is from: its own `extent.temporal` where it states
    * one, otherwise the span of its layers' dates.
    */
-  const dataDate = labels.formatPeriod(datasetPeriod(collection, members));
+  const dataDate = labels.periodField(datasetPeriod(collection, members));
   // `other` is STAC's "unknown", not a licence — see `licenseLabel`.
   const licenseLabel = labels.licenseLabel(collection.license);
   const allSaved = members.length > 0 && members.every((member) => starred[member.id]);
@@ -98,10 +98,10 @@ const CatalogBundleDetail = ({
     // does so on every row — so the extent wins here and the fallback to the
     // layers' own dates covers only a Collection that states nothing. Either way
     // a period renders as a period rather than as whichever endpoint came first.
-    {
+    !!dataDate && {
       icon: ICON_NAME.CALENDAR,
-      label: t("catalog_datetime"),
-      value: dataDate,
+      label: t(dataDate.labelKey),
+      value: dataDate.value,
     },
     {
       icon: ICON_NAME.CLOCK,

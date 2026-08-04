@@ -30,8 +30,14 @@ const period = (start?: string, end?: string) =>
   renderHook(() => useCatalogLabels()).result.current.formatPeriod({ start, end });
 
 describe("formatPeriod", () => {
-  it("shows one date for an instant", () => {
-    expect(period("2015-06-01T00:00:00Z", "2015-06-01T00:00:00Z")).toBe("01/06/2015");
+  it("spells the month for a real date, so 6/10 cannot read as 6 October", () => {
+    expect(period("2015-06-01T00:00:00Z", "2015-06-01T00:00:00Z")).toBe("1 Jun 2015");
+  });
+
+  it("shows the year alone when the value is only a year", () => {
+    // 4,689 of 10,793 layers are dated 1 January at midnight — a year with a day
+    // bolted on. Printing "1 Jan 2015" states a day the source never claimed.
+    expect(period("2015-01-01T00:00:00Z", "2015-01-01T00:00:00Z")).toBe("2015");
   });
 
   it("shows a span inside one year as the year, not as its first day", () => {
@@ -52,5 +58,39 @@ describe("formatPeriod", () => {
     expect(
       renderHook(() => useCatalogLabels()).result.current.formatPeriod(undefined)
     ).toBeUndefined();
+  });
+});
+
+describe("periodField", () => {
+  const field = (start?: string, end?: string) =>
+    renderHook(() => useCatalogLabels()).result.current.periodField({ start, end });
+
+  it("calls a single date a reference year, and states the year", () => {
+    // The heading claims a year, so the value is a year — a labelled row should
+    // not be more precise than its label. The card has room to show the day.
+    expect(field("2015-06-01T00:00:00Z", "2015-06-01T00:00:00Z")).toEqual({
+      labelKey: "common:metadata.headings.data_reference_year",
+      value: "2015",
+    });
+  });
+
+  it("calls a span a period", () => {
+    expect(field("2014-01-01T00:00:00Z", "2021-12-31T00:00:00Z")).toEqual({
+      labelKey: "common:catalog_datetime",
+      value: "2014 – 2021",
+    });
+  });
+
+  it("follows the value, not the layer count", () => {
+    // 3,818 of 3,834 datasets have every layer on one date, bundles included, and
+    // 70 single layers carry a range — so binding the heading to the member count
+    // would mislabel both ends of the catalog.
+    expect(field("2019-01-01T00:00:00Z", "2019-01-01T00:00:00Z")?.labelKey).toBe(
+      "common:metadata.headings.data_reference_year"
+    );
+  });
+
+  it("has nothing to say without a period", () => {
+    expect(field(undefined, undefined)).toBeUndefined();
   });
 });

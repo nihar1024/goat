@@ -152,16 +152,12 @@ def _write_parquet(
         for col in columns:
             if col == "geometry":
                 select_parts.append("ST_Point(i, i) AS geometry")
-            elif col == "group_geometry":
-                select_parts.append("ST_Point(i, i) AS group_geometry")
             elif col in {"datetime", "created", "updated"}:
                 select_parts.append(f"TIMESTAMPTZ '2026-01-01' AS {col}")
             elif col.startswith(("bbox_", "group_bbox_")):
                 select_parts.append(f"1.0 AS {col}")
             elif col == "member_count":
                 select_parts.append("1 AS member_count")
-            elif col == "is_representative":
-                select_parts.append("TRUE AS is_representative")
             else:
                 quoted = f'"{col}"'
                 select_parts.append(f"'{col}_' || i AS {quoted}")

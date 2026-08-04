@@ -69,6 +69,7 @@ from goatlib.tasks.catalog_mirror import (
     GUARANTEED_COLLECTION_COLUMNS,
     GUARANTEED_ITEM_COLUMNS,
     ITEMS_FILENAME,
+    MIRROR_FORMAT_VERSION,
     build_mirror,
 )
 from goatlib.tools.base import ToolSettings
@@ -88,10 +89,10 @@ __all__ = [
 # below is the runtime check that a build really emitted them.
 REQUIRED_ITEM_COLUMNS: tuple[str, ...] = tuple(
     name for name, _type in GUARANTEED_ITEM_COLUMNS
-) + ("id", "geometry", "member_count", "is_representative", "group_geometry")
+) + ("id", "geometry", "member_count")
 REQUIRED_COLLECTION_COLUMNS: tuple[str, ...] = tuple(
     name for name, _type in GUARANTEED_COLLECTION_COLUMNS
-) + ("id", "geometry", "member_count")
+) + ("id", "geometry", "member_count", "goat:geometryType")
 
 #: The mirror is two files, mirroring how the catalog is published and how the
 #: service relates them: item queries never touch collection rows and vice
@@ -270,8 +271,15 @@ def _composite_version(etags: dict[str, str]) -> str:
     file's ETag. Hashed rather than concatenated to keep it the same shape as
     the single ETag it replaces, which is what `apps/catalog` stamps as its
     ETag seed.
+
+    ``MIRROR_FORMAT_VERSION`` is in the hash because the inputs are not the only
+    thing that decides the output: a change to the converter produces a different
+    mirror from identical files, and without it every deployment would keep
+    serving the old one -- the ETags it compares would not have moved. Bumping
+    that constant forces exactly one rebuild.
     """
     joined = "\n".join(f"{name}:{etags[name]}" for name in sorted(etags))
+    joined = f"v{MIRROR_FORMAT_VERSION}\n{joined}"
     return hashlib.sha256(joined.encode()).hexdigest()[:32]
 
 

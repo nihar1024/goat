@@ -220,10 +220,10 @@ class TestDerivedColumns:
     def test_bundle_membership_is_precomputed(
         self, published: tuple[Path, Path], tmp_path: Path
     ) -> None:
-        """Exactly one representative per bundle, with the group's size on it.
+        """Every member row carries the real size of its dataset.
 
-        This is what lets grouped search be a filter instead of a GROUP BY over
-        every item row.
+        This is what lets a card state "4 layers" without a GROUP BY over every
+        item row per request.
         """
         out = tmp_path / "catalog.parquet"
         out_c = tmp_path / "collections_mirror.parquet"
@@ -233,15 +233,13 @@ class TestDerivedColumns:
         groups = con.execute(
             f"""SELECT coalesce(collection, id) AS grp,
                        count(*) AS members,
-                       count(*) FILTER (WHERE is_representative) AS reps,
                        max(member_count) AS stored
                 FROM read_parquet('{out.as_posix()}')
                 GROUP BY grp"""
         ).fetchall()
         con.close()
         assert groups
-        for _grp, members, reps, stored in groups:
-            assert reps == 1, "exactly one representative per bundle"
+        for _grp, members, stored in groups:
             assert stored == members, "member_count must equal the real group size"
 
 
@@ -338,3 +336,107 @@ def test_mirror_emits_every_column_the_consumer_requires(
     assert not missing, f"build_mirror does not emit: {sorted(missing)}"
     # Extra columns are expected: the mirror passes every published column
     # through, so the contract is a floor rather than the exact schema.
+
+
+@pytest.fixture
+def dataset_level_text(tmp_path: Path) -> tuple[Path, Path]:
+    """The live catalog's real shape: prose on the Collection, not on the items.
+
+    Measured on the harvested mirror: 0 of 10,793 items carry a description and 0
+    carry keywords, while 3,834 of 3,834 collections carry a description and 96%
+    carry keywords. The published item is a *layer* of a dataset and the
+    description belongs to the dataset.
+    """
+    con = duckdb.connect()
+    con.execute("LOAD spatial;")
+    con.execute(
+        """
+        CREATE TABLE items AS
+        SELECT * FROM (VALUES
+            ('i-1', 'c-1', 'Bodenbedeckung Stichtag 2021', NULL, NULL,
+             ST_GeomFromText('POINT(9 48)'), '1.0.0'),
+            ('i-own', 'c-1', 'Layer with its own words', 'Layer prose.',
+             ['layerword'], ST_GeomFromText('POINT(9 48)'), '1.0.0')
+        ) AS t(id, collection, title, description, keywords, geometry, stac_version)
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE collections AS
+        SELECT * FROM (VALUES
+            ('c-1', 'Digitales Landschaftsmodell',
+             'Umfasst die Flächen von Flüssen über 5 m Breite.',
+             ['Gewässer', 'Landschaftsmodell'])
+        ) AS t(id, title, description, keywords)
+        """
+    )
+    items_path = tmp_path / "items.parquet"
+    collections_path = tmp_path / "collections.parquet"
+    con.execute(f"COPY items TO '{items_path.as_posix()}' (FORMAT PARQUET)")
+    con.execute(f"COPY collections TO '{collections_path.as_posix()}' (FORMAT PARQUET)")
+    con.close()
+    return items_path, collections_path
+
+
+class TestDatasetLevelTextIsInherited:
+    """An item borrows its Collection's description and keywords.
+
+    Without this the catalog looks empty and searches badly: every result card
+    has no description to show, and ``q`` matches titles only -- the item
+    haystack measured 44 characters against the collection's 655, so ~93% of the
+    catalog's searchable prose was unreachable.
+    """
+
+    def test_item_without_description_inherits_the_collections(
+        self, dataset_level_text: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        out = tmp_path / "catalog.parquet"
+        out_c = tmp_path / "collections_mirror.parquet"
+        build_mirror(*dataset_level_text, out, out_c)
+        con = duckdb.connect()
+        con.execute("LOAD spatial;")
+        inherited, keywords = _row(
+            con,
+            f"SELECT description, keywords FROM read_parquet('{out.as_posix()}') "
+            f"WHERE id = 'i-1'",
+        )
+        con.close()
+        assert inherited == "Umfasst die Flächen von Flüssen über 5 m Breite."
+        assert list(keywords) == ["Gewässer", "Landschaftsmodell"]
+
+    def test_an_items_own_description_wins(
+        self, dataset_level_text: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """Inheritance is a fallback, not an override."""
+        out = tmp_path / "catalog.parquet"
+        out_c = tmp_path / "collections_mirror.parquet"
+        build_mirror(*dataset_level_text, out, out_c)
+        con = duckdb.connect()
+        con.execute("LOAD spatial;")
+        own, keywords = _row(
+            con,
+            f"SELECT description, keywords FROM read_parquet('{out.as_posix()}') "
+            f"WHERE id = 'i-own'",
+        )
+        con.close()
+        assert own == "Layer prose."
+        assert list(keywords) == ["layerword"]
+
+    def test_inherited_text_reaches_the_free_text_haystack(
+        self, dataset_level_text: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """`q` has to match a word that only the Collection states."""
+        out = tmp_path / "catalog.parquet"
+        out_c = tmp_path / "collections_mirror.parquet"
+        build_mirror(*dataset_level_text, out, out_c)
+        con = duckdb.connect()
+        con.execute("LOAD spatial;")
+        text = _scalar(
+            con,
+            f"SELECT search_text FROM read_parquet('{out.as_posix()}') "
+            f"WHERE id = 'i-1'",
+        )
+        con.close()
+        assert "flüssen" in text, "description words must be searchable"
+        assert "gewässer" in text, "keywords must be searchable"
+        assert "bodenbedeckung" in text, "the item's own title still counts"

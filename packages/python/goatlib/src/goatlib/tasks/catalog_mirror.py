@@ -44,7 +44,7 @@ path, measured at the 1M-item target:
 - ``goat:geographical_code`` and the other facet columns are real columns
   rather than paths into a JSON blob: filtering through a JSON path cost 1.4 s
   per query at 1M rows versus 2.6 ms as a column.
-- ``member_count``, ``is_representative`` and ``group_geometry`` precompute
+- ``member_count`` precomputes
   bundle membership, which a per-request ``GROUP BY`` was recomputing over
   every item row (~1 GB of hash table) on data fixed between harvests.
 - ``bbox_xmin``/``ymin``/``xmax``/``ymax`` (and the ``group_*`` pair) are the
@@ -69,11 +69,32 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "COLLECTIONS_FILENAME",
+    "MIRROR_FORMAT_VERSION",
     "GUARANTEED_COLLECTION_COLUMNS",
     "GUARANTEED_ITEM_COLUMNS",
     "ITEMS_FILENAME",
     "build_mirror",
 ]
+
+#: Bumped whenever this converter's OUTPUT changes for unchanged input.
+#:
+#: ``sync_catalog`` skips work when the published ETags match what it last built
+#: from — which is correct for data changes and wrong for *code* changes: a new
+#: derivation here leaves every deployment serving the old mirror, because the
+#: inputs it hashes did not move. Folding this into that marker is what turns a
+#: bump into exactly one forced rebuild everywhere.
+#:
+#: v2: items inherit their collection's description and keywords.
+#: v3: dropped `is_representative`/`group_geometry`/`group_bbox_*` — a dataset
+#:     list asks the collections relation, so nothing designates a member.
+#: v4: `datetime_start`/`datetime_end` — a temporal INTERVAL per row, so a
+#:     `start_datetime`/`end_datetime` item and a Collection whose
+#:     `extent.temporal` states a real range are matched by overlap instead of
+#:     being reduced to one instant.
+#: v5: `goat:geometryType` on a Collection — its layers' geometry type where
+#:     they agree on one, so a dataset card can show what shape the data is
+#:     without fetching its members.
+MIRROR_FORMAT_VERSION = 5
 
 ITEMS_FILENAME = "items.parquet"
 COLLECTIONS_FILENAME = "collections.parquet"
@@ -100,6 +121,8 @@ GUARANTEED_ITEM_COLUMNS: tuple[tuple[str, str], ...] = (
     *_GUARANTEED_SHARED,
     ("collection", "VARCHAR"),
     ("datetime", "TIMESTAMPTZ"),
+    ("datetime_start", "TIMESTAMPTZ"),
+    ("datetime_end", "TIMESTAMPTZ"),
     ("created", "TIMESTAMPTZ"),
     ("parquet_url", "VARCHAR"),
     ("goat:layerType", "VARCHAR"),
@@ -109,6 +132,8 @@ GUARANTEED_ITEM_COLUMNS: tuple[tuple[str, str], ...] = (
 GUARANTEED_COLLECTION_COLUMNS: tuple[tuple[str, str], ...] = (
     *_GUARANTEED_SHARED,
     ("datetime", "TIMESTAMPTZ"),
+    ("datetime_start", "TIMESTAMPTZ"),
+    ("datetime_end", "TIMESTAMPTZ"),
 )
 
 #: Physical row order of the written files -- what a reader's row-group
@@ -239,7 +264,91 @@ def _keywords_text(columns: dict[str, str], alias: str = "") -> str:
     return f"{ref}::VARCHAR"
 
 
-def _search_text_expr(columns: dict[str, str], alias: str = "") -> str:
+def _keywords_list_expr(items: dict[str, str], collections: dict[str, str]) -> str:
+    """``keywords`` as a list, inherited from the collection when the item has none.
+
+    Kept separate from :func:`_keywords_text` because the mirror needs both
+    spellings: a list for the column the served document passes through, and flat
+    text for the free-text haystack.
+
+    Only coalesces when both files declare a list. STAC says array-of-string but
+    the flat mirror has seen a bare string published, and mixing the two in one
+    COALESCE is a bind error that takes the whole build down -- so a mismatch
+    keeps the item's own value rather than risking that.
+    """
+
+    def is_list(columns: dict[str, str]) -> bool:
+        declared = columns.get("keywords", "").strip().upper()
+        return declared.endswith("[]") or declared.startswith("LIST")
+
+    if not is_list(items):
+        return _opt(items, "keywords", alias="i")
+    if not is_list(collections):
+        return _ref("keywords", "i")
+    return f'COALESCE({_ref("keywords", "i")}, {_ref("keywords", "c")})'
+
+
+def _temporal_interval(columns: dict[str, str], alias: str = "") -> tuple[str, str]:
+    """``(start, end)`` for a row's temporal extent, as TIMESTAMPTZ expressions.
+
+    STAC gives an Item two mutually exclusive spellings: a single ``datetime``, or
+    ``datetime: null`` with ``start_datetime``/``end_datetime`` for a range. Both
+    collapse to an interval here so the service compares intervals and nothing
+    downstream has to know which spelling a row used. A closed instant is simply
+    an interval of zero length.
+
+    Reducing a range to one instant is the trap this exists to avoid: taking the
+    END of a range would make a dataset covering 2014-2021 invisible to a search
+    for 2014-2016, and taking the start would hide it from 2019-2021.
+    """
+    instant = _opt(columns, "datetime", alias=alias)
+    start = _opt(columns, "start_datetime", alias=alias)
+    end = _opt(columns, "end_datetime", alias=alias)
+    lower = instant if start == "NULL" else f"COALESCE({start}, {instant})"
+    upper = instant if end == "NULL" else f"COALESCE({end}, {instant})"
+    return f"TRY_CAST({lower} AS TIMESTAMPTZ)", f"TRY_CAST({upper} AS TIMESTAMPTZ)"
+
+
+def _collection_interval(
+    con: duckdb.DuckDBPyConnection, path: Path, columns: dict[str, str]
+) -> tuple[str, str]:
+    """A Collection's temporal extent as ``(start, end)``.
+
+    STAC gives a Collection ``extent.temporal.interval`` -- a LIST of intervals,
+    each ``[start, end]`` with null meaning open-ended. The whole extent is the
+    earliest start to the latest end, so this unnests rather than reading
+    ``interval[1][1]``: that expression takes the END of the FIRST interval, which
+    turns a dataset covering 2014-2021 into an instant at 2021 and hides it from
+    every search before that year.
+
+    Falls back to the row's own ``datetime`` where the published file has no
+    usable extent -- which was the whole catalog until 2026-08-04 (``[[null,
+    null]]`` on all 3,834) and is none of it since.
+    """
+    instant = _opt(columns, "datetime")
+    lower = (
+        "COALESCE("
+        "(SELECT min(TRY_CAST(i[1] AS TIMESTAMPTZ)) FROM unnest(extent.temporal.interval) AS t(i)), "
+        f"TRY_CAST({instant} AS TIMESTAMPTZ))"
+    )
+    upper = (
+        "COALESCE("
+        "(SELECT max(TRY_CAST(i[2] AS TIMESTAMPTZ)) FROM unnest(extent.temporal.interval) AS t(i)), "
+        f"TRY_CAST({instant} AS TIMESTAMPTZ))"
+    )
+    return (
+        _probe(con, path, lower, ""),
+        _probe(con, path, upper, ""),
+    )
+
+
+def _search_text_expr(
+    columns: dict[str, str],
+    alias: str = "",
+    *,
+    description: str | None = None,
+    keywords: str | None = None,
+) -> str:
     """One lowercase haystack per row, for the free-text (``q``) filter.
 
     Precomputed here rather than assembled per query for two reasons: the
@@ -252,13 +361,22 @@ def _search_text_expr(columns: dict[str, str], alias: str = "") -> str:
     category would make ``q`` quietly overlap the facet filters, so those stay
     separately filterable instead.
 
+    ``description``/``keywords`` override where those two come from, which is how
+    an item borrows its dataset's text. It matters more than it sounds: the
+    harvester publishes both **only on the Collection**, so an item-only haystack
+    is the title and nothing else -- measured at 44 characters per item against
+    655 per collection, i.e. ~93% of the catalog's searchable prose invisible to
+    ``q``.
+
     ``concat_ws`` skips NULL arguments, so a row missing any of the three still
     produces a usable haystack rather than NULL.
     """
     parts = [
         _opt(columns, "title", alias=alias),
-        _opt(columns, "description", alias=alias),
-        _keywords_text(columns, alias),
+        description
+        if description is not None
+        else _opt(columns, "description", alias=alias),
+        keywords if keywords is not None else _keywords_text(columns, alias),
     ]
     present = [p for p in parts if p != "NULL"]
     if not present:
@@ -379,6 +497,25 @@ def build_mirror(
             item_expr(_opt(items, "goat:layerType", 'i."goat:layerType"')),
             coll_expr(_opt(collections, "goat:layerType", 'c."goat:layerType"')),
         )
+        # Description and keywords are published on the Collection ONLY -- 0 of
+        # 10,793 items carry either, while 3,834 of 3,834 collections carry a
+        # description and 96% carry keywords. Inheriting them here is what lets a
+        # result card show what a dataset is, and what puts the catalog's prose
+        # into `q`'s reach at all.
+        description = "COALESCE({}, {})".format(
+            item_expr(_opt(items, "description", "i.description")),
+            coll_expr(_opt(collections, "description", "c.description")),
+        )
+        keywords_text = "COALESCE({}, {})".format(
+            _keywords_text(items, "i"),
+            _probe(con, collections_path, _keywords_text(collections, "c"), "c"),
+        )
+        # The *column* has to stay a list, since that is what STAC `keywords` is
+        # and what the served document passes through -- only the haystack above
+        # gets the flattened text. Both sides are only coalesced when both are
+        # declared as lists; a published string on one side would otherwise make
+        # the COALESCE a bind error that fails the whole build.
+        keywords_column = _keywords_list_expr(items, collections)
         geographical_code = "COALESCE({}, {})".format(
             item_expr(
                 _opt(items, "goat:geographical_code", 'i."goat:geographical_code"')
@@ -394,13 +531,27 @@ def build_mirror(
         # Everything else keeps its published name, so `goat:geometryType` stays
         # `goat:geometryType` -- the column and the STAC property it becomes are
         # the same word, and the registry seeds already know it.
+        # `datetime` itself stays a passthrough — it is what STAC serves and what
+        # the UI shows as the data date. These two are derived beside it.
+        item_start, item_end = (
+            _probe(con, items_path, expr, "i")
+            for expr in _temporal_interval(items, "i")
+        )
+        collection_start, collection_end = _collection_interval(
+            con, collections_path, collections
+        )
+
         item_derived = {
             "geometry",
+            "datetime_start",
+            "datetime_end",
             "goat:layerType",
             "goat:geographical_code",
             "license",
             "publisher",
             "category",
+            "description",
+            "keywords",
             "search_text",
             "parquet_url",
             "language_code",
@@ -416,7 +567,11 @@ def build_mirror(
                 {_text(publisher)}                             AS publisher,
                 {_text(f"COALESCE({item_expr(_first_theme(items, 'i'))}, "
                        f"{coll_expr(_first_theme(collections, 'c'))})")} AS category,
-                {_text(_search_text_expr(items, "i"))}         AS search_text,
+                {_text(description)}                          AS description,
+                {keywords_column}                             AS keywords,
+                {_text(_search_text_expr(items, "i", description=description, keywords=keywords_text))} AS search_text,
+                {item_start}                                  AS datetime_start,
+                {item_end}                                    AS datetime_end,
                 {_text(item_expr(_opt(items, "language", "i.language.code")))} AS language_code,
                 {_text(item_expr(_opt(items, "assets", "i.assets.data.href")))} AS parquet_url
             FROM read_parquet('{items_path.as_posix()}') i
@@ -439,6 +594,8 @@ def build_mirror(
             "",
         )
         collection_derived = {
+            "datetime_start",
+            "datetime_end",
             "geometry",
             "datetime",
             "publisher",
@@ -456,26 +613,22 @@ def build_mirror(
                 {_text(_search_text_expr(collections))}        AS search_text,
                 {_text(_probe(con, collections_path, _opt(collections, "language", "language.code"), ""))} AS language_code,
                 {_probe(con, collections_path, _opt(collections, "summaries", "TRY_CAST(summaries.updated.maximum AS TIMESTAMPTZ)"), "")} AS updated,
-                {_probe(con, collections_path, _opt(collections, "extent", "TRY_CAST(extent.temporal.interval[1][1] AS TIMESTAMPTZ)"), "")} AS datetime
+                COALESCE({collection_end}, {collection_start})  AS datetime,
+                {collection_start}                             AS datetime_start,
+                {collection_end}                               AS datetime_end
             FROM read_parquet('{collections_path.as_posix()}')
         """
 
-        # Bundle membership, precomputed. `grouped=True` search shows one card
-        # per bundle (`coalesce(collection, id)`), which the service used to
-        # answer with a GROUP BY over every item row -- ~1M groups and about a
-        # gigabyte of hash table per request, on data that cannot change between
-        # harvests. Computing it once here turns that request into a filter on
-        # `is_representative` plus a column read of `member_count`.
+        # How many layers the dataset has, precomputed per member row.
         #
-        # `group_geometry` is the union envelope of the bundle's members, so a
-        # spatial filter in grouped mode still matches a bundle when *any*
-        # member falls in the box (the previous GROUP BY semantics). An envelope
-        # can over-include, never under-include -- the same precision a STAC
-        # Collection extent gives.
-        # "Most recently updated, ties broken by id". Safe to bind
-        # unconditionally: `updated` is a guaranteed column, so it is a typed
-        # NULL rather than a bind error when the published file omits it.
-        representative_order = "updated DESC NULLS LAST, id"
+        # `is_representative`, `group_geometry` and `group_bbox_*` used to live
+        # here too, to let Item Search stand in for a dataset list: one
+        # designated member per bundle, with the bundle's union envelope for
+        # spatial filters. That was wrong in a way the columns could not fix --
+        # filtering the designated member drops a dataset whose *other* layer
+        # matched (228 of the 1,886 datasets containing a polygon layer). A
+        # dataset list asks the collections relation now, where a member
+        # predicate is a semi-join, so nothing reads them.
         item_produced = (set(items) - item_derived) | item_derived
         collection_produced = (
             set(collections) - collection_derived
@@ -491,42 +644,66 @@ def build_mirror(
                 f"SELECT *, {', '.join(collection_fill)} FROM ({collection_select})"
             )
 
-        grouped_items = f"""
+        counted_items = f"""
             SELECT
                 * EXCLUDE (group_key),
                 {_envelope_columns("geometry")},
-                {_envelope_columns("ST_Envelope_Agg(geometry) OVER w", "group_bbox")},
-                count(*) OVER w                                AS member_count,
-                row_number() OVER (
-                    PARTITION BY group_key
-                    ORDER BY {representative_order}
-                ) = 1                                          AS is_representative,
-                ST_Envelope_Agg(geometry) OVER w                AS group_geometry
+                count(*) OVER (PARTITION BY group_key)          AS member_count
             FROM (
                 SELECT *, coalesce(collection, id) AS group_key
                 FROM ({item_select})
             )
-            WINDOW w AS (PARTITION BY group_key)
         """
         # A collection row is not a bundle member, so it carries the count of
         # its own items (what `/stac/resolve` used to run a second query for).
-        grouped_collections = f"""
+        # A Collection publishes no geometry type of its own -- it is a property of
+        # a layer, and `summaries` carries only `updated` on the live bucket. So it
+        # is resolved from the members here: the type they agree on, or NULL.
+        #
+        # Every member must state the SAME type and none may be silent, which
+        # costs 6 datasets against the looser reading (ignore the silent ones) and
+        # buys a column that cannot overstate what a bundle contains. Resolution
+        # over the live bucket's 3,834 datasets: 1,478 point, 1,383 polygon, 306
+        # line, 667 NULL (569 genuinely mixed, 92 with nothing published).
+        #
+        # This is a *display* column, deliberately hidden from the collections
+        # queryables. Filtering datasets by geometry is a question about members
+        # ("datasets with a polygon layer"), which only the semi-join answers --
+        # against this column a mixed bundle holding polygons would be dropped.
+        member_geometry = _probe(
+            con,
+            items_path,
+            _opt(items, "goat:geometryType", 'i."goat:geometryType"'),
+            "i",
+        )
+        counted_collections = f"""
             SELECT
                 c.*,
                 {_envelope_columns("c.geometry")},
-                coalesce(m.member_count, 0)                     AS member_count
+                coalesce(m.member_count, 0)                     AS member_count,
+                m.member_geometry_type                          AS "goat:geometryType"
             FROM ({collection_select}) c
             LEFT JOIN (
-                SELECT collection, count(*) AS member_count
-                FROM read_parquet('{items_path.as_posix()}')
+                SELECT
+                    collection,
+                    count(*) AS member_count,
+                    CASE
+                        WHEN count(DISTINCT geometry_type) = 1
+                             AND count(geometry_type) = count(*)
+                        THEN any_value(geometry_type)
+                    END AS member_geometry_type
+                FROM (
+                    SELECT i.collection, {member_geometry} AS geometry_type
+                    FROM read_parquet('{items_path.as_posix()}') i
+                )
                 WHERE collection IS NOT NULL
                 GROUP BY collection
             ) m ON m.collection = c.id
         """
 
         for out, query, order in (
-            (out_items, grouped_items, _ITEM_CLUSTER_ORDER),
-            (out_collections, grouped_collections, _COLLECTION_CLUSTER_ORDER),
+            (out_items, counted_items, _ITEM_CLUSTER_ORDER),
+            (out_collections, counted_collections, _COLLECTION_CLUSTER_ORDER),
         ):
             out.parent.mkdir(parents=True, exist_ok=True)
             con.execute(

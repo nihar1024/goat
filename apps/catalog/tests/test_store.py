@@ -13,6 +13,10 @@ from typing import Any
 
 import duckdb
 import pytest
+from goatlib.tasks.sync_catalog import (
+    REQUIRED_COLLECTION_COLUMNS,
+    REQUIRED_ITEM_COLUMNS,
+)
 
 from catalog.config import CatalogSettings
 from catalog.services.stac_build import collection_from_row, item_from_row
@@ -53,18 +57,25 @@ def test_fixture_readable(tmp_path: Path) -> None:
     assert doc0["properties"]["title"] == "Radverkehrsnetz Dresden 2018"
     # The mirror's internal columns must never reach a served document.
     assert "search_text" not in doc0["properties"]
-    assert "is_representative" not in doc0["properties"]
+    assert "member_count" not in doc0["properties"]
 
     bundle_members = [row for row in by_id.values() if row["collection"] == "src-1"]
     assert len(bundle_members) == 4
-    assert sum(1 for r in bundle_members if r["is_representative"]) == 1
     assert {r["member_count"] for r in bundle_members} == {4}
 
-    # Collections are their own relation now, not rows with a discriminator.
+    # Collections are their own relation now, not rows with a discriminator, and
+    # the fixture publishes one per dataset — a Collection per single-layer
+    # dataset plus the bundle — as the harvester does (0 of the real catalog's
+    # 10,793 items are orphans; row 0 is the fixture's one deliberate exception).
     ccolumns, crows = _read_all(tmp_path / "mirror_collections.parquet")
-    assert len(crows) == 1
-    collection_row = dict(zip(ccolumns, crows[0], strict=True))
-    assert collection_row["id"] == "src-1"
+    assert len(crows) > 1
+    by_collection_id = {
+        dict(zip(ccolumns, row, strict=True))["id"]: dict(
+            zip(ccolumns, row, strict=True)
+        )
+        for row in crows
+    }
+    collection_row = by_collection_id["src-1"]
     collection_doc = collection_from_row(collection_row)
     assert collection_doc["type"] == "Collection"
     assert collection_doc["id"] == "src-1"
@@ -165,6 +176,32 @@ def test_store_absent_file_boot(tmp_path: Path) -> None:
     rows = store.query(f"SELECT count(*) FROM {store.ITEMS}")
     assert rows[0][0] == 0
     assert store.version in ("", None)
+
+
+def test_empty_relations_carry_every_column_the_service_queries(
+    tmp_path: Path,
+) -> None:
+    """The stand-in schema must be a superset of what the SQL names.
+
+    The point of the empty relations is that a deployment with no mirror yet
+    answers "no results" instead of failing — and a column the service names but
+    the stand-in omits turns that into a binder error, i.e. a 400 on a query that
+    is perfectly valid. It happened: the collections stand-in had no `datetime`,
+    so `GET /stac/collections?datetime=…` reported "Referenced column
+    datetime_start not found" against an empty catalog.
+
+    Checked against the converter's own contract rather than a list repeated
+    here, so a column added to the mirror cannot be forgotten in this schema.
+    """
+    store = CatalogStore(CatalogSettings(data_dir=tmp_path))
+
+    for relation, required in (
+        (store.ITEMS, REQUIRED_ITEM_COLUMNS),
+        (store.COLLECTIONS, REQUIRED_COLLECTION_COLUMNS),
+    ):
+        present = {row[0] for row in store.query(f"DESCRIBE SELECT * FROM {relation}")}
+        missing = set(required) - present
+        assert not missing, f"{relation} stand-in is missing {sorted(missing)}"
 
 
 def test_store_query_dicts(tmp_path: Path) -> None:
@@ -409,7 +446,7 @@ def test_fixture_matches_the_schema_the_store_declares(tmp_path: Path) -> None:
     extra columns are expected and only a missing one is a fault.
 
     The fixture used to be a copy of the converter's SQL rather than a call to
-    it, and the copy drifted (``group_bbox_*`` vs ``group_*``): the suite stayed
+    it, and the copy drifted: the suite stayed
     green while production 400'd.
     """
     write_catalog(tmp_path)

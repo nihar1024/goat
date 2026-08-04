@@ -51,8 +51,8 @@ class SearchParams(BaseModel):
     #: a list enumerated here and again in every handler signature.
     fields: dict[str, str] = Field(default_factory=dict)
     cql: tuple[str, list[Any]] | None = None  # compiled fragment (Task 6)
-    grouped: bool = False
     bbox_mode: str = "strict"
+    nuts: list[str] | None = None  # NUTS region ids; intersect their geometry
     bbox_boost: list[float] | None = None  # rank intersecting rows first (4 or 6 nums)
     limit: int = 10
     offset: int = 0
@@ -267,11 +267,39 @@ def safe_query(
         raise ApiError(400, f"invalid search query: {exc}") from exc
 
 
+#: Filters whose answer for a dataset is the envelope of its layers', not the
+#: collection row's own value.
+#:
+#: Only temporal ones belong here. A dataset's period genuinely IS the span of
+#: its layers (that is what a Collection's `extent.temporal` states), whereas
+#: something like `license` is a property of the dataset itself -- promoting that
+#: to "any member" would make one openly-licensed layer relicense the whole
+#: dataset. `datetime` gets the same treatment in its own branch below.
+_DATASET_PERIOD_PARAMS = frozenset({"year"})
+
+
+def _member_exists(clause: str) -> str:
+    """Wrap an item-level predicate as "this collection has such a member".
+
+    The shape the NUTS filter already uses: a correlated EXISTS over the items
+    relation. It is what makes a dataset match on *any* of its layers, which is
+    the only correct reading of "datasets with a polygon layer" -- 569 bundles
+    mix geometry types, so testing one designated member instead silently drops
+    228 polygon datasets and 281 point ones.
+    """
+    return (
+        f"EXISTS (SELECT 1 FROM {CatalogStore.ITEMS} "
+        f"WHERE {CatalogStore.ITEMS}.collection = {CatalogStore.COLLECTIONS}.id "
+        f"AND {clause})"
+    )
+
+
 def build_filters(
     p: SearchParams,
     *,
     registry: QueryableRegistry,
     relation: Literal["items", "collections"] = "items",
+    item_registry: QueryableRegistry | None = None,
 ) -> tuple[str, list[Any]]:
     """Build a WHERE-clause body (no leading ``WHERE``) + positional params.
 
@@ -283,14 +311,13 @@ def build_filters(
 
     ``relation`` names which mirror relation the caller is querying. Items and
     collections live in separate files, so there is no discriminator predicate
-    to add -- the relation *is* the filter. It still matters here because a few
-    predicates only exist on one side: bundle representatives and the group
-    envelope are item concepts.
+    to add -- the relation *is* the filter.
 
-    With ``p.grouped``, the row set is narrowed to one representative per bundle
-    (precomputed by the mirror) and spatial predicates switch to the bundle's
-    ``group_geometry`` -- the union envelope of its members -- so a bundle still
-    matches when any of its members falls in the box.
+    ``item_registry`` lets Collection Search accept item-level facets by
+    promoting them to a semi-join (see :func:`_member_exists`). Without it a
+    dataset search cannot ask about geometry type at all, because that property
+    only exists on the layers inside the dataset.
+
     """
     if p.bbox is not None and p.intersects is not None:
         raise ApiError(400, "bbox and intersects are mutually exclusive")
@@ -307,20 +334,9 @@ def build_filters(
     # kind of row. `TRUE` keeps the fragment a valid WHERE body when nothing
     # else is filtered.
     filters: list[str] = ["TRUE"]
-    if p.grouped and relation == "items":
-        # One card per bundle. `is_representative` is the mirror's precomputed
-        # answer to "which member represents this group" (most recently updated,
-        # ties broken by id), so this is a filter rather than the GROUP BY over
-        # every item row it replaced -- which cost about a gigabyte of hash
-        # table per request at the 1M-item target, recomputed from data that
-        # cannot change between harvests.
-        filters.append("is_representative")
 
-    # Spatial predicates address the bundle envelope in grouped mode (see the
-    # docstring); everything else is per row either way.
-    grouped_items = p.grouped and relation == "items"
-    geom = "group_geometry" if grouped_items else "geometry"
-    env_prefix = "group_bbox" if grouped_items else "bbox"
+    geom = "geometry"
+    env_prefix = "bbox"
 
     def envelope_overlaps(w: float, s: float, e: float, n: float) -> str:
         """Cheap numeric overlap test against the row's stored envelope.
@@ -345,12 +361,18 @@ def build_filters(
         filters.append(f"id IN ({placeholders})")
 
     if p.collections:
-        # An item without an explicit collection is its own singleton
-        # bundle (same coalesce(collection, id) identity used by
-        # ``grouped=True`` and ``resolve_id``), so a bare item id is also a
-        # valid "collection" to filter by here.
         placeholders = ", ".join(add(c) for c in p.collections)
-        filters.append(f"coalesce(collection, id) IN ({placeholders})")
+        if relation == "collections":
+            # On the collections relation the collection IS the row. Reusing the
+            # item-shaped predicate here bound a `collection` column that does not
+            # exist, so `GET /stac/collections?source=…` answered 400 — found by a
+            # test written against the relation rather than the endpoint.
+            filters.append(f"id IN ({placeholders})")
+        else:
+            # An item without an explicit collection is its own singleton dataset
+            # (the same coalesce identity ``resolve_id`` uses), so a bare item id is
+            # also a valid "collection" to filter by.
+            filters.append(f"coalesce(collection, id) IN ({placeholders})")
 
     if p.bbox is not None:
         w, s, e, n = _validate_bbox(p.bbox)
@@ -386,17 +408,97 @@ def build_filters(
         # optimisation is for.
         filters.append(f"ST_Intersects({geom}, ST_GeomFromGeoJSON({add(geom_json)}))")
 
+    if p.nuts:
+        # Intersect the region's actual geometry, not its bounding box, because
+        # that is the question the user asked: "datasets covering Vienna", not
+        # "datasets covering the rectangle around Vienna".
+        #
+        # Measured honestly: on today's catalog it makes no difference at all
+        # (AT13/AT34/AT21/DE30 return identical counts either way), because the
+        # published item geometries are coarse state-sized envelopes rather than
+        # real footprints -- so both tests select the same rows. It matters as
+        # soon as footprints get finer, and the exact test costs nothing here:
+        # the envelope columns below discard almost every row first.
+        #
+        # Expressed as a semi-join against the NUTS table rather than by
+        # inlining the polygon: the geometries are large (MultiPolygons of a few
+        # hundred KB), and a GET whose query string carried one would risk a 414
+        # as well as re-parsing that GeoJSON on every request.
+        #
+        # The envelope columns pre-filter before the exact test, the same way
+        # the bbox branch does: cheap scalar comparisons discard almost every
+        # row before ST_Intersects is called on the survivors.
+        placeholders = ", ".join(add(code.strip()) for code in p.nuts if code.strip())
+        if placeholders:
+            filters.append(
+                f"""EXISTS (
+                    SELECT 1 FROM {CatalogStore.NUTS} n
+                    WHERE n.nuts_id IN ({placeholders})
+                      AND bbox_xmin <= ST_XMax(n.geometry)
+                      AND bbox_xmax >= ST_XMin(n.geometry)
+                      AND bbox_ymin <= ST_YMax(n.geometry)
+                      AND bbox_ymax >= ST_YMin(n.geometry)
+                      AND ST_Intersects({geom}, n.geometry)
+                )"""
+            )
+
     if p.datetime:
         start, end = parse_datetime_interval(p.datetime)
-        if start is not None and end is not None and start == end:
-            # Instant: our catalog's `datetime` column is date-precision, so
-            # "instant" is matched by exact timestamp equality, not a range.
-            filters.append(f"datetime = {add(start)}")
-        else:
+
+        def datetime_clause(add_param: Any) -> str:
+            """A row matches when its temporal extent OVERLAPS the query.
+
+            What the STAC API spec asks for: the `datetime` parameter selects
+            anything whose temporal property *intersects* the value. The mirror
+            stores an interval per row (`datetime_start`/`datetime_end`), so an
+            item published as `start_datetime`/`end_datetime` and a Collection
+            with a real `extent.temporal` are both handled here — an instant is
+            just a zero-length interval.
+
+            Comparing the single `datetime` instead (what this did) silently
+            under-matches the moment ranges appear upstream: a dataset covering
+            2014-2021 would answer only to a query containing whichever endpoint
+            had been picked.
+
+            Open-ended queries and open-ended extents both work: a NULL bound is
+            treated as unbounded rather than as a failed comparison.
+            """
+            bounds = []
             if start is not None:
-                filters.append(f"datetime >= {add(start)}")
+                # The row must not end before the query begins.
+                bounds.append(
+                    f"(datetime_end IS NULL OR datetime_end >= {add_param(start)})"
+                )
             if end is not None:
-                filters.append(f"datetime <= {add(end)}")
+                # ...nor begin after it ends.
+                bounds.append(
+                    f"(datetime_start IS NULL OR datetime_start <= {add_param(end)})"
+                )
+            if not bounds:
+                return "TRUE"
+            # A row with no temporal information at all matches nothing: `..` on
+            # both sides is not a filter, and anything narrower cannot include a
+            # dataset that never says when it is from.
+            return (
+                "(datetime_start IS NOT NULL OR datetime_end IS NOT NULL) AND "
+                + " AND ".join(bounds)
+            )
+
+        if relation == "collections":
+            # A dataset is in the range when its own extent says so OR when any of
+            # its layers' dates do. Both halves are needed because the two
+            # disagree on 2,502 of 3,834 datasets: a Collection states one extent
+            # and its members state their own instants, and STAC's rule that the
+            # extent is the envelope of the items is not met upstream yet
+            # (contract C12). Testing the collection alone would hide a dataset
+            # whose layers are from the period asked for.
+            own = datetime_clause(add)
+            member = datetime_clause(add)
+            filters.append(f"(({own}) OR {_member_exists(member)})")
+        else:
+            datetime_sql = datetime_clause(add)
+            if datetime_sql != "TRUE":
+                filters.append(datetime_sql)
 
     terms = _parse_q_terms(p.q)
     if terms:
@@ -415,14 +517,48 @@ def build_filters(
     # Iterated in the caller's insertion order so the `?` placeholders this
     # appends stay in the same left-to-right order as the params list.
     allowed = registry.filter_params()
+    # Collection Search accepts item-level facets too, as a semi-join. A dataset
+    # is a container: "which datasets have a polygon layer" is a question about
+    # its members, and answering it on the collection row alone is impossible --
+    # `goat:geometryType` is per layer and simply is not there. Promoting the
+    # parameter to an EXISTS keeps one vocabulary across both searches instead of
+    # a 400 that reads like the filter does not exist.
+    promoted = (
+        {
+            param: entry
+            for param, entry in item_registry.filter_params().items()
+            if param not in allowed
+        }
+        if relation == "collections" and item_registry is not None
+        else {}
+    )
     for param, value in p.fields.items():
         entry = allowed.get(param)
         if entry is None:
-            raise ApiError(
-                400,
-                f"unknown filter parameter: {param!r} "
-                f"(available: {', '.join(sorted(allowed))})",
-            )
+            promoted_entry = promoted.get(param)
+            if promoted_entry is None:
+                available = sorted({*allowed, *promoted})
+                raise ApiError(
+                    400,
+                    f"unknown filter parameter: {param!r} "
+                    f"(available: {', '.join(available)})",
+                )
+            clause = _scalar_filter(promoted_entry, value, add)
+            if clause:
+                filters.append(_member_exists(clause))
+            continue
+        if relation == "collections" and param in _DATASET_PERIOD_PARAMS:
+            # The same envelope reading `datetime` gets below: a dataset's period
+            # is its own extent OR any of its layers'. Without this, `year=2016`
+            # answered 1 dataset where `datetime=2016-01-01/2016-12-31` answered
+            # 51 -- two spellings of one question disagreeing, because today's
+            # a dataset's own extent and its layers' dates disagree on 2,502 of
+            # 3,834 datasets.
+            own_sql = _scalar_filter(entry, value, add)
+            member_sql = _scalar_filter(entry, value, add)
+            if own_sql and member_sql:
+                filters.append(f"(({own_sql}) OR {_member_exists(member_sql)})")
+            continue
         clause = _scalar_filter(entry, value, add)
         if clause:
             filters.append(clause)
@@ -446,7 +582,6 @@ def _build_order_by(
     p: SearchParams,
     boost: tuple[float, float, float, float] | None,
     *,
-    grouped: bool,
     registry: QueryableRegistry,
 ) -> tuple[str, list[Any]]:
     """Build the ORDER BY clause.
@@ -457,9 +592,6 @@ def _build_order_by(
     registry accepts both ``updated`` and ``properties.updated`` -- STAC
     clients send the prefixed spelling.
 
-    ``grouped`` now selects representative rows rather than aggregating, so both
-    modes order over the same columns; it only affects which geometry the
-    ``bbox_boost`` predicate reads.
     """
     order_params: list[Any] = []
 
@@ -473,15 +605,14 @@ def _build_order_by(
         # The stored envelope, not the geometry: `bbox_boost` only ranks, and an
         # envelope overlap is the same answer for a rectangular box at a
         # fraction of the cost (no spatial call per row).
-        env = "group_bbox" if grouped else "bbox"
         prefix = (
-            f"({env}_xmax >= {add(w)} AND {env}_xmin <= {add(e)} "
-            f"AND {env}_ymax >= {add(s)} AND {env}_ymin <= {add(n)}) DESC, "
+            f"(bbox_xmax >= {add(w)} AND bbox_xmin <= {add(e)} "
+            f"AND bbox_ymax >= {add(s)} AND bbox_ymin <= {add(n)}) DESC, "
         )
 
     # Relevance ranking only kicks in when the caller left sortby unset -- an
     # explicit sortby means q is filter-only (api spec §2.1.6), never a ranking
-    # signal. Unlike the BM25 version this replaces, it applies in grouped mode
+    # signal. Unlike the BM25 version this replaces, it applies
     # too: a representative row is a row, so "how many query words does it
     # match" is as meaningful for a bundle card as for a single layer.
     q_terms = _parse_q_terms(p.q)
@@ -545,20 +676,14 @@ def search_items(
     and uses it when its own ``collection_id`` argument is absent, instead of
     inventing a synthetic "datasets" collection.
     """
-    # Validated up front (400s regardless of grouped/ungrouped) since it
+    # Validated up front (400s either way) since it
     # only ever feeds ORDER BY, never build_filters' WHERE clause.
     boost = _validated_bbox_boost(p)
     where_sql, params = build_filters(p, registry=store.registry)
-    order_sql, order_params = _build_order_by(
-        p, boost, grouped=p.grouped, registry=store.registry
-    )
+    order_sql, order_params = _build_order_by(p, boost, registry=store.registry)
     limit = max(p.limit, 0)
     offset = max(p.offset, 0)
 
-    # Grouped and ungrouped are the same query: `build_filters` narrows to one
-    # representative row per bundle, and `member_count` is a column rather than
-    # something to aggregate. What used to be a GROUP BY over every item row
-    # (and a separate count over that subquery) is a plain scan either way.
     count_rows = safe_query(
         store, f"SELECT count(*) FROM {CatalogStore.ITEMS} WHERE {where_sql}", params
     )
@@ -572,11 +697,10 @@ def search_items(
     for row in rows:
         if row.get("collection"):
             row["goat:row_collection"] = row["collection"]
-        if not p.grouped:
-            # `member_count` is only meaningful on a bundle card: an ungrouped
-            # hit is one layer, and advertising its siblings' count there would
-            # suggest the response collapsed rows when it did not.
-            row.pop("member_count", None)
+        # `member_count` counts the layers of the *dataset*, so it says nothing
+        # about the layer this row is. It belongs on the Collection, which is what
+        # a dataset-level client reads (`GET /stac/collections`).
+        row.pop("member_count", None)
     return rows, number_matched
 
 
@@ -587,15 +711,14 @@ def search_collections(
     ``search_items``, against the collections relation.
 
     ``bbox_boost`` ranks intersecting collections first, validated exactly like
-    Item Search's (400 on a malformed box). ``grouped`` is a bundle-card (Item
-    Search) concept with no meaning for a collection, so it is ignored here.
+    Item Search's (400 on a malformed box).
     """
     registry = store.collection_registry
     boost = _validated_bbox_boost(p)
-    where_sql, params = build_filters(p, registry=registry, relation="collections")
-    order_sql, order_params = _build_order_by(
-        p, boost, grouped=False, registry=registry
+    where_sql, params = build_filters(
+        p, registry=registry, relation="collections", item_registry=store.registry
     )
+    order_sql, order_params = _build_order_by(p, boost, registry=registry)
     limit = max(p.limit, 0)
     offset = max(p.offset, 0)
 

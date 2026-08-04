@@ -308,7 +308,7 @@ async def test_search_catalog_returns_items() -> None:
 async def test_search_catalog_limit_is_clamped(store: CatalogStore) -> None:
     result = await mcp_module.search_catalog(limit=99999)
     assert "error" not in result
-    # The fixture's ~196 grouped bundles exceed the 100 clamp -- proves the
+    # The fixture's ~196 datasets exceed the 100 clamp -- proves the
     # crafted large `limit` never reaches the query unclamped.
     assert result["numberMatched"] > 100
     assert result["numberReturned"] == 100

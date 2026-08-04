@@ -7,6 +7,7 @@ owns that rule (see ``catalog.services.search``).
 """
 
 import pytest
+from fastapi.testclient import TestClient
 
 from catalog.errors import ApiError
 from catalog.services.aggregations import (
@@ -15,7 +16,7 @@ from catalog.services.aggregations import (
     facet_aggregations,
     run_aggregations,
 )
-from catalog.services.search import SearchParams
+from catalog.services.search import SearchParams, build_filters
 from catalog.store import CatalogStore
 
 
@@ -123,3 +124,147 @@ def test_bucket_ordering_by_frequency_desc_then_key_asc(store: CatalogStore) -> 
     actual = [(b["key"], b["frequency"]) for b in buckets]
 
     assert actual == expected
+
+
+def test_discovery_publishes_the_parameter_that_narrows_each_facet(
+    client: TestClient,
+) -> None:
+    """A client must be able to build a filter sidebar from discovery alone.
+
+    Stripping `_count` off the aggregation name is not enough and fails
+    silently: `category_count` is narrowed with `?themes=`, not `?category=`.
+    Without this field every consumer hardcodes that mapping and drifts from
+    the server the first time a facet is added or renamed.
+    """
+    aggregations = client.get("/stac/aggregations").json()["aggregations"]
+    by_name = {a["name"]: a for a in aggregations}
+
+    assert (
+        "goat:filter_param" not in by_name["total_count"]
+    ), "total_count is not a facet and nothing narrows it"
+    for name, aggregation in by_name.items():
+        if name == "total_count":
+            continue
+        param = aggregation.get("goat:filter_param")
+        assert param, f"{name} does not say how to filter by it"
+        # The parameter must actually be accepted by Item Search.
+        response = client.get("/stac/search", params={param: "x", "limit": 1})
+        assert response.status_code == 200, f"?{param}= is not a search parameter"
+
+
+def test_executed_aggregations_carry_the_filter_param_too(client: TestClient) -> None:
+    """The sidebar reads buckets and links from the same response."""
+    aggregations = client.get(
+        "/stac/aggregate", params={"aggregations": "type_count"}
+    ).json()["aggregations"]
+    assert aggregations[0]["goat:filter_param"] == "type"
+
+
+class TestCountingUnit:
+    """A facet count and the result set it describes must be in the same unit.
+
+    The live catalog holds 10,793 layers in 3,834 datasets. Counting layers under
+    a page that lists datasets reported "8,166 bundles" where selecting that
+    bucket returned 1,207 -- the sidebar and the results disagreed by 6.8x, which
+    is what made the numbers look broken.
+
+    The fixture's bundle is the interesting case: four layers, two ``point`` and
+    two ``line``, and the representative is a ``point``.
+    """
+
+    def test_layer_counts_are_the_default(self, store: CatalogStore) -> None:
+        """`unit` defaults to items, so existing Item Search clients are unmoved."""
+        buckets = {
+            b["key"]: b["frequency"]
+            for b in run_aggregations(store, SearchParams(), ["geometry_type_count"])[
+                "aggregations"
+            ][0]["buckets"]
+        }
+        assert buckets["line"] >= 2, "counts layers, as Item Search always did"
+
+    def test_a_bundles_layers_count_once_as_a_dataset(
+        self, store: CatalogStore
+    ) -> None:
+        """Two line layers in one dataset are one line dataset, not two."""
+        result = run_aggregations(
+            store,
+            SearchParams(collections=["src-1"]),
+            ["geometry_type_count"],
+            "collections",
+        )
+        buckets = {
+            b["key"]: b["frequency"] for b in result["aggregations"][0]["buckets"]
+        }
+        # Both values are present because the dataset HAS both -- and each counts
+        # the dataset once, which `count(*)` over items could not express.
+        assert buckets == {"point": 1, "line": 1}
+
+    def test_dataset_total_counts_collections(self, store: CatalogStore) -> None:
+        items = run_aggregations(store, SearchParams(), ["total_count"])[
+            "aggregations"
+        ][0]["value"]
+        datasets = run_aggregations(
+            store, SearchParams(), ["total_count"], "collections"
+        )["aggregations"][0]["value"]
+        assert datasets < items, "the fixture bundles several layers into one dataset"
+
+    def test_item_level_facets_are_still_offered_for_datasets(
+        self, store: CatalogStore
+    ) -> None:
+        """Geometry lives on layers, and is worth counting per dataset anyway."""
+        doc = available_aggregations(store, "collections")
+        names = {a["name"] for a in doc["aggregations"]}
+        assert "geometry_type_count" in names
+
+
+class TestItemFacetsOnCollectionSearch:
+    """A dataset matches when ANY of its layers does.
+
+    Filtering the designated representative instead silently dropped datasets: on
+    the live catalog 1,886 datasets contain a polygon layer but a representative
+    test returned 1,658, because 569 bundles mix geometry types.
+    """
+
+    def test_a_dataset_matches_on_a_non_representative_layer(
+        self, client: TestClient
+    ) -> None:
+        """The fixture bundle's representative is a point; it also has lines."""
+        found = client.get("/stac/collections", params={"geometry_type": "line"})
+        assert found.status_code == 200
+        assert "src-1" in {c["id"] for c in found.json()["collections"]}
+
+    def test_the_same_filter_on_item_search_still_means_layers(
+        self, client: TestClient
+    ) -> None:
+        """Item Search is unchanged: it answers about layers, not datasets."""
+        response = client.get("/stac/search", params={"geometry_type": "line"})
+        assert response.status_code == 200
+        geoms = {
+            f["properties"].get("goat:geometryType")
+            for f in response.json()["features"]
+        }
+        assert geoms == {"line"}
+
+    def test_an_unresolvable_parameter_lists_the_promoted_names_too(
+        self, store: CatalogStore
+    ) -> None:
+        """Promotion must widen the error's "available" list, not hide it.
+
+        Exercised through ``build_filters`` rather than the endpoint because an
+        *undeclared* query parameter never reaches it -- ``FacetFilters`` declares
+        the accepted names statically, so FastAPI drops the rest. What can still
+        go wrong is a declared parameter that resolves against neither relation,
+        and the 400 has to say what would have worked.
+        """
+        with pytest.raises(ApiError) as raised:
+            build_filters(
+                SearchParams(fields={"not_a_facet": "x"}),
+                registry=store.collection_registry,
+                relation="collections",
+                item_registry=store.registry,
+            )
+        assert raised.value.status_code == 400
+        assert "geometry_type" in str(raised.value.detail), (
+            "an item-level facet is available on collection search now, "
+            "so it belongs in the list of what the caller could have sent"
+        )

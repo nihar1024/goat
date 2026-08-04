@@ -250,19 +250,20 @@ def _public_assets(assets: dict[str, Any] | None) -> dict[str, Any]:
 _INTERNAL_COLUMNS = frozenset(
     {
         "search_text",
+        # The row's temporal extent as a comparable interval, derived so the
+        # `datetime` filter can test overlap. Not served: a row states its own
+        # time the STAC way -- `datetime` (+ `start_datetime`/`end_datetime`, or
+        # a Collection's `extent.temporal`) -- and publishing a second spelling
+        # of it would be two answers to one question.
+        "datetime_start",
+        "datetime_end",
         "language_code",
         "category",
         "parquet_url",
-        "is_representative",
-        "group_geometry",
         "bbox_xmin",
         "bbox_ymin",
         "bbox_xmax",
         "bbox_ymax",
-        "group_bbox_xmin",
-        "group_bbox_ymin",
-        "group_bbox_xmax",
-        "group_bbox_ymax",
         "goat:row_collection",
     }
 )
@@ -273,8 +274,8 @@ _INTERNAL_COLUMNS = frozenset(
 #: kept internal like the other derived columns:
 #:
 #: * ``member_count`` -- how many layers share this item's bundle. The one
-#:   number a grouped result must carry (a card standing in for 74 layers is
-#:   meaningless without it), and useful ungrouped too ("one of 74").
+#:   number a dataset card must carry (a card standing for 74 layers is
+#:   meaningless without it).
 #: * ``publisher`` -- denormalised from the Collection's ``providers[0].name``.
 #:   Items never carry ``providers``, so without this a result list showing
 #:   "Stadt Wien" would need one extra request *per card* to fetch the parent
@@ -390,15 +391,17 @@ def item_from_row(row: dict[str, Any]) -> dict[str, Any]:
     }
     # `datetime` is the one property that must be *present* even when unknown:
     # the Item spec makes it a required member of `properties` whose value may
-    # be null. Dropping it with the other nulls made 52% of the real catalog
-    # (5,593 items with no published date) fail validation on a missing
-    # required member.
+    # be null. Dropping it with the other nulls made every undated item fail
+    # validation on a missing required member -- 52% of the catalog when that was
+    # measured, and the reason the null is written rather than omitted.
     #
     # Null is not the whole answer -- the schema allows a null `datetime` only
-    # alongside `start_datetime` + `end_datetime`, which the harvester does not
-    # publish (contract C11). Serving null states the gap where an absent
-    # member hid it, and points a validator at the field that is actually
-    # missing upstream.
+    # alongside `start_datetime` + `end_datetime`. Where the harvester publishes
+    # those (contract C11), they pass through as columns and are served here as
+    # properties, and this null is then the correct, spec-compliant statement
+    # that the row covers a range rather than an instant. Where it publishes
+    # neither, the null states the gap where an absent member hid it and points
+    # a validator at the field that is actually missing upstream.
     properties.setdefault("datetime", None)
     document["properties"] = properties
     return document

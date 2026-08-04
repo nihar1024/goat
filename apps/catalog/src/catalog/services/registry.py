@@ -52,7 +52,7 @@ _GEOJSON_GEOMETRY_SCHEMA = "https://geojson.org/schema/Geometry.json"
 #:
 #: The rest are the mirror's internal machinery: ``search_text`` is the folded
 #: haystack behind ``q`` (filtering it directly would expose an implementation
-#: detail and duplicate ``q``), ``is_representative``/``group_geometry`` drive
+#: detail and duplicate ``q``), the mirror's own bookkeeping columns drive
 #: bundle grouping, and ``member_count`` is already published on the document as
 #: ``goat:member_count``.
 _HIDDEN_COLUMNS = frozenset(
@@ -60,17 +60,13 @@ _HIDDEN_COLUMNS = frozenset(
         "document",
         "parquet_url",
         "search_text",
-        "is_representative",
-        "group_geometry",
+        "datetime_start",
+        "datetime_end",
         "member_count",
         "bbox_xmin",
         "bbox_ymin",
         "bbox_xmax",
         "bbox_ymax",
-        "group_bbox_xmin",
-        "group_bbox_ymin",
-        "group_bbox_xmax",
-        "group_bbox_ymax",
     }
 )
 
@@ -210,17 +206,26 @@ class _Virtual:
 #: parameter but *not* via CQL2 or ``sortby`` -- everything else in the API
 #: supports all three. Expressing them here closes that gap.
 _VIRTUAL_FIELDS: dict[str, _Virtual] = {
-    # Derived from `datetime` rather than stored. Filtering by year is what the
-    # UI's period control sends; CQL2 can express the same thing the long way
-    # (`datetime >= ... AND datetime <= ...`), and now also directly.
+    # The year a row's data STARTS in -- not every year it covers. A single
+    # expression cannot say "overlaps 2016" (that needs two comparisons), and
+    # `datetime` already does say it: `?datetime=2016-01-01T00:00:00Z/
+    # 2016-12-31T23:59:59Z` selects everything running through 2016, ranged rows
+    # included, which is the filter a client wanting "data from 2016" should
+    # send. This one exists to make the year sortable and CQL2-addressable, and
+    # is exact for the instant-dated rows that are most of the catalog.
     #
     # This one stays virtual because `date_part` over a native timestamp costs
     # 40 ms at the 1M-item target -- unlike the JSON-path extraction that
     # `geographical_code` used to need, which is why that one became a column.
     "year": _Virtual(
-        expr="date_part('year', datetime)",
+        # Off the interval's start, not `datetime`: a row that states a range
+        # publishes `start_datetime`/`end_datetime` and MAY leave `datetime`
+        # null (STAC allows exactly that), so faceting on `datetime` would drop
+        # every ranged dataset out of the year list. For an instant the two are
+        # the same value.
+        expr="date_part('year', COALESCE(datetime_start, datetime_end))",
         json_type="integer",
-        requires="datetime",
+        requires="datetime_start",
     ),
 }
 
@@ -308,11 +313,28 @@ def _entry(name: str, expr: str, json_type: str, json_format: str | None) -> Que
     )
 
 
-def build_registry(columns: dict[str, str]) -> "QueryableRegistry":
+#: Columns hidden on the COLLECTIONS relation only.
+#:
+#: ``goat:geometryType`` is a real column there since mirror v5 -- the layers'
+#: geometry type where they agree on one, so a dataset card can say what shape
+#: the data is. It is not a *filter*, though: "datasets with a polygon layer" is
+#: a question about members, and 569 of 1,207 bundles mix types, so this column
+#: is NULL for exactly the datasets a filter must still find. Hidden here, the
+#: parameter falls through to the item registry and compiles to the semi-join
+#: that answers it (``build_filters``' ``promoted``).
+_HIDDEN_COLLECTION_COLUMNS = frozenset({"goat:geometryType"})
+
+
+def build_registry(
+    columns: dict[str, str], *, relation: str = "items"
+) -> "QueryableRegistry":
     """Build the registry for a table with these ``{column: duckdb_type}``."""
+    hidden = _HIDDEN_COLUMNS | (
+        _HIDDEN_COLLECTION_COLUMNS if relation == "collections" else frozenset()
+    )
     entries: dict[str, Queryable] = {}
     for name, duckdb_type in columns.items():
-        if name in _HIDDEN_COLUMNS:
+        if name in hidden:
             continue
         classified = _classify(duckdb_type)
         if classified is None:

@@ -66,6 +66,8 @@ _ITEM_COLUMNS_SQL = """
     search_text VARCHAR,
     geometry GEOMETRY,
     datetime TIMESTAMPTZ,
+    datetime_start TIMESTAMPTZ,
+    datetime_end TIMESTAMPTZ,
     created TIMESTAMPTZ,
     updated TIMESTAMPTZ,
     parquet_url VARCHAR,
@@ -76,13 +78,7 @@ _ITEM_COLUMNS_SQL = """
     bbox_ymin DOUBLE,
     bbox_xmax DOUBLE,
     bbox_ymax DOUBLE,
-    group_bbox_xmin DOUBLE,
-    group_bbox_ymin DOUBLE,
-    group_bbox_xmax DOUBLE,
-    group_bbox_ymax DOUBLE,
-    member_count BIGINT,
-    is_representative BOOLEAN,
-    group_geometry GEOMETRY
+    member_count BIGINT
 """
 
 _COLLECTION_COLUMNS_SQL = """
@@ -96,6 +92,10 @@ _COLLECTION_COLUMNS_SQL = """
     search_text VARCHAR,
     geometry GEOMETRY,
     updated TIMESTAMPTZ,
+    datetime TIMESTAMPTZ,
+    datetime_start TIMESTAMPTZ,
+    datetime_end TIMESTAMPTZ,
+    "goat:geometryType" VARCHAR,
     bbox_xmin DOUBLE,
     bbox_ymin DOUBLE,
     bbox_xmax DOUBLE,
@@ -337,8 +337,20 @@ class CatalogStore:
 
         nuts_path = self._settings.nuts_path
         if nuts_path.exists():
+            # `ST_SetCRS`, not `ST_Transform`: the coordinates are already
+            # lon/lat degrees and must not move. Only the *declared* CRS is
+            # changed, because the two producers label the same thing
+            # differently -- Eurostat GISCO's NUTS file says `EPSG:4326` while
+            # the harvester's GeoParquet says `OGC:CRS84` -- and DuckDB refuses
+            # `ST_Intersects` across mismatched declarations. Without this, the
+            # spatial filter fails with a binder error (`?nuts=`, i.e. every
+            # catalog-page request).
             con.execute(
-                f"CREATE TABLE {self.NUTS} AS SELECT * FROM read_parquet(?)",
+                f"""
+                CREATE TABLE {self.NUTS} AS
+                SELECT * REPLACE (ST_SetCRS(geometry, 'OGC:CRS84') AS geometry)
+                FROM read_parquet(?)
+                """,
                 [nuts_path.as_posix()],
             )
         else:
@@ -346,15 +358,21 @@ class CatalogStore:
 
         # One registry per relation, derived from the relation that was just
         # built, so neither can describe a schema other than the one loaded.
-        # They differ for real -- a collection has no `parquet_url`,
-        # `goat:geometryType` or bundle representative -- and advertising the
-        # item ones as filterable for Collection Search would be a small lie.
+        # They differ for real -- a collection has no `parquet_url` and no
+        # `created` -- and advertising the item ones as filterable for Collection
+        # Search would be a small lie. The relation is passed because two columns
+        # of the same name are not always the same queryable: a collection's
+        # `goat:geometryType` describes the dataset for display and must not
+        # shadow the member semi-join a geometry *filter* needs.
         def registry_for(relation: str) -> QueryableRegistry:
             columns = {
                 row[0]: row[1]
                 for row in con.execute(f"DESCRIBE SELECT * FROM {relation}").fetchall()
             }
-            return build_registry(columns)
+            return build_registry(
+                columns,
+                relation="collections" if relation == self.COLLECTIONS else "items",
+            )
 
         return _Built(
             con=con,

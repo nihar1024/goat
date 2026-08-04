@@ -208,7 +208,10 @@ def test_virtual_queryables_are_filterable_and_sortable(
     stored document (1.4 s per query at 1M rows) and the mirror now promotes it
     to a real column, so it resolves to a plain quoted identifier.
     """
-    assert registry.sql_expr("year") == "date_part('year', datetime)"
+    assert (
+        registry.sql_expr("year")
+        == "date_part('year', COALESCE(datetime_start, datetime_end))"
+    )
     year = registry.resolve("year")
     assert year is not None and year.sortable
 

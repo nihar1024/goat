@@ -206,11 +206,22 @@ def _originals() -> list[dict[str, Any]]:
 #: * ``goat:layerType`` is published on the Collection and denormalised onto
 #:   every item so a search can facet by it.
 #: * ``goat:member_count`` is how many layers share the item's bundle --
-#:   precomputed at build time, and the number a grouped result card exists to
+#:   precomputed at build time, and the number a dataset card exists to
 #:   show ("74 layers").
 #: * ``goat:publisher`` is denormalised from the Collection's ``providers``, so
 #:   a card can name the publisher without fetching the parent.
 _ADDED_PROPERTIES = {"goat:layerType", "goat:member_count", "goat:publisher"}
+
+#: Added to a **Collection** only: its members' geometry type, where they all
+#: agree on one. A Collection publishes none of its own (it is a property of a
+#: layer, and the published ``summaries`` carry only ``updated``), and a dataset
+#: card needs to know what shape the data is.
+#:
+#: Kept separate from ``_ADDED_PROPERTIES`` on purpose. That set is discounted at
+#: both levels, so putting this in it would also stop checking that an *Item's*
+#: published ``goat:geometryType`` survives the round trip -- which it must, and
+#: which is what the texture on 10,685 layer cards is drawn from.
+_ADDED_COLLECTION_MEMBERS = {"goat:geometryType"}
 
 #: `goat:style` carries a heterogeneous nested array (``[[["label"], "#rgb"]]``)
 #: which parquet cannot type, so ``read_json_auto`` in this harness turns the
@@ -247,6 +258,12 @@ def test_real_document_survives_the_column_round_trip(
         if isinstance(container, dict):
             for name in _ADDED_PROPERTIES | _UNTYPEABLE_PROPERTIES:
                 container.pop(name, None)
+    # Top level only, so an Item's own `properties.goat:geometryType` stays under
+    # assertion.
+    if "properties" not in rebuilt:
+        for name in _ADDED_COLLECTION_MEMBERS:
+            rebuilt.pop(name, None)
+            expected.pop(name, None)
     assert rebuilt == expected
 
 

@@ -22,6 +22,7 @@ from catalog.services.search import (
     parse_datetime_interval,
     resolve_id,
     safe_query,
+    search_collections,
     search_items,
 )
 from catalog.store import CatalogStore
@@ -286,36 +287,36 @@ def test_collection_rows_excluded_from_item_search(store: CatalogStore) -> None:
     assert docs == []
 
 
-def test_grouped_one_entry_per_bundle(store: CatalogStore) -> None:
+def test_collection_search_is_one_entry_per_dataset(store: CatalogStore) -> None:
+    """A dataset list asks the collections relation.
+
+    This replaced `grouped=True` Item Search, which returned one designated
+    member per bundle and filtered *that member* -- so a dataset whose other
+    layer matched was dropped (228 of the 1,886 real datasets containing a
+    polygon layer). See `TestItemFacetsOnCollectionSearch` in test_aggregations.
+    """
+    rows, matched = search_collections(store, SearchParams(collections=["src-1"]))
+    assert matched == 1
+    assert [row["id"] for row in rows] == ["src-1"]
+    assert rows[0]["member_count"] == 4
+
+
+def test_item_search_still_answers_about_layers(store: CatalogStore) -> None:
+    """The bundle's four members are four items, and `member_count` is not on them.
+
+    It counts the layers of a *dataset*, so it belongs on the Collection; leaving
+    it on an item invited a card to read its siblings' count as its own.
+    """
     member_ids = [
         row[0]
-        for row in store.query(
-            f"SELECT id FROM {store.ITEMS} WHERE collection = 'src-1'"
+        for row in safe_query(
+            store, f"SELECT id FROM {CatalogStore.ITEMS} WHERE collection = 'src-1'", []
         )
     ]
     assert len(member_ids) == 4
-
-    newest_id = store.query(
-        f"SELECT id FROM {store.ITEMS} WHERE collection = 'src-1' "
-        f"ORDER BY updated DESC LIMIT 1"
-    )[0][0]
-
-    docs, n = search_items(store, SearchParams(ids=member_ids, grouped=True))
-    assert n == 1
-    assert len(docs) == 1
-    assert docs[0]["id"] == newest_id
-    assert docs[0]["member_count"] == 4
-
-
-def test_grouped_ungrouped_member_count_matches(store: CatalogStore) -> None:
-    member_ids = [
-        row[0]
-        for row in store.query(
-            f"SELECT id FROM {store.ITEMS} WHERE collection = 'src-1'"
-        )
-    ]
-    _, n_ungrouped = search_items(store, SearchParams(ids=member_ids))
-    assert n_ungrouped == 4
+    rows, matched = search_items(store, SearchParams(ids=member_ids))
+    assert matched == 4
+    assert all("member_count" not in row for row in rows)
 
 
 def test_q_free_text_matches_title(store: CatalogStore) -> None:
@@ -511,14 +512,12 @@ def test_q_composes_with_bbox_boost_ranking_order(store: CatalogStore) -> None:
     assert flags == sorted(flags, reverse=True)
 
 
-def test_q_grouped_still_filters_but_skips_ranking(store: CatalogStore) -> None:
-    """grouped=True: q still filters members on the WHERE side (members not
+def test_q_filters_on_the_where_side(store: CatalogStore) -> None:
+    """q filters rows on the WHERE side (rows not
     matching q must not leak a bundle in), but ranking falls back to the
     default group ordering (updated DESC) rather than injecting per-member
     BM25 into ORDER BY -- documented simplification, see report."""
-    docs, n = search_items(
-        store, SearchParams(q="Radverkehrsnetz", grouped=True, limit=1000)
-    )
+    docs, n = search_items(store, SearchParams(q="Radverkehrsnetz", limit=1000))
     assert n > 0
     # As in test_default_sort_is_updated_desc: `properties.updated` is
     # sparse by design, so check the always-populated `updated` column
@@ -663,12 +662,10 @@ def test_bbox_boost_ranks_intersecting_first(store: CatalogStore) -> None:
     assert flags == sorted(flags, reverse=True)  # all True's before all False's
 
 
-def test_bbox_boost_combines_with_grouped(store: CatalogStore) -> None:
+def test_bbox_boost_combines_with_a_plain_search(store: CatalogStore) -> None:
     boost_bbox = [8.0, 50.0, 9.0, 51.0]
-    _, n_plain = search_items(store, SearchParams(grouped=True, limit=1000))
-    _, n_boosted = search_items(
-        store, SearchParams(grouped=True, limit=1000, bbox_boost=boost_bbox)
-    )
+    _, n_plain = search_items(store, SearchParams(limit=1000))
+    _, n_boosted = search_items(store, SearchParams(limit=1000, bbox_boost=boost_bbox))
     assert n_boosted == n_plain
 
 
@@ -705,3 +702,67 @@ def test_invalid_query_is_still_400(store: CatalogStore) -> None:
     with pytest.raises(ApiError) as exc:
         safe_query(store, "SELECT nonexistent_column FROM cat")
     assert exc.value.status_code == 400
+
+
+class TestNutsSpatialFilter:
+    """`?nuts=` filters by a region's geometry (the spatial filter's backend).
+
+    Before this existed the parameter was silently ignored: the web client sent
+    it and got the unfiltered catalog back, which looks like a filter that does
+    nothing rather than an error.
+    """
+
+    def test_unknown_region_matches_nothing(self, store: CatalogStore) -> None:
+        _, n = search_items(store, SearchParams(nuts=["NOT-A-REGION"], limit=10))
+        assert n == 0
+
+    def test_region_narrows_the_result_set(self, store: CatalogStore) -> None:
+        _, everything = search_items(store, SearchParams(limit=10))
+        region = store.query(f"SELECT nuts_id FROM {store.NUTS} LIMIT 1")
+        if not region:
+            pytest.skip("fixture has no NUTS regions")
+        _, narrowed = search_items(store, SearchParams(nuts=[region[0][0]], limit=10))
+        assert narrowed <= everything
+
+    def test_multiple_regions_union(self, store: CatalogStore) -> None:
+        """Several ids match anything touching *any* of them."""
+        rows = store.query(f"SELECT nuts_id FROM {store.NUTS} LIMIT 2")
+        if len(rows) < 2:
+            pytest.skip("fixture has fewer than two NUTS regions")
+        first, second = rows[0][0], rows[1][0]
+        _, n_first = search_items(store, SearchParams(nuts=[first], limit=10))
+        _, n_both = search_items(store, SearchParams(nuts=[first, second], limit=10))
+        assert n_both >= n_first
+
+    def test_blank_values_are_ignored_not_matched(self, store: CatalogStore) -> None:
+        """An empty `?nuts=` must not become a filter that excludes everything."""
+        _, everything = search_items(store, SearchParams(limit=10))
+        _, blank = search_items(store, SearchParams(nuts=["", "  "], limit=10))
+        assert blank == everything
+
+
+def test_date_range_matches_a_dataset_through_its_layers(store: CatalogStore) -> None:
+    """A dataset is in a date range when any of its layers is.
+
+    The harvester publishes a Collection's `extent.temporal` as [[null, null]], so
+    the collection's own `datetime` is set on 88 of 3,834 real rows while 1,333
+    datasets contain a dated layer. Testing the collection alone answered 68 for
+    2010-2024 where the correct answer is 607 — the date filter was the same
+    designated-row bug as geometry type, and quieter, because a date filter
+    returning too little looks like a sparse catalog rather than a fault.
+    """
+    dated = safe_query(
+        store,
+        f"SELECT collection, datetime FROM {CatalogStore.ITEMS} "
+        f"WHERE datetime IS NOT NULL AND collection IS NOT NULL LIMIT 1",
+        [],
+    )
+    assert dated, "the fixture needs a dated layer inside a collection"
+    collection_id, moment = dated[0]
+    day = moment.date().isoformat()
+
+    rows, matched = search_collections(
+        store, SearchParams(datetime=f"{day}T00:00:00Z/{day}T23:59:59Z", limit=100)
+    )
+    assert matched >= 1
+    assert collection_id in {row["id"] for row in rows}

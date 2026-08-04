@@ -22,7 +22,7 @@ Kept here (re-backed by this service's own modules -- ``catalog.services
 .search``, ``catalog.services.aggregations``, ``catalog.services
 .stac_build`` -- instead of geoapi's asyncpg pool):
 
-- ``search_catalog`` -- Item Search (grouped, dataset-level) + facet counts.
+- ``search_catalog`` -- Collection Search (dataset-level) + facet counts.
 - ``get_catalog_record`` -- full record for an id, item or collection/bundle.
 
 **Dropped**: ``get_layer_geojson``, the feature-preview tool that fetched a
@@ -91,8 +91,17 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from catalog.errors import ApiError
 from catalog.routers.params import SearchQuery
-from catalog.services.aggregations import aggregation_names, run_aggregations
-from catalog.services.search import resolve_id, safe_query, search_items
+from catalog.services.aggregations import (
+    aggregation_names,
+    facet_params,
+    run_aggregations,
+)
+from catalog.services.search import (
+    SearchParams,
+    resolve_id,
+    safe_query,
+    search_collections,
+)
 from catalog.services.stac_build import (
     collection_from_row,
     collection_to_stac,
@@ -181,42 +190,52 @@ def _cap_items(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]
     return kept, truncated
 
 
-def _trim_item(item: dict[str, Any], *, member_count: int = 1) -> dict[str, Any]:
-    """Reduce a full STAC Item (from ``record_to_item``) to the fields
-    useful for an LLM, to save tokens -- mirrors the reference's
-    ``_trim_feature``."""
-    props = item.get("properties") or {}
-    contacts = [c for c in props.get("contacts") or [] if isinstance(c, dict)]
+def _trim_dataset(collection: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a full STAC Collection to the fields useful for an LLM.
+
+    A dataset *is* a Collection, so this reads the dataset's own metadata rather
+    than a designated layer's. The previous version trimmed an Item and took
+    dataset identity off whichever layer the mirror had marked representative,
+    which meant a bundle answered with one member's title (92 of 3,834 differ,
+    60 carrying a format suffix like "SHP EPSG:31259").
+    """
+    contacts = [c for c in collection.get("contacts") or [] if isinstance(c, dict)]
     publisher = next(
         (c for c in contacts if "publisher" in (c.get("roles") or [])),
         contacts[0] if contacts else None,
     )
+    providers = [p for p in collection.get("providers") or [] if isinstance(p, dict)]
+    producer = next(
+        (p for p in providers if "producer" in (p.get("roles") or [])),
+        providers[0] if providers else None,
+    )
     keywords = [
-        kw.get("value") for kw in props.get("keywords") or [] if isinstance(kw, dict)
+        kw.get("value") if isinstance(kw, dict) else kw
+        for kw in collection.get("keywords") or []
     ]
     themes = [
         concept.get("id")
-        for theme in props.get("themes") or []
+        for theme in collection.get("themes") or []
         for concept in (theme.get("concepts") or [])
         if isinstance(concept, dict)
     ]
-    language = props.get("language")
+    language = collection.get("language")
     if isinstance(language, dict):
         language = language.get("code")
+    spatial = ((collection.get("extent") or {}).get("spatial") or {}).get("bbox") or []
     return {
-        "id": item.get("id"),
-        "collection": item.get("collection"),
-        "title": props.get("title"),
-        "description": props.get("description"),
-        "type": props.get("goat:layerType"),
-        "publisher": publisher.get("name") if publisher else None,
-        "license": props.get("license"),
-        "keywords": keywords or None,
+        "id": collection.get("id"),
+        "title": collection.get("title"),
+        "description": collection.get("description"),
+        "type": collection.get("goat:layerType"),
+        "publisher": (publisher or producer or {}).get("name") or None,
+        "license": collection.get("license"),
+        "keywords": [kw for kw in keywords if kw] or None,
         "themes": themes or None,
         "language": language,
-        "updated": props.get("updated"),
-        "bbox": item.get("bbox"),
-        "member_count": member_count,
+        "updated": collection.get("updated"),
+        "bbox": spatial[0] if spatial else None,
+        "member_count": collection.get("goat:member_count") or 1,
     }
 
 
@@ -235,6 +254,7 @@ async def search_catalog(
     publisher: str | None = None,
     type: str | None = None,
     geographical_code: str | None = None,
+    geometry_type: str | None = None,
     datetime: str | None = None,
     sortby: str | None = None,
     limit: int = 10,
@@ -243,9 +263,10 @@ async def search_catalog(
     """Search the GOAT data catalog and return matching datasets, plus facet
     counts over the same filters.
 
-    Datasets are grouped (one entry per dataset bundle; ``member_count`` > 1
-    means several layers are bundled under it). Results are trimmed for
-    brevity; use ``get_catalog_record(id)`` for the full record.
+    One entry per dataset (``member_count`` > 1 means several layers are bundled
+    under it), and the facet counts are in the same unit -- so a count and the
+    result set it describes always agree. Results are trimmed for brevity; use
+    ``get_catalog_record(id)`` for the full record.
 
     Args:
         q: Free-text over title, description and keywords. Spaces mean AND
@@ -268,6 +289,8 @@ async def search_catalog(
         type: Comma-separated layer types, e.g. feature, raster, table, bundle
             (describe_catalog() lists what this catalog holds).
         geographical_code: Comma-separated ISO 3166-1 alpha-2 codes.
+        geometry_type: Comma-separated geometry types, e.g. point, line, polygon.
+            Matches a dataset when ANY of its layers has that geometry.
         datetime: RFC 3339 instant or interval, e.g. '2023-01-01/2024-12-31'.
         sortby: e.g. '-updated'; prefix '-' for descending.
         limit: Max datasets to return (1-100, default 10).
@@ -301,20 +324,24 @@ async def search_catalog(
                 "publisher": publisher,
                 "type": type,
                 "geographical_code": geographical_code,
-                "grouped": True,
+                "geometry_type": geometry_type,
                 "limit": limit,
                 "offset": offset,
             }
         ).to_search_params(store.registry, default_filter_lang="cql2-text", limit=limit)
-        rows, matched = search_items(store, params)
-        facets = run_aggregations(store, params, None)["aggregations"]
+        # Collection Search, not Item Search: one row per dataset, filtered as a
+        # dataset. Item-level filters (`geometry_type`) become semi-joins, so
+        # "datasets with a polygon layer" matches on *any* layer -- asking Item
+        # Search for one designated layer per dataset missed 228 of the 1,886
+        # datasets that contain one.
+        rows, matched = search_collections(store, params)
+        facets = run_aggregations(store, params, None, "collections")["aggregations"]
     except ApiError as exc:
         return {"error": exc.detail}
 
     trimmed = [
-        _trim_item(
-            record_to_item(item_from_row(row), stac_base=_STAC_BASE),
-            member_count=row.get("member_count", 1),
+        _trim_dataset(
+            collection_to_stac(collection_from_row(row), stac_base=_STAC_BASE)
         )
         for row in rows
     ]
@@ -344,6 +371,22 @@ async def describe_catalog(max_values: int = 40) -> dict[str, Any]:
             first). Filters with more values than this are marked truncated.
     """
     store = _require_store()
+    # Counted through the aggregation service, in DATASETS, because that is what
+    # `search_catalog` returns. Hand-rolled SQL over the items relation counted
+    # layers and — worse — could advertise a value that the dataset search then
+    # matched nothing for, because a collection-level filter reads the
+    # collection's own column, not its members'. Going through the same code path
+    # as `/aggregate` makes "every value here is a valid argument" true by
+    # construction rather than by coincidence.
+    # `{aggregation name: the parameter that narrows it}` -- never the name minus
+    # "_count": `category_count` is narrowed with `?themes=`.
+    params_for_aggregation = facet_params(store)
+    aggregated = run_aggregations(store, SearchParams(), None, "collections")
+    dataset_facets = {
+        params_for_aggregation[a["name"]]: a["buckets"]
+        for a in aggregated["aggregations"]
+        if a.get("buckets") is not None and a["name"] in params_for_aggregation
+    }
     filters: list[dict[str, Any]] = []
     for param, queryable in sorted(store.registry.filter_params().items()):
         entry: dict[str, Any] = {
@@ -351,20 +394,13 @@ async def describe_catalog(max_values: int = 40) -> dict[str, Any]:
             "description": queryable.definition.get("description"),
             "type": queryable.json_type,
         }
-        if queryable.facetable:
-            rows = safe_query(
-                store,
-                f"SELECT {queryable.expr} AS value, count(*) AS n "
-                f"FROM {CatalogStore.ITEMS} "
-                f"WHERE {queryable.expr} IS NOT NULL "
-                f"GROUP BY 1 ORDER BY n DESC, value ASC LIMIT ?",
-                [max_values + 1],
-            )
+        buckets = dataset_facets.get(param)
+        if queryable.facetable and buckets is not None:
             entry["values"] = [
-                {"value": value, "count": int(count)}
-                for value, count in rows[:max_values]
+                {"value": bucket["key"], "count": bucket["frequency"]}
+                for bucket in buckets[:max_values]
             ]
-            entry["truncated"] = len(rows) > max_values
+            entry["truncated"] = len(buckets) > max_values
         filters.append(entry)
 
     totals = safe_query(

@@ -348,6 +348,27 @@ def test_search_post_intersects_missing_coordinates_400(client: TestClient) -> N
     assert r.status_code == 400
 
 
+def test_search_post_bbox_as_csv_string_400(client: TestClient) -> None:
+    """A POST body must spell `bbox` as an array, not the GET way.
+
+    One params model serves both verbs, so its CSV parser is reachable from a
+    JSON body — and this used to succeed, against Item Search's POST schema
+    (`bbox` is an array of numbers there) and against what stac-api-validator
+    asserts. The GET spelling and a JSON array both still work.
+    """
+    assert client.post("/stac/search", json={"bbox": "10,50,11,51"}).status_code == 400
+    assert (
+        client.post("/stac/search", json={"bbox_boost": "10,50,11,51"}).status_code
+        == 400
+    )
+    assert (
+        client.post("/stac/search", json={"bbox": [10, 50, 11, 51]}).status_code == 200
+    )
+    assert client.get("/stac/search", params={"bbox": "10,50,11,51"}).status_code == 200
+    # An empty POST is a valid search for everything, and must not trip the check.
+    assert client.post("/stac/search").status_code == 200
+
+
 def test_search_intersects_semantically_invalid_geometry_400(
     client: TestClient,
 ) -> None:

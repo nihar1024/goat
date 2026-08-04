@@ -85,6 +85,31 @@ def _parse_bbox(value: Any) -> Any:
         raise ApiError(400, f"invalid bbox: {value!r}") from exc
 
 
+#: POST-body members that must arrive as JSON arrays.
+#:
+#: One model serves both verbs (see the module docstring), so the GET-side CSV
+#: parsers are reachable from a JSON body too -- and `{"bbox": "1,2,3,4"}` then
+#: succeeds where Item Search's POST schema types `bbox` as an array of numbers.
+#: A string there is a client error, and stac-api-validator asserts the 400.
+#:
+#: Only the numeric boxes are strict. `sortby` stays lenient on purpose (clients
+#: send the Sort extension's objects and `-field` strings interchangeably, and
+#: both are unambiguous), as do `ids`/`collections`, where a comma is not valid
+#: inside a value so the CSV reading cannot lose information.
+_POST_ARRAY_ONLY = ("bbox", "bbox_boost")
+
+
+def reject_get_encodings(body: Any) -> None:
+    """Raise 400 if a POST body spells an array parameter the GET way."""
+    if not isinstance(body, dict):
+        return
+    for name in _POST_ARRAY_ONLY:
+        if isinstance(body.get(name), str):
+            raise ApiError(
+                400, f"invalid {name}: must be an array of numbers in a POST body"
+            )
+
+
 _SORT_PREFIX_DIRECTION = {"+": "asc", "-": "desc"}
 
 
@@ -264,6 +289,13 @@ class _FilterMixin(FacetFilters):
         default="strict",
         description="strict (default) matches any intersection; relevant drops slivers",
     )
+    nuts: CsvList = Field(
+        default=None,
+        description=(
+            "NUTS region ids (e.g. AT13, DE21). Matches datasets intersecting the"
+            " region's geometry, not merely its bounding box. Combinable with bbox."
+        ),
+    )
 
     def _base_params(
         self,
@@ -287,6 +319,7 @@ class _FilterMixin(FacetFilters):
             fields=self.filter_fields(),
             cql=cql,
             bbox_mode=self.bbox_mode,
+            nuts=self.nuts,
             **overrides,
         )
 
@@ -328,10 +361,6 @@ class SearchQuery(_FilterMixin):
         default=None, description="GeoJSON geometry (URL-encoded for GET)"
     )
     sortby: SortBy = Field(default=None, description="e.g. -properties.updated")
-    grouped: bool = Field(
-        default=False,
-        description="One entry per bundle (dataset card), members hidden",
-    )
     bbox_boost: BboxCsv = Field(default=None, description=BboxBoostDescription)
     limit: int = Field(default=DEFAULT_LIMIT, description=LIMIT_DESCRIPTION)
     offset: int = Field(default=0, ge=0)
@@ -356,7 +385,6 @@ class SearchQuery(_FilterMixin):
             ids=self.ids,
             intersects=self.intersects,
             sortby=self.sortby,
-            grouped=self.grouped,
             bbox_boost=self.bbox_boost,
             limit=limit,
             offset=self.offset,
@@ -394,7 +422,7 @@ class AggregateQuery(_FilterMixin):
     """``GET /stac/aggregate`` parameters.
 
     The same predicates as Item Search minus everything that only shapes a
-    result page (``sortby``, ``grouped``, ``limit``/``offset``, ``bbox_boost``):
+    result page (``sortby``, ``limit``/``offset``, ``bbox_boost``):
     an aggregation counts the whole matching set.
     """
 
@@ -405,6 +433,15 @@ class AggregateQuery(_FilterMixin):
     )
     aggregations: CsvList = Field(
         default=None, description="Aggregation names (default: all)"
+    )
+    unit: Literal["items", "collections"] = Field(
+        default="items",
+        description=(
+            "What a count counts: 'items' counts layers, 'collections' counts"
+            " datasets. A client listing datasets must ask for 'collections', or"
+            " its facet counts describe a different set of things than its"
+            " results (10,793 layers live in 3,834 datasets)."
+        ),
     )
 
     def to_search_params(self, registry: QueryableRegistry) -> SearchParams:

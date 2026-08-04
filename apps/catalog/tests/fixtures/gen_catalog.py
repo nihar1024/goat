@@ -41,7 +41,7 @@ Pinned content contract (seed 42):
 
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -151,6 +151,12 @@ COLLECTION_STAC_EXTENSIONS = [
 # assert on these positions/ids verbatim.
 BUNDLE_COLLECTION_INDEX = 9
 BUNDLE_ROW_INDICES = (10, 11, 12, 13)
+
+#: The one item left without a collection, so the collection-less branch of the
+#: assembler stays covered (no `collection`/`parent` links, self link under
+#: `/items/`). Row 0 is the pinned row those tests reach for, so it is the orphan;
+#: every other item gets its own dataset.
+ORPHAN_INDEX = 0
 BUNDLE_COLLECTION_ID = "src-1"
 
 # A per-row mix of "provider download" assets (real harvester items carry
@@ -327,6 +333,41 @@ def _make_collection_row(rng: random.Random, i: int) -> Row:
         version="v1",
         parquet_url=None,
         idx=i,
+    )
+
+
+def _dataset_collection_for(item: Row) -> Row:
+    """The Collection that *is* this single-layer dataset.
+
+    Every published item belongs to a collection -- 0 of the real catalog's
+    10,793 items are orphans -- because the harvester emits one Collection per
+    source dataset and one Item per layer of it. The fixture used to leave all
+    but the bundle members collection-less, which made a dataset-level search
+    (Collection Search, which the catalog page and the MCP tool both use) see a
+    single dataset and nothing to page through.
+
+    Metadata is copied from the layer, as it is upstream: for a one-layer dataset
+    the layer's title and licence *are* the dataset's.
+    """
+    return Row(
+        id=f"src-{item.id}",
+        collection=None,
+        type="collection",
+        geom_type=None,
+        title=item.title,
+        description=item.description,
+        license=item.license,
+        category=item.category,
+        language=item.language,
+        publisher=item.publisher,
+        geometry_wkt=item.geometry_wkt,
+        geometry_geojson=item.geometry_geojson,
+        item_datetime=item.item_datetime,
+        created=item.created,
+        updated=item.updated,
+        version=item.version,
+        parquet_url=None,
+        idx=item.idx,
     )
 
 
@@ -565,26 +606,37 @@ def _build_rows(n: int) -> list[Row]:
     rng = random.Random(42)
     rows: list[Row] = []
     for i in range(n):
-        if i == 0:
-            rows.append(
-                _make_row(
-                    rng,
-                    i,
-                    topic="Radverkehrsnetz",
-                    region="Dresden",
-                    license_id="CC-BY-4.0",
-                    category="transportation",
-                    language="de",
-                )
-            )
-        elif i == BUNDLE_COLLECTION_INDEX:
+        if i == BUNDLE_COLLECTION_INDEX:
             rows.append(_make_collection_row(rng, i))
-        elif i in BUNDLE_ROW_INDICES:
+            continue
+        if i in BUNDLE_ROW_INDICES:
             rows.append(
                 _make_row(rng, i, collection=BUNDLE_COLLECTION_ID, row_type="feature")
             )
-        else:
-            rows.append(_make_row(rng, i))
+            continue
+        item = (
+            _make_row(
+                rng,
+                i,
+                topic="Radverkehrsnetz",
+                region="Dresden",
+                license_id="CC-BY-4.0",
+                category="transportation",
+                language="de",
+            )
+            if i == 0
+            else _make_row(rng, i)
+        )
+        # One Collection per layer, as the harvester publishes it. `ORPHAN_INDEX`
+        # keeps exactly one collection-less Item, because STAC permits it and the
+        # assembler has a branch for it (no `collection`/`parent` links, and a
+        # self link under `/items/`).
+        if i == ORPHAN_INDEX:
+            rows.append(item)
+            continue
+        dataset = _dataset_collection_for(item)
+        rows.append(replace(item, collection=dataset.id))
+        rows.append(dataset)
     return rows
 
 

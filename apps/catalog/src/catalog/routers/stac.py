@@ -43,6 +43,7 @@ from catalog.routers.params import (
     CollectionSearchQuery,
     ItemsQuery,
     SearchQuery,
+    reject_get_encodings,
 )
 from catalog.services import capabilities, stac_build
 from catalog.services.aggregations import (
@@ -491,6 +492,10 @@ async def stac_search_post(
     body: SearchQuery = Body(default_factory=SearchQuery),
 ) -> dict[str, Any]:
     base = _stac_base(request)
+    # Checked against the raw body, because by this point the shared GET/POST
+    # model has already coerced a CSV `bbox` string into a list. Starlette caches
+    # the body, so this re-reads rather than re-receives it.
+    reject_get_encodings(await request.json() if await request.body() else None)
     params = body.to_search_params(
         store.registry,
         # cql2-json is the POST default (a JSON body carries a JSON filter);
@@ -551,9 +556,13 @@ class ResolvedEntry(BaseModel):
     responses=_documents(AggregationsDiscovery),
 )
 async def stac_aggregations(
+    unit: Annotated[
+        Literal["items", "collections"],
+        Query(description="Count layers ('items') or datasets ('collections')"),
+    ] = "items",
     store: CatalogStore = Depends(get_store),
 ) -> dict[str, Any]:
-    return available_aggregations(store)
+    return available_aggregations(store, unit)
 
 
 @router.get(
@@ -566,7 +575,10 @@ async def stac_aggregate(
     store: CatalogStore = Depends(get_store),
 ) -> dict[str, Any]:
     return run_aggregations(
-        store, query.to_search_params(store.registry), query.aggregations
+        store,
+        query.to_search_params(store.registry),
+        query.aggregations,
+        query.unit,
     )
 
 

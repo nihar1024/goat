@@ -31,6 +31,7 @@ from goatlib.tasks.catalog_mirror import build_mirror
 
 from catalog.config import CatalogSettings
 from catalog.services.search import SearchParams, search_collections, search_items
+from catalog.services.stac_build import collection_from_row
 from catalog.store import CatalogStore
 from tests.test_mirror_roundtrip import _publish
 
@@ -287,26 +288,10 @@ def test_the_mirror_stores_the_whole_interval(temporal_store: CatalogStore) -> N
         assert starts["undated"] is None and ends["undated"] is None
 
 
-def test_a_multi_interval_extent_spans_all_of_its_intervals(tmp_path: Path) -> None:
-    """A Collection may publish several intervals; the extent is their envelope.
-
-    ``extent.temporal.interval`` is a list, and the spec is explicit that the
-    first entry is the whole extent while later ones may describe sub-periods.
-    Reading a single element -- which the mirror used to do -- gets this wrong in
-    both directions, so the envelope is computed over all of them.
-    """
-    collections = [
-        _collection(
-            "src-multi",
-            [
-                ["2000-01-01T00:00:00Z", "2005-12-31T00:00:00Z"],
-                ["2010-01-01T00:00:00Z", "2012-12-31T00:00:00Z"],
-            ],
-            "multi",
-        )
-    ]
-    items = [_item("item-multi", "src-multi", {"datetime": "2000-01-01T00:00:00Z"})]
-
+def _store_for(
+    tmp_path: Path, items: list[dict], collections: list[dict]
+) -> CatalogStore:
+    """Publish, convert and load — one catalog per case."""
     con = duckdb.connect()
     con.execute("INSTALL spatial; LOAD spatial; INSTALL json; LOAD json;")
     published_items = tmp_path / "published_items.parquet"
@@ -321,9 +306,107 @@ def test_a_multi_interval_extent_spans_all_of_its_intervals(tmp_path: Path) -> N
         con,
     )
     con.close()
-    (tmp_path / "VERSION").write_text("v-temporal-multi")
-
+    (tmp_path / "VERSION").write_text("v-temporal-case")
     store = CatalogStore(CatalogSettings(data_dir=tmp_path))
     store.ensure_current()
-    start, end = store.query("SELECT datetime_start, datetime_end FROM collections")[0]
+    return store
+
+
+def _interval(store: CatalogStore) -> tuple[Any, Any]:
+    row = store.query("SELECT datetime_start, datetime_end FROM collections")[0]
+    return row[0], row[1]
+
+
+def test_a_closed_published_extent_is_the_dataset_period(tmp_path: Path) -> None:
+    """A Collection that states a closed extent is stating its coverage.
+
+    Only 64 of 3,834 do, and 44 of those are wider than their layers' span --
+    `Seismik NRW` covers 1935-2025 where its one layer is dated 1935. Reading the
+    layers there would throw the dataset's actual coverage away.
+
+    Also read as an envelope over *all* of `extent.temporal.interval`: the list's
+    first entry is the whole extent per the spec, but the mirror used to take
+    `interval[1][1]`, the END of the FIRST entry, which is wrong in both
+    directions on a multi-interval extent.
+    """
+    store = _store_for(
+        tmp_path,
+        [_item("item-multi", "src-multi", {"datetime": "2001-06-01T00:00:00Z"})],
+        [
+            _collection(
+                "src-multi",
+                [
+                    ["2000-01-01T00:00:00Z", "2005-12-31T00:00:00Z"],
+                    ["2010-01-01T00:00:00Z", "2012-12-31T00:00:00Z"],
+                ],
+                "multi",
+            )
+        ],
+    )
+    start, end = _interval(store)
     assert (start.year, end.year) == (2000, 2012)
+
+
+def test_an_open_ended_extent_loses_to_the_layers(tmp_path: Path) -> None:
+    """`[start, null]` is not a statement about coverage, so the layers answer.
+
+    3,766 of 3,834 collections publish exactly that, with the start in the harvest
+    year on 799 of them -- which is the case reproduced here: an extent claiming
+    the data has been collected since the harvest, and a layer that says 2021.
+    Trusting the extent had a 2021 dataset advertising itself as "since 2026", and
+    a single-layer dataset from 2001 as "since 2001".
+    """
+    store = _store_for(
+        tmp_path,
+        [_item("item-open", "src-open", {"datetime": "2021-05-04T00:00:00Z"})],
+        [_collection("src-open", [["2026-07-30T00:00:00Z", None]], "open")],
+    )
+    start, end = _interval(store)
+    assert (start.year, end.year) == (2021, 2021)
+
+
+def test_a_bundle_spans_its_layers(tmp_path: Path) -> None:
+    """With no usable extent, a dataset's period is its layers' envelope."""
+    store = _store_for(
+        tmp_path,
+        [
+            _item("item-a", "src-bundle", {"datetime": "2014-03-01T00:00:00Z"}),
+            _item("item-b", "src-bundle", {"datetime": "2019-09-01T00:00:00Z"}),
+            _item("item-c", "src-bundle", {}),
+        ],
+        [_collection("src-bundle", [[None, None]], "bundle")],
+    )
+    start, end = _interval(store)
+    assert (start.year, end.year) == (2014, 2019)
+
+
+def test_an_extent_survives_when_no_layer_is_dated(tmp_path: Path) -> None:
+    """Nothing to read on the layers leaves the published extent, open or not."""
+    store = _store_for(
+        tmp_path,
+        [_item("item-undated", "src-open", {})],
+        [_collection("src-open", [["2000-01-01T00:00:00Z", None]], "open")],
+    )
+    start, end = _interval(store)
+    assert start.year == 2000 and end is None
+
+
+def test_the_served_extent_states_the_dataset_period(tmp_path: Path) -> None:
+    """`extent.temporal` on a served Collection is the interval the filter uses.
+
+    A client -- and the catalog's own cards -- must not be told one period while
+    `?datetime=` matches another, so the extent is served from the derived
+    interval rather than passed through.
+    """
+    store = _store_for(
+        tmp_path,
+        [_item("item-open", "src-open", {"datetime": "2021-05-04T00:00:00Z"})],
+        [_collection("src-open", [["2026-07-30T00:00:00Z", None]], "open")],
+    )
+    row = store.query_dicts(
+        "SELECT * REPLACE (ST_AsGeoJSON(geometry) AS geometry) FROM collections"
+    )[0]
+    served = collection_from_row(row)
+    assert served["extent"]["temporal"]["interval"] == [
+        ["2021-05-04T00:00:00Z", "2021-05-04T00:00:00Z"]
+    ]

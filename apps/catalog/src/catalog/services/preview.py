@@ -63,7 +63,9 @@ _SAMPLE_SEED = 42
 _GEOMETRY_TYPE_PREFIX = "GEOMETRY"
 
 
-def object_key(href: str, bucket: str) -> str:
+def object_key(
+    href: str, bucket: str, *, prefixes: tuple[str, ...] = ("data/",)
+) -> str:
     """Resolve a published asset href to a key inside our own bucket.
 
     The href comes from the harvester (``../../../data/<id>.parquet``,
@@ -75,7 +77,9 @@ def object_key(href: str, bucket: str) -> str:
     * an absolute URL is accepted only when it addresses this bucket,
     * ``..`` may only appear as the leading walk out of the tree, never in the
       resolved key,
-    * the key must start with a known data prefix.
+    * the key must start with one of ``prefixes`` -- each caller passes the
+      prefixes it is allowed to read, so the data objects the preview samples
+      and the thumbnails the assets route serves cannot reach each other's.
 
     Anything else raises rather than being "helpfully" coerced.
     """
@@ -106,8 +110,8 @@ def object_key(href: str, bucket: str) -> str:
     if any(s == ".." for s in segments):
         raise ApiError(404, "item data asset href is not a valid object key")
     key = "/".join(segments)
-    if not key.startswith("data/"):
-        raise ApiError(404, "item data asset is not a catalog data object")
+    if not key.startswith(prefixes):
+        raise ApiError(404, "asset href is not inside a published catalog prefix")
     return key
 
 
@@ -284,7 +288,7 @@ class PreviewReader:
         bucket, so a test can point the same query pipeline at a local file.
         """
         bucket = self._settings.s3_catalog_bucket or ""
-        key = object_key(str(row.get("parquet_url") or ""), bucket)
+        key = object_key(str(row.get("parquet_url") or ""), bucket, prefixes=("data/",))
         return f"s3://{bucket}/{key}"
 
     def render(self, generation: str, row: dict[str, Any], limit: int) -> bytes:

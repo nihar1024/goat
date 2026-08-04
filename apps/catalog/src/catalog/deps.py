@@ -8,6 +8,7 @@ without an import cycle.
 from fastapi import Depends, Request
 
 from catalog.errors import ApiError, NotModifiedError
+from catalog.services.assets import AssetReader
 from catalog.services.preview import PreviewReader
 from catalog.store import CatalogStore
 
@@ -58,6 +59,18 @@ async def check_not_modified(
     etag = f'W/"{store.etag_seed}"'
     if request.headers.get("if-none-match") == etag:
         raise NotModifiedError(etag)
+
+
+def get_asset_reader(request: Request) -> AssetReader:
+    """FastAPI dependency: the asset reader, when one is configured.
+
+    404 rather than 501 for the same reason previews do it: an endpoint this
+    deployment does not offer is not there. Both need the catalog bucket.
+    """
+    reader: AssetReader | None = getattr(request.app.state, "asset_reader", None)
+    if reader is None:
+        raise ApiError(404, "assets are not enabled on this deployment")
+    return reader
 
 
 def get_preview_reader(request: Request) -> PreviewReader:

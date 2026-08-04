@@ -15,8 +15,10 @@ from catalog.auth import BearerAuthASGIMiddleware
 from catalog.config import CatalogSettings
 from catalog.deps import get_store
 from catalog.errors import ApiError, NotModifiedError
+from catalog.routers.assets import router as assets_router
 from catalog.routers.nuts import router as nuts_router
 from catalog.routers.stac import router as stac_router
+from catalog.services.assets import AssetReader
 from catalog.services.preview import PreviewReader
 from catalog.store import CatalogStore
 
@@ -69,6 +71,9 @@ def create_app(settings: CatalogSettings | None = None) -> FastAPI:
         # swapped on every mirror reload and only ever reads local files.
         app.state.preview_reader = (
             PreviewReader(settings) if settings.preview_enabled else None
+        )
+        app.state.asset_reader = (
+            AssetReader(settings) if settings.assets_enabled else None
         )
         if mcp_module is not None:
             mcp_module.set_store(app.state.store)
@@ -236,6 +241,7 @@ def create_app(settings: CatalogSettings | None = None) -> FastAPI:
 
     app.include_router(stac_router)
     app.include_router(nuts_router)
+    app.include_router(assets_router)
 
     if mcp_module is not None:
         # streamable_http_path="/" so the sub-app's single route sits at

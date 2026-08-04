@@ -120,6 +120,18 @@ def _stac_base(request: Request) -> str:
     return f"{_base_url(request)}/stac"
 
 
+def _assets_base(request: Request) -> str:
+    """This API's own asset base, derived from the request like every other base.
+
+    A sibling of ``/stac`` rather than a path inside it: the assets route is not
+    a STAC endpoint. Derived rather than configured so a served thumbnail href is
+    right on localhost and behind the ingress with nothing set -- the one case
+    that would need a setting is a CDN in front, which is a change here and
+    nowhere else.
+    """
+    return f"{_base_url(request)}/assets"
+
+
 def _ui_base(request: Request) -> str:
     """The GOAT web app's base URL, for the served items' "Open in GOAT" link.
 
@@ -244,12 +256,19 @@ def _require_collection_row(store: CatalogStore, cid: str) -> dict[str, Any]:
 
 
 def _run_search(
-    store: CatalogStore, base: str, params: SearchParams, ui: str | None = None
+    store: CatalogStore,
+    base: str,
+    params: SearchParams,
+    ui: str | None = None,
+    assets: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     rows, matched = search_items(store, params)
     features = [
         stac_build.record_to_item(
-            stac_build.item_from_row(row), stac_base=base, goat_ui_base_url=ui
+            stac_build.item_from_row(row),
+            stac_base=base,
+            goat_ui_base_url=ui,
+            assets_base=assets,
         )
         for row in rows
     ]
@@ -290,11 +309,13 @@ async def stac_landing(
     responses=_documents(stac_build.Conformance),
 )
 async def stac_conformance(store: CatalogStore = Depends(get_store)) -> dict[str, Any]:
-    """The conformance classes this catalog can actually serve.
+    """The conformance classes this catalog serves.
 
-    Derived from the loaded file rather than a fixed list, so the declaration
-    and the behaviour cannot disagree (see ``catalog.services.capabilities``).
+    What is listed here is what the API will honour; a class the current data
+    cannot support is not declared.
     """
+    # Derived from the loaded file rather than a fixed list, so the declaration
+    # and the behaviour cannot disagree -- see `catalog.services.capabilities`.
     return {"conformsTo": capabilities.conformance_classes(store.registry)}
 
 
@@ -344,9 +365,12 @@ async def stac_collections(
     params = query.to_search_params(store.registry, limit=limit)
     rows, matched = search_collections(store, params)
     ui = _ui_base(request)
+    assets = _assets_base(request)
     collections = [
         stac_build.collection_to_stac(
-            stac_build.collection_from_row(row), stac_base=base, goat_ui_base_url=ui
+            stac_build.collection_from_row(row, assets_base=assets),
+            stac_base=base,
+            goat_ui_base_url=ui,
         )
         for row in rows
     ]
@@ -368,7 +392,7 @@ async def stac_collection(
 ) -> dict[str, Any]:
     row = _require_collection_row(store, cid)
     return stac_build.collection_to_stac(
-        stac_build.collection_from_row(row),
+        stac_build.collection_from_row(row, assets_base=_assets_base(request)),
         stac_base=_stac_base(request),
         goat_ui_base_url=_ui_base(request),
     )
@@ -399,6 +423,7 @@ async def stac_collection_items(
             stac_base=base,
             collection_id=cid,
             goat_ui_base_url=ui,
+            assets_base=_assets_base(request),
         )
         for row in rows
     ]
@@ -438,6 +463,7 @@ async def stac_collection_item(
         stac_base=_stac_base(request),
         collection_id=cid,
         goat_ui_base_url=_ui_base(request),
+        assets_base=_assets_base(request),
     )
 
 
@@ -463,7 +489,9 @@ async def stac_search_get(
         default_filter_lang="cql2-text",
         limit=clamp_limit(query.limit, MAX_SEARCH_LIMIT),
     )
-    features, matched = _run_search(store, base, params, _ui_base(request))
+    features, matched = _run_search(
+        store, base, params, _ui_base(request), _assets_base(request)
+    )
     self_href = _self_href(request)
     first_href = _paged_href(request, 0, params.limit)
     next_href, prev_href = _next_prev_href(
@@ -503,7 +531,9 @@ async def stac_search_post(
         default_filter_lang="cql2-json",
         limit=clamp_limit(body.limit, MAX_SEARCH_LIMIT),
     )
-    features, matched = _run_search(store, base, params, _ui_base(request))
+    features, matched = _run_search(
+        store, base, params, _ui_base(request), _assets_base(request)
+    )
     self_href = f"{base}/search"
     result = stac_build.item_collection(
         features, stac_base=base, self_href=self_href, number_matched=matched
@@ -603,6 +633,7 @@ async def stac_resolve(
         raise ApiError(404, f"Catalog entry not found: {entry_id}")
 
     ui = _ui_base(request)
+    assets = _assets_base(request)
     if res["kind"] == "item":
         collection_id = res["collection_id"]
         out: dict[str, Any] = {
@@ -612,6 +643,7 @@ async def stac_resolve(
                 stac_base=base,
                 collection_id=collection_id,
                 goat_ui_base_url=ui,
+                assets_base=assets,
             ),
             "collection_id": collection_id,
         }
@@ -619,7 +651,7 @@ async def stac_resolve(
             coll_row = get_collection_row(store, collection_id)
             if coll_row is not None:
                 out["collection"] = stac_build.collection_to_stac(
-                    stac_build.collection_from_row(coll_row),
+                    stac_build.collection_from_row(coll_row, assets_base=assets),
                     stac_base=base,
                     goat_ui_base_url=ui,
                 )
@@ -628,7 +660,7 @@ async def stac_resolve(
     return {
         "kind": "collection",
         "collection": stac_build.collection_to_stac(
-            stac_build.collection_from_row(res["collection_row"]),
+            stac_build.collection_from_row(res["collection_row"], assets_base=assets),
             stac_base=base,
             goat_ui_base_url=ui,
         ),
@@ -638,6 +670,7 @@ async def stac_resolve(
                 stac_base=base,
                 collection_id=entry_id,
                 goat_ui_base_url=ui,
+                assets_base=assets,
             )
             for row in res["member_rows"]
         ],
@@ -655,16 +688,22 @@ async def stac_item_preview(
     store: CatalogStore = Depends(get_store),
     reader: PreviewReader = Depends(get_preview_reader),
 ) -> Response:
-    """A small, fixed sample of the item's features, for a preview map.
+    """A sample of the item's features as GeoJSON, for drawing a preview map.
 
-    Deliberately *not* a data endpoint: no paging, no bbox, no attribute
-    filtering, and a hard ceiling on both feature count and payload bytes.
-    A client that wants the data adds the layer to a project (design S14).
+    At most 100 features and 2 MB, whichever comes first, and no parameters:
+    this shows what the data looks like, it does not return the data. Add the
+    layer to a project to work with it.
 
-    Because there is no viewport parameter the answer depends only on the item
-    and the mirror generation, so it is computed once per item per harvest and
-    cached; a sync drops the cache with the generation it was sampled under.
+    Answers 404 where a deployment does not offer previews.
     """
+    # Everything below is implementation, kept out of the description above --
+    # this docstring is the endpoint's public text in `/openapi.json`, and a
+    # client has no use for how the sample is produced.
+    #
+    # There is no viewport parameter, so the answer depends only on the item and
+    # the mirror generation: it is rendered once per item per harvest and cached
+    # under that generation, which a sync then drops. The ceilings are what keep
+    # a preview from becoming a download of data design S14 keeps private.
     res = resolve_id(store, item_id)
     if res is None or res["kind"] != "item":
         raise ApiError(404, f"Item not found: {item_id}")
@@ -703,4 +742,5 @@ async def stac_item_by_id(
         stac_base=_stac_base(request),
         collection_id=res["collection_id"],
         goat_ui_base_url=_ui_base(request),
+        assets_base=_assets_base(request),
     )

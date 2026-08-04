@@ -18,6 +18,7 @@ import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -233,15 +234,50 @@ def _is_unservable_link(href: object) -> bool:
 _PRIVATE_ASSET_ROLES = frozenset({"collection-mirror"})
 
 
-def _public_assets(assets: dict[str, Any] | None) -> dict[str, Any]:
-    """The document's assets minus the ones this API does not publish."""
-    return {
-        key: asset
-        for key, asset in (assets or {}).items()
-        if isinstance(asset, dict)
-        and not _is_private_href(asset.get("href"))
-        and not _PRIVATE_ASSET_ROLES.intersection(asset.get("roles") or ())
-    }
+#: Assets this API serves itself, and the ``/assets`` kind each is served as.
+#:
+#: The harvester publishes these hrefs relative to the static JSON tree
+#: (``../../../thumbs/<id>.svg``), which is correct there and meaningless to a
+#: client that received the item from this API -- so :func:`_public_assets` drops
+#: them as unservable. Rewriting them to this API's own route publishes the two
+#: that a client needs *without* opening the bucket, and without waiting for the
+#: harvester to publish absolute hrefs: the tree-relative form is exactly what
+#: the route resolves a key from.
+#:
+#: The GeoParquet is deliberately not here. It keeps being dropped, which is how
+#: "the harmonised data is not downloadable" stays true by construction rather
+#: than by a permission that could be relaxed.
+_SERVED_ASSETS = {"thumbnail": "thumbnail", "style": "style"}
+
+
+def _public_assets(
+    assets: dict[str, Any] | None,
+    *,
+    item_id: str | None = None,
+    assets_base: str | None = None,
+) -> dict[str, Any]:
+    """The document's assets minus the ones this API does not publish.
+
+    ``assets_base`` is this API's own ``/assets`` base URL; without it (an
+    offline rebuild, a test) the served set is only what the publisher made
+    absolute itself.
+    """
+    served: dict[str, Any] = {}
+    for key, asset in (assets or {}).items():
+        if not isinstance(asset, dict):
+            continue
+        if _PRIVATE_ASSET_ROLES.intersection(asset.get("roles") or ()):
+            continue
+        kind = _SERVED_ASSETS.get(key)
+        if kind and assets_base and item_id:
+            served[key] = {
+                **asset,
+                "href": f"{assets_base}/{quote(item_id, safe='')}/{kind}",
+            }
+            continue
+        if not _is_private_href(asset.get("href")):
+            served[key] = asset
+    return served
 
 
 #: Mirror columns that exist to answer queries, not to be served. They are
@@ -411,10 +447,15 @@ def item_from_row(row: dict[str, Any]) -> dict[str, Any]:
 #: the temporal extent so Collection Search can filter on it, but a STAC
 #: Collection has no top-level `datetime` member -- `extent` is its temporal
 #: statement -- so it must not be serialised.
-_COLLECTION_INTERNAL = _INTERNAL_COLUMNS | {"datetime"}
+#: `thumbnail_item` names the layer whose thumbnail stands for the dataset. It is
+#: not served as a property -- `collection_from_row` turns it into the
+#: `assets.thumbnail` href a card reads.
+_COLLECTION_INTERNAL = _INTERNAL_COLUMNS | {"datetime", "thumbnail_item"}
 
 
-def collection_from_row(row: dict[str, Any]) -> dict[str, Any]:
+def collection_from_row(
+    row: dict[str, Any], *, assets_base: str | None = None
+) -> dict[str, Any]:
     """Assemble a STAC Collection from one mirror row.
 
     A Collection has no ``properties``: every field is top level, so this is a
@@ -438,7 +479,64 @@ def collection_from_row(row: dict[str, Any]) -> dict[str, Any]:
     # served Collection keeps `extent` as its spatial statement, so the derived
     # geometry is internal and never serialised.
     _ = geometry
+    _state_temporal_extent(document, row)
+    _state_thumbnail(document, row, assets_base)
     return document
+
+
+def _state_thumbnail(
+    document: dict[str, Any], row: dict[str, Any], assets_base: str | None
+) -> None:
+    """Give the dataset the thumbnail of the layer that has one.
+
+    A Collection publishes no thumbnail (only `collection-mirror`, which this API
+    never serves), so a dataset card would have nothing to show while 1,021 of
+    its layers do. The href points at the *layer* that owns the object, because
+    that is where the asset route resolves a key from -- the dataset is borrowing
+    a picture, not claiming an object of its own.
+
+    No `type`: the collection row does not know the layer's, and guessing one
+    would be a claim about bytes this row has never seen. A client reads the type
+    off the response, which is where it is authoritative.
+    """
+    item_id = row.get("thumbnail_item")
+    if not item_id or not assets_base:
+        return
+    assets = document.get("assets")
+    if not isinstance(assets, dict):
+        assets = {}
+        document["assets"] = assets
+    assets["thumbnail"] = {
+        "href": f"{assets_base}/{quote(str(item_id), safe='')}/thumbnail",
+        "roles": ["thumbnail"],
+    }
+
+
+def _state_temporal_extent(document: dict[str, Any], row: dict[str, Any]) -> None:
+    """Serve ``extent.temporal`` as the envelope of the dataset's layers.
+
+    STAC defines a Collection's temporal extent as exactly that envelope, and the
+    mirror computes it (``datetime_start``/``datetime_end``, mirror v6) because the
+    published extent is not it: `[start, null]` on 3,766 of 3,834 collections, with
+    the start in the harvest year on 799 of them. Passing that through meant a
+    dataset whose only layer is from 2001 advertised itself as "collected since
+    2001, ongoing" -- to this API's own filter as well as to a client, since the
+    filter compares the derived interval.
+
+    So the served extent states the derived one, and the published value survives
+    only where no layer carries a date (the fallback is in the converter). When the
+    harvester starts publishing the envelope itself, this becomes a no-op that
+    restates what it said -- which is how to tell it is doing the right thing
+    rather than papering over the gap.
+    """
+    start, end = row.get("datetime_start"), row.get("datetime_end")
+    if start is None and end is None:
+        return
+    extent = document.get("extent")
+    if not isinstance(extent, dict):
+        extent = {}
+        document["extent"] = extent
+    extent["temporal"] = {"interval": [[_clean(start), _clean(end)]]}
 
 
 def record_to_item(
@@ -447,6 +545,7 @@ def record_to_item(
     stac_base: str,
     collection_id: str | None = None,
     goat_ui_base_url: str | None = None,
+    assets_base: str | None = None,
 ) -> dict[str, Any]:
     """Return the stored STAC Item, adjusted for serving over this API.
 
@@ -482,7 +581,9 @@ def record_to_item(
     resolved = collection_id or item.get("collection") or row_collection
     cid = str(resolved) if resolved else None
 
-    item["assets"] = _public_assets(item.get("assets"))
+    item["assets"] = _public_assets(
+        item.get("assets"), item_id=item_id, assets_base=assets_base
+    )
 
     if cid:
         item["collection"] = cid

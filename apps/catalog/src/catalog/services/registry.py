@@ -322,7 +322,7 @@ def _entry(name: str, expr: str, json_type: str, json_format: str | None) -> Que
 #: is NULL for exactly the datasets a filter must still find. Hidden here, the
 #: parameter falls through to the item registry and compiles to the semi-join
 #: that answers it (``build_filters``' ``promoted``).
-_HIDDEN_COLLECTION_COLUMNS = frozenset({"goat:geometryType"})
+_HIDDEN_COLLECTION_COLUMNS = frozenset({"goat:geometryType", "thumbnail_item"})
 
 
 def build_registry(

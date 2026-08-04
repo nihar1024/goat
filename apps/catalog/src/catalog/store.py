@@ -96,6 +96,7 @@ _COLLECTION_COLUMNS_SQL = """
     datetime_start TIMESTAMPTZ,
     datetime_end TIMESTAMPTZ,
     "goat:geometryType" VARCHAR,
+    thumbnail_item VARCHAR,
     bbox_xmin DOUBLE,
     bbox_ymin DOUBLE,
     bbox_xmax DOUBLE,

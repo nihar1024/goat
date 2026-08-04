@@ -533,6 +533,28 @@ def test_cors_preflight_from_a_foreign_origin_is_not_allowed(
     assert "access-control-allow-origin" not in {k.lower() for k in r.headers}
 
 
+def test_several_cors_origins_are_each_allowed(catalog_dir: Path) -> None:
+    """More than one origin is the normal local-dev case.
+
+    The web dev server moves to 3001+ whenever another worktree holds 3000, so
+    `CATALOG_CORS_ORIGINS` takes a list and every entry in it is served.
+    """
+    app = create_app(
+        CatalogSettings(
+            data_dir=catalog_dir,
+            cors_origins=["http://localhost:3000", "http://localhost:3001"],
+        )
+    )
+    with TestClient(app) as c:
+        for origin in ("http://localhost:3000", "http://localhost:3001"):
+            r = c.options(
+                "/stac",
+                headers={"Origin": origin, "Access-Control-Request-Method": "GET"},
+            )
+            assert r.status_code == 200, origin
+            assert r.headers["access-control-allow-origin"] == origin
+
+
 def test_explicit_cors_origins_override_the_derived_default(
     catalog_dir: Path,
 ) -> None:

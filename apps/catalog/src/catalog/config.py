@@ -123,6 +123,15 @@ class CatalogSettings(BaseSettings):
         default="us-east-1",
         validation_alias=AliasChoices("CATALOG_S3_REGION", "S3_REGION"),
     )
+    #: Ceiling on a served asset. A read is whole-object (DuckDB, not a range
+    #: request), so this is what stands between one malformed object and the
+    #: pod's memory. Generous against the real corpus: the largest thumbnail is
+    #: a few hundred KB and a style is under 1 KB.
+    assets_max_bytes: int = 5 * 1024 * 1024
+    #: How long a client may treat a thumbnail or style as fresh. Long, and
+    #: paired with the store's ETag: the object cannot change without a harvest,
+    #: and a harvest changes the ETag, so a stale copy revalidates into a 304.
+    assets_max_age_seconds: int = 86400
     #: Feature ceiling. A preview is a taste of the data, not a download; the
     #: cap is what keeps it from becoming one.
     preview_max_features: int = 100
@@ -160,6 +169,11 @@ class CatalogSettings(BaseSettings):
     #: cannot change until a sync swaps the mirror, and a sync changes the
     #: ETag, so a client that kept a stale copy revalidates into a 304.
     preview_max_age_seconds: int = 86400
+
+    @property
+    def assets_enabled(self) -> bool:
+        """Serving thumbnails and styles needs the same bucket the preview does."""
+        return self.preview_enabled
 
     @property
     def preview_enabled(self) -> bool:

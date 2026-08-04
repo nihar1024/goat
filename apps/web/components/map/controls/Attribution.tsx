@@ -79,7 +79,13 @@ const AttributionControl: React.FC<AttributionControlProps> = ({
   extraAttribution,
 }) => {
   const { t } = useTranslation("common");
-  const { map } = useMap();
+  // `map` is the project map, which `MapProvider` registers under that id.
+  // `current` is whichever map this control is mounted inside, and is the only
+  // one available on surfaces that mount a map without the provider — the
+  // catalog's preview maps. Without the fallback the control still renders, but
+  // finds no sources, so it silently drops the credits it exists to show.
+  const { map: projectMap, current } = useMap();
+  const map = projectMap ?? current;
   const [parts, setParts] = useState<AttributionParts>({ madeWith: [], dataSources: [] });
   const [overflowing, setOverflowing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);

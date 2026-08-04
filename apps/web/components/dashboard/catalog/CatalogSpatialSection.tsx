@@ -16,6 +16,8 @@ import {
 } from "@/lib/catalog/spatial";
 
 import { useCatalogBasemapStyle } from "@/hooks/catalog/useCatalogBasemapStyle";
+
+import CatalogMapAttribution from "@/components/dashboard/catalog/CatalogMapAttribution";
 import { useCatalogNutsGeometries } from "@/hooks/catalog/useCatalogNutsGeometries";
 
 import CatalogSpatialDialog from "@/components/dashboard/catalog/CatalogSpatialDialog";
@@ -110,16 +112,8 @@ const CatalogSpatialSection = ({
 
         {filter ? (
           <Box
-            component="button"
-            type="button"
-            onClick={() => setOpen(true)}
             sx={{
-              display: "block",
-              width: "100%",
-              p: 0,
-              textAlign: "left",
-              font: "inherit",
-              cursor: "pointer",
+              position: "relative",
               overflow: "hidden",
               borderRadius: 2,
               border: `1px solid ${theme.palette.divider}`,
@@ -147,6 +141,9 @@ const CatalogSpatialSection = ({
                       paint={{ "line-color": SHAPE_COLOR, "line-width": 1.6 }}
                     />
                   </Source>
+                  {/* Credited even at this size: the tiles are MapTiler's and the
+                      data OpenStreetMap's whether the map is 96px or full screen. */}
+                  <CatalogMapAttribution />
                 </MapLibre>
               ) : (
                 // A region whose outline has not arrived yet, or is unavailable.
@@ -186,6 +183,26 @@ const CatalogSpatialSection = ({
                 </Typography>
               </Stack>
             </Stack>
+
+            {/* The whole card still opens the dialog, but as an overlay rather
+                than a button wrapped around everything: the map credits MapTiler
+                and OpenStreetMap with links, and a link inside a button is invalid
+                HTML — React says so, and the nested control cannot be relied on to
+                get its own clicks. The credit strip's z-index keeps it above this. */}
+            <Box
+              component="button"
+              type="button"
+              aria-label={label ? `${t("edit")} — ${label}` : t("edit")}
+              onClick={() => setOpen(true)}
+              sx={{
+                position: "absolute",
+                inset: 0,
+                p: 0,
+                border: 0,
+                background: "transparent",
+                cursor: "pointer",
+              }}
+            />
           </Box>
         ) : (
           <Box

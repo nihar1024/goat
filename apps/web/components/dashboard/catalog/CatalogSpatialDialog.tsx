@@ -39,6 +39,8 @@ import type { CatalogNutsRegion } from "@/lib/validations/catalog";
 import { useCatalogBasemapStyle } from "@/hooks/catalog/useCatalogBasemapStyle";
 import { useCatalogNutsGeometries } from "@/hooks/catalog/useCatalogNutsGeometries";
 
+import CatalogMapAttribution from "@/components/dashboard/catalog/CatalogMapAttribution";
+
 /**
  * The spatial filter tool, following the prototype's `spatial-filter.jsx`: search
  * a place, buffer a point, or draw an area, on one editable map.
@@ -430,7 +432,9 @@ const CatalogSpatialDialog = ({
               initialViewState={initialViewState}
               onClick={handleMapClick}
               style={{ width: "100%", height: "100%" }}
-              mapStyle={basemapStyle}>
+              mapStyle={basemapStyle}
+              // Ours replaces it, at the end of the map's children.
+              attributionControl={false}>
               <Source id="spatial-draft" type="geojson" data={features}>
                 <MapLayer
                   id="spatial-draft-fill"
@@ -493,6 +497,7 @@ const CatalogSpatialDialog = ({
                   />
                 </Source>
               )}
+              <CatalogMapAttribution />
             </MapLibre>
           </Box>
         </Stack>

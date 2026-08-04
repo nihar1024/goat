@@ -1,0 +1,37 @@
+"use client";
+
+import { use } from "react";
+
+import { useCatalogResolve } from "@/lib/api/catalog";
+
+import CatalogDetailView from "@/components/dashboard/catalog/CatalogDetailView";
+
+/**
+ * Catalog entry detail. Data comes from the catalog STAC API only — never core,
+ * because a catalog entry is not a GOAT layer until a project adds it
+ * (promote-on-use). `/datasets/[datasetId]` is the page for promoted layers.
+ *
+ * One `/stac/resolve/{id}` call settles what the id is: a card in grouped mode
+ * carries a collection (a bundle), an ungrouped card carries an item.
+ */
+export default function CatalogDetailPage(props: {
+  params: Promise<{ datasetId: string }>;
+}) {
+  // `params` is a Promise since Next 16 and must be unwrapped, as every other
+  // dynamic route here does (see app/(dashboard)/datasets/[datasetId]).
+  const { datasetId } = use(props.params);
+  const { collection, members, item, parent, isLoading, isError } =
+    useCatalogResolve(datasetId);
+
+  return (
+    <CatalogDetailView
+      entryId={datasetId}
+      collection={collection}
+      members={members}
+      item={item}
+      parent={parent}
+      isLoading={isLoading}
+      isError={!!isError}
+    />
+  );
+}

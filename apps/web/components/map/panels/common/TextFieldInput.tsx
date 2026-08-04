@@ -11,7 +11,7 @@ type TextFieldInputProps = {
   disabled?: boolean;
   tooltip?: string;
   onFocus?: () => void;
-  type?: "text" | "number";
+  type?: "text" | "number" | "date";
   clearable?: boolean;
   placeholder?: string;
   multiline?: boolean;

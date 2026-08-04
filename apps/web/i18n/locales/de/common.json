@@ -2520,7 +2520,6 @@
   "catalog_no_geometry": "Dieser Datensatz hat keine räumliche Ausdehnung und kann daher nicht auf einer Karte gezeigt werden.",
   "catalog_no_schema": "Für diesen Datensatz ist kein Spaltenschema veröffentlicht.",
   "catalog_preview_sample": "Gezeigt wird eine Auswahl von {{count}} Objekten.",
-  "catalog_row_count": "Zeilen",
   "catalog_row_count_short": "{{count, number}} Zeilen",
   "catalog_schema_column_count": "{{count}} Spalten",
   "catalog_subtitle": "Kuratierte, direkt nutzbare Datensätze von offiziellen Open-Data-Anbietern und weiteren vertrauenswürdigen Quellen.",
@@ -2563,6 +2562,8 @@
   "catalog_saved": "Gespeichert",
   "catalog_no_description": "Für diesen Datensatz wurde keine Beschreibung veröffentlicht.",
   "catalog_keywords": "Schlagwörter",
+  "catalog_feature_sample_note": "Die ersten {{count, number}} Objekte dieses Datensatzes.",
+  "catalog_feature_table": "Datensätze",
   "catalog_columns": "Spalten",
   "catalog_columns_note": "Wie jede Spalte heißt und wie sie gespeichert ist.",
   "catalog_source_metadata": "Quellmetadaten",
@@ -2587,6 +2588,5 @@
   "catalog_result_range": "{{from}}–{{to}} von {{total}} Datensätzen",
   "catalog_n_favourites": "{{count}} gespeichert auf dieser Seite",
   "catalog_no_favourites": "Noch nichts gespeichert",
-  "catalog_no_favourites_hint": "Mit dem Stern auf einem Datensatz hier speichern.",
-  "catalog_date_range_hint": "Der Zeitraum, den die Daten abdecken — nicht der Zeitpunkt der Aufnahme in den Katalog."
+  "catalog_no_favourites_hint": "Mit dem Stern auf einem Datensatz hier speichern."
 }

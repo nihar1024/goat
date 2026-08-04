@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { useCatalogPreview } from "@/lib/api/catalog";
 import { catalogKindOf } from "@/lib/catalog/kind";
 import type { CatalogCollection, CatalogItem } from "@/lib/validations/catalog";
 
@@ -23,6 +24,7 @@ import {
   SectionCard,
   type MetaField,
 } from "@/components/dashboard/catalog/CatalogDetailChrome";
+import CatalogFeatureTable from "@/components/dashboard/catalog/CatalogFeatureTable";
 import CatalogFootprintMap from "@/components/dashboard/catalog/CatalogFootprintMap";
 import CatalogProviderCard from "@/components/dashboard/catalog/CatalogProviderCard";
 import CatalogSchemaTable from "@/components/dashboard/catalog/CatalogSchemaTable";
@@ -75,6 +77,9 @@ const CatalogLayerDetail = ({
   const props = item.properties;
   const { description, keywords } = describedBy(item, collection);
   const columns = props["table:columns"] ?? [];
+  // The same SWR key the map uses, so the two share one request: the tab shows
+  // the sample as rows and the map draws it as geometry.
+  const { preview } = useCatalogPreview(item.id);
   const hasMap = !!item.geometry;
   const memberCount = (collection?.["goat:member_count"] as number | undefined) ?? 1;
   const inBundle = memberCount > 1;
@@ -88,13 +93,18 @@ const CatalogLayerDetail = ({
   const title = inBundle ? props.title : collection?.title || props.title;
   // `other` is STAC's "unknown", not a licence — see `licenseLabel`.
   const licenseLabel = labels.licenseLabel(props.license);
+  const periodField = labels.periodField(
+    inBundle ? itemPeriod(item) : datasetPeriod(collection, [item])
+  );
 
   const tabs = useMemo(() => {
-    const list: { id: TabId; label: string; count?: number }[] = [
+    const list: { id: TabId; label: string }[] = [
       { id: "summary", label: t("summary") },
     ];
     if (columns.length > 0) {
-      list.push({ id: "data", label: t("data"), count: columns.length });
+      // No count on the tab. The table below it lists the columns, so the badge
+      // repeated a number nobody was going to act on.
+      list.push({ id: "data", label: t("data") });
     }
     return list;
   }, [columns.length, t]);
@@ -127,46 +137,24 @@ const CatalogLayerDetail = ({
       label: t("metadata.headings.language"),
       value: labels.languageLabel(props.language?.code),
     },
-    // The one row the prototype's sidebar does not list. Row count is published
-    // on nearly every item and is the number that decides whether a dataset is
-    // worth opening, and the prototype shows it on its cards — which the live
-    // data cannot fill, because a dataset card stands for all of its layers.
-    {
-      icon: ICON_NAME.TABLE,
-      label: t("catalog_row_count"),
-      value: labels.formatCount(props["table:row_count"]),
-    },
     !!licenseLabel && {
       icon: ICON_NAME.LICENSE,
       label: t("metadata.headings.license"),
       value: <LicenseBadge license={licenseLabel} href={linkHref(item.links, "license")} />,
     },
-    {
-      icon: ICON_NAME.DATABASE,
-      label: t("metadata.headings.lineage"),
-      value: props["processing:lineage"] as string | undefined,
-    },
-    // The data's OWN date, where the source states one. Read as a period rather
-    // than as `properties.datetime`: an item covering a range publishes
-    // `start_datetime`/`end_datetime` and sets `datetime` to null, so the single
-    // field is empty for exactly the datasets that have the most to say about
-    // when they are from. Dropped entirely where nothing is stated (see
-    // `MetaSidebar`) rather than shown empty.
+    // When the data is from, headed by what the value turns out to be: a
+    // reference year for a single date, a period for a span (`periodField`).
     //
-    // A lone layer reads its DATASET's period, for the same reason it takes the
-    // dataset's title and description: the two are one thing, and the Collection
-    // is where a conformant harvest states coverage. Where they disagree the
-    // extent is the broader of the two by definition (it is the envelope of the
-    // items), so this shows the period the data covers rather than one date
-    // inside it — 8 collections in the current bucket differ that way. Inside a
-    // bundle the layer's own date is the honest answer, since the dataset's is
-    // already on the bundle page.
-    {
+    // Read as a period rather than as `properties.datetime`, since an item
+    // covering a range publishes `start_datetime`/`end_datetime` and sets
+    // `datetime` to null. A lone layer reads its DATASET's period for the same
+    // reason it takes the dataset's title and description: the two are one thing.
+    // Inside a bundle the layer's own date is the honest answer, because the
+    // dataset's is already on the bundle page.
+    !!periodField && {
       icon: ICON_NAME.CALENDAR,
-      label: t("catalog_datetime"),
-      value: labels.formatPeriod(
-        inBundle ? itemPeriod(item) : datasetPeriod(collection, [item])
-      ),
+      label: t(periodField.labelKey),
+      value: periodField.value,
     },
     {
       icon: ICON_NAME.CLOCK,
@@ -266,8 +254,13 @@ const CatalogLayerDetail = ({
                 <Box
                   sx={{
                     position: "relative",
-                    flex: { xs: "none", md: 1 },
-                    minHeight: { xs: 320, md: 260 },
+                    // A real height rather than "whatever the sidebar leaves".
+                    // The summary column is description + map and the sidebar is
+                    // a dozen metadata rows, so `flex: 1` against a 260px floor
+                    // gave the map the remainder — around a third of the card,
+                    // too little to read a footprint in, let alone a sample.
+                    flex: { xs: "none", md: "none" },
+                    height: { xs: 320, md: 460 },
                     borderRadius: 2.5,
                     overflow: "hidden",
                     border: `1px solid ${theme.palette.divider}`,
@@ -280,9 +273,20 @@ const CatalogLayerDetail = ({
           )}
 
           {tab === "data" && (
-            <SectionCard title={t("catalog_columns")} note={t("catalog_columns_note")}>
-              <CatalogSchemaTable columns={columns} />
-            </SectionCard>
+            <>
+              {/* The sample first: "what does a record look like" is the question
+                  a data tab is opened with, and the dictionary answers a narrower
+                  one. Absent where the deployment serves no preview, which is the
+                  same condition that leaves the map showing only a footprint. */}
+              {!!preview?.features?.length && (
+                <SectionCard title={t("catalog_feature_table")}>
+                  <CatalogFeatureTable features={preview.features} columns={columns} />
+                </SectionCard>
+              )}
+              <SectionCard title={t("catalog_columns")} note={t("catalog_columns_note")}>
+                <CatalogSchemaTable columns={columns} />
+              </SectionCard>
+            </>
           )}
         </Stack>
 

@@ -1,6 +1,7 @@
 import useSWR from "swr";
 
 import { fetcher } from "@/lib/api/fetcher";
+import type { CatalogStyle } from "@/lib/catalog/style";
 import { CATALOG_BASE_URL } from "@/lib/constants";
 import type {
   CatalogAggregations,
@@ -194,6 +195,26 @@ export const useCatalogCollectionItems = (
     isLoading,
     isError: error,
   };
+};
+
+/**
+ * A dataset's own rendering style, from the asset href the item carries.
+ *
+ * Takes the href rather than an id: the served item states where its style is
+ * (`/assets/{id}/style`), and a client that composed that URL itself would be
+ * guessing at a route it was already told. No href means the dataset published
+ * no style — 108 of 10,793 layers — which is not an error.
+ *
+ * Immutable for the life of a mirror generation, like the preview, so it never
+ * revalidates and a failure is simply "no style".
+ */
+export const useCatalogStyle = (href?: string, enabled = true) => {
+  const { data, isLoading, error } = useSWR<CatalogStyle>(
+    enabled && href ? href : null,
+    fetcher,
+    { revalidateOnFocus: false, revalidateIfStale: false, shouldRetryOnError: false }
+  );
+  return { style: data, isLoading, isError: error };
 };
 
 /**

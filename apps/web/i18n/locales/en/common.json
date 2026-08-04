@@ -2522,7 +2522,6 @@
   "catalog_no_geometry": "This dataset has no spatial extent, so there is nothing to show on a map.",
   "catalog_no_schema": "No column schema is published for this dataset.",
   "catalog_preview_sample": "Showing a sample of {{count}} features.",
-  "catalog_row_count": "Rows",
   "catalog_row_count_short": "{{count, number}} rows",
   "catalog_schema_column_count": "{{count}} columns",
   "catalog_subtitle": "Curated, ready-to-use datasets from official open-data providers and other trusted sources.",
@@ -2565,6 +2564,8 @@
   "catalog_saved": "Saved",
   "catalog_no_description": "No description was published for this dataset.",
   "catalog_keywords": "Key words",
+  "catalog_feature_sample_note": "The first {{count, number}} features of this dataset.",
+  "catalog_feature_table": "Records",
   "catalog_columns": "Columns",
   "catalog_columns_note": "What each column is called and how it is stored.",
   "catalog_source_metadata": "Source metadata",
@@ -2589,6 +2590,5 @@
   "catalog_result_range": "{{from}}–{{to}} of {{total}} datasets",
   "catalog_n_favourites": "{{count}} saved on this page",
   "catalog_no_favourites": "Nothing saved yet",
-  "catalog_no_favourites_hint": "Use the star on a dataset to save it here.",
-  "catalog_date_range_hint": "The period the data covers — not when it was added to the catalog."
+  "catalog_no_favourites_hint": "Use the star on a dataset to save it here."
 }

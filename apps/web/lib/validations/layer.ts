@@ -891,6 +891,19 @@ export const ALLOWED_KINDS_BY_GEOM_TYPE: Record<string, FieldKind[]> = {
   multipolygon: ["string", "number", "area", "perimeter", "datetime", "boolean", "formula"],
 };
 
+/**
+ * Kinds a *new* layer can be created with.
+ *
+ * The rest — computed kinds and formula — need `field_config` written against an
+ * existing layer for their values to be produced at all, so they belong to Edit
+ * fields rather than to creation. `layer_create` accepts exactly this set.
+ */
+const CREATABLE_KINDS = ["string", "number", "datetime", "boolean"] as const;
+export type CreatableFieldKind = (typeof CREATABLE_KINDS)[number];
+
+export const isCreatableKind = (kind: FieldKind): kind is CreatableFieldKind =>
+  (CREATABLE_KINDS as readonly string[]).includes(kind);
+
 // Kinds whose VALUES are computed by the backend (read-only in editors).
 // Formula belongs here: its values are derived, only its expression is edited.
 export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([

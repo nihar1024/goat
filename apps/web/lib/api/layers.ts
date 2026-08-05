@@ -6,6 +6,7 @@ import { GEOAPI_BASE_URL } from "@/lib/constants";
 import type { PaginatedQueryParams } from "@/lib/validations/common";
 import type {
   ClassBreaks,
+  CreatableFieldKind,
   CreateLayerFromDataset,
   CreateRasterLayer,
   DatasetCollectionItems,
@@ -259,12 +260,21 @@ export const createRasterLayer = async (payload: CreateRasterLayer, projectId?: 
  * Create a new empty layer with user-defined fields.
  * Executed as a Windmill job via the Processes API.
  */
+/** Kinds a new layer can be created with — see `CreatableFieldKind`. */
+export type CreateEmptyLayerPayload = {
+  name: string;
+  geometry_type: "point" | "line" | "polygon" | null;
+  /**
+   * Sent as `kind`, the same vocabulary `addColumn` uses on an existing layer, so
+   * a datetime is stored as a timestamp rather than as text. Computed kinds are
+   * absent by construction: their values come from `field_config`, which is only
+   * written once the layer exists.
+   */
+  fields: Array<{ name: string; kind: CreatableFieldKind }>;
+};
+
 export const createEmptyLayer = async (
-  payload: {
-    name: string;
-    geometry_type: "point" | "line" | "polygon" | null;
-    fields: Array<{ name: string; type: "string" | "number" }>;
-  },
+  payload: CreateEmptyLayerPayload,
   projectId: string
 ): Promise<Job> => {
   const inputs: Record<string, unknown> = {

@@ -7,10 +7,6 @@ import {
   Button,
   Checkbox,
   IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
   Stack,
   Switch,
   Tooltip,
@@ -54,13 +50,11 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import MoreMenu from "@/components/common/PopperMenu";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 // Modals
-import CatalogExplorerModal from "@/components/modals/CatalogExplorer";
+import AddLayerModal from "@/components/modals/AddLayerModal";
 import ConfirmModal from "@/components/modals/Confirm";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
 import DatasetExternalModal from "@/components/modals/DatasetExternal";
-import CreateLayerModal from "@/components/modals/CreateLayer";
-import DatasetUploadModal from "@/components/modals/DatasetUpload";
 import MapLayerChartModal from "@/components/modals/MapLayerChart";
 import ProjectLayerDeleteModal from "@/components/modals/ProjectLayerDelete";
 import ProjectLayerGroupModal from "@/components/modals/ProjectLayerGroupModal";
@@ -93,60 +87,32 @@ export const AddLayerButton = ({
   startIcon?: boolean;
 }) => {
   const { t } = useTranslation("common");
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [addSourceType, setAddSourceType] = useState<AddLayerSourceType | null>(null);
-  const open = Boolean(anchorEl);
-  const menuItems = [
-    { type: AddLayerSourceType.DatasourceExplorer, icon: ICON_NAME.DATABASE, label: t("dataset_explorer") },
-    { type: AddLayerSourceType.DatasourceUpload, icon: ICON_NAME.UPLOAD, label: t("dataset_upload") },
-    { type: AddLayerSourceType.DataSourceExternal, icon: ICON_NAME.LINK, label: t("dataset_external") },
-    { type: AddLayerSourceType.CatalogExplorer, icon: ICON_NAME.GLOBE, label: t("catalog_explorer") },
-    { type: AddLayerSourceType.CreateEmptyLayer, icon: ICON_NAME.PLUS, label: t("create_layer") },
-  ];
+  const [open, setOpen] = useState(false);
+  // Sources that have not been rebuilt inside the modal yet still open their own
+  // dialog, handed off from the modal's tab (see HandoffPanel).
+  const [legacySource, setLegacySource] = useState<AddLayerSourceType | null>(null);
+
   return (
     <>
       <Button
         variant={variant}
         size="small"
         startIcon={startIcon ? <AddIcon fontSize="small" /> : undefined}
-        onClick={(e) => setAnchorEl(e.currentTarget)}
+        onClick={() => setOpen(true)}
         sx={{ borderRadius: 4, textTransform: "none", fontWeight: "bold", whiteSpace: "nowrap" }}>
         {t("add_layer")}
       </Button>
-      <Menu
-        anchorEl={anchorEl}
+      <AddLayerModal
         open={open}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}>
-        {menuItems.map((item) => (
-          <MenuItem
-            key={item.type}
-            onClick={() => {
-              setAddSourceType(item.type);
-              setAnchorEl(null);
-            }}>
-            <ListItemIcon>
-              <Icon iconName={item.icon} style={{ fontSize: 15 }} />
-            </ListItemIcon>
-            <ListItemText primaryTypographyProps={{ variant: "body2" }}>{item.label}</ListItemText>
-          </MenuItem>
-        ))}
-      </Menu>
-      {addSourceType === AddLayerSourceType.DatasourceExplorer && (
-        <DatasetExplorerModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
+        onClose={() => setOpen(false)}
+        projectId={projectId}
+        onOpenLegacy={(source) => setLegacySource(source)}
+      />
+      {legacySource === AddLayerSourceType.DatasourceExplorer && (
+        <DatasetExplorerModal open={true} onClose={() => setLegacySource(null)} projectId={projectId} />
       )}
-      {addSourceType === AddLayerSourceType.DatasourceUpload && (
-        <DatasetUploadModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
-      )}
-      {addSourceType === AddLayerSourceType.DataSourceExternal && (
-        <DatasetExternalModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
-      )}
-      {addSourceType === AddLayerSourceType.CatalogExplorer && (
-        <CatalogExplorerModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
-      )}
-      {addSourceType === AddLayerSourceType.CreateEmptyLayer && (
-        <CreateLayerModal open={true} onClose={() => setAddSourceType(null)} projectId={projectId} />
+      {legacySource === AddLayerSourceType.DataSourceExternal && (
+        <DatasetExternalModal open={true} onClose={() => setLegacySource(null)} projectId={projectId} />
       )}
     </>
   );

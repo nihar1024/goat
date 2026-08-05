@@ -63,11 +63,10 @@ import { OverflowTypograpy } from "@/components/common/OverflowTypography";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 import MoreMenu from "@/components/common/PopperMenu";
 import Container from "@/components/map/panels/Container";
-import CatalogExplorerModal from "@/components/modals/CatalogExplorer";
+import AddLayerModal from "@/components/modals/AddLayerModal";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
 import DatasetExternalModal from "@/components/modals/DatasetExternal";
-import DatasetUploadModal from "@/components/modals/DatasetUpload";
 import MapLayerChartModal from "@/components/modals/MapLayerChart";
 import ProjectLayerDeleteModal from "@/components/modals/ProjectLayerDelete";
 import ProjectLayerRenameModal from "@/components/modals/ProjectLayerRename";
@@ -251,13 +250,15 @@ const AddLayerSection = ({ projectId }: { projectId: string }) => {
         <DatasetExplorerModal open={true} onClose={closeAddLayerSourceModal} projectId={projectId} />
       )}
       {addLayerSourceOpen === AddLayerSourceType.DatasourceUpload && (
-        <DatasetUploadModal open={true} onClose={closeAddLayerSourceModal} projectId={projectId} />
+        <AddLayerModal
+          open={true}
+          onClose={closeAddLayerSourceModal}
+          projectId={projectId}
+          onOpenLegacy={(source) => setAddSourceOpen(source)}
+        />
       )}
       {addLayerSourceOpen === AddLayerSourceType.DataSourceExternal && (
         <DatasetExternalModal open={true} onClose={closeAddLayerSourceModal} projectId={projectId} />
-      )}
-      {addLayerSourceOpen === AddLayerSourceType.CatalogExplorer && (
-        <CatalogExplorerModal open={true} onClose={closeAddLayerSourceModal} projectId={projectId} />
       )}
     </>
   );

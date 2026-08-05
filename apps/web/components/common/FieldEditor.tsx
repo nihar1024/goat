@@ -285,13 +285,16 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
     onChange(fields.map((f) => (f.id === id ? { ...f, formula: expression } : f)));
   };
 
-  // Formula fields validate and backfill against the existing table, so they
-  // are only offered when editing an existing dataset (layerId present) —
-  // not in the create-new-dataset flow.
+  // Derived values need a table to derive them from, so every computed kind —
+  // formula included — is offered only when editing an existing dataset (layerId
+  // present). At creation there is no `field_config` yet to carry the expression
+  // or the compute SQL, so such a column would be made and never filled.
   const baseKinds: FieldKind[] = geometryType
     ? ALLOWED_KINDS_BY_GEOM_TYPE[geometryType] ?? ["string", "number", "datetime", "boolean", "formula"]
     : ["string", "number", "datetime", "boolean", "formula"];
-  const availableKinds: FieldKind[] = baseKinds.filter((k) => k !== "formula" || !!layerId);
+  const availableKinds: FieldKind[] = baseKinds.filter(
+    (k) => !COMPUTED_KINDS.has(k) || !!layerId
+  );
 
   const fieldTypeItems: SelectorItem[] = availableKinds.map((k) => ALL_FIELD_TYPE_ITEMS[k]);
   const hasFields = fields.length > 0;

@@ -45,8 +45,8 @@ import TileGrid from "@/components/dashboard/common/TileGrid";
 import type { SelectedFolderForEdit } from "@/components/modals/Folder";
 import FolderModal from "@/components/modals/Folder";
 import ShareModal from "@/components/modals/Share";
+import AddLayerModal from "@/components/modals/AddLayerModal";
 import DatasetExternal from "@/components/modals/DatasetExternal";
-import DatasetUploadModal from "@/components/modals/DatasetUpload";
 import DocumentUploadModal from "@/components/modals/DocumentUpload";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 
@@ -128,16 +128,13 @@ const Datasets = () => {
     mutate();
   };
 
+  // Datasets come from the Add Layer modal (upload today, connections through its
+  // handoff tab); a document is not a dataset, so it keeps its own entry.
   const addDatasetMenuItems = [
     {
       sourceType: AddLayerSourceType.DatasourceUpload,
       iconName: ICON_NAME.UPLOAD,
       label: t("dataset_upload"),
-    },
-    {
-      sourceType: AddLayerSourceType.DataSourceExternal,
-      iconName: ICON_NAME.LINK,
-      label: t("dataset_external"),
     },
     {
       sourceType: "document" as const,
@@ -217,10 +214,11 @@ const Datasets = () => {
   return (
     <Container sx={{ py: 10, px: 10 }} maxWidth="xl">
       {addDatasetModal === AddLayerSourceType.DatasourceUpload && (
-        <DatasetUploadModal
+        <AddLayerModal
           open={true}
           onClose={closeAddDatasetModal}
           defaultFolderId={activeFolderId ?? homeFolder?.id}
+          onOpenLegacy={(source) => setAddDatasetModal(source)}
         />
       )}
       {addDatasetModal === AddLayerSourceType.DataSourceExternal && (

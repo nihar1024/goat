@@ -108,8 +108,11 @@ const CatalogThumbnail = ({
     overflow: "hidden",
     borderRadius: 2,
     // A list row gives the thumb a 200px column at 130px tall.
+    // A height, not a ratio: `aspect-ratio` against a percentage width contributes
+    // nothing to how tall the card says it is, so a grid row sized itself without
+    // counting this band and the card's own body spilled past its clipped edge.
     ...(variant === "grid"
-      ? { width: "100%", aspectRatio: "16 / 9" }
+      ? { width: "100%", height: 176 }
       : variant === "mark"
         ? { width: 44, height: 44 }
         : { width: 200, height: 130 }),

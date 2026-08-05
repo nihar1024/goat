@@ -1,7 +1,7 @@
 "use client";
 
-import { Box, Collapse, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
-import { useState } from "react";
+import { Box, Checkbox, Collapse, IconButton, Paper, Stack, Typography, useTheme } from "@mui/material";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -17,6 +17,17 @@ import CatalogThumbnail from "@/components/dashboard/catalog/CatalogThumbnail";
 /** One result: thumbnail with the kind tagged over it, title with a save star, two clamped lines of
  * description, and a meta row of publisher / licence / language / period. */
 
+export type CatalogCardSelection = {
+  /** Everything this card stands for is selected. */
+  selected: boolean;
+  /** Some of a bundle's layers are — the checkbox reads as partial. */
+  indeterminate?: boolean;
+  onToggle: () => void;
+  /** Per-layer selection inside the expanded bundle. */
+  isMemberSelected?: (memberId: string) => boolean;
+  onToggleMember?: (memberId: string) => void;
+};
+
 type CatalogCardProps = {
   card: CatalogCardModel;
   view?: "list" | "grid";
@@ -26,10 +37,18 @@ type CatalogCardProps = {
   starred?: boolean;
   onToggleStar?: () => void;
   /**
+   * Turns the card into a picker: a checkbox instead of navigation. Present only
+   * in the Add Layer modal — the catalog page leaves it out and the card behaves
+   * as a link, exactly as before.
+   */
+  selection?: CatalogCardSelection;
+  /**
    * Phone layout: a square mark beside the title instead of a thumbnail band, the
    * kind as a text eyebrow, and the description clamped to one line.
    */
   compact?: boolean;
+  /** A bundle's list was opened or closed. */
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 const CatalogCard = ({
@@ -39,7 +58,9 @@ const CatalogCard = ({
   onOpenMember,
   starred = false,
   onToggleStar,
+  selection,
   compact,
+  onExpandedChange,
 }: CatalogCardProps) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -96,41 +117,104 @@ const CatalogCard = ({
     </IconButton>
   ) : null;
 
+  // One border colour for the card and for the layer list hanging under a tile, so
+  // an open bundle reads as one object.
+  const borderColor =
+    selection?.selected || selection?.indeterminate || hover
+      ? theme.palette.primary.main
+      : theme.palette.divider;
+
+  /** A bundle's layers, listed the same way wherever they are shown. */
+  const memberList = card.bundleId ? (
+    <CatalogBundleMembers
+      collectionId={card.bundleId}
+      dense={isGrid}
+      onOpenMember={selection ? undefined : onOpenMember}
+      selection={
+        selection?.onToggleMember && selection.isMemberSelected
+          ? { isSelected: selection.isMemberSelected, onToggle: selection.onToggleMember }
+          : undefined
+      }
+    />
+  ) : null;
+
+  const checkbox = selection ? (
+    <Checkbox
+      size="small"
+      checked={selection.selected}
+      indeterminate={!!selection.indeterminate}
+      // The card handles the click; this must not toggle twice.
+      onClick={(event) => event.stopPropagation()}
+      onChange={() => selection.onToggle()}
+      sx={{ flexShrink: 0, p: 0.5 }}
+    />
+  ) : null;
+
   return (
     <Paper
       elevation={0}
-      onClick={() => onClick?.()}
+      onClick={() => (selection ? selection.onToggle() : onClick?.())}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       sx={{
         position: "relative",
         overflow: "hidden",
         borderRadius: "12px",
-        border: `1.5px solid ${hover ? theme.palette.primary.main : theme.palette.divider}`,
+        border: `1.5px solid ${borderColor}`,
         boxShadow: hover ? theme.shadows[4] : theme.shadows[6],
         transform: hover ? "translateY(-2px)" : "none",
         transition: theme.transitions.create(
           ["transform", "box-shadow", "border-color"],
           { duration: 140 }
         ),
-        cursor: onClick ? "pointer" : "default",
-        height: isGrid ? "100%" : undefined,
-        // A floor, so a grid row stays even when one card has less to show.
-        // dataset has no description.
-        minHeight: isGrid ? 320 : undefined,
+        cursor: onClick || selection ? "pointer" : "default",
+        // A tile is a column with a floor, so a row of them stays even when one card
+        // has little to show. The grid sizes the row to the tallest card in it — see
+        // the grids' `gridAutoRows: max-content`, which this floor then raises.
+        ...(isGrid && {
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 320,
+          /**
+           * A tile out of view is not laid out, styled or painted — the browser's own
+           * answer to "only render what is on screen", and what keeps a scrolled-up
+           * list of hundreds cheap. `containIntrinsicSize` is the height to assume
+           * while skipped, so the scrollbar does not jump as tiles are passed.
+           */
+          contentVisibility: "auto",
+          containIntrinsicSize: "auto 368px",
+        }),
       }}>
       <Box
         sx={{
-          display: "grid",
-          // The body column has to fill the card for the meta row's `mt: auto` to mean anything — otherwise the grid is only as tall as its content and the divider sits directly under the title.
-          height: isGrid ? "100%" : undefined,
-          gridTemplateRows: isGrid ? "auto minmax(0, 1fr)" : undefined,
-          gridTemplateColumns: compact
-            ? "44px minmax(0, 1fr)"
+          /**
+           * A tile stacks; a row and a phone card put the thumbnail beside the body.
+           *
+           * The stack is flex rather than grid on purpose: a flex child is never
+           * sized below its own content, whereas the `1fr` body row this used to be
+           * could be — and was, whenever a two-line title made the body taller than
+           * the card's floor, which cut the meta line in half against the card's
+           * clipped edge. The body still grows to fill a card taller than its
+           * content, so the meta row's `mt: auto` keeps it at the bottom.
+           */
+          ...(isGrid
+            ? {
+                display: "flex",
+                flexDirection: "column",
+                flexGrow: 1,
+                // `auto`, never `0`: a `flex: 1` basis of zero makes this contribute
+                // nothing to how tall the card wants to be, and where the grid has a
+                // height of its own — the picker's scrolling results column — the row
+                // was then sized to the card's floor and the body spilled past the
+                // clipped edge.
+                flexBasis: "auto",
+              }
             : {
-                xs: "minmax(0, 1fr)",
-                sm: isGrid ? "minmax(0, 1fr)" : "200px minmax(0, 1fr)",
-              },
+                display: "grid",
+                gridTemplateColumns: compact
+                  ? "44px minmax(0, 1fr)"
+                  : { xs: "minmax(0, 1fr)", sm: "200px minmax(0, 1fr)" },
+              }),
           gap: compact ? "12px" : isGrid ? "10px" : "18px",
           p: compact ? 3 : isGrid ? 3 : 4,
         }}>
@@ -138,6 +222,7 @@ const CatalogCard = ({
           sx={{
             position: "relative",
             width: isGrid ? "100%" : "fit-content",
+            flexShrink: 0,
           }}>
           <CatalogThumbnail
             kind={kind}
@@ -152,12 +237,16 @@ const CatalogCard = ({
             </Box>
           )}
           {/* On a tile the star sits over the thumbnail: the title is two clamped lines and cannot give up the width. */}
-          {isGrid && star && (
-            <Box sx={{ position: "absolute", top: 4, right: 4 }}>{star}</Box>
+          {isGrid && (star || checkbox) && (
+            <Box sx={{ position: "absolute", top: 4, right: 4, display: "flex", alignItems: "center" }}>
+              {star}
+              {checkbox}
+            </Box>
           )}
         </Box>
 
-        <Stack sx={{ minWidth: 0 }}>
+        <Stack
+          sx={{ minWidth: 0, ...(isGrid && { flexGrow: 1, flexBasis: "auto" }) }}>
           <Stack
             direction="row"
             alignItems="flex-start"
@@ -198,7 +287,12 @@ const CatalogCard = ({
               {card.title}
             </Typography>
             </Box>
-            {!isGrid && star}
+            {!isGrid && (star || checkbox) && (
+              <Stack direction="row" alignItems="center" sx={{ flexShrink: 0 }}>
+                {star}
+                {checkbox}
+              </Stack>
+            )}
           </Stack>
 
           {card.description && (
@@ -257,23 +351,27 @@ const CatalogCard = ({
         </Stack>
       </Box>
 
-      {/* Rows only: a footer on a tile would stretch every card in its grid row to match. */}
-      {isBundle && !isGrid && card.bundleId && (
+      {/* A bundle lists its layers in either view; the strip is the control in both. */}
+      {isBundle && card.bundleId && (
         <>
           <Box
             component="button"
             type="button"
             onClick={(event: React.MouseEvent) => {
               event.stopPropagation();
-              setExpanded((open) => !open);
+              setExpanded((open) => {
+                onExpandedChange?.(!open);
+                return !open;
+              });
             }}
             sx={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               width: "100%",
-              px: 5,
-              py: 2.5,
+              flexShrink: 0,
+              px: isGrid ? 3 : 5,
+              py: isGrid ? 2 : 2.5,
               font: "inherit",
               cursor: "pointer",
               border: "none",
@@ -281,13 +379,20 @@ const CatalogCard = ({
               backgroundColor: theme.palette.action.hover,
               "&:hover": { backgroundColor: theme.palette.action.selected },
             }}>
-            <Typography variant="body2" color="text.secondary" fontWeight={500}>
+            <Typography
+              variant={isGrid ? "caption" : "body2"}
+              color="text.secondary"
+              fontWeight={500}>
               {t("catalog_member_count", { count: memberCount })}
             </Typography>
             <Stack direction="row" spacing={1.5} alignItems="center">
-              <Typography variant="body2" color="primary" fontWeight={600}>
-                {expanded ? t("collapse") : t("expand")}
-              </Typography>
+              {/* The chevron carries it on a tile, where the words would crowd the
+                  count they sit beside. */}
+              {!isGrid && (
+                <Typography variant="body2" color="primary" fontWeight={600}>
+                  {expanded ? t("collapse") : t("expand")}
+                </Typography>
+              )}
               <Icon
                 iconName={expanded ? ICON_NAME.CHEVRON_UP : ICON_NAME.CHEVRON_DOWN}
                 style={{ fontSize: 14 }}
@@ -295,8 +400,8 @@ const CatalogCard = ({
               />
             </Stack>
           </Box>
-          <Collapse in={expanded} unmountOnExit>
-            <CatalogBundleMembers collectionId={card.bundleId} onOpenMember={onOpenMember} />
+          <Collapse in={expanded} unmountOnExit sx={{ flexShrink: 0 }}>
+            {memberList}
           </Collapse>
         </>
       )}
@@ -304,4 +409,4 @@ const CatalogCard = ({
   );
 };
 
-export default CatalogCard;
+export default memo(CatalogCard);

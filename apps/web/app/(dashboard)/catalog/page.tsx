@@ -3,7 +3,6 @@
 import {
   Box,
   Button,
-  Chip,
   Container,
   Drawer,
   Grid,
@@ -26,11 +25,14 @@ import { useCatalogAggregations, useCatalogDatasets } from "@/lib/api/catalog";
 import { datasetCard } from "@/lib/catalog/card";
 import type { CatalogCollection } from "@/lib/validations/catalog";
 
-import { useCatalogFacetBuckets } from "@/hooks/catalog/useCatalogFacetBuckets";
+import {
+  FACET_HIDDEN,
+  useCatalogFacetSections,
+} from "@/hooks/catalog/useCatalogFacetSections";
 import { CATALOG_PAGE_SIZE, useCatalogSearchState } from "@/hooks/catalog/useCatalogSearchState";
-import { useGetMetadataValueTranslation } from "@/hooks/map/DatasetHooks";
 
 import EmptySection from "@/components/common/EmptySection";
+import CatalogActiveFilters from "@/components/dashboard/catalog/CatalogActiveFilters";
 import CatalogCard from "@/components/dashboard/catalog/CatalogCard";
 import CatalogFilterPanel from "@/components/dashboard/catalog/CatalogFilterPanel";
 import CatalogSpatialSection from "@/components/dashboard/catalog/CatalogSpatialSection";
@@ -58,78 +60,12 @@ import CatalogToolbar from "@/components/dashboard/catalog/CatalogToolbar";
  */
 
 /** Icons per facet parameter. Falls back to a neutral filter glyph. */
-const FACET_ICONS: Record<string, ICON_NAME> = {
-  type: ICON_NAME.LAYERS,
-  geometry_type: ICON_NAME.POLYGON_FEATURE,
-  themes: ICON_NAME.DATA_CATEGORY,
-  publisher: ICON_NAME.ORGANIZATION,
-  language: ICON_NAME.LANGUAGE,
-  license: ICON_NAME.LICENSE,
-};
-
-/** Facets whose buckets are too sparse to be worth a sidebar section. */
-const MIN_BUCKETS_TO_OFFER = 2;
-
-/** Sort orders the catalog offers. `-` prefixes a descending `sortby`. */
+/** Sort choices, page-only: the Add Layer picker takes results as they come. */
 const SORT_OPTIONS: { value: string; labelKey: string; icon: ICON_NAME }[] = [
   { value: "-updated", labelKey: "sort_last_updated", icon: ICON_NAME.REFRESH },
   { value: "title", labelKey: "sort_title_asc", icon: ICON_NAME.SORT_ALPHA_ASC },
   { value: "-title", labelKey: "sort_title_desc", icon: ICON_NAME.SORT_ALPHA_DESC },
 ];
-
-/**
- * Filter parameters whose values the app already has a vocabulary for, under a
- * different name than the parameter: `?themes=` selects a data category, and
- * `?language=` a language code.
- */
-const FACET_VOCABULARY: Record<string, string> = {
-  themes: "data_category",
-  language: "language_code",
-};
-
-/**
- * Sidebar headings that differ from the metadata field names.
- *
- * `metadata.headings.*` names *fields on a record* — "Geometry type" / "Geometrietyp"
- * is right on a detail page, and is the term the UI glossary fixes for the workflow
- * parameter. As a pair of filter categories they read badly: "Typ" next to
- * "Geometrietyp" makes a reader work out which type is which. A browse filter wants
- * the shorter noun, so the catalog labels these two "Data type" and "Geometry".
- */
-const FACET_LABEL_KEYS: Record<string, string> = {
-  type: "catalog_facet_type",
-  geometry_type: "catalog_facet_geometry",
-};
-
-/**
- * Facets the sidebar does not offer, whatever the server reports.
- *
- * `geographical_code` is a coarse label — a country or continent code — published
- * on 71 of 3,834 datasets, and every one of them says `AT` bar a single `HU`. The
- * spatial filter above it answers the same question against real geometry (a NUTS
- * region or a drawn shape, matched on the dataset's footprint), so offering this
- * as well put two "where" controls in one sidebar, one of which covers 1.9% of
- * the catalog and would disagree with the other.
- *
- * Hidden here rather than dropped server-side: the aggregation and the
- * `?geographical_code=` filter stay part of the API, which other clients and the
- * MCP tools use, and a metadata row on a detail page still states the value where
- * a dataset publishes one. This only decides what the browse sidebar offers.
- */
-const FACET_HIDDEN = new Set(["geographical_code"]);
-
-/**
- * Sidebar order, most-asked question first.
- *
- * The server returns aggregations in mirror-column order, which put Geometry above
- * Data type and left the date range stranded near the top. Browsing a data catalog
- * asks in roughly this sequence: where is it, what is it about, what kind of thing
- * is it (and then which geometry), whose is it, may I use it, and only last — when
- * is it from, which is also the least populated field (`datetime` is null on 52%
- * of items). Anything the server adds that is not listed keeps its own position at
- * the end.
- */
-const FACET_ORDER = ["themes", "type", "geometry_type", "publisher", "license", "language"];
 
 /**
  * A dataset row. The adapter lives here rather than inline at both call sites so
@@ -173,18 +109,6 @@ const CatalogPage = () => {
   /** Below `sm` the toolbar and the cards switch to their phone layouts. */
   const isPhone = useMediaQuery(theme.breakpoints.down("sm"));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  /**
-   * Facet values are shown through the app's own vocabularies, so the sidebar
-   * says "Bundle" and "Austria" where the served buckets say `bundle` and `AT` —
-   * matching what the cards beside them show. Untranslated values pass through.
-   */
-  const translateMetadataValue = useGetMetadataValueTranslation();
-  const facetOptionLabel = useCallback(
-    (param: string, value: string) =>
-      translateMetadataValue(FACET_VOCABULARY[param] ?? param, value),
-    [translateMetadataValue]
-  );
-
   const { aggregations: served, isLoading: discoveryLoading } = useCatalogAggregations();
   const aggregations = useMemo(
     () => served.filter((a) => !FACET_HIDDEN.has(a["goat:filter_param"] ?? "")),
@@ -210,6 +134,16 @@ const CatalogPage = () => {
   } = useCatalogSearchState({ aggregations });
 
   /**
+   * The sidebar's sections, their labels and their bucket counts — shared with the
+   * Add Layer picker, which shows the same filters over the same catalog.
+   */
+  const {
+    sections: facetSections,
+    facetLabel,
+    optionLabel: facetOptionLabel,
+  } = useCatalogFacetSections({ aggregations, facetQueryParams });
+
+  /**
    * Selected NUTS regions. Held in the URL as one comma-separated value so a
    * filtered catalog is shareable, and split here for the chips.
    */
@@ -226,27 +160,6 @@ const CatalogPage = () => {
     (id: string) => setStarred((prev) => ({ ...prev, [id]: !prev[id] })),
     []
   );
-
-  /**
-   * The facets, in the order the server offers them, each with the parameter that
-   * narrows it. The parameter comes from `goat:filter_param`, never from the
-   * facet's name — `category_count` is narrowed with `?themes=`.
-   */
-  const facetAggregations = useMemo(
-    () => aggregations.filter((a) => a.name !== "total_count"),
-    [aggregations]
-  );
-  const facetPlan = useMemo(() => {
-    const plan = facetAggregations.flatMap((aggregation) => {
-      const param = aggregation["goat:filter_param"];
-      return param ? [{ name: aggregation.name, param }] : [];
-    });
-    const rank = (param: string) => {
-      const index = FACET_ORDER.indexOf(param);
-      return index === -1 ? FACET_ORDER.length : index;
-    };
-    return [...plan].sort((a, b) => rank(a.param) - rank(b.param));
-  }, [facetAggregations]);
 
   const {
     datasets: fetchedDatasets,
@@ -273,44 +186,6 @@ const CatalogPage = () => {
         : fetchedDatasets,
     [fetchedDatasets, favouritesOnly, starred]
   );
-  const { buckets } = useCatalogFacetBuckets({ facets: facetPlan, params: facetQueryParams });
-
-  /** Facet sections for the sidebar. */
-  /**
-   * A facet's heading. Shared with the active-filter chips so a chip can say which
-   * facet it came from — "Polygon" alone is clear, "Austria" next to it is not.
-   */
-  const facetLabel = useCallback(
-    (param: string) =>
-      FACET_LABEL_KEYS[param]
-        ? t(FACET_LABEL_KEYS[param])
-        : t(`common:metadata.headings.${param}`, param),
-    [t]
-  );
-
-  const facetSections = useMemo(
-    () =>
-      facetPlan.flatMap(({ name, param }) => {
-        const options = (buckets[name] ?? [])
-          .filter((bucket) => bucket.key !== null)
-          .map((bucket) => ({
-            value: bucket.key as string,
-            label: facetOptionLabel(param, bucket.key as string),
-            count: bucket.frequency,
-          }));
-        if (options.length < MIN_BUCKETS_TO_OFFER) return [];
-        return [
-          {
-            param,
-            label: facetLabel(param),
-            icon: FACET_ICONS[param] ?? ICON_NAME.FILTER,
-            options,
-          },
-        ];
-      }),
-    [facetPlan, buckets, facetOptionLabel, facetLabel]
-  );
-
   const debouncedSetQ = useMemo(() => debounce((value: string) => setQ(value), 500), [setQ]);
 
   const pageCount = total ? Math.ceil(total / CATALOG_PAGE_SIZE) : 0;
@@ -415,16 +290,12 @@ const CatalogPage = () => {
                   {t("loading")}
                 </Typography>
               )}
-              {Object.entries(facetSelections).flatMap(([param, values]) =>
-                values.map((value) => (
-                  <Chip
-                    key={`${param}-${value}`}
-                    size="small"
-                    label={`${facetLabel(param)}: ${facetOptionLabel(param, value)}`}
-                    onDelete={() => toggleFacet(param, value)}
-                  />
-                ))
-              )}
+              <CatalogActiveFilters
+                selections={facetSelections}
+                facetLabel={facetLabel}
+                optionLabel={facetOptionLabel}
+                onRemove={toggleFacet}
+              />
             </Stack>
 
             {showSkeletons && (
@@ -464,6 +335,11 @@ const CatalogPage = () => {
                         sm: "repeat(2, minmax(0, 1fr))",
                         lg: "repeat(3, minmax(0, 1fr))",
                       },
+                      // Every row as tall as the tallest card in it. `auto` is not
+                      // the same thing here: where the grid has a height of its own,
+                      // as it does in the Add Layer picker, `auto` rows are sized to
+                      // fit that height and the cards are clipped instead.
+                      gridAutoRows: "max-content",
                       gap: 4,
                     }}>
                     {items.map((dataset) => (

@@ -1,7 +1,7 @@
 "use client";
 
 import CheckIcon from "@mui/icons-material/Check";
-import { Box, InputBase, Paper, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Collapse, InputBase, Paper, Stack, Typography, useTheme } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,11 +14,14 @@ import TextFieldInput from "@/components/map/panels/common/TextFieldInput";
 
 /** Header + collapsible body, the shape every section in the panel shares. */
 const Section = ({
+  inset = 4,
   icon,
   label,
   defaultOpen = false,
   children,
 }: {
+  /** Horizontal padding in theme units; 0 flushes the rows to the rail. */
+  inset?: number;
   icon: ICON_NAME;
   label: string;
   defaultOpen?: boolean;
@@ -37,7 +40,7 @@ const Section = ({
           alignItems: "center",
           gap: 2.5,
           width: "100%",
-          px: 4,
+          px: inset,
           py: 3,
           background: "transparent",
           border: "none",
@@ -49,13 +52,28 @@ const Section = ({
         <Typography variant="body2" fontWeight={600} sx={{ flex: 1, textAlign: "left" }}>
           {label}
         </Typography>
-        <Icon
-          iconName={open ? ICON_NAME.CHEVRON_UP : ICON_NAME.CHEVRON_DOWN}
-          style={{ fontSize: 14 }}
-          htmlColor={theme.palette.text.secondary}
-        />
+        {/* One chevron that turns, rather than two that swap: swapping the glyph has
+            nothing to animate between. */}
+        <Box
+          sx={{
+            display: "flex",
+            transform: open ? "rotate(180deg)" : "none",
+            transition: theme.transitions.create("transform", {
+              duration: theme.transitions.duration.shortest,
+            }),
+          }}>
+          <Icon
+            iconName={ICON_NAME.CHEVRON_DOWN}
+            style={{ fontSize: 14 }}
+            htmlColor={theme.palette.text.secondary}
+          />
+        </Box>
       </Box>
-      {open && <Box sx={{ px: 2, pb: 3 }}>{children}</Box>}
+      {/* `unmountOnExit`, so a closed section costs nothing: a panel holds several,
+          each with every bucket the facet offers. */}
+      <Collapse in={open} unmountOnExit>
+        <Box sx={{ px: inset ? 2 : 0, pb: 3 }}>{children}</Box>
+      </Collapse>
     </Box>
   );
 };
@@ -259,17 +277,27 @@ type Props = {
   onToggleFacet: (param: string, value: string) => void;
   activeFilterCount: number;
   onClearAll: () => void;
-  favouritesOnly: boolean;
-  onToggleFavourites: () => void;
+  /** Omitted by hosts that offer favourites some other way (the Add Layer picker
+   * has a tab for them). */
+  favouritesOnly?: boolean;
+  onToggleFavourites?: () => void;
   dateFrom?: string | null;
   dateTo?: string | null;
-  onChangeDates: (range: { from?: string | null; to?: string | null }) => void;
+  /** Omitted by hosts with no date filter — the Add Layer picker. */
+  onChangeDates?: (range: { from?: string | null; to?: string | null }) => void;
   /** The spatial control, injected so this panel stays presentational. */
   spatialFilter?: React.ReactNode;
   /** Rendered in the header beside "Clear". */
   headerAction?: React.ReactNode;
   /** Drop the card framing, for a panel that already sits inside one. */
   flush?: boolean;
+  /**
+   * Horizontal padding of the panel's rows, in theme units. The rows themselves always
+   * span the full width, so this indents their contents without shortening the rules
+   * between them — which is what lets the Add Layer picker sit the panel flush against
+   * the modal's frame and still keep its labels off the edge.
+   */
+  inset?: number;
 };
 
 const CatalogFilterPanel = ({
@@ -286,6 +314,7 @@ const CatalogFilterPanel = ({
   spatialFilter,
   headerAction,
   flush,
+  inset = 4,
 }: Props) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -304,7 +333,7 @@ const CatalogFilterPanel = ({
         direction="row"
         alignItems="center"
         justifyContent="space-between"
-        sx={{ px: 4, py: 3.5, borderBottom: `1px solid ${theme.palette.divider}` }}>
+        sx={{ px: inset, py: 3.5, borderBottom: `1px solid ${theme.palette.divider}` }}>
         <Typography variant="body2" fontWeight={700}>
           {t("filter")}
         </Typography>
@@ -333,19 +362,20 @@ const CatalogFilterPanel = ({
       </Stack>
 
       {/* Favourites: a filter, not a facet — it has no buckets to count. */}
+      {onToggleFavourites && (
       <Stack
         direction="row"
         alignItems="center"
         spacing={2.5}
         onClick={onToggleFavourites}
         sx={{
-          px: 4,
+          px: inset,
           py: 3,
           cursor: "pointer",
           borderBottom: `1px solid ${theme.palette.divider}`,
           backgroundColor: favouritesOnly ? theme.palette.action.selected : "transparent",
         }}>
-        <FilterCheckbox checked={favouritesOnly} onChange={onToggleFavourites} />
+        <FilterCheckbox checked={!!favouritesOnly} onChange={onToggleFavourites} />
         <Icon
           iconName={ICON_NAME.STAR}
           style={{ fontSize: 14 }}
@@ -355,6 +385,7 @@ const CatalogFilterPanel = ({
           {t("catalog_show_my_favourites")}
         </Typography>
       </Stack>
+      )}
 
       {spatialFilter}
 
@@ -365,7 +396,8 @@ const CatalogFilterPanel = ({
           label={facet.label}
           // The first couple of facets open by default.
           // the panel should show its shape without a click, but not be a wall.
-          defaultOpen={index < 2}>
+          defaultOpen={index < 2}
+          inset={inset}>
           <FacetOptions
             options={facet.options}
             selected={selected[facet.param] ?? []}
@@ -373,9 +405,10 @@ const CatalogFilterPanel = ({
           />
         </Section>
       ))}
-      <Section icon={ICON_NAME.CALENDAR} label={t("catalog_datetime")}>
+      {onChangeDates && (
+      <Section icon={ICON_NAME.CALENDAR} label={t("catalog_datetime")} inset={inset}>
         {/* The app's own input (`TextFieldInput`, as the attribute-field editor uses) rather than a bare MUI `TextField`: same 40px height, same floating label treatment, same clear affordance as every other field in the product. */}
-        <Stack spacing={2} sx={{ px: 2 }}>
+        <Stack spacing={2} sx={{ px: inset ? 2 : 0 }}>
           <TextFieldInput
             type="date"
             label={t("catalog_date_from")}
@@ -390,6 +423,7 @@ const CatalogFilterPanel = ({
           />
         </Stack>
       </Section>
+      )}
     </Paper>
   );
 };

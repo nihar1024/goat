@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import useSWR from "swr";
+import useSWRInfinite from "swr/infinite";
 
 import { fetcher } from "@/lib/api/fetcher";
 import type { CatalogStyle } from "@/lib/catalog/style";
@@ -95,6 +97,62 @@ export const useCatalogDatasets = (params: CatalogSearchParams, enabled = true) 
     isValidating,
     isError: error,
     mutate,
+  };
+};
+
+/**
+ * The same result list, accumulated page by page — what a picker scrolls through.
+ *
+ * A page of results is a page either way; the difference is that this keeps the ones
+ * already seen. In a picker that matters: with pages, everything ticked on page 1
+ * disappears the moment you look at page 2, and the count in the footer is the only
+ * evidence it is still selected.
+ *
+ * `offset` is this hook's business, so callers pass the query without one.
+ */
+export const useCatalogDatasetPages = (
+  params: CatalogSearchParams,
+  { pageSize, enabled = true }: { pageSize: number; enabled?: boolean }
+) => {
+  const { data, size, setSize, isLoading, isValidating, error } = useSWRInfinite<CatalogCollections>(
+    (index, previous: CatalogCollections | null) => {
+      if (!enabled || !CATALOG_API_BASE_URL) return null;
+      // Nothing came back last time, so there is no page after it.
+      if (previous && previous.collections.length === 0) return null;
+      return catalogUrl("/collections", { ...params, limit: pageSize, offset: index * pageSize });
+    },
+    fetcher,
+    // The first page is not re-fetched on every `setSize`: pages already on screen
+    // must not be reordered under a cursor that is picking things.
+    { revalidateFirstPage: false, keepPreviousData: true }
+  );
+
+  const pages = data ?? [];
+  // By id, because two requests are two moments: a mirror re-synced mid-scroll can
+  // shift a dataset across the boundary and hand it back twice.
+  const datasets = useMemo(() => {
+    const seen = new Set<string>();
+    return (data ?? [])
+      .flatMap((page) => page.collections)
+      .filter((collection) => {
+        if (seen.has(collection.id)) return false;
+        seen.add(collection.id);
+        return true;
+      });
+  }, [data]);
+  const total = pages[0]?.numberMatched ?? undefined;
+  return {
+    datasets,
+    total,
+    /** Waiting for the first page, with nothing to show yet. */
+    isLoading: isLoading && datasets.length === 0,
+    /** Waiting for a further page, under results already on screen. */
+    isLoadingMore: size > pages.length || (isValidating && pages.length > 0 && size > 1),
+    hasMore: total !== undefined ? datasets.length < total : pages.length === size,
+    loadMore: () => setSize((current) => current + 1),
+    /** Back to a single page — what a changed filter means. */
+    resetPages: () => setSize(1),
+    isError: error,
   };
 };
 

@@ -5,17 +5,20 @@ import { useCallback, useMemo } from "react";
 
 import type { CatalogSearchParams } from "@/lib/api/catalog";
 import {
-  type CatalogSpatialFilter,
-  decodeSpatial,
-  encodeSpatial,
-  spatialGeometry,
-} from "@/lib/catalog/spatial";
+  CATALOG_PAGE_SIZE,
+  buildFacetParams,
+  buildSearchParams,
+  countActiveFilters,
+} from "@/lib/catalog/searchQuery";
+import { type CatalogSpatialFilter, decodeSpatial, encodeSpatial } from "@/lib/catalog/spatial";
 import type { CatalogAggregation } from "@/lib/validations/catalog";
 
-/** URL-owned state of the catalog page, and the API query derived from it. */
+/**
+ * URL-owned state of the catalog page. The query itself is built by
+ * `lib/catalog/searchQuery`, which the Add Layer picker shares with local state.
+ */
 
-/** Page size. */
-export const CATALOG_PAGE_SIZE = 12;
+export { CATALOG_PAGE_SIZE };
 
 export type CatalogView = "list" | "grid";
 
@@ -33,14 +36,6 @@ const baseParsers = {
   to: parseAsString,
   page: parseAsInteger.withDefault(1),
   view: parseAsString.withDefault("list"),
-};
-
-/** `2020-01-01` + `2024-12-31` -> `2020-01-01T00:00:00Z/2024-12-31T23:59:59Z`. */
-const toDatetimeInterval = (from?: string | null, to?: string | null): string | undefined => {
-  if (!from && !to) return undefined;
-  const start = from ? `${from}T00:00:00Z` : "..";
-  const end = to ? `${to}T23:59:59Z` : "..";
-  return `${start}/${end}`;
 };
 
 export type UseCatalogSearchStateOptions = {
@@ -89,11 +84,14 @@ export const useCatalogSearchState = ({ aggregations }: UseCatalogSearchStateOpt
 
   const activeFilterCount = useMemo(
     () =>
-      Object.values(facetSelections).reduce((n, values) => n + values.length, 0) +
-      // Every spatial shape counts as one filter, not one per parameter.
-      (spatial ? 1 : 0) +
-      (state.from || state.to ? 1 : 0),
-    [facetSelections, spatial, state.from, state.to]
+      countActiveFilters({
+        page: state.page,
+        spatial,
+        from: state.from,
+        to: state.to,
+        facetSelections,
+      }),
+    [facetSelections, spatial, state.from, state.to, state.page]
   );
 
   /** Toggling a value always returns to page 1: page 7 of a new result set is meaningless. */
@@ -140,32 +138,24 @@ export const useCatalogSearchState = ({ aggregations }: UseCatalogSearchStateOpt
   }, [facetParams, setState]);
 
   /** The request, for Collection Search — one row per dataset. */
-  const searchParams = useMemo<CatalogSearchParams>(() => {
-    // A drawn or buffered shape travels as `intersects`; a region as its id, so
-    // the boundary geometry never crosses the wire.
-    const geometry = spatialGeometry(spatial);
-    const params: CatalogSearchParams = {
-      limit: CATALOG_PAGE_SIZE,
-      offset: (state.page - 1) * CATALOG_PAGE_SIZE,
-      sortby: state.sortby,
-      q: state.q ?? undefined,
-      nuts: spatial?.kind === "region" ? spatial.nutsIds : undefined,
-      intersects: geometry ? JSON.stringify(geometry) : undefined,
-      datetime: toDatetimeInterval(state.from, state.to),
-      ...facetSelections,
-    };
-    return params;
-  }, [state.page, state.sortby, state.q, spatial, state.from, state.to, facetSelections]);
+  const searchParams = useMemo<CatalogSearchParams>(
+    () =>
+      buildSearchParams({
+        q: state.q,
+        sortby: state.sortby,
+        page: state.page,
+        from: state.from,
+        to: state.to,
+        spatial,
+        facetSelections,
+      }),
+    [state.page, state.sortby, state.q, spatial, state.from, state.to, facetSelections]
+  );
 
-  /**
-   * The same predicates without paging or sorting — what facet counts are
-   * computed under, so a bucket count matches what selecting it would return.
-   */
-  const facetQueryParams = useMemo<CatalogSearchParams>(() => {
-    const { limit: _limit, offset: _offset, sortby: _sortby, ...rest } = searchParams;
-    // Counts have to be in the same unit as the results, or the sidebar describes a different set of things than the page: counting layers under a dataset list reported 8,166 bundles where selecting that bucket returned 1,207.
-    return { ...rest, unit: "collections" };
-  }, [searchParams]);
+  const facetQueryParams = useMemo<CatalogSearchParams>(
+    () => buildFacetParams(searchParams),
+    [searchParams]
+  );
 
   return {
     state,

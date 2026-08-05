@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Skeleton, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Checkbox, Skeleton, Stack, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -31,9 +31,22 @@ const memberIcon = (item: CatalogItem): ICON_NAME => {
 const CatalogBundleMembers = ({
   collectionId,
   onOpenMember,
+  selection,
+  dense,
 }: {
   collectionId: string;
   onOpenMember?: (memberId: string) => void;
+  /**
+   * Tile width: the geometry column goes, since the row's glyph already says what
+   * the geometry is, and the row sits closer to the card's edges. Its fixed tracks
+   * need about 410px, which a tile in a three-column grid does not have.
+   */
+  dense?: boolean;
+  /** Present in the Add Layer picker: each layer is chosen individually. */
+  selection?: {
+    isSelected: (memberId: string) => boolean;
+    onToggle: (memberId: string) => void;
+  };
 }) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -42,9 +55,11 @@ const CatalogBundleMembers = ({
     limit: 50,
   });
 
+  const pad = dense ? 3 : 5;
+
   if (isLoading) {
     return (
-      <Stack spacing={1} sx={{ px: 5, py: 3 }}>
+      <Stack spacing={1} sx={{ px: pad, py: 3 }}>
         <Skeleton variant="text" width="60%" />
         <Skeleton variant="text" width="45%" />
       </Stack>
@@ -53,7 +68,7 @@ const CatalogBundleMembers = ({
 
   if (isError || items.length === 0) {
     return (
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: 5, py: 3 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: pad, py: 3 }}>
         {t("catalog_bundle_members_unavailable")}
       </Typography>
     );
@@ -63,28 +78,49 @@ const CatalogBundleMembers = ({
     <Stack divider={<Box sx={{ borderTop: `1px solid ${theme.palette.divider}` }} />}>
       {items.map((member) => {
         const rows = member.properties["table:row_count"];
+        const picked = selection?.isSelected(member.id) ?? false;
         return (
           <Box
             key={member.id}
             onClick={(event) => {
-              // The card behind this row navigates to the dataset; a member row
-              // must open the member instead.
+              // The card behind this row acts on the whole dataset; a member row
+              // must act on the member instead.
               event.stopPropagation();
+              if (selection) {
+                selection.onToggle(member.id);
+                return;
+              }
               onOpenMember?.(member.id);
             }}
             sx={{
               display: "grid",
               // Fixed tracks, right-aligned: ragged `flex` columns put each row's geometry and count at a different x, so the numbers could not be read down the list.
-              gridTemplateColumns: "16px minmax(0, 1fr) 88px 96px",
+              gridTemplateColumns: dense
+                ? selection
+                  ? "28px 16px minmax(0, 1fr) auto"
+                  : "16px minmax(0, 1fr) auto"
+                : selection
+                  ? "28px 16px minmax(0, 1fr) 88px 96px"
+                  : "16px minmax(0, 1fr) 88px 96px",
               alignItems: "center",
-              columnGap: 3,
-              px: 5,
-              py: 2.5,
-              cursor: onOpenMember ? "pointer" : "default",
-              "&:hover": onOpenMember
+              columnGap: dense ? 2 : 3,
+              px: pad,
+              py: dense ? 2 : 2.5,
+              cursor: onOpenMember || selection ? "pointer" : "default",
+              backgroundColor: picked ? theme.palette.action.selected : undefined,
+              "&:hover": onOpenMember || selection
                 ? { backgroundColor: theme.palette.action.hover }
                 : undefined,
             }}>
+            {selection && (
+              <Checkbox
+                size="small"
+                checked={picked}
+                onClick={(event) => event.stopPropagation()}
+                onChange={() => selection.onToggle(member.id)}
+                sx={{ p: 0.5 }}
+              />
+            )}
             <Icon
               iconName={memberIcon(member)}
               style={{ fontSize: 13 }}
@@ -93,9 +129,11 @@ const CatalogBundleMembers = ({
             <Typography variant="body2" noWrap title={member.properties.title}>
               {member.properties.title}
             </Typography>
-            <Typography variant="caption" color="text.secondary" noWrap>
-              {labels.geometryLabel(member.properties["goat:geometryType"])}
-            </Typography>
+            {!dense && (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {labels.geometryLabel(member.properties["goat:geometryType"])}
+              </Typography>
+            )}
             <Typography variant="caption" color="text.secondary" align="right" noWrap>
               {typeof rows === "number" ? t("catalog_row_count_short", { count: rows }) : ""}
             </Typography>

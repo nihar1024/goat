@@ -79,13 +79,18 @@ const AttributionControl: React.FC<AttributionControlProps> = ({
   extraAttribution,
 }) => {
   const { t } = useTranslation("common");
-  // `map` is the project map, which `MapProvider` registers under that id.
-  // `current` is whichever map this control is mounted inside, and is the only
-  // one available on surfaces that mount a map without the provider — the
-  // catalog's preview maps. Without the fallback the control still renders, but
-  // finds no sources, so it silently drops the credits it exists to show.
+  /**
+   * `current` first: it is the map this control is mounted *inside*, so it is right
+   * whenever it exists. `map` — the project map, which `MapProvider` registers under
+   * that id — is the fallback for the project layouts, where the control sits in a
+   * corner box outside the map.
+   *
+   * The order matters: with the Add Layer modal open over a project map, both are
+   * defined, and preferring the registry made a preview map's strip credit the
+   * project's sources instead of its own.
+   */
   const { map: projectMap, current } = useMap();
-  const map = projectMap ?? current;
+  const map = current ?? projectMap;
   const [parts, setParts] = useState<AttributionParts>({ madeWith: [], dataSources: [] });
   const [overflowing, setOverflowing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);

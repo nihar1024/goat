@@ -62,6 +62,21 @@ describe("AttributionControl", () => {
     expect(screen.getByText(/MapTiler/)).toBeInTheDocument();
   });
 
+  it("prefers the map it is mounted inside over the registered project map", () => {
+    // Both are defined while the Add Layer modal is open over a project map. The
+    // strip must describe the map it lives in, not whichever one the provider
+    // happens to have registered.
+    const projectMap = {
+      getStyle: () => ({ sources: { osm: { attribution: "© Project basemap" } } }),
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+    mapContext = { map: projectMap, current: fakeMap };
+    render(<AttributionControl />);
+    expect(screen.getByText(/OpenStreetMap contributors/)).toBeInTheDocument();
+    expect(screen.queryByText(/Project basemap/)).not.toBeInTheDocument();
+  });
+
   it("shows a 'more' link on overflow that opens the attributions modal", () => {
     const { container } = render(<AttributionControl />);
     const textEl = container.querySelector("[data-testid='attribution-text']") as HTMLElement;

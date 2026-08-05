@@ -403,6 +403,10 @@ const CatalogSpatialDialog = ({
               cursor: mode === "region" ? "grab" : "crosshair",
             }}>
             <MapLibre
+              // A distinct id, because this map can share a `MapProvider` with the
+              // project map (the Add Layer modal opens over it) and react-map-gl
+              // registers every id-less map as "default" — two of those is a crash.
+              id="catalog-spatial-dialog"
               ref={mapRef}
               initialViewState={initialViewState}
               onClick={handleMapClick}

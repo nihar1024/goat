@@ -18,6 +18,7 @@ import CatalogMapAttribution from "@/components/dashboard/catalog/CatalogMapAttr
 import { LayerLegendPanel } from "@/components/map/panels/layer/legend/LayerLegend";
 import type { LayerField } from "@/components/map/popover/formatFeatureProperties";
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
+import { EDGE_GAP } from "@/components/map/popover/PopupFixedHost";
 
 /** Where the dataset is, and — where the deployment allows it — what it contains. */
 
@@ -25,9 +26,6 @@ const FOOTPRINT_COLOR = "#2278CF";
 
 /** Room kept clear for the credit strip, which sits in the same corner the panel is pinned to. */
 const ATTRIBUTION_ROOM = 24;
-
-/** The gap `PopupFixedHost` leaves between the panel and the map's edges. */
-const EDGE_GAP = 12;
 
 type PickedFeature = {
   lngLat: { lng: number; lat: number };
@@ -241,6 +239,9 @@ const CatalogFootprintMap = ({
             : { height: 420, borderRadius: 1, overflow: "hidden" }),
         }}>
         <MapLibre
+          // Named for the same reason as the catalog's other maps: it must not
+          // collide with a host page's own map inside a shared `MapProvider`.
+          id="catalog-footprint"
           initialViewState={initialViewState}
           style={{ width: "100%", height: "100%" }}
           mapStyle={basemapStyle}

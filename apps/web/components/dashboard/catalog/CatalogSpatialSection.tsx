@@ -106,6 +106,9 @@ const CatalogSpatialSection = ({
             <Box sx={{ height: 96, position: "relative" }}>
               {bounds ? (
                 <MapLibre
+                  // See the dialog: an id of its own, so this and the project map
+                  // never both register as "default".
+                  id="catalog-spatial-preview"
                   // Non-interactive: this is a picture of the filter, and the map
                   // to change it is in the dialog.
                   interactive={false}

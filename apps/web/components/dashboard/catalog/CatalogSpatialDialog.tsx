@@ -41,26 +41,7 @@ import { useCatalogNutsGeometries } from "@/hooks/catalog/useCatalogNutsGeometri
 
 import CatalogMapAttribution from "@/components/dashboard/catalog/CatalogMapAttribution";
 
-/**
- * The spatial filter tool, following the prototype's `spatial-filter.jsx`: search
- * a place, buffer a point, or draw an area, on one editable map.
- *
- * The prototype's map is a hand-drawn SVG standing in for the real thing; this is
- * MapLibre with the same three answers to "which datasets cover this?":
- *
- * - **Region** — searching picks a NUTS area and filters by its *actual boundary*
- *   (`?nuts=`), which beats any hand-drawn approximation of the same place. The
- *   prototype's search box geocodes to a point-and-buffer; ours resolves to a real
- *   administrative geometry, which is strictly better and needs no third-party
- *   geocoder. Several regions are additive.
- * - **Point + buffer** — click the map, set a radius. Sent as `?intersects=` with
- *   the buffered circle.
- * - **Polygon** — click corners, close the ring. Also `?intersects=`.
- *
- * Editing is deliberately plain — click to place, click a vertex to close, undo,
- * clear — rather than a draw library: three shapes with three rules do not justify
- * the dependency, and the map already carries every interaction it needs.
- */
+/** The spatial filter tool: search a place, buffer a point, or draw an area, on one editable map. */
 
 const SHAPE_COLOR = "#2BB381";
 
@@ -115,12 +96,7 @@ const CatalogSpatialDialog = ({
 
   const features = useMemo(() => spatialFeatures(draft, geometries), [draft, geometries]);
 
-  /**
-   * Framing. The map is uncontrolled and `fitBounds` is called imperatively when
-   * the *set of regions* changes — not when any shape changes. A point or polygon
-   * is placed by clicking the map, so re-framing then would yank the view out from
-   * under the click; a region arrives from the search box and has to be shown.
-   */
+  /** Framing. */
   const mapRef = useRef<MapRef | null>(null);
   /** Opens on the shape already in force; otherwise on Europe. */
   const initialViewState = useMemo(() => {
@@ -133,8 +109,7 @@ const CatalogSpatialDialog = ({
       };
     }
     return { longitude: 10, latitude: 51, zoom: 3.4 };
-    // Only the filter the dialog opened with matters; later edits move the map
-    // through `fitBounds` or not at all.
+    // Only the filter the dialog opened with matters; later edits move the map through `fitBounds`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -514,8 +489,7 @@ const CatalogSpatialDialog = ({
         <Button onClick={onClose} color="inherit">
           {t("cancel")}
         </Button>
-        {/* Applying an empty draft clears the filter, so the dialog is also how a
-            filter is removed without hunting for the section's Clear link. */}
+        {/* Applying an empty draft clears the filter, so the dialog is also how a filter is removed without hunting for the section's Clear link. */}
         <Button
           variant="contained"
           // Enabled when there is a shape to apply, or an existing filter that

@@ -9,21 +9,8 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import TextFieldInput from "@/components/map/panels/common/TextFieldInput";
 
-/**
- * The catalog's filter sidebar, following the prototype's `FilterPanel`
- * (`catalog.jsx`): one bordered panel with a "Filters / Clear (n)" header, then
- * favourites, the spatial filter, a date range, and the facets — each a
- * collapsible section divided by a single rule.
- *
- * Two departures from the previous implementation, both from the prototype:
- *
- * - It is **one panel**, not a stack of independent accordions. The header
- *   counts every active filter, spatial and dates included, so "Clear" means
- *   clear everything rather than only the checkboxes.
- * - A facet option with **zero matches is shown disabled**, not hidden. Its
- *   absence is information: it says the value exists in the catalog but not in
- *   the current result set, which a vanishing row cannot convey.
- */
+/** The filter sidebar: a "Filters / Clear (n)" header, then favourites, the spatial filter, a date
+ * range and the facets, each a collapsible section. */
 
 /** Header + collapsible body, the shape every section in the panel shares. */
 const Section = ({
@@ -73,14 +60,7 @@ const Section = ({
   );
 };
 
-/**
- * The panel's checkbox.
- *
- * Extracted because there are two of them — the facet rows and the favourites row
- * — and hand-rolling it twice is exactly how the favourites box kept rendering as
- * a solid green square after the facet boxes gained their tick. A checked box needs
- * a checkmark; a fill alone reads as a colour swatch.
- */
+/** The panel's checkbox. */
 const FilterCheckbox = ({
   checked,
   disabled,
@@ -128,26 +108,12 @@ const FilterCheckbox = ({
 
 export type FacetOption = { value: string; label: string; count: number };
 
-/**
- * How a long facet is bounded, and the size at which it also gains a search field.
- *
- * Publisher has 385 values on the live catalog. Rather than a "Show all" that
- * either hides most of them or unrolls a mile of sidebar, the list keeps its own
- * scroll — the section stays a fixed size and every value is reachable without a
- * mode change. CARTO's country facet does the same.
- */
+/** How a long facet is bounded, and the size at which it also gains a search field. */
 const MAX_LIST_HEIGHT = 268;
 const SCROLLABLE_FROM = 9;
 const SEARCHABLE_FROM = 12;
 
-/**
- * One facet's options: all of them, scrolling inside the section once there are
- * more than a handful, with a search field above once there are many.
- *
- * Zero-count options stay visible but disabled. Their absence is information: the
- * value exists in the catalog but not in the current result set, which a
- * vanishing row cannot convey.
- */
+/** One facet's options: all of them, scrolling inside the section once there are more than a handful, with a search field above once there are many. */
 const FacetOptions = ({
   options,
   selected,
@@ -300,11 +266,7 @@ type Props = {
   onChangeDates: (range: { from?: string | null; to?: string | null }) => void;
   /** The spatial control, injected so this panel stays presentational. */
   spatialFilter?: React.ReactNode;
-  /**
-   * Rendered in the header beside "Clear". The mobile drawer puts its close
-   * control here rather than adding a second header of its own — two rows both
-   * saying "Filter" is what a nested panel looks like when nobody checked.
-   */
+  /** Rendered in the header beside "Clear". */
   headerAction?: React.ReactNode;
   /** Drop the card framing, for a panel that already sits inside one. */
   flush?: boolean;
@@ -334,7 +296,7 @@ const CatalogFilterPanel = ({
       sx={{
         borderRadius: flush ? 0 : 2.5,
         border: flush ? "none" : `1px solid ${theme.palette.divider}`,
-        boxShadow: flush ? "none" : theme.shadows[1],
+        boxShadow: flush ? "none" : theme.shadows[6],
         overflow: "hidden",
         backgroundColor: flush ? "transparent" : undefined,
       }}>
@@ -401,7 +363,7 @@ const CatalogFilterPanel = ({
           key={facet.param}
           icon={facet.icon}
           label={facet.label}
-          // The first couple of facets open by default, as the prototype does:
+          // The first couple of facets open by default.
           // the panel should show its shape without a click, but not be a wall.
           defaultOpen={index < 2}>
           <FacetOptions
@@ -412,10 +374,7 @@ const CatalogFilterPanel = ({
         </Section>
       ))}
       <Section icon={ICON_NAME.CALENDAR} label={t("catalog_datetime")}>
-        {/* The app's own input (`TextFieldInput`, as the attribute-field editor
-            uses) rather than a bare MUI `TextField`: same 40px height, same
-            floating label treatment, same clear affordance as every other field
-            in the product. The catalog had grown its own. */}
+        {/* The app's own input (`TextFieldInput`, as the attribute-field editor uses) rather than a bare MUI `TextField`: same 40px height, same floating label treatment, same clear affordance as every other field in the product. */}
         <Stack spacing={2} sx={{ px: 2 }}>
           <TextFieldInput
             type="date"

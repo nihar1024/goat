@@ -10,17 +10,7 @@ import type { CatalogCollection, CatalogItem } from "@/lib/validations/catalog";
 import CatalogBundleDetail from "@/components/dashboard/catalog/CatalogBundleDetail";
 import CatalogLayerDetail from "@/components/dashboard/catalog/CatalogLayerDetail";
 
-/**
- * Detail view for one catalog entry, dispatching on what the id turned out to
- * be: a bundle (`/stac/resolve` says `collection`) or a single dataset.
- *
- * Nothing here reads core. A catalog entry is not a GOAT layer until a project
- * adds it (promote-on-use), so the promoted-layer components — `DatasetSummary`,
- * `DatasetTable`, `DatasetMapPreview` — would render empty rather than wrong:
- * they page rows through `useLayerFields(layer_id)` and draw the layer's tiles,
- * neither of which exists for a catalog dataset. `/datasets/[datasetId]` remains
- * the page for promoted layers.
- */
+/** Detail view for one catalog entry, dispatching on what the id turned out to be: a bundle (`/stac/resolve` says `collection`) or a single dataset. */
 
 type Props = {
   entryId: string;
@@ -43,13 +33,7 @@ const CatalogDetailView = ({
   const router = useRouter();
   const { t } = useTranslation("common");
 
-  /**
-   * Saved datasets, in memory until core has somewhere to keep them.
-   *
-   * Favourites are user-scoped and the design puts the control on every card and
-   * both detail headers, so the interaction is wired up now and persisted later.
-   * The consequence is honest: a star does not survive a reload.
-   */
+  /** Saved datasets, in memory until core has somewhere to keep them. */
   const [starred, setStarred] = useState<Record<string, boolean>>({});
   const toggleStar = useCallback(
     (target: CatalogItem) =>
@@ -68,29 +52,13 @@ const CatalogDetailView = ({
   // than to whatever the browser remembers.
   const parentIsBundle = (parent?.["goat:member_count"] ?? 1) > 1;
 
-  /**
-   * The one layer of a single-layer dataset, if that is what this id resolved to.
-   *
-   * Read from `members` rather than `goat:member_count`: the count is what the
-   * mirror recorded, and this has to be the layer actually in hand to render.
-   */
+  /** The one layer of a single-layer dataset, if that is what this id resolved to. */
   const singleLayer =
     collection && (collection["goat:member_count"] ?? members.length) === 1
       ? members[0]
       : undefined;
 
-  /**
-   * Back to the list, with the search that produced it intact.
-   *
-   * `router.back()` rather than `push("/catalog")`, because the catalog keeps all
-   * of its state in the query string: pushing the bare path throws away the
-   * filters, the page, the spatial filter and the sort the user had set. Going
-   * back restores that URL exactly, and also restores scroll position.
-   *
-   * The fallback matters for a link opened in a new tab or pasted in fresh, where
-   * there is nothing to go back to — `history.length` of 1 means this entry is the
-   * whole session, and a plain push is then the only sensible destination.
-   */
+  /** Back to the list, with the search that produced it intact. */
   const backToList = useCallback(() => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
@@ -115,10 +83,7 @@ const CatalogDetailView = ({
         </Typography>
       )}
 
-      {/* A dataset with ONE layer is that layer. The list navigates by collection
-          id (a card stands for a dataset), so without this a Feature card opened a
-          page titled "BUNDLE" offering "Save all" for a bundle of one. `resolve`
-          already returns the member, so this costs no extra request. */}
+      {/* A dataset with ONE layer is that layer. */}
       {!isLoading && !isError && collection && singleLayer && (
         <CatalogLayerDetail
           item={singleLayer}
@@ -146,14 +111,7 @@ const CatalogDetailView = ({
           item={item}
           collection={parent}
           onBack={() =>
-            // A member goes up to its bundle; anything else goes back to the list
-            // it came from, filters and all.
-            //
-            // `replace`, not `push`: the member is *inside* the bundle, so going
-            // up should not deepen the history. Pushing left the bundle sitting on
-            // top of the member, and the bundle's own Back — a `router.back()`,
-            // which is what preserves the list's filters — returned to the member
-            // it had just come from instead of to the list.
+            // A member goes up to its bundle; anything else goes back to the list it came from, filters and all.
             parentIsBundle && parent
               ? router.replace(`/catalog/${encodeURIComponent(parent.id)}`)
               : backToList()

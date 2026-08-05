@@ -22,20 +22,8 @@ import { useCatalogNutsGeometries } from "@/hooks/catalog/useCatalogNutsGeometri
 
 import CatalogSpatialDialog from "@/components/dashboard/catalog/CatalogSpatialDialog";
 
-/**
- * The filter panel's Location section, following the prototype's `SpatialFilter`:
- * a dashed call-to-action while empty, and once set, a small map of the shape with
- * its label and an Edit affordance.
- *
- * The control itself is a dialog (`CatalogSpatialDialog`) rather than something
- * inline, because a map you can draw on does not fit a 260px sidebar — which is
- * exactly why the prototype makes this a trigger and puts the tool in a modal.
- *
- * Naming matters here: this is **Location**, distinct from the **Region** facet.
- * `geographical_code` filters on a code recorded on the dataset; this filters on
- * geometry. Two sidebar sections with the same name asking different questions was
- * the previous version's worst flaw.
- */
+/** The filter panel's Location section: a dashed call-to-action while empty; once set, a small map of
+ * the shape with its label and an Edit affordance. */
 
 const SHAPE_COLOR = "#2BB381";
 
@@ -61,11 +49,7 @@ const CatalogSpatialSection = ({
     return [box[0], box[1], box[2], box[3]] as [number, number, number, number];
   }, [features]);
 
-  /**
-   * What the filter says it is. A region's name comes from the selection when it
-   * was just picked, or from the geometry response after a reload — the URL can
-   * only carry the id, and the id alone ("AT12") says nothing.
-   */
+  /** What the filter says it is. */
   const label = useMemo(() => {
     if (!filter) return null;
     if (filter.kind === "point") {
@@ -141,8 +125,7 @@ const CatalogSpatialSection = ({
                       paint={{ "line-color": SHAPE_COLOR, "line-width": 1.6 }}
                     />
                   </Source>
-                  {/* Credited even at this size: the tiles are MapTiler's and the
-                      data OpenStreetMap's whether the map is 96px or full screen. */}
+                  {/* Credited even at this size: the tiles are MapTiler's and the data OpenStreetMap's whether the map is 96px or full screen. */}
                   <CatalogMapAttribution />
                 </MapLibre>
               ) : (
@@ -184,11 +167,7 @@ const CatalogSpatialSection = ({
               </Stack>
             </Stack>
 
-            {/* The whole card still opens the dialog, but as an overlay rather
-                than a button wrapped around everything: the map credits MapTiler
-                and OpenStreetMap with links, and a link inside a button is invalid
-                HTML — React says so, and the nested control cannot be relied on to
-                get its own clicks. The credit strip's z-index keeps it above this. */}
+            {/* The whole card still opens the dialog, but as an overlay rather than a button wrapped around everything: the map credits MapTiler and OpenStreetMap with links, and a link inside a button is invalid HTML — React says so, and the nested control cannot be relied on to get its own clicks. */}
             <Box
               component="button"
               type="button"

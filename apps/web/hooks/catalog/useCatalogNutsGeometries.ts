@@ -3,21 +3,7 @@ import useSWR from "swr";
 import { CATALOG_API_BASE_URL } from "@/lib/api/catalog";
 import { fetcher } from "@/lib/api/fetcher";
 
-/**
- * The outlines *and names* of several NUTS regions, keyed by id.
- *
- * One SWR entry over the whole selection rather than a hook per region, because
- * the number of selected regions changes as the user picks and removes them and
- * hooks cannot be called conditionally. Regions are fetched in parallel and a
- * failure on one is dropped rather than failing the set: a missing outline means
- * the map draws one less shape, not a broken dialog.
- *
- * The name comes back with the geometry, which is what lets a shared link show
- * "Niederösterreich" instead of `AT12` — the URL can only carry the id, and this
- * request is being made anyway to draw the boundary.
- *
- * Immutable for the life of a mirror generation, so it never revalidates.
- */
+/** The outlines *and names* of several NUTS regions, keyed by id. */
 type NutsRegionShape = { geometry?: GeoJSON.Geometry; name?: string };
 
 export const useCatalogNutsGeometries = (nutsIds: string[]) => {

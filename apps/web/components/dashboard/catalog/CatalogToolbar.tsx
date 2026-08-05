@@ -20,17 +20,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-/**
- * The catalog's toolbar, following the prototype's own row (`catalog.jsx`): a
- * pill-shaped search field, a segmented Grid/List toggle, and a pill sort
- * dropdown.
- *
- * Not the shared `ContentSearchBar`. That component is bound to the layer and
- * project query-parameter shapes (`GetDatasetSchema`, `GetProjectsQueryParams`)
- * and carries a filter menu the catalog does its filtering in a sidebar instead —
- * so using it here meant passing a `contentType` the catalog is not and getting a
- * square field where the design has a pill.
- */
+/** The catalog's toolbar: a search field, a Grid/List toggle, and a sort dropdown. */
 
 export type CatalogSortOption = { value: string; label: string; icon?: ICON_NAME };
 
@@ -60,14 +50,7 @@ const CatalogToolbar = ({
    */
   onOpenFilters?: () => void;
   activeFilterCount?: number;
-  /**
-   * Phone layout: search collapses to an icon that expands over the row, sort
-   * loses its label, and the Grid/List toggle is dropped — one column is the only
-   * layout a phone has, so the two views render identically there.
-   *
-   * CARTO's mobile catalog does the same: a labelled Filters button plus two
-   * icons, all on one row. Ours previously wrapped onto two.
-   */
+  /** Phone layout: search collapses to an icon that expands over the row, sort loses its label, and the Grid/List toggle is dropped — one column is the only layout a phone has, so the two views render identically there. */
   compact?: boolean;
 }) => {
   const { t } = useTranslation("common");
@@ -142,7 +125,7 @@ const CatalogToolbar = ({
           py: 2.5,
           borderRadius: "999px",
           border: `1px solid ${theme.palette.divider}`,
-          boxShadow: theme.shadows[1],
+          boxShadow: theme.shadows[6],
         }}>
         <Icon
           iconName={ICON_NAME.SEARCH}

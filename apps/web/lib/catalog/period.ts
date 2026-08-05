@@ -1,11 +1,4 @@
-/**
- * When a catalog row's data is from.
- *
- * Separate from the label helpers because this is a question about the *data*,
- * not about wording: STAC allows a row to state its time in three places, and
- * every surface that shows a date has to read all three or it shows nothing for
- * the datasets that say the most.
- */
+/** When a catalog row's data is from. */
 
 import type { CatalogCollection, CatalogItem } from "@/lib/validations/catalog";
 
@@ -15,15 +8,7 @@ import type { CatalogCollection, CatalogItem } from "@/lib/validations/catalog";
  */
 export type CatalogPeriod = { start?: string | null; end?: string | null };
 
-/**
- * When an item's data is from.
- *
- * STAC gives an Item two ways to say this and requires the unused one be null:
- * an instant in `datetime`, or a range in `start_datetime`/`end_datetime` with
- * `datetime` null. Reading `datetime` alone therefore shows *no* date for a
- * dataset that covers a period — which is what a standards-conformant harvest
- * produces for anything measured over time.
- */
+/** When an item's data is from. */
 export const itemPeriod = (item: CatalogItem): CatalogPeriod | undefined => {
   const { datetime, start_datetime: start, end_datetime: end } = item.properties;
   if (start || end) return { start: start ?? datetime, end: end ?? datetime };
@@ -31,17 +16,8 @@ export const itemPeriod = (item: CatalogItem): CatalogPeriod | undefined => {
 };
 
 /**
- * When a dataset's data is from: the envelope of its layers' dates.
- *
- * The served `extent.temporal` is already that envelope — the mirror derives it
- * from the members and keeps the published extent only as a fallback (mirror v6),
- * because a Collection's own extent is `[start, null]` on 3,766 of 3,834 rows
- * with the start in the harvest year on 799 of them. Reading it directly made a
- * single-layer dataset from 2001 render as "since 2001".
- *
- * `members` still matters where they are in hand and the row is not: a bundle
- * page has the layers, and a period computed from them cannot disagree with the
- * dates listed beneath it.
+ * When a dataset's data is from. The served `extent.temporal` is already the
+ * envelope of its layers' dates; `members` is the fallback for rows not in hand.
  */
 export const datasetPeriod = (
   collection: CatalogCollection | undefined,

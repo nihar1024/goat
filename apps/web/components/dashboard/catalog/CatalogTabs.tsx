@@ -3,16 +3,7 @@
 import { Box, Stack, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-/**
- * The catalog's top-level tabs, following the prototype's tab bar: label, count
- * pill, and a 3px underline on the active one.
- *
- * Workflows and Projects are rendered **disabled**. The design shows all three,
- * but a workflow or project catalog does not exist yet — design §10 lists those
- * tabs as a later phase — so they are shown to convey the intended shape while
- * being plainly unavailable. A tab that looked live and led to an empty page
- * would be worse than one that says it is coming.
- */
+/** The catalog's top-level tabs: label, count pill, 3px underline on the active one. */
 
 export type CatalogTabId = "datasets" | "workflows" | "projects";
 
@@ -110,8 +101,7 @@ const CatalogTabs = ({
           button
         ) : (
           <Tooltip key={tab.id} title={t("catalog_tab_coming_soon")} placement="top">
-            {/* A disabled button emits no pointer events, so the tooltip needs a
-                wrapper to hang off. */}
+            {/* A disabled button emits no pointer events, so the tooltip needs a wrapper to hang off. */}
             <Box component="span" sx={{ display: "inline-flex" }}>
               {button}
             </Box>

@@ -10,27 +10,9 @@ import type { CatalogItem } from "@/lib/validations/catalog";
 
 import { useCatalogLabels } from "@/hooks/catalog/useCatalogLabels";
 
-/**
- * The layers inside a dataset, listed under its card.
- *
- * Fetching lives here rather than on the page so it happens **only when a bundle
- * is expanded**: this component is mounted by the card's `Collapse` with
- * `unmountOnExit`, so a page of ten bundles costs no extra requests until one is
- * opened. Doing it on the page would mean ten collection queries per page to
- * populate footers nobody had asked for.
- *
- * The result list returns datasets (Collections), so a dataset's layers genuinely
- * have to be asked for separately.
- */
+/** The layers inside a dataset, listed under its card. */
 
-/**
- * The glyph for a layer, from its own geometry — a polygon layer gets a polygon,
- * not the generic stack of layers every row used to show.
- *
- * `goat:layerType` is not consulted: it is denormalised from the collection, so
- * every member of a bundle reports "bundle". The layer's own fields are what
- * distinguish it.
- */
+/** The glyph for a layer, from its own geometry. */
 const memberIcon = (item: CatalogItem): ICON_NAME => {
   switch (item.properties["goat:geometryType"]) {
     case "point":
@@ -92,9 +74,7 @@ const CatalogBundleMembers = ({
             }}
             sx={{
               display: "grid",
-              // Fixed tracks, right-aligned: ragged `flex` columns put each row's
-              // geometry and count at a different x, so the numbers could not be
-              // read down the list.
+              // Fixed tracks, right-aligned: ragged `flex` columns put each row's geometry and count at a different x, so the numbers could not be read down the list.
               gridTemplateColumns: "16px minmax(0, 1fr) 88px 96px",
               alignItems: "center",
               columnGap: 3,

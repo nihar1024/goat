@@ -3,14 +3,7 @@ import type { SxProps, Theme } from "@mui/material";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-/**
- * The card primitives from the catalog prototype (`catalog.jsx`): the type tag
- * overlaid on a thumbnail, and one cell of the meta grid.
- *
- * Kept in their own module because the list and grid cards, the bundle child
- * rows and the detail header all use them — the prototype defines them once for
- * the same reason.
- */
+/** Card primitives: the type tag overlaid on a thumbnail, and one cell of the meta grid. */
 
 /** `TypeTag` — the kind, overlaid on the thumbnail's top-left corner. */
 export const TypeTag = ({ label, locked }: { label: string; locked?: boolean }) => (
@@ -37,13 +30,7 @@ export const TypeTag = ({ label, locked }: { label: string; locked?: boolean }) 
   </Box>
 );
 
-/**
- * `Meta` — one labelled cell of a card's meta grid. Truncates, never wraps.
- *
- * `sx` is how the caller places the cell in its grid — a tile pushes every second
- * cell to the right edge and gives a lone last cell the full width, which only
- * the caller knows how to work out.
- */
+/** `Meta` — one labelled cell of a card's meta grid. */
 export const Meta = ({
   icon,
   label,

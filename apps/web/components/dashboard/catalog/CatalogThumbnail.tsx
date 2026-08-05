@@ -5,36 +5,7 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import type { CatalogKind } from "@/lib/catalog/kind";
 
-/**
- * A card's picture: the dataset's own thumbnail when one is published, and a
- * drawn stand-in when not.
- *
- * The stand-in is the common case, not the exception — 118 of 10,793 items carry
- * a thumbnail, and the harvester publishes those hrefs tree-relative so the API
- * strips them (contract C8). So it is designed as the default rather than as a
- * fallback, and it says exactly what the catalog knows: what shape the data is,
- * and nothing else. The prototype (`catalog.jsx`'s `MapThumb`) drew a procedural
- * little map per dataset with invented roads and water; rendering that for real
- * would read as a preview of data nobody has seen.
- *
- * Two things it deliberately does NOT do:
- *
- * - **No brand green.** Green is this interface's action colour — the primary
- *   button, the save star, links — and spending it on decoration on every card
- *   competed with the controls that need it. The stand-in is steel-on-slate: a
- *   map sheet before anything is plotted on it, which is the state of a dataset
- *   nobody has opened.
- * - **No per-dataset colour.** A hue hashed from the publisher (597 of them)
- *   would give the grid rhythm and spend the whole palette on decoration. The
- *   variation here carries meaning instead: the ground's texture is the data's
- *   shape, so a page of results is scannable by feel rather than by reading six
- *   identical tiles.
- *
- * Where the shape is unknown — a bundle whose layers disagree (569 of 1,207), or
- * a dataset with nothing published — the ground falls back to a plain graticule:
- * "geodata, shape unstated" is the honest reading, and inventing a shape for it
- * would be the one thing this component exists to avoid.
- */
+/** A card's picture: the dataset's own thumbnail when one is published, and a drawn stand-in when not. */
 
 /** Which mark, from the most specific thing the card knows. */
 const markFor = (kind: CatalogKind, geometryType?: string): ICON_NAME => {
@@ -69,11 +40,7 @@ const textureFor = (kind: CatalogKind, geometryType?: string): Texture => {
   }
 };
 
-/**
- * The ground pattern, as CSS gradients rather than an image or an SVG defs
- * block: a tile is 44–200px wide and there can be 24 of them on screen, so the
- * pattern has to cost nothing to paint and stay crisp at every size.
- */
+/** The ground pattern, as CSS gradients rather than an image or an SVG defs block: a tile is 44–200px wide and there can be 24 of them on screen, so the pattern has to cost nothing to paint and stay crisp at every size. */
 const textureCss = (texture: Texture, line: string): string => {
   switch (texture) {
     case "dots":
@@ -111,11 +78,7 @@ type Props = {
   kind: CatalogKind;
   /** The data's shape, where the dataset states one. */
   geometryType?: string;
-  /**
-   * `grid` is a 16:9 band above the title, `list` a tile beside it, and `mark` a
-   * small square for a phone — where a full-width band is 200px of decoration
-   * that pushes the next dataset off the screen.
-   */
+  /** `grid` is a 16:9 band above the title, `list` a tile beside it, and `mark` a small square for a phone — where a full-width band is 200px of decoration that pushes the next dataset off the screen. */
   variant?: "grid" | "list" | "mark";
   /** Shown as a badge on a bundle. */
   memberCount?: number;
@@ -144,9 +107,7 @@ const CatalogThumbnail = ({
     flexShrink: 0,
     overflow: "hidden",
     borderRadius: 2,
-    // The prototype's list row gives the thumb a 200px column at 130px tall.
-    // Sized here rather than inherited from the parent so the component renders
-    // correctly wherever it is dropped, not only inside that grid.
+    // A list row gives the thumb a 200px column at 130px tall.
     ...(variant === "grid"
       ? { width: "100%", aspectRatio: "16 / 9" }
       : variant === "mark"
@@ -189,9 +150,7 @@ const CatalogThumbnail = ({
           inset: 0,
           backgroundImage: textureCss(texture, pattern),
           backgroundSize: textureSize(texture),
-          // Centred so the pattern is symmetrical in the frame whatever the
-          // tile's size — a graticule cropped hard on one edge looks like a
-          // rendering mistake.
+          // Centred so the pattern is symmetrical in the frame whatever the tile's size — a graticule cropped hard on one edge looks like a rendering mistake.
           backgroundPosition: "center",
         }}
       />
@@ -213,10 +172,7 @@ const CatalogThumbnail = ({
         <Box
           sx={{
             position: "absolute",
-            // Top-right on a row, bottom-right on a tile: the prototype puts both
-            // this badge and the tile's save control top-right, where they sit on
-            // top of each other. The count moves rather than the control, which
-            // belongs at the corner a person reaches for.
+            // Top-right on a row, bottom-right on a tile, where the save control does not sit.
             ...(variant === "grid" ? { bottom: 8 } : { top: 8 }),
             right: 8,
             minWidth: 24,

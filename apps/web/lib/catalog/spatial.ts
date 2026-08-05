@@ -1,38 +1,14 @@
 import circle from "@turf/circle";
 
-/**
- * The catalog's spatial filter: what it can be, how it travels in the URL, and
- * the geometry the API is asked with.
- *
- * Three shapes, because the catalog answers "which datasets cover this?" in
- * three genuinely different ways:
- *
- * - **region** — an administrative area picked by name. Filtered with `?nuts=`,
- *   which does a geometry semi-join server-side. Preferred when it fits: an exact
- *   NUTS boundary beats any hand-drawn approximation of the same place.
- * - **point** — a place plus a radius, the design's "search a place, buffer it".
- * - **polygon** — an area drawn on the map.
- *
- * The last two become `?intersects=` with a GeoJSON polygon.
- *
- * **Why the URL keeps the definition and not the geometry.** A buffered circle
- * serialises to 64 coordinate pairs; storing that would make the link unreadable,
- * and — worse — would lose the radius, so reopening the tool could not restore
- * the slider. `pt=lng,lat,km` round-trips exactly and stays legible in a shared
- * link. The GeoJSON is derived at the query boundary instead.
- */
+/** The catalog's spatial filter: what it can be, how it travels in the URL, and the geometry the API is asked with. */
 
 export type CatalogSpatialFilter =
-  /**
-   * One or more NUTS regions; a dataset matching any of them is included.
-   * `names` is in-session convenience only — the URL carries ids, so after a
-   * reload the ids are what there is to show.
-   */
+  /** One or more NUTS regions; a dataset matching any of them is included. */
   | { kind: "region"; nutsIds: string[]; names?: Record<string, string> }
   | { kind: "point"; lng: number; lat: number; km: number; label?: string }
   | { kind: "polygon"; ring: [number, number][] };
 
-/** Buffer bounds, as the prototype's slider: 500 m to 25 km in 500 m steps. */
+/** Buffer bounds: 500 m to 25 km in 500 m steps. */
 export const MIN_BUFFER_KM = 0.5;
 export const MAX_BUFFER_KM = 25;
 export const BUFFER_STEP_KM = 0.5;
@@ -74,14 +50,7 @@ export const encodeSpatial = (filter: CatalogSpatialFilter | null): SpatialParam
   }
 };
 
-/**
- * Read a filter back out of the URL.
- *
- * Unparseable values yield `null` rather than throwing: the URL is user-editable,
- * and a mistyped link should show an unfiltered catalog, not an error page. A
- * `nuts` id carries no name, so the label falls back to the id until the region
- * is looked up.
- */
+/** Read a filter back out of the URL. */
 export const decodeSpatial = (params: {
   nuts?: string | null;
   pt?: string | null;
@@ -107,14 +76,7 @@ export const decodeSpatial = (params: {
   return null;
 };
 
-/**
- * The polygon to send as `intersects`, or `undefined` for a region — which is
- * filtered by id (`?nuts=`) so the geometry never has to travel.
- *
- * A ring is closed here rather than at the drawing site: GeoJSON requires the
- * first and last position to match, and the map hands back the vertices a person
- * clicked.
- */
+/** The polygon to send as `intersects`, or `undefined` for a region — which is filtered by id (`?nuts=`) so the geometry never has to travel. */
 export const spatialGeometry = (
   filter: CatalogSpatialFilter | null
 ): GeoJSON.Polygon | undefined => {
@@ -139,11 +101,7 @@ export const spatialGeometry = (
 export const formatBuffer = (km: number) =>
   km < 1 ? `${Math.round(km * 1000)} m` : `${km} km`;
 
-/**
- * What to draw for a filter: its own geometry, plus any region outlines that have
- * been fetched. Always a FeatureCollection so one map layer set covers all three
- * shapes.
- */
+/** What to draw for a filter: its own geometry, plus any region outlines that have been fetched. */
 export const spatialFeatures = (
   filter: CatalogSpatialFilter | null,
   regionGeometries?: Record<string, GeoJSON.Geometry | undefined>

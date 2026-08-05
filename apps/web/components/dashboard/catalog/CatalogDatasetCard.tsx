@@ -37,7 +37,7 @@ const CatalogDatasetCard = ({
         overflow: "hidden",
         "&:hover": {
           cursor: "pointer",
-          boxShadow: 10,
+          boxShadow: 6,
           "& img": {
             transform: "scale(1.2)",
           },

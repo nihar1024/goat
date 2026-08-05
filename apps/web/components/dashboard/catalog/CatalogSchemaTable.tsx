@@ -8,21 +8,7 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import type { CatalogColumn } from "@/lib/validations/catalog";
 
-/**
- * A dataset's columns — STAC `table:columns` — as the prototype's data
- * dictionary: monospaced names, the storage type, and what each column means.
- *
- * The description column is dropped when no column has one. The catalog
- * currently publishes names and partial types but no per-column descriptions
- * (harvester contract), and a third column of empty cells reads as missing data
- * rather than as an absent field.
- *
- * Scrolls inside itself: a 60-column dataset must not widen the page.
- *
- * Long schemas open shortened. A dictionary is a reference, consulted rather than
- * read, and 27 rows of it push everything below the dataset out of reach; the
- * widest in the catalog runs to 253 columns.
- */
+/** A dataset's columns (STAC `table:columns`): name, storage type, and description where published. */
 
 /** Rows shown before the list is collapsed behind a toggle. */
 const COLLAPSED_ROWS = 15;
@@ -36,9 +22,7 @@ const CatalogSchemaTable = ({ columns }: { columns: CatalogColumn[] }) => {
   const shown = collapsible && !expanded ? columns.slice(0, COLLAPSED_ROWS) : columns;
 
   const withDescription = columns.some((column) => !!column.description);
-  // Without descriptions the two remaining columns still stay left, against a
-  // filler track — a type stranded at the far edge of the card reads as a
-  // different row.
+  // Without descriptions the two remaining columns still stay left, against a filler track — a type stranded at the far edge of the card reads as a different row.
   const template = withDescription
     ? "200px 110px minmax(320px, 1fr)"
     : "minmax(200px, 360px) 140px 1fr";
@@ -112,9 +96,7 @@ const CatalogSchemaTable = ({ columns }: { columns: CatalogColumn[] }) => {
       {collapsible && (
         <Button
           onClick={() => setExpanded((open) => !open)}
-          // `text`, explicitly: the theme's default variant is `contained`, which
-          // turned a quiet "there is more of this list" into a full-width solid
-          // green bar heavier than the table above it.
+          // `text`, explicitly: the theme's default variant is `contained`, which turned a quiet "there is more of this list" into a full-width solid green bar heavier than the table above it.
           variant="text"
           color="primary"
           // Full width and flush: the row it replaces, so the list ends on the

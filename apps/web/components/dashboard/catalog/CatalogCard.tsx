@@ -14,23 +14,8 @@ import CatalogBundleMembers from "@/components/dashboard/catalog/CatalogBundleMe
 import { Meta, TypeTag } from "@/components/dashboard/catalog/CatalogCardParts";
 import CatalogThumbnail from "@/components/dashboard/catalog/CatalogThumbnail";
 
-/**
- * One result in the catalog, following the prototype's `ListCard`/`GridCard`
- * (`catalog.jsx`): a thumbnail with the kind tagged over it, a title carrying a
- * save star, two clamped lines of description, and a meta row of
- * publisher / licence / language / data period.
- *
- * Purely presentational: it renders a `CatalogCardModel` and never asks what that
- * model was built from. The list builds one per dataset (a STAC Collection), a
- * bundle's page builds one per layer (a STAC Item) — see `lib/catalog/card`.
- *
- * Nothing assumes a field is populated. Coverage in the live catalog is uneven, so
- * every cell renders only with content and the grid shrinks rather than showing
- * dashes.
- *
- * A dataset of several layers grows a footer that reveals them inline, so what a
- * bundle contains can be seen without leaving the list.
- */
+/** One result: thumbnail with the kind tagged over it, title with a save star, two clamped lines of
+ * description, and a meta row of publisher / licence / language / period. */
 
 type CatalogCardProps = {
   card: CatalogCardModel;
@@ -41,16 +26,8 @@ type CatalogCardProps = {
   starred?: boolean;
   onToggleStar?: () => void;
   /**
-   * Phone layout: a small square mark beside the title instead of a full-width
-   * thumbnail band, the kind as a text eyebrow instead of a tag over the image,
-   * and the description clamped to one line.
-   *
-   * Measured against CARTO's mobile catalog, which fits about five datasets on a
-   * phone screen where a banded card fits two — and the band is a generic glyph
-   * today, so it is decoration standing between the reader and the next result.
-   * The description was dropped entirely at first, when items carried none; now
-   * that every dataset has one, a single line is worth more than the space it
-   * costs.
+   * Phone layout: a square mark beside the title instead of a thumbnail band, the
+   * kind as a text eyebrow, and the description clamped to one line.
    */
   compact?: boolean;
 };
@@ -83,22 +60,8 @@ const CatalogCard = ({
   // "Feature" would be a guess presented as fact.
   const typeLabel = labels.kindLabel(kind);
 
-  /**
-   * The meta row, in one order for every view — **most-populated first**, so the
-   * cells that are always there anchor the left edge and only the tail can be
-   * missing. A row that led with a field 18% of datasets lack (`language`, as the
-   * prototype has it) put a gap in the first column of every fifth card, and the
-   * remaining cells slid left, so no two rows in the list lined up.
-   *
-   * Coverage over the catalog's 3,834 datasets, which is what fixed the order:
-   * publisher 100%, a stated period 100%, language 81%, a *named* licence 4%
-   * (`licenseLabel` drops the 3,659 that say `other`). The prototype's other four
-   * cells are gone, with the reasons recorded in `lib/catalog/card`.
-   *
-   * The grid tile takes the same fields in the same order, two per row instead of
-   * four. A tile and a row describing the same dataset should not disagree about
-   * what is worth knowing about it.
-   */
+  // The meta row keeps one order in every view, most-populated first, so only the
+  // tail of it can be missing.
   const language = labels.languageLabel(card.languageCode);
   const period = labels.formatPeriod(card.period);
   const license = labels.licenseLabel(card.license);
@@ -123,9 +86,7 @@ const CatalogCard = ({
         flexShrink: 0,
         opacity: hover || starred ? 1 : 0.55,
         transition: theme.transitions.create("opacity"),
-        // No disc behind it on a tile. The stand-in thumbnail is a flat slate
-        // ground, not a photograph, so a white circle only added a shape nobody
-        // could name. Reinstate a scrim if real images ever land behind the star.
+        // No disc behind it on a tile.
       }}>
       <Icon
         iconName={ICON_NAME.STAR}
@@ -146,7 +107,7 @@ const CatalogCard = ({
         overflow: "hidden",
         borderRadius: "12px",
         border: `1.5px solid ${hover ? theme.palette.primary.main : theme.palette.divider}`,
-        boxShadow: hover ? theme.shadows[3] : theme.shadows[1],
+        boxShadow: hover ? theme.shadows[4] : theme.shadows[6],
         transform: hover ? "translateY(-2px)" : "none",
         transition: theme.transitions.create(
           ["transform", "box-shadow", "border-color"],
@@ -154,16 +115,14 @@ const CatalogCard = ({
         ),
         cursor: onClick ? "pointer" : "default",
         height: isGrid ? "100%" : undefined,
-        // The prototype's tile keeps a floor so a grid row stays even when one
+        // A floor, so a grid row stays even when one card has less to show.
         // dataset has no description.
         minHeight: isGrid ? 320 : undefined,
       }}>
       <Box
         sx={{
           display: "grid",
-          // The body column has to fill the card for the meta row's `mt: auto` to
-          // mean anything — otherwise the grid is only as tall as its content and
-          // the divider sits directly under the title.
+          // The body column has to fill the card for the meta row's `mt: auto` to mean anything — otherwise the grid is only as tall as its content and the divider sits directly under the title.
           height: isGrid ? "100%" : undefined,
           gridTemplateRows: isGrid ? "auto minmax(0, 1fr)" : undefined,
           gridTemplateColumns: compact
@@ -192,9 +151,7 @@ const CatalogCard = ({
               <TypeTag label={typeLabel} />
             </Box>
           )}
-          {/* On a tile the star sits over the thumbnail, as the prototype's
-              GridCard has it: the title is two clamped lines and cannot give up
-              the width a control beside it would take. */}
+          {/* On a tile the star sits over the thumbnail: the title is two clamped lines and cannot give up the width. */}
           {isGrid && star && (
             <Box sx={{ position: "absolute", top: 4, right: 4 }}>{star}</Box>
           )}
@@ -269,24 +226,13 @@ const CatalogCard = ({
                 // A clear gap above the rule even when the title fills the card.
                 pt: isGrid ? 3 : 2.5,
                 borderTop: `1px solid ${theme.palette.divider}`,
-                // Spread across the rule, ends flush with it: the cells divide the
-                // width they actually have instead of filling the first N of four
-                // fixed columns, which left the last cell stranded three-quarters
-                // across and a quarter of the rule with nothing under it. Since a
-                // card carries 2–4 cells depending on what its dataset published,
-                // fixed columns cannot be both full-width and gap-free — this
-                // distributes whatever is there.
+                // Spread across the rule, ends flush with it: the cells divide the width they actually have instead of filling the first N of four fixed columns, which left the last cell stranded three-quarters across and a quarter of the rule with nothing under it.
                 display: "grid",
                 gridTemplateColumns: `repeat(${meta.length}, minmax(0, auto))`,
                 justifyContent: "space-between",
                 columnGap: isGrid ? 1.5 : 4,
                 rowGap: 1.5,
-                // A tile is half the width of a row, so its cells pair up two per
-                // line instead of being squeezed into one. `1fr auto` rather than
-                // two equal halves: the left cell takes the room it needs (a
-                // publisher name is long, a language is one word) and the right
-                // one is pushed to the edge, so both ends meet the rule the way
-                // they do on a row.
+                // A tile is half the width of a row, so its cells pair up two per line instead of being squeezed into one.
                 ...(twoUp && { gridTemplateColumns: "minmax(0, 1fr) auto" }),
               }}>
               {meta.map((cell, index) => (
@@ -297,10 +243,7 @@ const CatalogCard = ({
                   sx={
                     twoUp
                       ? {
-                          // Right-hand cells sit against the right edge; a final
-                          // cell with no partner takes the whole line rather than
-                          // half of it, which is what left "since 2010" stranded
-                          // under a truncated publisher.
+                          // Right-hand cells sit against the right edge; a final cell with no partner takes the whole line rather than half of it, which is what left "since 2010" stranded under a truncated publisher.
                           ...(index % 2 === 1 && { justifySelf: "end" }),
                           ...(index === meta.length - 1 &&
                             meta.length % 2 === 1 && { gridColumn: "1 / -1" }),
@@ -314,12 +257,7 @@ const CatalogCard = ({
         </Stack>
       </Box>
 
-      {/* The expand footer belongs to the ROW only — the prototype's GridCard has
-          no footer, and adding one had a consequence beyond the extra control:
-          grid rows stretch to their tallest card, so one bundle inflated every
-          sibling in its row and their bottom-pinned meta rows drifted away from
-          the title. On a tile the thumbnail's count badge already says how many
-          layers there are, and the card opens the bundle. */}
+      {/* Rows only: a footer on a tile would stretch every card in its grid row to match. */}
       {isBundle && !isGrid && card.bundleId && (
         <>
           <Box

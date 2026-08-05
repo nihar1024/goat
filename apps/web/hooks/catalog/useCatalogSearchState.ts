@@ -12,42 +12,14 @@ import {
 } from "@/lib/catalog/spatial";
 import type { CatalogAggregation } from "@/lib/validations/catalog";
 
-/**
- * URL-owned state of the catalog page, and the API query derived from it.
- *
- * The URL is the *only* state. The previous catalog page kept filters in
- * `nuqs` and mirrored them into a React state object that every toggle had to
- * update by hand — two sources of truth, and a shareable link that could
- * disagree with the view. Here `toggleFacet` writes the URL and the query is a
- * `useMemo` over it, so a pasted link and a click produce identical requests.
- *
- * Facet keys are **not enumerated here.** They arrive from
- * `/stac/aggregations` as `goat:filter_param`, so a facet added server-side
- * becomes filterable without touching this file. Only the parameters that are
- * not facets — free text, sorting, spatial, dates, paging, view — are named.
- */
+/** URL-owned state of the catalog page, and the API query derived from it. */
 
-/**
- * Page size. The API caps `limit` at 100.
- *
- * 12 rather than 10 because the grid is 1, 2 or 3 columns depending on width, and
- * 12 divides by all three — so the last row is full at every breakpoint instead of
- * trailing one or two cards. (Ten left a single card alone on a 3-column row.)
- * Stretching the stragglers instead would make one card three times the width of
- * its neighbours, which is worse than the gap it fills.
- */
+/** Page size. */
 export const CATALOG_PAGE_SIZE = 12;
 
 export type CatalogView = "list" | "grid";
 
-/**
- * Non-facet URL parameters.
- *
- * `from`/`to` are plain dates rather than the API's `datetime` interval: the
- * API requires full RFC 3339 (`2020-01-01T00:00:00Z/..` — a bare date is a
- * 400), and nobody should have to hand-write that into a shared link. The
- * conversion happens at the query boundary below.
- */
+/** Non-facet URL parameters. */
 const baseParsers = {
   q: parseAsString,
   sortby: parseAsString.withDefault("-updated"),
@@ -167,15 +139,7 @@ export const useCatalogSearchState = ({ aggregations }: UseCatalogSearchStateOpt
     });
   }, [facetParams, setState]);
 
-  /**
-   * The request, for Collection Search — one row per dataset.
-   *
-   * There is no `grouped` any more. That parameter asked Item Search for one
-   * designated layer per dataset, which filtered the designated layer rather than
-   * the dataset: 1,886 datasets contain a polygon layer but only 1,658 were
-   * findable. Asking the collections relation makes item-level filters
-   * semi-joins, which is the question a person is actually asking.
-   */
+  /** The request, for Collection Search — one row per dataset. */
   const searchParams = useMemo<CatalogSearchParams>(() => {
     // A drawn or buffered shape travels as `intersects`; a region as its id, so
     // the boundary geometry never crosses the wire.
@@ -199,9 +163,7 @@ export const useCatalogSearchState = ({ aggregations }: UseCatalogSearchStateOpt
    */
   const facetQueryParams = useMemo<CatalogSearchParams>(() => {
     const { limit: _limit, offset: _offset, sortby: _sortby, ...rest } = searchParams;
-    // Counts have to be in the same unit as the results, or the sidebar describes
-    // a different set of things than the page: counting layers under a dataset
-    // list reported 8,166 bundles where selecting that bucket returned 1,207.
+    // Counts have to be in the same unit as the results, or the sidebar describes a different set of things than the page: counting layers under a dataset list reported 8,166 bundles where selecting that bucket returned 1,207.
     return { ...rest, unit: "collections" };
   }, [searchParams]);
 

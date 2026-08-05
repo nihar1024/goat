@@ -19,48 +19,14 @@ import { LayerLegendPanel } from "@/components/map/panels/layer/legend/LayerLege
 import type { LayerField } from "@/components/map/popover/formatFeatureProperties";
 import { MapFeaturePopover } from "@/components/map/popover/MapFeaturePopover";
 
-/**
- * Where the dataset is, and — where the deployment allows it — what it contains.
- *
- * Two levels of detail, because only one of them is always available:
- *
- * - The **footprint** comes from the item's own `geometry`/`bbox`, which the
- *   catalog always serves. It answers "does this cover my area".
- * - A bounded **feature sample** comes from `/stac/items/{id}/preview`, which
- *   reads the published GeoParquet and 404s when no catalog bucket is
- *   configured. Treated as "no preview here" rather than an error, per that
- *   endpoint's contract.
- *
- * Neither renders the dataset as a GOAT layer: catalog data lives in DuckLake
- * only after a project adds it (promote-on-use), so tiles do not exist yet.
- *
- * **A sample is drawn, explained and inspected with the app's own components.**
- * The style the harvester publishes has the shape a GOAT layer carries, and it is
- * the same style promote applies when the dataset becomes a layer — so the paint
- * comes from `transformToMapboxLayerStyleSpec`, the legend is the Layers panel's
- * `LayerLegendPanel`, and a hovered or clicked feature opens `MapFeaturePopover`
- * on the same hover-previews/click-pins terms the project map uses. A preview
- * with its own versions of those would drift from the map it exists to predict.
- *
- * The footprint case keeps a neutral accent and none of that furniture: colouring
- * a bounding box in the dataset's palette, or hanging a legend off it, would imply
- * you were looking at the data rather than at its outline.
- */
+/** Where the dataset is, and — where the deployment allows it — what it contains. */
 
 const FOOTPRINT_COLOR = "#2278CF";
 
-/**
- * Room kept clear for the credit strip, which sits in the same corner the panel is
- * pinned to. A starting guess only, used until the strip has rendered — the real
- * value is measured off it, since its height depends on the theme's caption size.
- */
+/** Room kept clear for the credit strip, which sits in the same corner the panel is pinned to. */
 const ATTRIBUTION_ROOM = 24;
 
-/**
- * The gap `PopupFixedHost` leaves between the panel and the map's edges. Repeated
- * below the panel so the space above the attribution matches the space above the
- * panel, instead of the panel stopping just short of the credit line.
- */
+/** The gap `PopupFixedHost` leaves between the panel and the map's edges. */
 const EDGE_GAP = 12;
 
 type PickedFeature = {
@@ -79,10 +45,7 @@ const PLAIN_LAYERS = [
 
 const CatalogFootprintMap = ({
   item,
-  /**
-   * Fills its container instead of standing at a fixed height. The prototype
-   * shows the map inline in the Summary column, where the caller owns the height.
-   */
+  /** Fills its container instead of standing at a fixed height. */
   fill,
 }: {
   item: CatalogItem;
@@ -117,13 +80,7 @@ const CatalogFootprintMap = ({
   /** The dataset's own rendering, and some of its data to draw with it. */
   const styledSample = !!sample && !!styled && !!geometryType;
 
-  /**
-   * Field definitions for the popup, from what the dataset published.
-   *
-   * A promoted layer's popup reads these from core; a catalog dataset has no
-   * layer yet, so `table:columns` stands in — same names, same types, so the same
-   * formatting applies.
-   */
+  /** Field definitions for the popup, from what the dataset published. */
   const fields = useMemo<LayerField[]>(
     () =>
       (item.properties["table:columns"] ?? []).map((column) => ({
@@ -133,14 +90,7 @@ const CatalogFootprintMap = ({
     [item.properties]
   );
 
-  /**
-   * The map's rendered height, and how much of its bottom the attribution takes.
-   *
-   * Both measured rather than assumed. The height, because the caller sets it
-   * (460px on a desktop card, 320 on a phone) and a fixed guess would leave dead
-   * space on one and overflow the other. The credit strip, because its height comes
-   * from the theme's caption metrics rather than from anything stated here.
-   */
+  /** The map's rendered height, and how much of its bottom the attribution takes. */
   const mapBox = useRef<HTMLDivElement | null>(null);
   const [panelHeight, setPanelHeight] = useState(420);
   const [attributionRoom, setAttributionRoom] = useState(ATTRIBUTION_ROOM);
@@ -163,23 +113,12 @@ const CatalogFootprintMap = ({
     return () => observer.disconnect();
   }, [measure]);
 
-  /**
-   * A popup configuration for a dataset that has none.
-   *
-   * A project layer's popup is authored by whoever owns the layer. A catalog
-   * dataset is nobody's yet, so this is the default a reader wants: every field,
-   * as a table, in the order the dataset declares them.
-   */
+  /** A popup configuration for a dataset that has none. */
   const popup = useMemo<PopupProperties>(
     () =>
       ({
         enabled: true,
-        // The same behaviour the project map gives this value: hover previews
-        // (transient), click pins (sticky, and hovers stop changing it). Nothing
-        // here reads the field -- `MapViewer` drives it off Redux popup state and
-        // project layers, neither of which a catalog dataset has, so this map does
-        // its own hit-testing -- but the panel it produces should be described in
-        // the app's own vocabulary rather than a private one.
+        // The same behaviour the project map gives this value: hover previews (transient), click pins (sticky, and hovers stop changing it).
         trigger: "click_and_hover",
         mode: "simple",
         blocks: [
@@ -195,76 +134,42 @@ const CatalogFootprintMap = ({
           },
         ],
         html: "",
-        // Pinned to a corner rather than anchored to the feature: an in-place
-        // popover sized for a full-screen map covers most of a card-sized one,
-        // and it moves under the cursor while you are trying to compare features.
+        // Pinned to a corner: an in-place popover sized for a full-screen map
+        // covers most of a card-sized one.
         layout: "pinned",
         anchor: "top_right",
-        // No header at all: the page title above the map already says which
-        // dataset this is, and the panel closes on the next pan or on a click off
-        // the features -- so it needs no close control of its own either.
+        // The page title above the map already names the dataset, and a pan or a
+        // click off the features closes the panel, so it needs no close control.
         header: "none",
         width: 300,
-        // Fills the map's height, less the host's gap above, the attribution
-        // strip below, and the same gap again between the two. Stopping short of
-        // the attribution rather than covering it: it names MapTiler and the
-        // OpenStreetMap contributors, whose licences require it stay legible.
+        // The map's height, less the host's gap above, the credit strip below, and
+        // the same gap again between the two.
         max_height: Math.max(160, panelHeight - EDGE_GAP * 2 - attributionRoom),
       }) as unknown as PopupProperties,
     [fields, panelHeight, attributionRoom]
   );
 
-  /**
-   * Two ways a feature becomes the one on show, in order of precedence:
-   *
-   * - **hovered** -- a preview. Reading a map means sweeping it, and asking for a
-   *   click per feature turns "what is this band" into a chore.
-   * - **picked** -- a click, which pins. Once pinned the panel stops following the
-   *   cursor, so the reader can move the mouse to the panel and read, scroll or
-   *   select text in it without the content changing underneath them. That is the
-   *   thing hover alone cannot do.
-   *
-   * Pinned wins, and a click off the features unpins -- so one gesture (click)
-   * both opens and closes, and nothing needs a close button.
-   */
+  /** Hover previews, a click pins; a pin outranks the hover and ignores it until dismissed. */
   const [picked, setPicked] = useState<PickedFeature | null>(null);
   const [hovered, setHovered] = useState<PickedFeature | null>(null);
   const active = picked ?? hovered;
   /** Whether the cursor is over a feature, so the pointer means something. */
   const [hovering, setHovering] = useState(false);
 
-  /**
-   * The sample feature under a pointer position.
-   *
-   * Queried with a small **bbox array**, not with `event.point`. Two things go
-   * wrong otherwise, and both fail quietly:
-   *
-   * - `event.point` is a `Point` from a different module instance than the one
-   *   MapLibre type-checks against, so it matches no branch and the query returns
-   *   nothing at all.
-   * - A plain `{x, y}` is not recognised either -- and there the fallback is
-   *   *worse than nothing*: the query degrades to the whole viewport and hands
-   *   back every rendered feature, so a click anywhere selected whatever happened
-   *   to be first. That is the "I click here and it selects something else" bug.
-   *
-   * A two-point array is unambiguous, needs no class identity, and gives the
-   * tolerance hit-testing wants anyway: a 5px reach so a 3px dot or a hairline is
-   * clickable rather than pixel-perfect.
-   */
+  /** The sample feature under a pointer position. */
   const featureAt = (event: MapLayerMouseEvent) => {
     const wanted = styledSample ? [STYLED_LAYER] : PLAIN_LAYERS;
-    // Only layers the style really holds: a pointer crossing the map while the
-    // style is still assembling would otherwise ask for a layer that does not
-    // exist yet, which MapLibre reports as a console error rather than an empty
-    // result. Read from `getStyle()`, not `getLayer()` -- the latter returns
-    // nothing through react-map-gl's wrapper, which silently filtered out every
-    // layer and made the map unclickable.
+    // Read from `getStyle()`: `getLayer()` returns nothing through react-map-gl's
+    // wrapper, and querying a layer the style has yet to add logs an error.
     const present = new Set(
       (event.target.getStyle()?.layers ?? []).map((layer) => layer.id)
     );
     const layers = wanted.filter((id) => present.has(id));
     if (!layers.length) return undefined;
     const { x, y } = event.point;
+    // A two-point box, never `event.point`: an unrecognised point argument makes
+    // `queryRenderedFeatures` fall back to the whole viewport and return the first
+    // feature anywhere on the map. The 5px reach also makes a 3px dot clickable.
     const box: [[number, number], [number, number]] = [
       [x - 5, y - 5],
       [x + 5, y + 5],
@@ -294,24 +199,13 @@ const CatalogFootprintMap = ({
     if (picked) return;
     setHovered((prev) => {
       if (!hit) return prev ? null : prev;
-      // Same feature under the cursor: keep the previous object. A mousemove
-      // fires per pixel, and a fresh object each time would re-render the whole
-      // panel while the reader's eyes are still on the first field.
+      // Same feature under the cursor: keep the previous object.
       if (prev && prev.feature.id === hit.id) return prev;
       return asPicked(event, hit);
     });
   };
 
-  /**
-   * Escape dismisses the panel. Redundant with clicking the basemap, on purpose:
-   * a panel filling the map's height leaves little basemap to click, and Escape
-   * is what a keyboard reader will reach for.
-   *
-   * It has to drop the preview as well as the pin. The cursor is still wherever
-   * it was when the panel was pinned -- usually on the very feature -- so
-   * unpinning alone just hands the panel to the hover underneath it and nothing
-   * appears to happen. Nothing re-opens until the pointer moves again.
-   */
+  /** Escape dismisses the panel. */
   useEffect(() => {
     if (!active) return;
     const onKey = (event: KeyboardEvent) => {
@@ -360,34 +254,27 @@ const CatalogFootprintMap = ({
             // The preview follows the cursor off the map; a pinned panel stays.
             setHovered(null);
           }}
-          // A panned or zoomed map leaves the panel describing a feature the
-          // reader can no longer see, and its highlight somewhere off screen, so
-          // moving the map drops both the pin and the preview.
-          // The attribution control mounts with the map, after the first measure.
+          // The credit strip only exists once the map has loaded.
           onLoad={measure}
+          // Moving the map would leave the panel describing a feature that is no
+          // longer in view, so it drops both the pin and the preview.
           onMoveStart={() => {
             setPicked(null);
             setHovered(null);
           }}>
-          {/* `generateId` so every sampled feature has one: the shared highlight
-              spec targets the active feature by id, and preview GeoJSON carries
-              none of its own. */}
+          {/* `generateId`: the highlight spec targets a feature by id, and preview
+              GeoJSON carries none. */}
           <Source id="catalog-geometry" type="geojson" data={shown} generateId>
-            {/* Each layer is a direct child of `Source`, which injects the source
-                id into the children it can see -- a wrapping fragment hides them
-                from it and costs them their source. */}
+            {/* Layers stay direct children — `Source` injects its id only into
+                children it can see, and a wrapping fragment hides them. */}
             {styledSample && (
               <MapLayer
                 {...({
                   id: STYLED_LAYER,
                   ...styled,
-                  // No geometry-type filter here, unlike the plain layers below:
-                  // this layer's type (fill/line/circle) already comes from the
-                  // dataset's own declared geometry, so a filter repeating that
-                  // declaration guards nothing -- and if the two ever disagreed it
-                  // would blank the layer silently rather than mis-draw visibly.
-                  // react-map-gl types a layer as the union of every MapLibre
-                  // spec, so one assembled at runtime cannot narrow to a member.
+                  // No geometry-type filter, unlike the plain layers: this layer's
+                  // type already comes from the dataset's declared geometry, and a
+                  // filter repeating it would blank the layer if the two disagreed.
                 } as React.ComponentProps<typeof MapLayer>)}
               />
             )}
@@ -415,9 +302,7 @@ const CatalogFootprintMap = ({
               />
             )}
 
-            {/* The same highlight the project map draws on an active feature --
-                a line for fills, a disc for points, in the app's highlight
-                colour. */}
+            {/* The app's own highlight for an active feature. */}
             {active && !!getHightlightStyleSpec(active.feature) && (
               <MapLayer
                 {...({
@@ -431,21 +316,9 @@ const CatalogFootprintMap = ({
           {active && (
             <Box
               sx={{
-                /**
-                 * A hover preview must not take the pointer, or it cannot work at
-                 * all: pinned to a corner, the panel opens over the very features
-                 * being swept, so the canvas receives a `mouseout` the instant it
-                 * appears -- which clears the hover, closes the panel, and
-                 * flickers once per pixel of movement.
-                 *
-                 * So: a ghost while previewing, solid once pinned. A pinned panel
-                 * is meant to be scrolled and to have its text selected, and by
-                 * then the pointer leaving the map means what it says.
-                 *
-                 * `!important`, and the whole subtree rather than the outer box:
-                 * the popover's own host sets `pointer-events: auto` on itself,
-                 * and it is as specific as anything reachable from out here.
-                 */
+                // A hover preview must not take the pointer: it opens over the
+                // features being swept, and the `mouseout` that follows would clear
+                // the hover and flicker the panel. Pinned, it becomes interactive.
                 ...(picked
                   ? null
                   : { "&, & *": { pointerEvents: "none !important" } }),
@@ -467,9 +340,8 @@ const CatalogFootprintMap = ({
           <CatalogMapAttribution maxWidth={styledSample ? "62%" : "100%"} />
         </MapLibre>
 
-        {/* The dataset's own legend, from the same style its features are drawn
-            with, rendered by the panel the Layers panel uses -- so a colour ramp
-            reads identically here and in a project. */}
+        {/* The dataset's legend, drawn by the Layers panel's own component from the
+            same style the features use. */}
         {styledSample && (
           <Paper
             elevation={0}
@@ -489,10 +361,7 @@ const CatalogFootprintMap = ({
               // otherwise cover the legend where the two meet on a narrow map.
               zIndex: 2,
             }}>
-            {/* Headings kept: they read "Fill color based on: measure", which is
-                what turns a column of swatches into an explanation. At default
-                size, too — shrinking a legend to fit a corner is how it stops
-                being readable. */}
+            {/* Headings kept: they read "Fill color based on: measure", which is what turns a column of swatches into an explanation. */}
             <LayerLegendPanel
               properties={style as Record<string, unknown>}
               geometryType={geometryType}

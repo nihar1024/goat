@@ -18,7 +18,7 @@ import {
   BUNDLE_ACCENT,
   DetailHeader,
   DetailTabs,
-  KeywordChips,
+  KeywordSection,
   LicenseBadge,
   MetaSidebar,
   SectionCard,
@@ -26,19 +26,7 @@ import {
 } from "@/components/dashboard/catalog/CatalogDetailChrome";
 import CatalogProviderCard from "@/components/dashboard/catalog/CatalogProviderCard";
 
-/**
- * A bundle, following the prototype's `GroupDetail` (`catalog.jsx`): the source
- * dataset's description, then its layers as the same cards the result list uses,
- * with the shared metadata in a column beside them.
- *
- * Members are rendered as `CatalogCard`s deliberately — the prototype reuses its
- * `ListCard` here too. A member row that looked different from the same dataset
- * in search results would suggest it is a different kind of thing, when a bundle
- * is only a grouping of layers that were harvested together.
- *
- * "Save all" toggles every member at once, which is what the prototype offers:
- * nobody stars 74 layers one at a time.
- */
+/** A bundle: the dataset's description, its layers as result cards, and the shared metadata beside them. */
 const CatalogBundleDetail = ({
   collection,
   members,
@@ -94,10 +82,7 @@ const CatalogBundleDetail = ({
         <LicenseBadge license={licenseLabel} href={linkHref(collection.links, "license")} />
       ),
     },
-    // A Collection states its time as `extent.temporal`, and since 2026-08-04 it
-    // does so on every row — so the extent wins here and the fallback to the
-    // layers' own dates covers only a Collection that states nothing. Either way
-    // a period renders as a period rather than as whichever endpoint came first.
+    // A Collection states its time as `extent.temporal`, and since 2026-08-04 it does so on every row — so the extent wins here and the fallback to the layers' own dates covers only a Collection that states nothing.
     !!dataDate && {
       icon: ICON_NAME.CALENDAR,
       label: t(dataDate.labelKey),
@@ -168,22 +153,7 @@ const CatalogBundleDetail = ({
                 {t("catalog_no_description")}
               </Typography>
             )}
-            {!!collection.keywords?.length && (
-              <Box sx={{ mt: 4.5, pt: 4, borderTop: `1px solid ${theme.palette.divider}` }}>
-                <Typography
-                  sx={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    textTransform: "uppercase",
-                    color: theme.palette.text.secondary,
-                    mb: 2.5,
-                  }}>
-                  {t("catalog_keywords")}
-                </Typography>
-                <KeywordChips keywords={collection.keywords} />
-              </Box>
-            )}
+            <KeywordSection keywords={collection.keywords} />
           </SectionCard>
 
           <SectionCard

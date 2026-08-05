@@ -9,20 +9,7 @@ import type { CatalogCollection } from "@/lib/validations/catalog";
 
 import { SectionCard } from "@/components/dashboard/catalog/CatalogDetailChrome";
 
-/**
- * Who produced the dataset, and where its own metadata record lives.
- *
- * The prototype puts this under the metadata column on both detail views, and it
- * is the one place a user can go from GOAT's copy back to the authoritative
- * source — so the `rel="via"` link the catalog publishes is offered as
- * prominently as the name.
- *
- * `providers` is a collection-level field, and roles are ordered by STAC
- * convention rather than importance: the producer is the answer to "whose data
- * is this?", so it is preferred over whoever hosts or processed it. A bare
- * `goat:publisher` string is accepted as a fallback because items carry that
- * even when the collection was not fetched.
- */
+/** Who produced the dataset, and where its own metadata record lives. */
 const CatalogProviderCard = ({
   providers,
   publisher,
@@ -77,8 +64,7 @@ const CatalogProviderCard = ({
                 {name}
               </Typography>
             )}
-            {/* The provider's own description often carries the contact address,
-                which is the only route to a correction. */}
+            {/* The provider's own description often carries the contact address, which is the only route to a correction. */}
             {producer?.description && (
               <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.45 }}>
                 {producer.description}

@@ -18,7 +18,7 @@ import {
   BUNDLE_ACCENT,
   DetailHeader,
   DetailTabs,
-  KeywordChips,
+  KeywordSection,
   LicenseBadge,
   MetaSidebar,
   SectionCard,
@@ -29,27 +29,7 @@ import CatalogFootprintMap from "@/components/dashboard/catalog/CatalogFootprint
 import CatalogProviderCard from "@/components/dashboard/catalog/CatalogProviderCard";
 import CatalogSchemaTable from "@/components/dashboard/catalog/CatalogSchemaTable";
 
-/**
- * One dataset, following the prototype's `LayerDetail` (`catalog.jsx`): a
- * description with its keywords and a map beneath it, the metadata as a column
- * beside them, and the columns on a second tab.
- *
- * Three points where the prototype and the live catalog differ, each resolved in
- * favour of what the data supports:
- *
- * - **The map is inline, not a tab.** The prototype only gives tabular data its
- *   own Map tab, and a footprint is context for the description rather than a
- *   destination. A dataset with no geometry (94 of the current items) simply has
- *   no map card.
- * - **Description and keywords come from the parent collection**, because that is
- *   where the harvester publishes them — see `describedBy`.
- * - **Download is not offered.** Every asset the mirror holds lives in GOAT's own
- *   storage and is stripped from responses (design S14), so a download button
- *   would have nothing to fetch. Adding the dataset to a project is the intended
- *   route to the data (promote-on-use) and is shown as the primary action,
- *   disabled until that lands; the provider's own record stays reachable through
- *   the Provider card.
- */
+/** One dataset: description, keywords and a map, metadata beside them, columns on a second tab. */
 
 type TabId = "summary" | "data";
 
@@ -83,13 +63,7 @@ const CatalogLayerDetail = ({
   const hasMap = !!item.geometry;
   const memberCount = (collection?.["goat:member_count"] as number | undefined) ?? 1;
   const inBundle = memberCount > 1;
-  /**
-   * Inside a bundle, the layer's own title is what distinguishes it from its
-   * siblings ("… SHP EPSG:31259"). On its own, the layer *is* the dataset, so the
-   * dataset's name is the right one — and it is the name the card that led here
-   * showed. 60 of the catalog's representative titles carry a format suffix the
-   * collection title does not.
-   */
+  /** Inside a bundle, the layer's own title is what distinguishes it from its siblings ("… SHP EPSG:31259"). */
   const title = inBundle ? props.title : collection?.title || props.title;
   // `other` is STAC's "unknown", not a licence — see `licenseLabel`.
   const licenseLabel = labels.licenseLabel(props.license);
@@ -97,15 +71,7 @@ const CatalogLayerDetail = ({
     inBundle ? itemPeriod(item) : datasetPeriod(collection, [item])
   );
 
-  /**
-   * How big the dataset is, beside the sample that shows a slice of it — the two
-   * numbers a reader needs to judge what the rows below them represent.
-   *
-   * Rows come from `table:row_count`, which the harvester publishes per layer; a
-   * dataset that states none simply reports its columns. Deliberately here rather
-   * than in the metadata sidebar: a count of rows means something next to the
-   * rows, and nothing at all next to a licence and a language.
-   */
+  /** How big the dataset is, beside the sample that shows a slice of it — the two numbers a reader needs to judge what the rows below them represent. */
   const datasetSize = useMemo(() => {
     const parts: string[] = [];
     const rows = props["table:row_count"];
@@ -164,15 +130,7 @@ const CatalogLayerDetail = ({
       label: t("metadata.headings.license"),
       value: <LicenseBadge license={licenseLabel} href={linkHref(item.links, "license")} />,
     },
-    // When the data is from, headed by what the value turns out to be: a
-    // reference year for a single date, a period for a span (`periodField`).
-    //
-    // Read as a period rather than as `properties.datetime`, since an item
-    // covering a range publishes `start_datetime`/`end_datetime` and sets
-    // `datetime` to null. A lone layer reads its DATASET's period for the same
-    // reason it takes the dataset's title and description: the two are one thing.
-    // Inside a bundle the layer's own date is the honest answer, because the
-    // dataset's is already on the bundle page.
+    // When the data is from, headed by what the value turns out to be: a reference year for a single date, a period for a span (`periodField`).
     !!periodField && {
       icon: ICON_NAME.CALENDAR,
       label: t(periodField.labelKey),
@@ -219,8 +177,7 @@ const CatalogLayerDetail = ({
               </Button>
             )}
             <Tooltip title={t("catalog_tab_coming_soon")} placement="top">
-              {/* A disabled button emits no pointer events, so the tooltip needs
-                  a wrapper to hang off. */}
+              {/* A disabled button emits no pointer events, so the tooltip needs a wrapper to hang off. */}
               <Box component="span" sx={{ display: "inline-flex" }}>
                 <Button
                   variant="contained"
@@ -254,22 +211,7 @@ const CatalogLayerDetail = ({
                     {t("catalog_no_description")}
                   </Typography>
                 )}
-                {!!keywords?.length && (
-                  <Box sx={{ mt: 4.5, pt: 4, borderTop: `1px solid ${theme.palette.divider}` }}>
-                    <Typography
-                      sx={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: 0.5,
-                        textTransform: "uppercase",
-                        color: theme.palette.text.secondary,
-                        mb: 2.5,
-                      }}>
-                      {t("catalog_keywords")}
-                    </Typography>
-                    <KeywordChips keywords={keywords} />
-                  </Box>
-                )}
+                <KeywordSection keywords={keywords} />
               </SectionCard>
 
               {hasMap && (
@@ -277,16 +219,12 @@ const CatalogLayerDetail = ({
                   sx={{
                     position: "relative",
                     // A real height rather than "whatever the sidebar leaves".
-                    // The summary column is description + map and the sidebar is
-                    // a dozen metadata rows, so `flex: 1` against a 260px floor
-                    // gave the map the remainder — around a third of the card,
-                    // too little to read a footprint in, let alone a sample.
                     flex: { xs: "none", md: "none" },
                     height: { xs: 320, md: 460 },
                     borderRadius: 2.5,
                     overflow: "hidden",
                     border: `1px solid ${theme.palette.divider}`,
-                    boxShadow: theme.shadows[1],
+                    boxShadow: theme.shadows[6],
                   }}>
                   <CatalogFootprintMap item={item} fill />
                 </Box>
@@ -296,10 +234,7 @@ const CatalogLayerDetail = ({
 
           {tab === "data" && (
             <>
-              {/* The sample first: "what does a record look like" is the question
-                  a data tab is opened with, and the dictionary answers a narrower
-                  one. Absent where the deployment serves no preview, which is the
-                  same condition that leaves the map showing only a footprint. */}
+              {/* The sample first: "what does a record look like" is the question a data tab is opened with, and the dictionary answers a narrower one. */}
               {!!preview?.features?.length && (
                 <SectionCard title={t("catalog_feature_table")} right={datasetSize}>
                   <CatalogFeatureTable
@@ -309,8 +244,7 @@ const CatalogLayerDetail = ({
                   />
                 </SectionCard>
               )}
-              {/* No subtitle: the heading and the column headers underneath it
-                  already say what this is. */}
+              {/* No subtitle: the heading and the column headers underneath it already say what this is. */}
               <SectionCard title={t("catalog_columns")}>
                 <CatalogSchemaTable columns={columns} />
               </SectionCard>

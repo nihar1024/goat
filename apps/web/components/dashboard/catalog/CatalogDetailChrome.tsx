@@ -5,17 +5,9 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-/**
- * The pieces every catalog detail view is built from, following the prototype's
- * `DetailHeader` / `DetailTabs` / `SectionCard` / `MetaSidebar` (`catalog.jsx`).
- *
- * They live together because the bundle view and the layer view are the same
- * page with different content: same back link, same 28px title, same uppercase
- * tab rail, same 280px sticky metadata column. Keeping them in one file is what
- * makes the two views agree without either owning the other.
- */
+/** The pieces every catalog detail view is built from: header, tabs, section card, metadata sidebar. */
 
-/** The accent the prototype gives bundles, on both the badge and the tag. */
+/** The bundle accent, on both the badge and the tag. */
 export const BUNDLE_ACCENT = "#7B5BD1";
 
 export type DetailBadge = {
@@ -95,15 +87,13 @@ export const DetailHeader = ({
                 letterSpacing: badge.plain ? 0 : 0.8,
                 textTransform: badge.plain ? "none" : "uppercase",
                 color: badgeColor,
-                // 1A ≈ 10% alpha, the tint the prototype uses for every badge.
+                // 1A ≈ 10% alpha.
                 backgroundColor: `${badgeColor}1A`,
               }}>
               {badge.label}
             </Typography>
           )}
-          {/* `component`, not `variant`: the theme runs h1 through
-              responsiveFontSizes(), whose media queries would override a plain
-              fontSize here and render the title at display size. */}
+          {/* `component`, not `variant`: the theme runs h1 through responsiveFontSizes(), whose media queries would override a plain fontSize here and render the title at display size. */}
           <Typography
             component="h1"
             sx={{
@@ -148,9 +138,7 @@ export const DetailTabs = <T extends string>({
   const theme = useTheme();
   const { i18n } = useTranslation();
 
-  // A single tab is a label, not a choice. The prototype still draws the rail
-  // for the bundle view (which only has Summary), so it is kept: it anchors the
-  // page's structure and the view gains tabs later.
+  // A single tab is a label, not a choice.
   return (
     <Stack
       direction="row"
@@ -225,7 +213,7 @@ export const SectionCard = ({
   note?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
-  /** Padding in theme units (4px each); the prototype's default is 24px. */
+  /** Padding in theme units (4px each). */
   pad?: number;
   bleed?: boolean;
 }) => {
@@ -236,16 +224,13 @@ export const SectionCard = ({
         backgroundColor: theme.palette.background.paper,
         border: `1px solid ${theme.palette.divider}`,
         borderRadius: 2.5,
-        boxShadow: theme.shadows[1],
+        boxShadow: theme.shadows[6],
         p: pad,
         overflow: bleed ? "hidden" : undefined,
       }}>
       {title && (
         <Stack direction="row" alignItems="baseline" spacing={3} sx={{ mb: note ? 1.5 : 3.5 }}>
-          {/* A heading, not a label: the weight and colour of the table headers
-              beneath it, so a section reads as the start of its content rather
-              than as a caption stamped above it. Upper-case letter-spaced small
-              text belongs on field labels, which is what this was copied from. */}
+          {/* A heading, not a label: the weight and colour of the table headers beneath it, so a section reads as the start of its content rather than as a caption stamped above it. */}
           <Typography
             sx={{
               fontSize: 15,
@@ -278,15 +263,7 @@ export type MetaField = {
   value: React.ReactNode;
 };
 
-/**
- * The metadata column: one row per field, each a tinted icon tile with a label
- * above its value.
- *
- * Rows without a value are dropped rather than shown empty. That is not
- * defensiveness — catalog coverage is genuinely uneven (`datetime` is null on
- * 52% of items, update frequency is not published at all), and a column of
- * dashes would say less than a shorter column.
- */
+/** The metadata column: one row per field, each a tinted icon tile with a label above its value. */
 export const MetaSidebar = ({
   fields,
   children,
@@ -305,8 +282,7 @@ export const MetaSidebar = ({
     <Box
       component="aside"
       sx={{ width: { xs: "100%", md: 280 }, flexShrink: 0, alignSelf: "stretch" }}>
-      {/* Sticky only once it is a column beside the content: stuck to the top of
-          a stacked layout it would float over what follows it. */}
+      {/* Sticky only once it is a column beside the content: stuck to the top of a stacked layout it would float over what follows it. */}
       <Box sx={{ position: { md: "sticky" }, top: { md: 16 } }}>
         {rows.length > 0 && (
           <Box
@@ -314,7 +290,7 @@ export const MetaSidebar = ({
               backgroundColor: theme.palette.background.paper,
               border: `1px solid ${theme.palette.divider}`,
               borderRadius: 2.5,
-              boxShadow: theme.shadows[1],
+              boxShadow: theme.shadows[6],
               px: 4.5,
               py: 1,
             }}>
@@ -374,16 +350,7 @@ export const MetaSidebar = ({
   );
 };
 
-/**
- * A license, linked to its terms when the catalog published a `rel="license"`
- * link.
- *
- * The label is the identifier as served, not a friendly name: 97% of the live
- * catalog carries the literal `other`, and one value is a bare URL, so mapping
- * onto the app's `metadata.license` vocabulary would invent precision the data
- * does not have. Tinting green only for a recognised open identifier keeps the
- * distinction the prototype draws without pretending to classify the rest.
- */
+/** A license, linked to its terms when the catalog published a `rel="license"` link. */
 const OPEN_LICENSE = /^(cc0|cc-by|cc-zero|odbl|odc-|pddl|dl-de|mit|apache)/i;
 
 export const LicenseBadge = ({ license, href }: { license: string; href?: string }) => {
@@ -393,9 +360,7 @@ export const LicenseBadge = ({ license, href }: { license: string; href?: string
   const looksLikeUrl = /^https?:\/\//.test(license);
   const label = looksLikeUrl ? license.replace(/^https?:\/\//, "").split("/").pop() || license : license;
 
-  // No icon inside the badge: both callers put it in a `MetaSidebar` row, which
-  // already draws a licence glyph in its tile — so the row showed the same icon
-  // twice, 12px apart.
+  // No icon inside the badge: both callers put it in a `MetaSidebar` row, which already draws a licence glyph in its tile — so the row showed the same icon twice, 12px apart.
   const badge = (
     <Typography
       component="span"
@@ -423,7 +388,35 @@ export const LicenseBadge = ({ license, href }: { license: string; href?: string
   );
 };
 
-/** A dataset's keywords, as the prototype's pill row. */
+/**
+ * The keywords, under their own heading, below a rule inside a section card. Both
+ * detail views showed exactly this and had it written out twice.
+ *
+ * The heading is a smaller, quieter `SectionCard` heading rather than a different
+ * kind of label: it sits in the same card as one, and upper-case letter-spaced text
+ * beside a sentence-case heading reads as an inconsistency, not as hierarchy.
+ */
+export const KeywordSection = ({ keywords }: { keywords?: string[] | null }) => {
+  const { t } = useTranslation("common");
+  const theme = useTheme();
+  if (!keywords?.length) return null;
+  return (
+    <Box sx={{ mt: 4.5, pt: 4, borderTop: `1px solid ${theme.palette.divider}` }}>
+      <Typography
+        sx={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: theme.palette.text.secondary,
+          mb: 2.5,
+        }}>
+        {t("catalog_keywords")}
+      </Typography>
+      <KeywordChips keywords={keywords} />
+    </Box>
+  );
+};
+
+/** A dataset's keywords, as a pill row. */
 export const KeywordChips = ({ keywords }: { keywords: string[] }) => {
   const theme = useTheme();
   return (

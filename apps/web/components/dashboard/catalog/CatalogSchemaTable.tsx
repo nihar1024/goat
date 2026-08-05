@@ -1,7 +1,10 @@
 "use client";
 
-import { Box, Typography, useTheme } from "@mui/material";
+import { Box, Button, Typography, useTheme } from "@mui/material";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import type { CatalogColumn } from "@/lib/validations/catalog";
 
@@ -15,10 +18,22 @@ import type { CatalogColumn } from "@/lib/validations/catalog";
  * rather than as an absent field.
  *
  * Scrolls inside itself: a 60-column dataset must not widen the page.
+ *
+ * Long schemas open shortened. A dictionary is a reference, consulted rather than
+ * read, and 27 rows of it push everything below the dataset out of reach; the
+ * widest in the catalog runs to 253 columns.
  */
+
+/** Rows shown before the list is collapsed behind a toggle. */
+const COLLAPSED_ROWS = 15;
+
 const CatalogSchemaTable = ({ columns }: { columns: CatalogColumn[] }) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
+
+  const collapsible = columns.length > COLLAPSED_ROWS;
+  const shown = collapsible && !expanded ? columns.slice(0, COLLAPSED_ROWS) : columns;
 
   const withDescription = columns.some((column) => !!column.description);
   // Without descriptions the two remaining columns still stay left, against a
@@ -51,25 +66,29 @@ const CatalogSchemaTable = ({ columns }: { columns: CatalogColumn[] }) => {
           py: 2.5,
           backgroundColor: theme.palette.action.hover,
           borderBottom: `1px solid ${theme.palette.divider}`,
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: 0.4,
-          textTransform: "uppercase",
+          // The sample table's header sets the pattern for both tables on this
+          // tab: a column name, in the text's own case.
+          fontSize: 13,
+          fontWeight: 600,
           color: theme.palette.text.secondary,
         }}>
         <Box>{t("catalog_column_name")}</Box>
         <Box>{t("catalog_column_type")}</Box>
         {withDescription && <Box>{t("catalog_column_description")}</Box>}
       </Box>
-      {columns.map((column, index) => (
+      {shown.map((column, index) => (
         <Box
           key={column.name}
           sx={{
             ...cell,
             py: 2.75,
             alignItems: "baseline",
+            // The toggle below carries its own top border, so the last row keeps
+            // one only when it really is the end of the list.
             borderBottom:
-              index < columns.length - 1 ? `1px solid ${theme.palette.divider}` : "none",
+              index < shown.length - 1 || collapsible
+                ? `1px solid ${theme.palette.divider}`
+                : "none",
           }}>
           <Typography
             sx={{ fontSize: 13, fontWeight: 600, fontFamily: "ui-monospace, monospace" }}>
@@ -90,6 +109,36 @@ const CatalogSchemaTable = ({ columns }: { columns: CatalogColumn[] }) => {
           )}
         </Box>
       ))}
+      {collapsible && (
+        <Button
+          onClick={() => setExpanded((open) => !open)}
+          // `text`, explicitly: the theme's default variant is `contained`, which
+          // turned a quiet "there is more of this list" into a full-width solid
+          // green bar heavier than the table above it.
+          variant="text"
+          color="primary"
+          // Full width and flush: the row it replaces, so the list ends on the
+          // same rhythm it was read in.
+          sx={{
+            width: "100%",
+            justifyContent: "flex-start",
+            px: 3.5,
+            py: 2,
+            borderRadius: 0,
+            fontSize: 12.5,
+            fontWeight: 600,
+            textTransform: "none",
+            "&:hover": { backgroundColor: theme.palette.action.hover },
+          }}
+          endIcon={
+            <Icon
+              iconName={expanded ? ICON_NAME.CHEVRON_UP : ICON_NAME.CHEVRON_DOWN}
+              style={{ fontSize: 11 }}
+            />
+          }>
+          {expanded ? t("show_less") : t("catalog_show_all_columns", { count: columns.length })}
+        </Button>
+      )}
     </Box>
   );
 };

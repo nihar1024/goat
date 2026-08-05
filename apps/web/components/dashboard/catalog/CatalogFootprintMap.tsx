@@ -483,9 +483,11 @@ const CatalogFootprintMap = ({
               px: 2,
               py: 1.5,
               borderRadius: 1.5,
-              border: `1px solid ${theme.palette.divider}`,
               backgroundColor: theme.palette.background.paper,
               opacity: 0.96,
+              // Above the credit strip, which sets a z-index of its own and would
+              // otherwise cover the legend where the two meet on a narrow map.
+              zIndex: 2,
             }}>
             {/* Headings kept: they read "Fill color based on: measure", which is
                 what turns a column of swatches into an explanation. At default

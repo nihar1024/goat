@@ -1,15 +1,16 @@
 "use client";
 
 import { Box, Typography, useTheme } from "@mui/material";
-import { useMemo } from "react";
+import { type Theme, emphasize } from "@mui/material/styles";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
+import type { DatasetCollectionItems } from "@/lib/validations/layer";
 import type { CatalogColumn } from "@/lib/validations/catalog";
 
-import {
-  type LayerField,
-  formatFeatureProperties,
-} from "@/components/map/popover/formatFeatureProperties";
+import FeatureTable, { type FeatureTableField } from "@/components/common/FeatureTable";
 
 /**
  * The dataset's actual rows — the preview sample, one line per feature.
@@ -19,24 +20,21 @@ import {
  * record look like. The preview already carries up to 100 features with their
  * attributes, so the rows cost nothing beyond rendering them.
  *
- * Two things it borrows rather than reinvents:
+ * The table itself is the app's own `FeatureTable` — the one the dataset modal,
+ * the dashboard widget and the workflows data panel use. It is presentational and
+ * documented for callers that synthesise rows rather than page them from the API,
+ * which is exactly a catalog dataset: it has no layer to query yet. So a value
+ * reads here the way it reads in every other GOAT table, and column resizing or
+ * cell formatting improvements arrive here for free.
  *
- * - **Column order and labels come from `table:columns`**, so the table matches
- *   the dictionary below it and stays stable across features that happen to omit
- *   a key. Anything a feature carries that the schema does not is appended, since
- *   a value nobody declared is still a value.
- * - **Values are formatted by the app's own field formatter** — the one the map
- *   popup uses — so a number, an area or a date reads here exactly as it does
- *   everywhere else in GOAT.
- *
- * Scrolls in both directions inside its own frame: 60 columns must not widen the
- * page, and 100 rows must not push the dictionary off the screen.
+ * What stays local is the part that is about the catalog rather than about tables:
+ * which columns to show, and in which order.
  */
 
 /**
  * Columns that are the feature's shape rather than its attributes. The preview
  * strips them from `properties` — the same set `catalog.services.preview` calls
- * non-property columns — so a table listing them would show a dash per row and
+ * non-property columns — so a table listing them would show a blank per row and
  * read as missing data.
  */
 const STRUCTURAL = new Set(["geometry", "geom", "bbox"]);
@@ -45,133 +43,168 @@ const STRUCTURAL = new Set(["geometry", "geom", "bbox"]);
  * below it reachable. */
 const MAX_HEIGHT = 420;
 
+/**
+ * The header's surface: a touch lighter than the card, the same lift the data
+ * table in map mode gives its own sticky header. Named because two things need
+ * it — the header cells, and the scrollbar gutter beside them.
+ */
+const HEADER_BG = (theme: Theme) => emphasize(theme.palette.background.paper, 0.03);
+
 const CatalogFeatureTable = ({
   features,
   columns,
+  truncated,
 }: {
   features: GeoJSON.Feature[];
   columns: CatalogColumn[];
+  /**
+   * Whether the dataset holds more than these features — the preview's own
+   * `goat:truncated`, rather than a guess from the row count. A dataset with 75
+   * rows is shown in full, and telling its reader the view was "limited" would be
+   * false.
+   */
+  truncated?: boolean;
 }) => {
-  const { t, i18n } = useTranslation("common");
+  const { t } = useTranslation("common");
   const theme = useTheme();
 
+  /**
+   * How tall the header is, so the strip beside it can be painted to match — see
+   * the band on the scrolling box. Measured rather than assumed: the height
+   * depends on the theme's metrics and on whether a long column name wraps.
+   */
+  const scrollBox = useRef<HTMLDivElement | null>(null);
+  const [headHeight, setHeadHeight] = useState(0);
+  useEffect(() => {
+    const head = scrollBox.current?.querySelector("thead");
+    if (!head) return;
+    const measure = () => setHeadHeight(head.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(head);
+    return () => observer.disconnect();
+  }, [columns, features]);
+
   /** Declared columns first, then anything the data carries beyond them. */
-  const names = useMemo(() => {
-    const declared = columns
-      .map((column) => column.name)
-      .filter((name) => !!name && !STRUCTURAL.has(name));
-    const seen = new Set(declared);
-    const extra: string[] = [];
+  const fields = useMemo<FeatureTableField[]>(() => {
+    const declared = columns.filter(
+      (column) => !!column.name && !STRUCTURAL.has(column.name)
+    );
+    const seen = new Set(declared.map((column) => column.name));
+    const extra: FeatureTableField[] = [];
     for (const feature of features) {
       for (const key of Object.keys(feature.properties ?? {})) {
         if (!seen.has(key)) {
           seen.add(key);
-          extra.push(key);
+          // A value nobody declared is still a value.
+          extra.push({ name: key, type: "string" });
         }
       }
     }
-    return [...declared, ...extra];
+    return [
+      ...declared.map((column) => ({ name: column.name, type: column.type ?? "string" })),
+      ...extra,
+    ];
   }, [columns, features]);
 
-  const fields = useMemo<LayerField[]>(
-    () =>
-      names.map((name) => ({
-        name,
-        type: columns.find((column) => column.name === name)?.type ?? "text",
+  /**
+   * The sample as the table's own page shape. Only `features[].properties` is
+   * read for rendering; the counts describe the sample honestly, and the
+   * remaining members belong to an OGC Features page this is not — a preview has
+   * no links to follow and no title of its own.
+   */
+  const data = useMemo<DatasetCollectionItems>(
+    () => ({
+      type: "FeatureCollection",
+      title: "",
+      links: [],
+      numberMatched: features.length,
+      numberReturned: features.length,
+      features: features.map((feature, index) => ({
+        type: "Feature",
+        // Positional: preview features carry no id, and the table only needs a
+        // stable key per row.
+        id: index,
+        properties: (feature.properties ?? {}) as Record<string, unknown>,
       })),
-    [names, columns]
+    }),
+    [features]
   );
 
-  const rows = useMemo(
-    () =>
-      features.map(
-        (feature) =>
-          formatFeatureProperties({
-            properties: (feature.properties ?? {}) as Record<string, unknown>,
-            layerFields: fields,
-            lang: i18n.language,
-          }).byColumn
-      ),
-    [features, fields, i18n.language]
-  );
-
-  if (!names.length || !rows.length) return null;
-
-  const cellSx = {
-    px: 3,
-    py: 2,
-    fontSize: 12.5,
-    whiteSpace: "nowrap",
-    maxWidth: 280,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  } as const;
+  if (!fields.length || !features.length) return null;
 
   return (
-    <Box>
+    <Box
+      sx={{
+        border: `1px solid ${theme.palette.divider}`,
+        borderRadius: 2,
+        overflow: "hidden",
+      }}>
       <Box
+        ref={scrollBox}
         sx={{
-          border: `1px solid ${theme.palette.divider}`,
-          borderRadius: 2,
           overflow: "auto",
           maxHeight: MAX_HEIGHT,
+          /**
+           * The platform's own scrollbar, deliberately unstyled.
+           *
+           * Starting the thumb below the sticky header needs the track inset with
+           * `::-webkit-scrollbar-track`, and touching any of those pseudo-elements
+           * makes Chrome swap the platform bar for a custom one: always drawn,
+           * always holding its gutter, and defaulting its track and corner to
+           * white whatever the theme says. That trade is worse than the thing it
+           * fixes. A scrollbar spanning the header is a small oddity; a permanent
+           * white bar down a dark table is not.
+           *
+           * The one part worth keeping is the band: the gutter sits outside the
+           * table's box, so the card shows through beside the header as a notch.
+           * Painting the box's top strip in the header's colour closes it, and the
+           * gradient is attached to the box rather than the content, so it stays
+           * put while the rows scroll under it.
+           */
+          backgroundImage: `linear-gradient(${HEADER_BG(theme)} 0 ${headHeight}px, transparent ${headHeight}px)`,
         }}>
-        <Box component="table" sx={{ borderCollapse: "collapse", width: "100%" }}>
-          <Box component="thead">
-            <Box component="tr">
-              {names.map((name) => (
-                <Box
-                  component="th"
-                  key={name}
-                  sx={{
-                    ...cellSx,
-                    // The header stays put while the rows scroll under it —
-                    // a 100-row sample is otherwise unreadable past the fold.
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1,
-                    textAlign: "left",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 0.4,
-                    textTransform: "uppercase",
-                    color: theme.palette.text.secondary,
-                    backgroundColor: theme.palette.background.paper,
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                    fontFamily: "ui-monospace, monospace",
-                  }}>
-                  {name}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-          <Box component="tbody">
-            {rows.map((row, index) => (
-              <Box
-                component="tr"
-                key={index}
-                sx={{
-                  "&:nth-of-type(even)": { backgroundColor: theme.palette.action.hover },
-                }}>
-                {names.map((name) => (
-                  <Box component="td" key={name} sx={cellSx} title={row[name] ?? ""}>
-                    {row[name] || (
-                      <Typography
-                        component="span"
-                        sx={{ color: theme.palette.text.disabled, fontSize: 12.5 }}>
-                        —
-                      </Typography>
-                    )}
-                  </Box>
-                ))}
-              </Box>
-            ))}
-          </Box>
-        </Box>
+        {/* Dressed like the data table in map mode, which is where people meet a
+            table of features in this product:
+            - `bordered` for the column dividers. A sample runs to 40 columns and
+              scrolls sideways, and without them the eye loses the column it was
+              following. (Map mode is a separate component, but its rule is the
+              one this variant applies.)
+            - a header a touch lighter than the card, the same lift map mode gives
+              its own. The default is the *page* background, which is darker than
+              this card in the dark theme and read as a band laid over the table. */}
+        <FeatureTable
+          fields={fields}
+          data={data}
+          variant="bordered"
+          headerColor={HEADER_BG(theme)}
+        />
       </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
-        {t("catalog_feature_sample_note", { count: rows.length })}
-      </Typography>
+      {/* Why the table stops where it does, in the footer of the frame it applies
+          to rather than as a sentence underneath it. The count above says how big
+          the dataset is; this says how much of it you are looking at — so it is
+          only worth saying when the two differ. */}
+      {truncated && (
+        <Box
+          sx={{
+            px: 3,
+            py: 2,
+            borderTop: `1px solid ${theme.palette.divider}`,
+            backgroundColor: theme.palette.action.hover,
+          }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Icon
+              iconName={ICON_NAME.TABLE}
+              style={{ fontSize: 11 }}
+              htmlColor={theme.palette.text.secondary}
+            />
+            {t("catalog_preview_limited", { count: features.length })}
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 };

@@ -97,6 +97,28 @@ const CatalogLayerDetail = ({
     inBundle ? itemPeriod(item) : datasetPeriod(collection, [item])
   );
 
+  /**
+   * How big the dataset is, beside the sample that shows a slice of it — the two
+   * numbers a reader needs to judge what the rows below them represent.
+   *
+   * Rows come from `table:row_count`, which the harvester publishes per layer; a
+   * dataset that states none simply reports its columns. Deliberately here rather
+   * than in the metadata sidebar: a count of rows means something next to the
+   * rows, and nothing at all next to a licence and a language.
+   */
+  const datasetSize = useMemo(() => {
+    const parts: string[] = [];
+    const rows = props["table:row_count"];
+    if (typeof rows === "number") parts.push(t("catalog_row_count_short", { count: rows }));
+    if (columns.length) parts.push(t("catalog_schema_column_count", { count: columns.length }));
+    if (!parts.length) return undefined;
+    return (
+      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+        {parts.join(" · ")}
+      </Typography>
+    );
+  }, [props, columns.length, t]);
+
   const tabs = useMemo(() => {
     const list: { id: TabId; label: string }[] = [
       { id: "summary", label: t("summary") },
@@ -279,11 +301,17 @@ const CatalogLayerDetail = ({
                   one. Absent where the deployment serves no preview, which is the
                   same condition that leaves the map showing only a footprint. */}
               {!!preview?.features?.length && (
-                <SectionCard title={t("catalog_feature_table")}>
-                  <CatalogFeatureTable features={preview.features} columns={columns} />
+                <SectionCard title={t("catalog_feature_table")} right={datasetSize}>
+                  <CatalogFeatureTable
+                    features={preview.features}
+                    columns={columns}
+                    truncated={!!preview["goat:truncated"]}
+                  />
                 </SectionCard>
               )}
-              <SectionCard title={t("catalog_columns")} note={t("catalog_columns_note")}>
+              {/* No subtitle: the heading and the column headers underneath it
+                  already say what this is. */}
+              <SectionCard title={t("catalog_columns")}>
                 <CatalogSchemaTable columns={columns} />
               </SectionCard>
             </>

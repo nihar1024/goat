@@ -242,13 +242,15 @@ export const SectionCard = ({
       }}>
       {title && (
         <Stack direction="row" alignItems="baseline" spacing={3} sx={{ mb: note ? 1.5 : 3.5 }}>
+          {/* A heading, not a label: the weight and colour of the table headers
+              beneath it, so a section reads as the start of its content rather
+              than as a caption stamped above it. Upper-case letter-spaced small
+              text belongs on field labels, which is what this was copied from. */}
           <Typography
             sx={{
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 0.6,
-              textTransform: "uppercase",
-              color: theme.palette.text.secondary,
+              fontSize: 15,
+              fontWeight: 600,
+              color: theme.palette.text.primary,
             }}>
             {title}
           </Typography>

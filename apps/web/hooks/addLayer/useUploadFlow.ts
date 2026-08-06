@@ -2,31 +2,30 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type FieldErrors, type UseFormRegister, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { toast } from "react-toastify";
 
-import { requestDatasetUpload } from "@/lib/api/datasets";
 import { getWritableFolders, useFolders } from "@/lib/api/folders";
-import { createLayer } from "@/lib/api/layers";
-import { useJobs } from "@/lib/api/processes";
 import { useProject } from "@/lib/api/projects";
-import { uploadFileToS3 } from "@/lib/services/s3";
-import { setRunningJobIds } from "@/lib/store/jobs/slice";
-import { parseTabularPreview, type TabularPreview } from "@/lib/utils/tabular-preview";
+import {
+  derivePreview,
+  readTabularSource,
+  type TabularPreview,
+  type TabularSource,
+} from "@/lib/utils/tabular-preview";
 import type { GetContentQueryParams } from "@/lib/validations/common";
 import type { Folder } from "@/lib/validations/folder";
 import type { LayerMetadata } from "@/lib/validations/layer";
-import { createLayerFromDatasetSchema, layerMetadataSchema } from "@/lib/validations/layer";
+import { layerMetadataSchema } from "@/lib/validations/layer";
 
-import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
+import { useDatasetImport } from "@/hooks/addLayer/useDatasetImport";
 
 import type { FlowController } from "@/hooks/addLayer/flow";
 
 /**
- * Uploading a file as a dataset: state, steps, validation and submit — no UI.
+ * Uploading a file as a dataset: state, validation and submit — no UI.
  *
  * Headless so the flow is not tied to the modal that hosts it today; a side panel
  * or a page can mount this with a body of its own. Everything the host draws
- * (frame, stepper, footer) it draws from `FlowController`.
+ * (frame, footer) it draws from `FlowController`.
  *
  * The API sequence is unchanged from the dialog this replaces: presigned URL →
  * direct S3 upload → `createLayer`, whose OGC job id goes to the jobs store.
@@ -34,6 +33,9 @@ import type { FlowController } from "@/hooks/addLayer/flow";
 
 const ACCEPTED_FILE_TYPES = [".gpkg", ".geojson", ".zip", ".kml", ".csv", ".xlsx", ".parquet"];
 const TABULAR_EXTENSIONS = ["csv", "xlsx", "xls"];
+
+/** As `contentMetadataSchema` enforces it — kept here so the field can stop at the same point. */
+export const MAX_NAME_LENGTH = 100;
 
 export type UploadFlowState = {
   file?: File;
@@ -57,6 +59,9 @@ export type UploadFlowState = {
   /** Defaults the name field to the file's own name, without its extension. */
   suggestedName: string;
   values: LayerMetadata;
+  /** The row edits both directly — there is no form to register against. */
+  setName: (value: string) => void;
+  setDescription: (value: string) => void;
 };
 
 export type UploadFlow = FlowController & { upload: UploadFlowState };
@@ -64,29 +69,35 @@ export type UploadFlow = FlowController & { upload: UploadFlowState };
 export const useUploadFlow = ({
   projectId,
   defaultFolderId,
+  initialFile,
   onDone,
 }: {
   projectId?: string;
   defaultFolderId?: string;
+  /** A file the host already has — dropped on the map, rather than chosen in here. */
+  initialFile?: File;
   onDone?: () => void;
 }): UploadFlow => {
   const { t } = useTranslation("common");
-  const dispatch = useAppDispatch();
-  const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
 
   const { project } = useProject(projectId);
-  const { mutate: mutateJobs } = useJobs({ read: false });
+  const { importDataset } = useDatasetImport();
   const queryParams: GetContentQueryParams = { order: "descendent", order_by: "updated_at" };
   const { folders: allFolders } = useFolders(queryParams);
   const folders = getWritableFolders(allFolders);
 
-  const [step, setStep] = useState(0);
   const [file, setFileValue] = useState<File>();
   const [fileError, setFileError] = useState<string>();
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>();
   const folderInitialized = useRef(false);
-  const [isBusy, setIsBusy] = useState(false);
-  const [preview, setPreview] = useState<TabularPreview | null>(null);
+  /**
+   * Never busy: the dialog no longer waits for anything.
+   *
+   * It hands the file to the import and closes, so there is no window in which its control
+   * should spin. What the transfer is doing is the banner's business.
+   */
+  const isBusy = false;
+  const [source, setSource] = useState<TabularSource | null>(null);
   const [hasHeader, setHasHeader] = useState(true);
   const [sheet, setSheet] = useState("");
 
@@ -95,14 +106,6 @@ export const useUploadFlow = ({
     return !!ext && TABULAR_EXTENSIONS.includes(ext);
   }, [file]);
 
-  /** A tabular file earns an extra step to configure how it is read. */
-  const steps = useMemo(() => {
-    const base = [t("select_file"), t("destination_and_metadata"), t("confirmation")];
-    return isTabular ? [base[0], t("preview_and_configure"), base[1], base[2]] : base;
-  }, [isTabular, t]);
-
-  const metadataStep = isTabular ? 2 : 1;
-  const lastStep = steps.length - 1;
 
   // The project's own folder is the natural destination; otherwise whatever folder
   // the host was looking at.
@@ -123,35 +126,44 @@ export const useUploadFlow = ({
     }
   }, [folders, project?.folder_id, defaultFolderId]);
 
+  // Reading depends on the file and the worksheet only. `hasHeader` is not a dependency:
+  // it changes how these rows are read, not which bytes are read, and having it here made
+  // every flip of the switch re-read the file.
   useEffect(() => {
     if (!file || !isTabular) {
-      setPreview(null);
+      setSource(null);
       return;
     }
     let cancelled = false;
-    parseTabularPreview(file, { hasHeader, sheetName: sheet || undefined })
+    readTabularSource(file, { sheetName: sheet || undefined })
       .then((parsed) => {
         if (cancelled) return;
-        setPreview(parsed);
+        setSource(parsed);
         if (!sheet && parsed.sheetNames.length > 0) setSheet(parsed.sheetNames[0]);
       })
       .catch((error) => {
         console.error("Preview parse error:", error);
-        if (!cancelled) setPreview(null);
+        if (!cancelled) setSource(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [file, isTabular, hasHeader, sheet]);
+  }, [file, isTabular, sheet]);
+
+  const preview = useMemo<TabularPreview | null>(
+    () => (source ? derivePreview(source, hasHeader) : null),
+    [source, hasHeader]
+  );
 
   const {
     register,
     getValues,
+    setValue,
     watch,
     reset: resetForm,
     formState: { errors, isValid },
   } = useForm<LayerMetadata>({ mode: "onChange", resolver: zodResolver(layerMetadataSchema) });
-  // Watched, not read once: the confirmation step has to re-render as the fields change.
+  // Watched, not read once: the footer's enabled state follows the fields.
   const values = watch();
 
   const suggestedName = useMemo(() => {
@@ -162,23 +174,41 @@ export const useUploadFlow = ({
       : file.name;
   }, [file]);
 
-  const setFile = useCallback((next: File | null) => {
-    setFileError(undefined);
-    setFileValue(undefined);
-    if (!next?.name) return;
-    if (!ACCEPTED_FILE_TYPES.some((type) => next.name.endsWith(type))) {
-      setFileError("Invalid file type. Please select a file of type");
-      return;
-    }
-    setFileValue(next);
-  }, []);
+  const setFile = useCallback(
+    (next: File | null) => {
+      setFileError(undefined);
+      setFileValue(undefined);
+      // Removing the file removes everything said about it: a name, a description and a
+      // workbook's settings all described that file, and carrying them over to the next
+      // one silently attaches them to something else.
+      setValue("name", "", { shouldValidate: false });
+      setValue("description", "", { shouldValidate: false });
+      setSource(null);
+      setHasHeader(true);
+      setSheet("");
+      if (!next?.name) return;
+      if (!ACCEPTED_FILE_TYPES.some((type) => next.name.endsWith(type))) {
+        setFileError("Invalid file type. Please select a file of type");
+        return;
+      }
+      setFileValue(next);
+      // The suggested name goes into the form, not just onto the screen: with no field
+      // registered for it, a name that only existed as display text left the form invalid
+      // and the upload button dead.
+      // Trimmed to the limit `contentMetadataSchema` enforces (100): an export named by a
+      // SQL query is longer than that, and suggesting it verbatim opened the form invalid
+      // with an error nobody had caused.
+      setValue("name", next.name.replace(/\.[^/.]+$/, "").slice(0, MAX_NAME_LENGTH), {
+        shouldValidate: true,
+      });
+    },
+    [setValue]
+  );
 
   const reset = useCallback(() => {
-    setStep(0);
     setFileValue(undefined);
     setFileError(undefined);
-    setIsBusy(false);
-    setPreview(null);
+    setSource(null);
     setHasHeader(true);
     setSheet("");
     setSelectedFolder(undefined);
@@ -186,73 +216,78 @@ export const useUploadFlow = ({
     resetForm();
   }, [resetForm]);
 
-  const submit = useCallback(async () => {
+  /**
+   * Hand the file to the import and close.
+   *
+   * Not awaited: the transfer can take minutes on a large file, and holding this dialog open
+   * for it blocks the whole app for something the banner reports perfectly well on its own.
+   * The dialog's job ends when the file and its settings have been handed over.
+   */
+  const submit = useCallback(() => {
     if (!file) return;
-    try {
-      setIsBusy(true);
-      const presigned = await requestDatasetUpload({
-        filename: file.name,
-        content_type: file.type || "application/octet-stream",
-        file_size: file.size,
-      });
-      await uploadFileToS3(file, presigned);
-      const payload = createLayerFromDatasetSchema.parse({
-        ...getValues(),
-        folder_id: selectedFolder?.id,
-        s3_key: presigned.fields.key,
-        ...(isTabular && { has_header: hasHeader }),
-        ...(isTabular && sheet && { sheet_name: sheet }),
-      });
-      const response = await createLayer(payload, projectId);
-      const jobId = response?.jobID;
-      if (jobId) {
-        mutateJobs();
-        dispatch(setRunningJobIds([...runningJobIds, jobId]));
-      }
-    } catch (error) {
-      toast.error(t("error_uploading_dataset"));
-      console.error("error", error);
-    } finally {
-      reset();
-      onDone?.();
-    }
+    void importDataset({
+      file,
+      name: getValues().name ?? suggestedName,
+      description: getValues().description,
+      folderId: selectedFolder?.id,
+      projectId,
+      ...(isTabular && { hasHeader }),
+      ...(isTabular && sheet ? { sheetName: sheet } : {}),
+    });
+    reset();
+    onDone?.();
   }, [
     file,
     getValues,
+    suggestedName,
     selectedFolder?.id,
+    projectId,
     isTabular,
     hasHeader,
     sheet,
-    projectId,
-    mutateJobs,
-    dispatch,
-    runningJobIds,
-    t,
+    importDataset,
     reset,
     onDone,
   ]);
 
   /**
-   * What the host's primary control says and does. Each step states its own
+   * What the host's primary control says and does. It states its own
    * blocking condition, so no host has to know the rules.
    */
-  const action = useMemo(() => {
-    if (step < lastStep) {
-      const blocked =
-        (step === 0 && !file) || (step === metadataStep && (!isValid || !selectedFolder));
-      return {
-        label: t("next"),
-        disabled: blocked,
-        run: () => setStep((current) => current + 1),
-      };
-    }
-    return { label: t("upload"), disabled: isBusy, run: submit };
-  }, [step, lastStep, metadataStep, file, isValid, selectedFolder, isBusy, submit, t]);
+  const setName = useCallback(
+    (value: string) => setValue("name", value, { shouldValidate: true }),
+    [setValue]
+  );
+  const setDescription = useCallback(
+    (value: string) => setValue("description", value, { shouldValidate: true }),
+    [setValue]
+  );
+
+  /**
+   * Take the file the host arrived with, once.
+   *
+   * Through `setFile` rather than around it, so a dropped file gets the same validation, the
+   * same suggested name and the same preview as one chosen in the dialog. Guarded by a ref:
+   * removing the file must not make it reappear.
+   */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!initialFile || seeded.current) return;
+    seeded.current = true;
+    setFile(initialFile);
+  }, [initialFile, setFile]);
+
+  const action = useMemo(
+    () => ({
+      label: t("upload"),
+      // One screen, so one condition: a file, a name that validates, somewhere to put it.
+      disabled: !file || !isValid || !selectedFolder,
+      run: submit,
+    }),
+    [file, isValid, selectedFolder, submit, t]
+  );
 
   return {
-    steps,
-    step,
-    goTo: setStep,
     action,
     isBusy,
     reset,
@@ -274,6 +309,8 @@ export const useUploadFlow = ({
       errors,
       suggestedName,
       values,
+      setName,
+      setDescription,
     },
   };
 };

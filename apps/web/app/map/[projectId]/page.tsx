@@ -57,6 +57,9 @@ const WorkflowsLayout = dynamic(() => import("@/components/workflows/WorkflowsLa
 
 const UPDATE_VIEW_STATE_DEBOUNCE_TIME = 200;
 
+import MapDropTarget from "@/components/map/MapDropTarget";
+import TransferToasts from "@/components/uploads/TransferToasts";
+
 export default function MapPage(props: { params: Promise<{ projectId: string }> }) {
   const params = use(props.params);
 
@@ -496,7 +499,17 @@ export default function MapPage(props: { params: Promise<{ projectId: string }> 
         <MapProvider>
           <DrawProvider>
             <MeasureProvider>
-              <Stack component="div" width="100%" height="100%" overflow="hidden">
+              <Stack
+                component="div"
+                width="100%"
+                height="100%"
+                overflow="hidden">
+                {isProjectEditor && (
+                  <>
+                    <MapDropTarget projectId={projectId} />
+                    <TransferToasts />
+                  </>
+                )}
                 <Header
                   showHambugerMenu={false}
                   mapHeader={true}

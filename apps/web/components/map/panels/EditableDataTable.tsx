@@ -62,7 +62,7 @@ import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput"
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import { COLUMN_MENU_DIVIDER_SX, COLUMN_MENU_PAPER_SX } from "@/components/common/columnMenuStyles";
-import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
+import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
 
@@ -80,7 +80,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useMap } from "react-map-gl/maplibre";
 import useLayerFields from "@/hooks/map/CommonHooks";
 
-import { updateProjectLayer, useProjectLayers } from "@/lib/api/projects";
+import { updateProjectLayer, useProject, useProjectLayers } from "@/lib/api/projects";
 import { useUserProfile } from "@/lib/api/users";
 import ColumnStatsPanel from "@/components/map/panels/ColumnStatsPanel";
 import ColumnFilterPopover from "@/components/map/panels/ColumnFilterPopover";
@@ -124,6 +124,15 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   const { projectId } = useParams();
   const { userProfile } = useUserProfile();
   const { layers: projectLayers, mutate: mutateProjectLayers } = useProjectLayers(projectId as string);
+  const { project } = useProject(projectId as string);
+  const canEditFeatures = canEditLayerFeatures({
+    currentUserId: userProfile?.id,
+    layerOwnerId: projectLayer.user_id,
+    projectOwnerId: project?.owned_by?.id,
+    isProjectEditor: isEditor,
+    layerSize: projectLayer.size,
+    inCatalog: projectLayer.in_catalog,
+  });
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const editLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
   const pendingFeatures = useAppSelector((state) => state.featureEditor.pendingFeatures);
@@ -891,7 +900,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
             {t("edit_fields")}
           </Button>
         )}
-        {isEditor && (isEditing || (projectLayer.user_id === userProfile?.id && (!projectLayer.size || projectLayer.size <= MAX_EDITABLE_LAYER_SIZE))) && (
+        {isEditor && (isEditing || canEditFeatures) && (
           <Button
             size="small"
             variant="outlined"

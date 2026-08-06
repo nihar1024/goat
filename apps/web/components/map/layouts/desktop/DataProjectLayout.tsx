@@ -330,6 +330,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               onUpdateGroup={handleUpdateGroup}
               onDeleteGroup={handleDeleteGroup}
               viewMode={isProjectEditor ? "edit" : "view"}
+              projectOwnerId={project.owned_by?.id}
             />
           </FloatingPanel>
           <Box sx={{ marginTop: "auto" }}>

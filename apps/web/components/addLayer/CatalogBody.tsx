@@ -10,7 +10,6 @@ import type { CatalogFlow } from "@/hooks/addLayer/useCatalogFlow";
 import { useCatalogFacetSections } from "@/hooks/catalog/useCatalogFacetSections";
 
 import CatalogPickerCard from "@/components/addLayer/CatalogPickerCard";
-import { ADD_LAYER_WIDE_WIDTH } from "@/components/addLayer/sources";
 import CatalogActiveFilters from "@/components/dashboard/catalog/CatalogActiveFilters";
 import CatalogFilterPanel from "@/components/dashboard/catalog/CatalogFilterPanel";
 import CatalogSpatialSection from "@/components/dashboard/catalog/CatalogSpatialSection";
@@ -79,9 +78,7 @@ const CatalogBody = ({ controller }: { controller: CatalogFlow }) => {
       sx={{
         height: "min(760px, 74vh)",
         minHeight: 0,
-        // The tab's final width, not the paper's current one — see
-        // `ADD_LAYER_WIDE_WIDTH`. Laid out once, then revealed as the paper grows.
-        width: ADD_LAYER_WIDE_WIDTH,
+        width: "100%",
       }}>
       <Box
         sx={{

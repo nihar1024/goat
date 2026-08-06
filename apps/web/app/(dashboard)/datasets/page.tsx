@@ -4,14 +4,9 @@ import {
   Box,
   Breadcrumbs,
   Button,
-  ClickAwayListener,
   Container,
   Grid,
   Link,
-  ListItemIcon,
-  Menu,
-  MenuItem,
-  MenuList,
   Pagination,
   Paper,
   Stack,
@@ -32,7 +27,6 @@ import type { PaginatedQueryParams } from "@/lib/validations/common";
 import type { Folder } from "@/lib/validations/folder";
 import type { GetDatasetSchema } from "@/lib/validations/layer";
 
-import { AddLayerSourceType } from "@/types/common";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
 import { useJobStatus } from "@/hooks/jobs/JobStatus";
@@ -45,8 +39,7 @@ import TileGrid from "@/components/dashboard/common/TileGrid";
 import type { SelectedFolderForEdit } from "@/components/modals/Folder";
 import FolderModal from "@/components/modals/Folder";
 import ShareModal from "@/components/modals/Share";
-import AddLayerModal from "@/components/modals/AddLayerModal";
-import DatasetExternal from "@/components/modals/DatasetExternal";
+import AddLayerMenu from "@/components/addLayer/AddLayerMenu";
 import DocumentUploadModal from "@/components/modals/DocumentUpload";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 
@@ -101,12 +94,10 @@ const Datasets = () => {
   const { documents, isLoading: isDocumentsLoading, mutate: mutateDocuments } = useDocuments(effectiveDocumentFolderId);
   const [openDocumentUpload, setOpenDocumentUpload] = useState(false);
 
-  const [addDatasetModal, setAddDatasetModal] = useState<AddLayerSourceType | null>(null);
   const [addDatasetAnchorEl, setAddDatasetAnchorEl] = useState<null | HTMLElement>(null);
   const [folderEditModal, setFolderEditModal] = useState<FolderEditModal | undefined>();
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
 
-  const open = Boolean(addDatasetAnchorEl);
   const handleAddDatasetClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAddDatasetAnchorEl(event.currentTarget);
   };
@@ -114,34 +105,6 @@ const Datasets = () => {
     setAddDatasetAnchorEl(null);
   };
 
-  const openAddDatasetModal = (sourceType: AddLayerSourceType | "document") => {
-    handleAddDatasetClose();
-    if (sourceType === "document") {
-      setOpenDocumentUpload(true);
-    } else {
-      setAddDatasetModal(sourceType);
-    }
-  };
-
-  const closeAddDatasetModal = () => {
-    setAddDatasetModal(null);
-    mutate();
-  };
-
-  // Datasets come from the Add Layer modal (upload today, connections through its
-  // handoff tab); a document is not a dataset, so it keeps its own entry.
-  const addDatasetMenuItems = [
-    {
-      sourceType: AddLayerSourceType.DatasourceUpload,
-      iconName: ICON_NAME.UPLOAD,
-      label: t("dataset_upload"),
-    },
-    {
-      sourceType: "document" as const,
-      iconName: ICON_NAME.FILE,
-      label: t("upload_document"),
-    },
-  ];
 
   useEffect(() => {
     if (datasets?.pages && queryParams?.page && datasets?.pages < queryParams?.page) {
@@ -213,17 +176,6 @@ const Datasets = () => {
 
   return (
     <Container sx={{ py: 10, px: 10 }} maxWidth="xl">
-      {addDatasetModal === AddLayerSourceType.DatasourceUpload && (
-        <AddLayerModal
-          open={true}
-          onClose={closeAddDatasetModal}
-          defaultFolderId={activeFolderId ?? homeFolder?.id}
-          onOpenLegacy={(source) => setAddDatasetModal(source)}
-        />
-      )}
-      {addDatasetModal === AddLayerSourceType.DataSourceExternal && (
-        <DatasetExternal open={true} onClose={closeAddDatasetModal} />
-      )}
       {folderEditModal && (
         <FolderModal
           type={folderEditModal.type}
@@ -271,36 +223,22 @@ const Datasets = () => {
             {t("add_dataset")}
           </Button>
         )}
-        <Menu
+        <AddLayerMenu
           anchorEl={addDatasetAnchorEl}
-          sx={{
-            "& .MuiPaper-root": {
-              boxShadow: "0px 0px 10px 0px rgba(58, 53, 65, 0.1)",
+          onClose={handleAddDatasetClose}
+          onSourceClose={mutate}
+          defaultFolderId={activeFolderId ?? homeFolder?.id}
+          // A document is not a dataset and has no flow of its own, but it is what someone
+          // reaches for in the same moment, so it keeps its place in this menu.
+          extra={[
+            {
+              key: "document",
+              label: t("upload_document"),
+              icon: ICON_NAME.FILE,
+              onSelect: () => setOpenDocumentUpload(true),
             },
-          }}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-          transformOrigin={{ vertical: -5, horizontal: "center" }}
-          open={open}
-          MenuListProps={{
-            "aria-labelledby": "basic-button",
-            sx: { p: 0 },
-          }}
-          onClose={handleAddDatasetClose}>
-          <Box>
-            <ClickAwayListener onClickAway={handleAddDatasetClose}>
-              <MenuList>
-                {addDatasetMenuItems.map((item, index) => (
-                  <MenuItem key={index} onClick={() => openAddDatasetModal(item.sourceType as AddLayerSourceType | "document")}>
-                    <ListItemIcon>
-                      <Icon iconName={item.iconName} style={{ fontSize: "15px" }} />
-                    </ListItemIcon>
-                    <Typography variant="body2">{item.label}</Typography>
-                  </MenuItem>
-                ))}
-              </MenuList>
-            </ClickAwayListener>
-          </Box>
-        </Menu>
+          ]}
+        />
       </Box>
       <Grid container justifyContent="space-between" spacing={4}>
         <Grid item xs={12}>

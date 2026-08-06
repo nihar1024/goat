@@ -21,7 +21,6 @@ import { useCreateFlow } from "@/hooks/addLayer/useCreateFlow";
 describe("useCreateFlow", () => {
   it("is a single view with a create action", () => {
     const { result } = renderHook(() => useCreateFlow({ projectId: "p1" }));
-    expect(result.current.steps).toEqual([]);
     expect(result.current.action.label).toBe("create_layer");
   });
 

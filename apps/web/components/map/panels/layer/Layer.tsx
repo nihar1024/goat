@@ -8,13 +8,8 @@ import {
   Box,
   Button,
   Card,
-  ClickAwayListener,
   Grid,
   IconButton,
-  ListItemIcon,
-  Menu,
-  MenuItem,
-  MenuList,
   Stack,
   Tooltip,
   Typography,
@@ -63,10 +58,9 @@ import { OverflowTypograpy } from "@/components/common/OverflowTypography";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 import MoreMenu from "@/components/common/PopperMenu";
 import Container from "@/components/map/panels/Container";
-import AddLayerModal from "@/components/modals/AddLayerModal";
+import AddLayerMenu from "@/components/addLayer/AddLayerMenu";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
-import DatasetExternalModal from "@/components/modals/DatasetExternal";
 import MapLayerChartModal from "@/components/modals/MapLayerChart";
 import ProjectLayerDeleteModal from "@/components/modals/ProjectLayerDelete";
 import ProjectLayerRenameModal from "@/components/modals/ProjectLayerRename";
@@ -156,7 +150,6 @@ export function SortableLayerTile(props: SortableLayerTileProps) {
 const AddLayerSection = ({ projectId }: { projectId: string }) => {
   const { t } = useTranslation("common");
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -165,37 +158,10 @@ const AddLayerSection = ({ projectId }: { projectId: string }) => {
   };
 
   const [addLayerSourceOpen, setAddSourceOpen] = useState<AddLayerSourceType | null>(null);
-  const openAddLayerSourceDialog = (addType: AddLayerSourceType) => {
-    handleClose();
-    setAddSourceOpen(addType);
-  };
-
   const closeAddLayerSourceModal = () => {
     setAddSourceOpen(null);
   };
 
-  const menuItems = [
-    {
-      sourceType: AddLayerSourceType.DatasourceExplorer,
-      iconName: ICON_NAME.DATABASE,
-      label: t("dataset_explorer"),
-    },
-    {
-      sourceType: AddLayerSourceType.DatasourceUpload,
-      iconName: ICON_NAME.UPLOAD,
-      label: t("dataset_upload"),
-    },
-    {
-      sourceType: AddLayerSourceType.DataSourceExternal,
-      iconName: ICON_NAME.LINK,
-      label: t("dataset_external"),
-    },
-    {
-      sourceType: AddLayerSourceType.CatalogExplorer,
-      iconName: ICON_NAME.GLOBE,
-      label: t("catalog_explorer"),
-    },
-  ];
 
   return (
     <>
@@ -215,50 +181,18 @@ const AddLayerSection = ({ projectId }: { projectId: string }) => {
             {t("common:add_layer")}
           </Typography>
         </Button>
-        <Menu
+        <AddLayerMenu
           anchorEl={anchorEl}
-          sx={{
-            "& .MuiPaper-root": {
-              boxShadow: "0px 0px 10px 0px rgba(58, 53, 65, 0.1)",
-            },
-          }}
-          anchorOrigin={{ vertical: "top", horizontal: "center" }}
-          transformOrigin={{ vertical: "bottom", horizontal: "center" }}
-          open={open}
-          MenuListProps={{
-            "aria-labelledby": "basic-button",
-            sx: { width: anchorEl && anchorEl.offsetWidth - 10, p: 0 },
-          }}
-          onClose={handleClose}>
-          <Box>
-            <ClickAwayListener onClickAway={handleClose}>
-              <MenuList>
-                {menuItems.map((item, index) => (
-                  <MenuItem key={index} onClick={() => openAddLayerSourceDialog(item.sourceType)}>
-                    <ListItemIcon>
-                      <Icon iconName={item.iconName} style={{ fontSize: "15px" }} />
-                    </ListItemIcon>
-                    <Typography variant="body2">{item.label}</Typography>
-                  </MenuItem>
-                ))}
-              </MenuList>
-            </ClickAwayListener>
-          </Box>
-        </Menu>
+          onClose={handleClose}
+          projectId={projectId}
+          // Above the button: this panel's own is at the foot of a sidebar, so a menu
+          // dropped below it would open off the bottom of the viewport.
+          placement="top"
+          onOpenLegacy={(source) => setAddSourceOpen(source)}
+        />
       </Stack>
       {addLayerSourceOpen === AddLayerSourceType.DatasourceExplorer && (
         <DatasetExplorerModal open={true} onClose={closeAddLayerSourceModal} projectId={projectId} />
-      )}
-      {addLayerSourceOpen === AddLayerSourceType.DatasourceUpload && (
-        <AddLayerModal
-          open={true}
-          onClose={closeAddLayerSourceModal}
-          projectId={projectId}
-          onOpenLegacy={(source) => setAddSourceOpen(source)}
-        />
-      )}
-      {addLayerSourceOpen === AddLayerSourceType.DataSourceExternal && (
-        <DatasetExternalModal open={true} onClose={closeAddLayerSourceModal} projectId={projectId} />
       )}
     </>
   );

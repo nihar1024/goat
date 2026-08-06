@@ -14,7 +14,7 @@ import { useContentMoreMenu } from "@/hooks/dashboard/ContentHooks";
 import EmptyCard from "@/components/dashboard/common/EmptyCard";
 import TileCard from "@/components/dashboard/common/TileCard";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
-import AddLayerModal from "@/components/modals/AddLayerModal";
+import AddLayerDialog from "@/components/addLayer/AddLayerDialog";
 
 interface DataSectionProps {
   layers: Layer[];
@@ -33,11 +33,7 @@ const DataSection = (props: DataSectionProps) => {
   return (
     <Box>
       {openDatasetUploadModal && (
-        <AddLayerModal
-          open={openDatasetUploadModal}
-          onClose={() => setOpenDatasetUploadModal(false)}
-          sources={["upload"]}
-        />
+        <AddLayerDialog source="upload" onClose={() => setOpenDatasetUploadModal(false)} />
       )}
       {activeContent && moreMenuState && (
         <>

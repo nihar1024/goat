@@ -3,40 +3,42 @@ import { ICON_NAME } from "@p4b/ui/components/Icon";
 import { AddLayerSourceType } from "@/types/common";
 
 /**
- * The sources a layer can come from — one tab each in the Add Layer modal.
+ * The sources a layer can come from — one menu entry each, opening a dialog of its own.
  *
- * Labels are single words where a single word will do: the modal is already called
- * Add Layer, so "Dataset Upload" and "Dataset Explorer" were repeating its subject
- * back at the reader and costing a 44px tab bar its room.
+ * Labels are single words where a single word will do: the button is already called Add
+ * Layer, so "Dataset Upload" and "Dataset Explorer" repeated its subject back at the reader.
  *
- * A source either has a flow of its own (a controller + a body) or, until it does,
- * a `handoff` to the dialog that still owns it. Hosts filter the list; nothing else
- * decides which tabs exist.
+ * A source either has a flow of its own (a controller + a body) or, until it does, a
+ * `handoff` to the dialog that still owns it. Hosts filter the list; nothing else decides
+ * which entries exist.
  */
+
+export type AddLayerSourceId = "upload" | "explorer" | "catalog" | "create";
 
 /**
- * How wide the dialog is on a browsing tab, and the width its body lays out at.
+ * The two things a source can be: data that does not exist in GOAT yet, or data that does.
  *
- * Both, from one constant, on purpose: the paper animates towards this while the body
- * is already at it, so the tab is revealed rather than reflowed. Were the body to size
- * itself off the animating paper instead, its cards would be laid out two-up, then
- * three-up, resizing under the cursor for the length of the transition.
+ * The menu groups by this rather than by how much work a source is, because it is the only
+ * distinction someone has already made before opening the menu — they know whether what
+ * they want is in GOAT or on their disk.
  */
-export const ADD_LAYER_WIDE_WIDTH = "min(1360px, 94vw)";
-
-export type AddLayerSourceId = "upload" | "explorer" | "catalog" | "connections" | "create";
+export type AddLayerGroup = "new" | "existing";
 
 export type AddLayerSource = {
   id: AddLayerSourceId;
-  /** i18n key for the tab label. */
+  /** i18n key for the menu label. */
   labelKey: string;
+  group: AddLayerGroup;
   icon: ICON_NAME;
-  /** i18n keys for the steps this source walks through; a single view declares none. */
-  stepKeys?: string[];
   /** Adds to a project, so it is absent where there is none (the datasets page). */
   needsProject?: boolean;
-  /** Browsing sources need room for a filter rail beside a list of cards. */
+  /**
+   * Browsing sources lay out their own edges, so their dialog does not pad them: a filter
+   * rail has to reach the frame for its rules to read as rules.
+   */
   wide?: boolean;
+  /** How wide this source's dialog is. A form's 860 by default. */
+  width?: number | string;
   /** The legacy dialog to open until this source has a flow. */
   handoff?: AddLayerSourceType;
 };
@@ -44,16 +46,21 @@ export type AddLayerSource = {
 export const ADD_LAYER_SOURCES: AddLayerSource[] = [
   {
     id: "upload",
-    labelKey: "upload",
+    labelKey: "upload_file",
+    group: "new",
     icon: ICON_NAME.UPLOAD,
-    // The tabular step appears only for CSV/XLSX — the flow reports the real list.
-    stepKeys: ["select_file", "destination_and_metadata", "confirmation"],
+    // One view, one column: a drop zone or a single file row, so it needs a little more
+    // than a form's 860 and nothing like a catalog's 1360. The file's own settings open in
+    // a dialog on top rather than widening this one.
+    width: "min(900px, 94vw)",
+
   },
   {
     id: "explorer",
     // "My datasets" rather than "Explore": it is the counterpart to Catalog,
     // and what distinguishes the two is whose datasets they are.
     labelKey: "my_datasets",
+    group: "existing",
     icon: ICON_NAME.DATABASE,
     needsProject: true,
     wide: true,
@@ -62,26 +69,28 @@ export const ADD_LAYER_SOURCES: AddLayerSource[] = [
   {
     id: "catalog",
     labelKey: "catalog",
+    group: "existing",
     icon: ICON_NAME.GLOBE,
     needsProject: true,
     wide: true,
-  },
-  {
-    id: "connections",
-    // "Connections" is the feature; `dataset_external` names only today's stand-in.
-    labelKey: "connections",
-    icon: ICON_NAME.LINK,
-    wide: true,
-    handoff: AddLayerSourceType.DataSourceExternal,
+    // A filter rail beside a grid of cards over thousands of collections: most of a desktop.
+    width: "min(1360px, 94vw)",
   },
   {
     id: "create",
     labelKey: "create_layer",
+    group: "new",
     icon: ICON_NAME.PLUS,
     // `createEmptyLayer` posts to a project; without one there is nothing to add
     // the new layer to, so the datasets page does not offer it.
     needsProject: true,
   },
+];
+
+/** The order the groups are shown in, with the i18n key for each heading. */
+export const ADD_LAYER_GROUPS: { id: AddLayerGroup; labelKey: string }[] = [
+  { id: "new", labelKey: "add_layer_group_new" },
+  { id: "existing", labelKey: "add_layer_group_existing" },
 ];
 
 export const sourcesFor = ({ hasProject }: { hasProject: boolean }): AddLayerSource[] =>

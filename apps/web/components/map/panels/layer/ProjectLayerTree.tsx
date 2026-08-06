@@ -50,11 +50,10 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import MoreMenu from "@/components/common/PopperMenu";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 // Modals
-import AddLayerModal from "@/components/modals/AddLayerModal";
+import AddLayerMenu from "@/components/addLayer/AddLayerMenu";
 import ConfirmModal from "@/components/modals/Confirm";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
-import DatasetExternalModal from "@/components/modals/DatasetExternal";
 import MapLayerChartModal from "@/components/modals/MapLayerChart";
 import ProjectLayerDeleteModal from "@/components/modals/ProjectLayerDelete";
 import ProjectLayerGroupModal from "@/components/modals/ProjectLayerGroupModal";
@@ -87,9 +86,9 @@ export const AddLayerButton = ({
   startIcon?: boolean;
 }) => {
   const { t } = useTranslation("common");
-  const [open, setOpen] = useState(false);
-  // Sources that have not been rebuilt inside the modal yet still open their own
-  // dialog, handed off from the modal's tab (see HandoffPanel).
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  // Sources that have not been rebuilt yet still open their own dialog, straight from the
+  // menu.
   const [legacySource, setLegacySource] = useState<AddLayerSourceType | null>(null);
 
   return (
@@ -98,21 +97,18 @@ export const AddLayerButton = ({
         variant={variant}
         size="small"
         startIcon={startIcon ? <AddIcon fontSize="small" /> : undefined}
-        onClick={() => setOpen(true)}
+        onClick={(event) => setAnchorEl(event.currentTarget)}
         sx={{ borderRadius: 4, textTransform: "none", fontWeight: "bold", whiteSpace: "nowrap" }}>
         {t("add_layer")}
       </Button>
-      <AddLayerModal
-        open={open}
-        onClose={() => setOpen(false)}
+      <AddLayerMenu
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
         projectId={projectId}
         onOpenLegacy={(source) => setLegacySource(source)}
       />
       {legacySource === AddLayerSourceType.DatasourceExplorer && (
         <DatasetExplorerModal open={true} onClose={() => setLegacySource(null)} projectId={projectId} />
-      )}
-      {legacySource === AddLayerSourceType.DataSourceExternal && (
-        <DatasetExternalModal open={true} onClose={() => setLegacySource(null)} projectId={projectId} />
       )}
     </>
   );

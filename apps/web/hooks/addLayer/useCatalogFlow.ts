@@ -222,9 +222,6 @@ export const useCatalogFlow = ({
   );
 
   return {
-    steps: [],
-    step: 0,
-    goTo: () => undefined,
     action,
     isBusy: false,
     reset,

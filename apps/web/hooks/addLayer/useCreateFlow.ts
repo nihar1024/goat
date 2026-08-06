@@ -149,9 +149,6 @@ export const useCreateFlow = ({
   );
 
   return {
-    steps: [],
-    step: 0,
-    goTo: () => undefined,
     action,
     isBusy,
     reset,

@@ -42,6 +42,11 @@ dev = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "network: Tests that access external network services (WFS, HTTP, etc.)",
+]
 
 [tool.ruff]
 target-version = "py311"

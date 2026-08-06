@@ -54,7 +54,11 @@ UserIdDep = Annotated[UUID, Depends(get_user_id)]
 async def _get_authorized_metadata(
     layer_info: LayerInfo, user_id: UUID
 ) -> LayerMetadata:
-    """Get layer metadata and verify the user owns the layer.
+    """Get layer metadata and verify the user may write to the layer.
+
+    The layer's owner always may. A non-owner may when the layer's owner has
+    put it in a project they both edit — see
+    ``LayerService.user_can_edit_layer``.
 
     Args:
         layer_info: Layer info from URL
@@ -70,9 +74,18 @@ async def _get_authorized_metadata(
     if not metadata:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    # Verify ownership: compare user_id from metadata with authenticated user
+    # A layer with no owner has no grant chain to derive access from.
+    if not metadata.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to modify this layer",
+        )
+
     user_id_hex = str(user_id).replace("-", "")
-    if not metadata.user_id or metadata.user_id != user_id_hex:
+    if metadata.user_id == user_id_hex:
+        return metadata
+
+    if not await layer_service.user_can_edit_layer(layer_info.layer_id, user_id):
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to modify this layer",

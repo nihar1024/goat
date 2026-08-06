@@ -357,6 +357,23 @@ export async function getJob(jobId: string): Promise<Job> {
 }
 
 /**
+ * A finished job's own result payload.
+ *
+ * The job *list* does not carry results — `GET /jobs` reports `result: null` for every
+ * entry — so anything that needs what a job produced has to ask for it per job.
+ */
+export async function getJobResult(jobId: string): Promise<Record<string, unknown> | null> {
+  const response = await apiRequestAuth(`${JOBS_API_BASE_URL}/${jobId}/results`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!response.ok) return null;
+  const body = (await response.json()) as { result?: Record<string, unknown> };
+  return body?.result ?? null;
+}
+
+/**
  * Dismiss/cancel a job
  */
 export async function dismissJob(jobId: string): Promise<void> {

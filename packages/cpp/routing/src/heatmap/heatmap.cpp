@@ -2,6 +2,7 @@
 
 #include "../network/network_prep.h"
 
+#include "../data/duckdb_setup.h"
 #include "../kernel/dijkstra.h"
 #include "../output/hex_resolution.h"
 #include "../output/sql_export.h"
@@ -36,18 +37,6 @@ using output::write_query_to_parquet;
 
 namespace
 {
-
-void ensure_required_extensions_loaded(duckdb::Connection &con)
-{
-    auto install_h3 = con.Query("INSTALL h3 FROM community");
-    if (install_h3->HasError())
-        throw std::runtime_error("Failed to install DuckDB H3 extension: "
-                                 + install_h3->GetError());
-    auto load_h3 = con.Query("LOAD h3");
-    if (load_h3->HasError())
-        throw std::runtime_error("Failed to load DuckDB H3 extension: "
-                                 + load_h3->GetError());
-}
 
 // Resettable stopwatch — each call returns ms since the previous call
 // (or since construction).
@@ -917,7 +906,7 @@ void run_street(HeatmapConfig const &cfg, duckdb::Connection &con,
 void configure_connection(HeatmapConfig const &cfg, duckdb::Connection &con,
                           PhaseTimer &timer)
 {
-    ensure_required_extensions_loaded(con);
+    data::ensure_required_extensions_loaded(con);
     {
         std::error_code ec;
         std::filesystem::path spill =
@@ -943,6 +932,22 @@ void run_reachability(HeatmapConfig const &cfg, duckdb::Connection &con,
         run_street(cfg, con, timer);
 }
 
+// Export the reachability relation as a raw OD cost matrix:
+// (orig_cell, dest_cell, cost), one row per reachable (cell, opportunity)
+// pair. dest_cell is the opportunity's cell from _hm_opp_meta. `con` holds the
+// temp tables built by the shared reachability engine.
+void export_od_costs(HeatmapConfig const &cfg, duckdb::Connection &con)
+{
+    std::ostringstream sql;
+    sql << "COPY (SELECT p.cell AS orig_cell, om.opp_cell AS dest_cell, "
+        << "CAST(ROUND(p.min_cost) AS INTEGER) AS cost "
+        << "FROM _hm_per_opp p JOIN _hm_opp_meta om USING (opp_idx)) "
+        << "TO '" << sql_escape(cfg.output_path) << "' (FORMAT PARQUET)";
+    auto r = con.Query(sql.str());
+    if (r->HasError())
+        throw std::runtime_error("OD cost export failed: " + r->GetError());
+}
+
 } // namespace
 
 void build_reachability_relation(
@@ -958,11 +963,18 @@ void build_reachability_relation(
     emit(con);
 }
 
-void compute_heatmap(HeatmapConfig const &cfg)
+void compute(HeatmapConfig const &cfg)
 {
     build_reachability_relation(cfg, [&](duckdb::Connection &con) {
         PhaseTimer timer;
         reduce_and_export(cfg, con, timer);
+    });
+}
+
+void compute_od_costs(HeatmapConfig const &cfg)
+{
+    build_reachability_relation(cfg, [&](duckdb::Connection &con) {
+        export_od_costs(cfg, con);
     });
 }
 

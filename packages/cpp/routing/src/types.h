@@ -154,7 +154,7 @@ namespace routing
         // Reverse mode (street only): seed the search from the destination side
         // on the transposed graph, so cost[origin->destination] is recovered
         // while running one Dijkstra per destination. Output schema unchanged.
-        // (Reverse PT is served by compute_heatmap's od_output_path, not here.)
+        // (Reverse PT is served by compute_od_costs, not here.)
         bool reverse = false;
         bool sparse = false;  // emit only reachable pairs
     };

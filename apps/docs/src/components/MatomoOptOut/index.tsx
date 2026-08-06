@@ -32,6 +32,6 @@ function OptOutForm() {
 
 /** Matomo's opt-out form. Renders client-side only: it depends on the tracker
  * origin, and with JavaScript disabled there is no tracking to opt out of. */
-export default function MatomoOptOut(): JSX.Element {
+export default function MatomoOptOut(): React.ReactElement {
   return <BrowserOnly fallback={<div />}>{() => <OptOutForm />}</BrowserOnly>;
 }

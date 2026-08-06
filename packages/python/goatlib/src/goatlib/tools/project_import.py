@@ -649,13 +649,13 @@ class ProjectImportRunner(SimpleToolRunner):
                              attribute_accuracy, completeness, geographical_code,
                              language_code, distributor_name, distributor_email,
                              distribution_url, license, attribution,
-                             data_reference_year, data_category,
+                             data_reference_year, data_category, field_config,
                              created_at, updated_at)
                         VALUES
                             ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                              $11, $12, $13, $14, $15, $16, $17, $18,
                              $19, $20, $21, $22, $23, $24, $25, $26,
-                             $27, $28, $29, NOW(), NOW())
+                             $27, $28, $29, $30, NOW(), NOW())
                         """,
                         uuid.UUID(new_layer_id),
                         uuid.UUID(new_user_id),
@@ -686,6 +686,7 @@ class ProjectImportRunner(SimpleToolRunner):
                         layer_meta.attribution,
                         layer_meta.data_reference_year,
                         layer_meta.data_category,
+                        layer_meta.field_config,
                     )
 
                 # 4b. Insert one layer_project row per exported link.

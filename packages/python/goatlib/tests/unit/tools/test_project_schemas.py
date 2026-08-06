@@ -5,6 +5,7 @@ import json
 from goatlib.tools.project_schemas import (
     EXTERNAL_DATA_TYPES,
     FORMAT_VERSION,
+    ExportLayerMetadata,
     ExportManifest,
     ExportProjectMetadata,
     ExportWorkflow,
@@ -73,6 +74,39 @@ def test_workflow_config_preserved() -> None:
     restored = ExportWorkflow(**data)
     assert len(restored.config["nodes"]) == 2
     assert restored.config["edges"][0]["source"] == "n1"
+
+
+def test_layer_metadata_preserves_field_config() -> None:
+    """field_config (formula/computed columns) survives JSON round-trip."""
+    field_config = {
+        "risk_score": {
+            "kind": "formula",
+            "formula": "a + b",
+            "depends_on": ["a", "b"],
+            "is_computed": True,
+            "output_kind": "number",
+            "display_config": {"decimals": 2},
+        },
+        "area": {"kind": "area", "is_computed": True, "depends_on": ["geometry"]},
+    }
+    meta = ExportLayerMetadata(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name="My Layer",
+        type="feature",
+        field_config=field_config,
+    )
+    restored = ExportLayerMetadata(**json.loads(meta.model_dump_json()))
+    assert restored.field_config == field_config
+
+
+def test_layer_metadata_field_config_defaults_empty() -> None:
+    """Archives written before field_config existed import as no config."""
+    restored = ExportLayerMetadata(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        name="Old Layer",
+        type="feature",
+    )
+    assert restored.field_config == {}
 
 
 def test_format_version() -> None:

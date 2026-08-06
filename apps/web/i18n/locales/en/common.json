@@ -2628,5 +2628,7 @@
   "upload_failed_hint": "Nothing was imported. Try again.",
   "upload_preparing": "Preparing upload",
   "upload_finishing": "Finishing upload, waiting for the server",
-  "of": "of"
+  "of": "of",
+  "allow_sorting": "Allow sorting",
+  "allow_filtering": "Allow filtering"
 }

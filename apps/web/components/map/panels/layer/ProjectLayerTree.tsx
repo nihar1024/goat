@@ -31,6 +31,7 @@ import { emitInteractionEvent } from "@/lib/store/interaction/slice";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setDataPanelLayerId, setIsDataPanelOpen } from "@/lib/store/map/slice";
 import { rgbToHex } from "@/lib/utils/helpers";
+import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
 import { zoomToLayer, zoomToProjectLayer } from "@/lib/utils/map/navigate";
 // API & Store
 import type {
@@ -345,6 +346,10 @@ interface ProjectLayerTreeProps {
   headerContent?: React.ReactNode;
   /** Per-group info text (keyed by group ID string) shown as an ⓘ button on the group row */
   groupInfo?: Record<string, string>;
+  /** Project owner's user id, used to decide whether feature editing is offered.
+   * Passed in rather than fetched so the public dashboard, which renders this
+   * tree read-only, makes no authenticated request. */
+  projectOwnerId?: string | null;
 }
 
 export const ProjectLayerTree = ({
@@ -371,6 +376,7 @@ export const ProjectLayerTree = ({
   dimOutOfZoom = true,
   headerContent,
   groupInfo,
+  projectOwnerId,
 }: ProjectLayerTreeProps) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -667,7 +673,13 @@ export const ProjectLayerTree = ({
         !!node.query,
         !!node.in_catalog,
         false,
-        node.user_id === userProfile?.id,
+        // Catalog and size are handled by the filters below.
+        canEditLayerFeatures({
+          currentUserId: userProfile?.id,
+          layerOwnerId: node.user_id,
+          projectOwnerId,
+          isProjectEditor: isEditMode,
+        }),
         isEditMode,
       );
     }
@@ -912,7 +924,7 @@ export const ProjectLayerTree = ({
     viewMode, hideActions, toggleStyle, togglePosition, moreOptionsStyle,
     allowedActions, downloadableLayers, projectLayers,
     isEditMode, groupInfo,
-    mapMode, userProfile,
+    mapMode, userProfile, projectOwnerId,
     dispatch,
     activeLayerId, activeRightPanel,
   ]);

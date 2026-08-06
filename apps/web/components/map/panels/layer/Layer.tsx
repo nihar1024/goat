@@ -30,7 +30,7 @@ import {
   useProject,
 } from "@/lib/api/projects";
 import { useUserProfile } from "@/lib/api/users";
-import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
+import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
 import useStartEditingGuard from "@/hooks/map/useStartEditingGuard";
 
 import ConfirmModal from "@/components/modals/Confirm";
@@ -514,8 +514,14 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                               !!layer.charts,
                               layer.in_catalog,
                               false,
-                              layer.user_id === userProfile?.id &&
-                                (!layer.size || layer.size <= MAX_EDITABLE_LAYER_SIZE),
+                              canEditLayerFeatures({
+                                currentUserId: userProfile?.id,
+                                layerOwnerId: layer.user_id,
+                                projectOwnerId: project?.owned_by?.id,
+                                isProjectEditor: true,
+                                layerSize: layer.size,
+                                inCatalog: layer.in_catalog,
+                              }),
                               true,
                             )}
                             menuButton={

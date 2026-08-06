@@ -2626,5 +2626,7 @@
   "upload_failed_hint": "Es wurde nichts importiert. Bitte erneut versuchen.",
   "upload_preparing": "Upload wird vorbereitet",
   "upload_finishing": "Upload wird abgeschlossen, warte auf den Server",
-  "of": "von"
+  "of": "von",
+  "allow_sorting": "Sortieren erlauben",
+  "allow_filtering": "Filtern erlauben"
 }

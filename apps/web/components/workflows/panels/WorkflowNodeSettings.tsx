@@ -45,8 +45,10 @@ import {
 } from "@/lib/store/workflow/selectors";
 import { requestMapView, requestTableView, updateNode } from "@/lib/store/workflow/slice";
 import {
+  applyDynamicDefaults,
   getDefaultValues,
   getVisibleInputs,
+  isFormResetField,
   isSectionEnabled,
   processInputsWithSections,
 } from "@/lib/utils/ogc-utils";
@@ -476,7 +478,9 @@ export default function WorkflowNodeSettings({
 
   // Heatmap tools with per-opportunity config
   const isHeatmapOpportunityTool =
-    processId === "heatmap_gravity" || processId === "heatmap_closest_average" || processId === "heatmap_2sfca";
+    processId === "heatmap_gravity" ||
+    processId === "heatmap_closest_average" ||
+    processId === "heatmap_2sfca";
 
   // Compute predicted columns for connected tool outputs
   // This enables field selectors to show fields from upstream tool nodes
@@ -571,8 +575,11 @@ export default function WorkflowNodeSettings({
     const itemSchema = process.$defs[refName];
     if (!itemSchema) return {};
 
-    return getObjectDefaults(itemSchema, process.$defs);
-  }, [isHeatmapOpportunityTool, process]);
+    // Pass the node's own values so nested default_by_field / default_from
+    // resolve against routing_mode and cost_type — otherwise a distance-based
+    // heatmap would persist the time-based schema default as its budget.
+    return getObjectDefaults(itemSchema, process.$defs, { ...defaultValues, ...values });
+  }, [isHeatmapOpportunityTool, process, defaultValues, values]);
 
   // Auto-persist opportunity defaults to node config when connections are made.
   // Without this, default values are only used for display but never written to
@@ -717,7 +724,7 @@ export default function WorkflowNodeSettings({
         // Recursively resolve a node's output columns (same pattern as SqlToolSettings)
         const resolveNodeColumns = async (
           nodeId: string,
-          visited: Set<string>,
+          visited: Set<string>
         ): Promise<Record<string, string>> => {
           if (visited.has(nodeId)) return {};
           visited.add(nodeId);
@@ -854,38 +861,27 @@ export default function WorkflowNodeSettings({
     layers, // Re-fetch when layers become available
   ]);
 
-  // Compute new values with dynamic defaults applied
-  const computeNewValues = useCallback(
-    (prev: Record<string, unknown>, name: string, value: unknown) => {
-      const newValues = { ...prev, [name]: value };
-
-      // Check for dynamic defaults
-      for (const input of allInputs) {
-        const defaultByField = input.uiMeta?.widget_options?.default_by_field as
-          | { field: string; values: Record<string, unknown> }
-          | undefined;
-
-        if (defaultByField && defaultByField.field === name) {
-          const dynamicDefault = defaultByField.values[String(value)];
-          if (dynamicDefault !== undefined) {
-            newValues[input.name] = dynamicDefault;
-          }
-        }
-      }
-
-      return newValues;
-    },
-    [allInputs]
-  );
-
   // Update a single input value
   const handleInputChange = useCallback(
     (name: string, value: unknown) => {
-      // Compute new values based on current state
-      const newValues = computeNewValues(values, name, value);
+      // A field marked `resets_form` starts the node's form over when it
+      // changes — same rule as the toolbox form. Seeding the new value rebuilds
+      // the defaults that are keyed on it.
+      const resets =
+        !!process &&
+        isFormResetField(allInputs, name) &&
+        values[name] !== undefined &&
+        values[name] !== value;
+      const newValues = resets
+        ? getDefaultValues(process, { [name]: value })
+        : applyDynamicDefaults(allInputs, values, name, value);
 
       // Update local state
       setValues(newValues);
+      if (resets) {
+        setLayerFilters({});
+        setNestedLayerFilters({});
+      }
 
       // Save to Redux (outside setValues updater to avoid updating
       // other components during this component's render)
@@ -903,7 +899,7 @@ export default function WorkflowNodeSettings({
         );
       }
     },
-    [computeNewValues, values, dispatch, node]
+    [allInputs, process, values, dispatch, node]
   );
 
   // Update filter for a layer input
@@ -973,11 +969,7 @@ export default function WorkflowNodeSettings({
   }
 
   // Render Custom SQL tool settings (special case)
-  if (
-    node.type === "tool" &&
-    node.data.type === "tool" &&
-    node.data.processId === "custom_sql"
-  ) {
+  if (node.type === "tool" && node.data.type === "tool" && node.data.processId === "custom_sql") {
     return <SqlToolSettings node={node} onBack={onBack} />;
   }
 
@@ -1044,9 +1036,7 @@ export default function WorkflowNodeSettings({
                 <Chip
                   label={nodeStatus ? t(nodeStatus, { defaultValue: nodeStatus }) : t("idle")}
                   size="small"
-                  icon={
-                    nodeStatus === "skipped" ? <BlockIcon sx={{ fontSize: 14 }} /> : undefined
-                  }
+                  icon={nodeStatus === "skipped" ? <BlockIcon sx={{ fontSize: 14 }} /> : undefined}
                   color={
                     nodeStatus === "completed"
                       ? "primary"
@@ -1285,7 +1275,9 @@ export default function WorkflowNodeSettings({
                                     }}
                                     predictedColumns={{
                                       ...predictedColumns,
-                                      ...(opp.sourcePredictedCols ? { input_path: opp.sourcePredictedCols } : {}),
+                                      ...(opp.sourcePredictedCols
+                                        ? { input_path: opp.sourcePredictedCols }
+                                        : {}),
                                     }}
                                     variables={variables}
                                   />

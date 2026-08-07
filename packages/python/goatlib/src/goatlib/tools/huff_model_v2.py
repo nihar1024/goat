@@ -2,7 +2,7 @@
 
 Same Huff market-area analysis as v1, but the OD cost matrix is computed live
 via the local C++ routing backend (street: reverse+sparse travel-cost matrix;
-PT: compute_heatmap OD-cost emission). Output geometry matches the opportunity
+PT: compute_od_costs emission). Output geometry matches the opportunity
 layer, with a probability value per facility.
 """
 
@@ -12,7 +12,7 @@ from datetime import time as time_of_day
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 
 from goatlib.analysis.accessibility.huff_model_v2 import HuffmodelV2Tool
 from goatlib.analysis.schemas.catchment_area import WEEKDAY_LABELS
@@ -30,11 +30,14 @@ from goatlib.analysis.schemas.ui import (
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools._routing_limits import (
-    DEFAULT_MAX_DISTANCE_ACTIVE_M,
-    DEFAULT_MAX_DISTANCE_CAR_M,
     DEFAULT_MAX_TIME_ACTIVE_MIN,
-    DEFAULT_MAX_TIME_CAR_MIN,
-    DEFAULT_MAX_TIME_PT_MIN,
+    budget_widget_options,
+    leg_budget_widget_options,
+    resolve_budget_input,
+    resolve_leg_names,
+    validate_budget,
+    validate_cost_type,
+    validate_leg_budget,
 )
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.catchment_area_v2 import (
@@ -121,18 +124,11 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     output_path: str | None = Field(
         None, json_schema_extra=ui_field(section="result", hidden=True)
     )  # type: ignore[assignment]
-    # arrival_time + access/egress are derived from the pt_* UI fields in
-    # process(); hide the analysis-layer fields so they don't render.
+    # Derived in process(); hidden so the inherited analysis-layer fields don't
+    # render. access/egress_max_time are the analysis names for the leg budgets
+    # the form exposes as access/egress_max_cost.
     arrival_time: int | None = Field(
         None, json_schema_extra=ui_field(section="configuration", hidden=True)
-    )
-    access_mode: RoutingMode = Field(
-        default=RoutingMode.walking,
-        json_schema_extra=ui_field(section="configuration", hidden=True),
-    )
-    egress_mode: RoutingMode = Field(
-        default=RoutingMode.walking,
-        json_schema_extra=ui_field(section="configuration", hidden=True),
     )
     access_max_time: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
@@ -161,6 +157,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             label_key="routing_mode",
             enum_icons=HM_ROUTING_MODE_ICONS,
             enum_labels=HM_ROUTING_MODE_LABELS,
+            # Changing the transport mode restarts the form: it decides which
+            # measures, budgets and legs apply, so nothing should carry over.
+            widget_options={"resets_form": True},
         ),
     )
     # PT transit-mode filter (mirrors heatmap/catchment v2). Visible only for PT.
@@ -176,8 +175,8 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
 
     # ---- Configuration section (measure + budget + layers + advanced) -----
     # Travel cost type + limit selector — identical to catchment v2: a
-    # cost_type toggle plus five mode/cost-type-specific limit fields sharing
-    # the "cost_config" inline group, resolved to a single max_cost in process().
+    # cost_type toggle beside the single max_cost field, sharing the
+    # "cost_config" inline group.
     cost_type: CostType = Field(
         default=CostType.time,
         description="Measure the model by travel time or travel distance.",
@@ -190,67 +189,15 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             },
         ),
     )
-    max_cost_time_active: int = Field(
+    # Single travel budget — same name/meaning as the analysis schema and the
+    # C++ engine. Default, floor and cap come from the mode x cost_type rules.
+    max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        description="Maximum travel time in minutes.",
+        description="Upper limit for the selected measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=2, label_key="limit",
+            section="configuration", field_order=2, label_key="limit", description_key="limit",
             inline_group="cost_config", inline_flex="1 0 0",
-            widget_options={"max_value_from": {
-                "fields": [], "message": "active_mobility_time_limit_message",
-                "max": 45, "min": 1}},
-            visible_when={"$and": [
-                {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                {"cost_type": "time"}]},
-        ),
-    )
-    max_cost_time_car: int = Field(
-        default=DEFAULT_MAX_TIME_CAR_MIN,
-        description="Maximum travel time in minutes.",
-        json_schema_extra=ui_field(
-            section="configuration", field_order=2, label_key="limit",
-            inline_group="cost_config", inline_flex="1 0 0",
-            widget_options={"max_value_from": {
-                "fields": [], "message": "car_time_limit_message",
-                "max": 90, "min": 1}},
-            visible_when={"$and": [{"routing_mode": "car"}, {"cost_type": "time"}]},
-        ),
-    )
-    max_cost_time_pt: int = Field(
-        default=DEFAULT_MAX_TIME_PT_MIN,
-        description="Maximum travel time in minutes.",
-        json_schema_extra=ui_field(
-            section="configuration", field_order=2, label_key="travel_time_limit_min",
-            widget_options={"max_value_from": {
-                "fields": [], "message": "pt_time_limit_message",
-                "max": 90, "min": 1}},
-            visible_when={"routing_mode": "pt"},
-        ),
-    )
-    max_cost_distance: int = Field(
-        default=DEFAULT_MAX_DISTANCE_ACTIVE_M,
-        description="Maximum distance in meters.",
-        json_schema_extra=ui_field(
-            section="configuration", field_order=2, label_key="limit",
-            inline_group="cost_config", inline_flex="1 0 0",
-            widget_options={"max_value_from": {
-                "fields": [], "message": "active_mobility_distance_limit_message",
-                "max": 20000, "min": 50}},
-            visible_when={"$and": [
-                {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                {"cost_type": "distance"}]},
-        ),
-    )
-    max_cost_distance_car: int = Field(
-        default=DEFAULT_MAX_DISTANCE_CAR_M,
-        description="Maximum distance in meters.",
-        json_schema_extra=ui_field(
-            section="configuration", field_order=2, label_key="limit",
-            inline_group="cost_config", inline_flex="1 0 0",
-            widget_options={"max_value_from": {
-                "fields": [], "message": "car_distance_limit_message",
-                "max": 100000, "min": 50}},
-            visible_when={"$and": [{"routing_mode": "car"}, {"cost_type": "distance"}]},
+            widget_options=budget_widget_options(),
         ),
     )
     # PT day + arrival time (non-advanced, PT only) — mirrors heatmap v2.
@@ -271,11 +218,6 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             section="configuration", field_order=4, label_key="arrival_time",
             widget="time-picker", visible_when={"routing_mode": "pt"},
         ),
-    )
-    # Resolved from the mode/cost-type limit fields in process(); hidden.
-    max_cost: int = Field(
-        default=20,
-        json_schema_extra=ui_field(section="configuration", hidden=True),
     )
     # ---- Demand section ---------------------------------------------------
     demand_layer_id: str = Field(
@@ -385,7 +327,7 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             widget_options={"max_value_from": {"fields": [], "max": 5, "min": 0}},
         ),
     )
-    pt_access_mode: Literal["walk"] = Field(
+    access_mode: Literal["walk"] = Field(
         default="walk",
         description="Mode to reach transit stops (walk-only for PT).",
         json_schema_extra={
@@ -399,21 +341,40 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             "enum": ["walk"],
         },
     )
-    pt_access_max_time: int = Field(
+    access_cost_type: Literal["time"] = Field(
+        default="time",
+        description="Access leg cost type. Time-only: the access/egress "
+                    "lookup tables are built on travel time.",
+        json_schema_extra={
+            **ui_field(
+                section="configuration", field_order=21, label_key="measure_type",
+                enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+                inline_group="access_cost",
+                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            ),
+            "enum": ["time"],
+        },
+    )
+
+    access_max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        description="Access leg budget in minutes (≤ the lookup table max).",
+        description="Access leg budget (≤ the lookup table max).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=21, label_key="time_limit",
+            section="configuration", field_order=22, label_key="limit", description_key="limit",
+            inline_group="access_cost", inline_flex="1 0 0",
             visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
-            widget_options={"max_value_from": {"fields": [], "max": 20, "min": 1}},
+            widget_options=leg_budget_widget_options(
+                "access_cost_type", "pt_access_time_limit_message",
+                lookup_table=True,
+            ),
         ),
     )
-    pt_egress_mode: Literal["walk"] = Field(
+    egress_mode: Literal["walk"] = Field(
         default="walk",
         description="Mode from transit stops to the opportunity (walk-only for PT).",
         json_schema_extra={
             **ui_field(
-                section="configuration", field_order=22, label_key="pt_egress_mode",
+                section="configuration", field_order=23, label_key="pt_egress_mode",
                 group_label="groups.egress_leg",
                 enum_icons=ACCESS_EGRESS_MODE_ICONS,
                 enum_labels=ACCESS_EGRESS_MODE_LABELS,
@@ -422,13 +383,32 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             "enum": ["walk"],
         },
     )
-    pt_egress_max_time: int = Field(
+    egress_cost_type: Literal["time"] = Field(
+        default="time",
+        description="Egress leg cost type. Time-only: the access/egress "
+                    "lookup tables are built on travel time.",
+        json_schema_extra={
+            **ui_field(
+                section="configuration", field_order=24, label_key="measure_type",
+                enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+                inline_group="egress_cost",
+                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            ),
+            "enum": ["time"],
+        },
+    )
+
+    egress_max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        description="Egress leg budget in minutes (≤ the lookup table max).",
+        description="Egress leg budget (≤ the lookup table max).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=23, label_key="time_limit",
+            section="configuration", field_order=25, label_key="limit", description_key="limit",
+            inline_group="egress_cost", inline_flex="1 0 0",
             visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
-            widget_options={"max_value_from": {"fields": [], "max": 20, "min": 1}},
+            widget_options=leg_budget_widget_options(
+                "egress_cost_type", "pt_egress_time_limit_message",
+                lookup_table=True,
+            ),
         ),
     )
 
@@ -469,18 +449,20 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ),
     )
 
-    def resolve_max_cost(self: Self) -> int:
-        """Resolve the effective budget from the mode/cost-type limit fields
-        (mirrors catchment v2's resolve_max_cost)."""
-        if self.cost_type == CostType.distance:
-            if self.routing_mode == HeatmapRoutingMode.car:
-                return self.max_cost_distance_car
-            return self.max_cost_distance
-        if self.routing_mode == HeatmapRoutingMode.pt:
-            return self.max_cost_time_pt
-        if self.routing_mode == HeatmapRoutingMode.car:
-            return self.max_cost_time_car
-        return self.max_cost_time_active
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_budget(cls, data: Any) -> Any:
+        return resolve_leg_names(resolve_budget_input(data))
+
+    @model_validator(mode="after")
+    def _check_budget(self: Self) -> Self:
+        validate_cost_type(self.routing_mode, self.cost_type)
+        validate_budget(self.routing_mode, self.cost_type, self.max_cost)
+        validate_leg_budget(self.access_cost_type, self.access_max_cost,
+                            "access", lookup_table=True)
+        validate_leg_budget(self.egress_cost_type, self.egress_max_cost,
+                            "egress", lookup_table=True)
+        return self
 
 
 class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
@@ -558,25 +540,26 @@ class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
                     "opportunity_layer_id", "opportunity_layer_filter",
                     "reference_area_layer_id", "reference_area_layer_filter",
                     "result_layer_name", "show_advanced",
-                    "access_mode", "egress_mode", "access_max_time",
-                    "egress_max_time", "transit_modes", "max_transfers",
-                    "pt_modes", "pt_access_mode", "pt_access_max_time",
-                    "pt_egress_mode", "pt_egress_max_time", "pt_max_transfers",
+                    "transit_modes", "max_transfers", "pt_modes", "pt_max_transfers",
                     "pt_day", "pt_arrival_time",
-                    "max_cost", "max_cost_time_active", "max_cost_time_car",
-                    "max_cost_time_pt", "max_cost_distance", "max_cost_distance_car",
+                    # access/egress mode + cost_type are walk-only / time-only
+                    # UI tokens; the analysis layer takes its own enums and
+                    # names the budgets *_max_time (set explicitly below).
+                    "access_mode", "egress_mode",
+                    "access_cost_type", "egress_cost_type",
+                    "access_max_cost", "egress_max_cost",
+                    "access_max_time", "egress_max_time",
                 }
             ),
             routing_mode=routing_mode,
-            max_cost=params.resolve_max_cost(),
             demand_path=str(demand_path),
             opportunity_path=str(opportunity_path),
             reference_area_path=str(reference_area_path),
             arrival_time=arrival_time,
             access_mode=RoutingMode.walking,
             egress_mode=RoutingMode.walking,
-            access_max_time=params.pt_access_max_time,
-            egress_max_time=params.pt_egress_max_time,
+            access_max_time=params.access_max_cost,
+            egress_max_time=params.egress_max_cost,
             max_transfers=params.pt_max_transfers,
             transit_modes=transit_modes,
             output_path=str(output_path),

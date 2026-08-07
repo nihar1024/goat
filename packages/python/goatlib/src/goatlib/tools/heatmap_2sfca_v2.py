@@ -7,6 +7,8 @@ tile alongside the legacy matrix-based tool.
 
 from goatlib.tools.heatmap_v2 import (
     Heatmap2SFCAV2ToolRunner as Heatmap2SFCAV2ToolRunner,
+)
+from goatlib.tools.heatmap_v2 import (
     Heatmap2SFCAV2WindmillParams as Heatmap2SFCAV2WindmillParams,
 )
 

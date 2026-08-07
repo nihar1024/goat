@@ -124,7 +124,7 @@
     },
     "limit": {
       "label": "Limit",
-      "description": "Maximum travel budget"
+      "description": "Upper limit for the selected measure type: travel time or travel distance."
     },
     "steps": {
       "label": "Number of steps",
@@ -199,10 +199,6 @@
       "description": "Name for the output layer"
     },
     "max_cost": {
-      "label": "Travel time limit",
-      "description": "Maximum travel time in minutes"
-    },
-    "max_cost_time": {
       "label": "Travel time limit",
       "description": "Maximum travel time in minutes"
     },
@@ -293,10 +289,6 @@
     "arrival_time": {
       "label": "Arrival time",
       "description": "Time of day to arrive by. Each cell is scored by the best public-transport journey that reaches the opportunities at or before this time."
-    },
-    "time_limit": {
-      "label": "Time limit (min)",
-      "description": "Maximum travel time in minutes"
     },
     "catchment_type": {
       "label": "Catchment Area Type",
@@ -481,10 +473,6 @@
     "order": {
       "label": "Sort Order",
       "description": "Sort order by count"
-    },
-    "limit": {
-      "label": "Limit",
-      "description": "Maximum values to return"
     },
     "offset": {
       "label": "Offset",
@@ -753,18 +741,6 @@
     "calculate_by": {
       "label": "Calculate by",
       "description": "Measure travel cost by time or distance"
-    },
-    "limit_time_min": {
-      "label": "Limit - Time (min)",
-      "description": "Maximum travel time in minutes"
-    },
-    "travel_time_limit_min": {
-      "label": "Travel time limit (min)",
-      "description": "Maximum travel time in minutes"
-    },
-    "limit_distance_m": {
-      "label": "Limit - Distance (m)",
-      "description": "Maximum distance in meters"
     },
     "max_transfers": {
       "label": "Max. transfers",

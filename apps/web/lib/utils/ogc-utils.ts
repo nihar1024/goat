@@ -515,17 +515,86 @@ function formatSectionLabel(sectionId: string): string {
 }
 
 /**
+ * `default_from`: pick a default by matching conditions across several fields,
+ * using the same entry shape as `max_value_from`. First entry whose `when`
+ * matches wins; an entry without `when` is the fallback. Needed where a single
+ * field's default depends on more than one other field (e.g. a travel budget
+ * keyed on routing_mode AND cost_type), which `default_by_field` cannot express.
+ */
+export type DefaultFromEntry = { value: unknown; when?: Record<string, unknown> };
+export type DefaultFrom = { fields: DefaultFromEntry[] };
+
+/**
+ * Read a conditional widget option — one shaped `{fields: [{value, when}]}`.
+ * `default_from` and `unit_from` both use it, so they share one resolver.
+ */
+export function getConditionalOption(
+  schema: OGCInputSchema | undefined,
+  optionName: string
+): DefaultFrom | undefined {
+  const uiMeta = schema?.["x-ui"] as { widget_options?: Record<string, DefaultFrom | undefined> } | undefined;
+  return uiMeta?.widget_options?.[optionName];
+}
+
+export function getDefaultFrom(schema: OGCInputSchema | undefined): DefaultFrom | undefined {
+  return getConditionalOption(schema, "default_from");
+}
+
+/** i18n key for the unit suffix shown inside the input (e.g. min / m). */
+export function getUnitFrom(schema: OGCInputSchema | undefined): DefaultFrom | undefined {
+  return getConditionalOption(schema, "unit_from");
+}
+
+export function resolveDefaultFrom(
+  defaultFrom: DefaultFrom | undefined,
+  values: Record<string, unknown>
+): unknown {
+  if (!defaultFrom?.fields) return undefined;
+  for (const entry of defaultFrom.fields) {
+    if (entry.when && !Object.entries(entry.when).every(([k, v]) => values[k] === v)) continue;
+    return entry.value;
+  }
+  return undefined;
+}
+
+/** Field names a `default_from` depends on, so callers know when to re-resolve. */
+export function defaultFromDependencies(defaultFrom: DefaultFrom | undefined): string[] {
+  if (!defaultFrom?.fields) return [];
+  return [...new Set(defaultFrom.fields.flatMap((e) => Object.keys(e.when ?? {})))];
+}
+
+/** `default_by_field`: pick a default from a single other field's value. */
+export function getDefaultByField(
+  schema: OGCInputSchema | undefined
+): { field: string; values: Record<string, unknown> } | undefined {
+  const uiMeta = schema?.["x-ui"] as
+    | { widget_options?: { default_by_field?: { field: string; values: Record<string, unknown> } } }
+    | undefined;
+  return uiMeta?.widget_options?.default_by_field;
+}
+
+/**
  * Get default values for all inputs.
  *
- * Two passes:
+ * Three passes (the conditional passes resolve against the values built so far):
  *   1. Schema defaults (`default` from the JSON Schema).
  *   2. `default_by_field` resolution — fields keyed off another field's value
  *      (e.g. mode-specific speed defaults) need their initial value derived
  *      from the source field's *initial* default. The runtime handler in
  *      handleInputChange only fires on user-driven changes, not on first
  *      render, so we apply the same lookup here for the load case.
+ *   3. `default_from` resolution — the multi-field variant of the same idea.
+ *
+ * `overrides` seed the conditional passes and are never overwritten by them.
+ * Fields that restart the form rely on this: `routing_mode` has no schema
+ * default, so without seeding it nothing keyed on the mode could resolve and
+ * those fields would come back empty (a null speed) instead of the new mode's
+ * default.
  */
-export function getDefaultValues(process: OGCProcessDescription): Record<string, unknown> {
+export function getDefaultValues(
+  process: OGCProcessDescription,
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
 
   for (const [name, input] of Object.entries(process.inputs)) {
@@ -535,11 +604,11 @@ export function getDefaultValues(process: OGCProcessDescription): Record<string,
     }
   }
 
+  Object.assign(defaults, overrides);
+
   for (const [name, input] of Object.entries(process.inputs)) {
-    const uiMeta = input.schema["x-ui"] as
-      | { widget_options?: { default_by_field?: { field: string; values: Record<string, unknown> } } }
-      | undefined;
-    const defaultByField = uiMeta?.widget_options?.default_by_field;
+    if (name in overrides) continue;
+    const defaultByField = getDefaultByField(input.schema);
     if (!defaultByField) continue;
     const sourceVal = defaults[defaultByField.field];
     if (sourceVal === undefined || sourceVal === null) continue;
@@ -549,7 +618,76 @@ export function getDefaultValues(process: OGCProcessDescription): Record<string,
     }
   }
 
+  for (const [name, input] of Object.entries(process.inputs)) {
+    if (name in overrides) continue;
+    const resolved = resolveDefaultFrom(getDefaultFrom(input.schema), defaults);
+    if (resolved !== undefined) {
+      defaults[name] = resolved;
+    }
+  }
+
   return defaults;
+}
+
+/**
+ * Does changing this field restart the whole form? The transport mode decides
+ * which measures, budgets and legs are meaningful, so nothing may carry over.
+ */
+export function isFormResetField(inputs: ProcessedInput[], name: string): boolean {
+  return inputs.some((i) => i.name === name && i.uiMeta?.widget_options?.resets_form === true);
+}
+
+/**
+ * Apply a field change, re-resolving every value that depends on it: dynamic
+ * defaults (`default_by_field`, `default_from`) and fields whose `max_value_from`
+ * cap references the changed field.
+ */
+export function applyDynamicDefaults(
+  inputs: ProcessedInput[],
+  prev: Record<string, unknown>,
+  name: string,
+  value: unknown
+): Record<string, unknown> {
+  const newValues = { ...prev, [name]: value };
+
+  for (const input of inputs) {
+    const defaultByField = getDefaultByField(input.schema);
+    if (defaultByField?.field === name) {
+      const dynamicDefault = defaultByField.values[String(value)];
+      if (dynamicDefault !== undefined) {
+        newValues[input.name] = dynamicDefault;
+      }
+    }
+
+    // Re-resolve default_from when one of its condition fields changes.
+    // Reset (rather than clamp) is deliberate: switching cost_type moves
+    // between units, so the previous number is meaningless.
+    const defaultFrom = getDefaultFrom(input.schema);
+    if (defaultFromDependencies(defaultFrom).includes(name)) {
+      const resolved = resolveDefaultFrom(defaultFrom, newValues);
+      if (resolved !== undefined) {
+        newValues[input.name] = resolved;
+      }
+    }
+
+    // Auto-clamp fields whose max_value_from references the changed field
+    const maxValueFrom = input.uiMeta?.widget_options?.max_value_from as
+      | { fields: (string | { field?: string })[]; max?: number }
+      | undefined;
+
+    if (maxValueFrom) {
+      const fieldNames = maxValueFrom.fields.map((f) => (typeof f === "string" ? f : f.field));
+      if (fieldNames.includes(name)) {
+        const currentVal = newValues[input.name] as number | undefined;
+        const newLimit = Math.min(Number(value) || Infinity, maxValueFrom.max ?? Infinity);
+        if (currentVal !== undefined && currentVal > newLimit) {
+          newValues[input.name] = newLimit;
+        }
+      }
+    }
+  }
+
+  return newValues;
 }
 
 /**

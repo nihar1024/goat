@@ -124,7 +124,7 @@
     },
     "limit": {
       "label": "Limit",
-      "description": "Maximales Reisebudget"
+      "description": "Obergrenze für die gewählte Maßeinheit: Reisezeit oder Reisedistanz."
     },
     "steps": {
       "label": "Anzahl der Schritte",
@@ -199,10 +199,6 @@
       "description": "Name für den Ausgabe-Layer"
     },
     "max_cost": {
-      "label": "Reisezeitlimit",
-      "description": "Maximale Reisezeit in Minuten"
-    },
-    "max_cost_time": {
       "label": "Reisezeitlimit",
       "description": "Maximale Reisezeit in Minuten"
     },
@@ -294,10 +290,6 @@
       "label": "Ankunftszeit",
       "description": "Uhrzeit, bis zu der die Fahrt ankommen soll. Jede Zelle wird anhand der besten ÖV-Fahrt bewertet, die die Gelegenheiten bis zu dieser Zeit erreicht."
     },
-    "time_limit": {
-      "label": "Zeitlimit (Min.)",
-      "description": "Maximale Reisezeit in Minuten"
-    },
     "catchment_type": {
       "label": "Einzugsgebietstyp",
       "description": "Methode zur Berechnung der Einzugsgebiete"
@@ -357,10 +349,6 @@
     "mutation_rate": {
       "label": "Mutationsrate",
       "description": "Wahrscheinlichkeit für Mutation im genetischen Algorithmus"
-    },
-    "h3_resolution": {
-      "label": "H3-Gitter-Auflösung",
-      "description": "Detailgrad des hexagonalen Gitters (höher = detaillierter, langsamer)"
     },
     "num_triangles": {
       "label": "Kurvenglättung",
@@ -505,10 +493,6 @@
     "order": {
       "label": "Sortierreihenfolge",
       "description": "Sortierreihenfolge nach Anzahl"
-    },
-    "limit": {
-      "label": "Limit",
-      "description": "Maximale Anzahl der zurückzugebenden Werte"
     },
     "offset": {
       "label": "Versatz",
@@ -773,18 +757,6 @@
     "calculate_by": {
       "label": "Berechnung nach",
       "description": "Reisekosten nach Zeit oder Entfernung berechnen"
-    },
-    "limit_time_min": {
-      "label": "Limit - Zeit (Min)",
-      "description": "Maximale Reisezeit in Minuten"
-    },
-    "travel_time_limit_min": {
-      "label": "Reisezeitlimit (Min)",
-      "description": "Maximale Reisezeit in Minuten"
-    },
-    "limit_distance_m": {
-      "label": "Limit - Distanz (m)",
-      "description": "Maximale Entfernung in Metern"
     },
     "max_transfers": {
       "label": "Max. Umstiege",
@@ -1126,7 +1098,7 @@
     "catchment_area": "Einzugsgebiet",
     "catchment_area_starting_points": "Startpunkte",
     "heatmap_gravity": "Heatmap Gravity",
-    "heatmap_connectivity": "Heatmap Connectivity",
+    "heatmap_connectivity": "Heatmap Konnektivität",
     "heatmap_closest_average": "Heatmap Durchschnitt Reisezeit",
     "heatmap_2sfca": "Heatmap 2SFCA",
     "huff_model": "Huff-Modell",

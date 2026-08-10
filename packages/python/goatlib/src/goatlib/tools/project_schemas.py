@@ -96,6 +96,10 @@ class ExportLayerMetadata(BaseModel):
     properties: dict[str, Any] | None = None
     other_properties: dict[str, Any] | None = None
     attribute_mapping: dict[str, Any] | None = None
+    # Per-column metadata keyed by column name (field kind, formula and its
+    # dependencies, display config). Empty for archives written before it
+    # was exported.
+    field_config: dict[str, Any] = Field(default_factory=dict)
     upload_reference_system: int | None = None
     upload_file_type: FileUploadTypeLiteral | None = None
     size: int | None = None

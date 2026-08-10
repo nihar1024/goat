@@ -61,7 +61,8 @@ import type { FieldKind } from "@/lib/validations/layer";
 import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
-import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
+import { COLUMN_MENU_DIVIDER_SX, COLUMN_MENU_PAPER_SX } from "@/components/common/columnMenuStyles";
+import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
 
@@ -79,10 +80,12 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useMap } from "react-map-gl/maplibre";
 import useLayerFields from "@/hooks/map/CommonHooks";
 
-import { updateProjectLayer, useProjectLayers } from "@/lib/api/projects";
+import { updateProjectLayer, useProject, useProjectLayers } from "@/lib/api/projects";
 import { useUserProfile } from "@/lib/api/users";
 import ColumnStatsPanel from "@/components/map/panels/ColumnStatsPanel";
-import QuickFilterPopover from "@/components/map/panels/QuickFilterPopover";
+import ColumnFilterPopover from "@/components/map/panels/ColumnFilterPopover";
+import { filterColumnType } from "@/lib/utils/columnFilterOperators";
+import useProjectLayerFilterController from "@/hooks/map/useProjectLayerFilterController";
 import ConfirmModal from "@/components/modals/Confirm";
 import EditFieldsModal from "@/components/modals/EditFields";
 
@@ -121,6 +124,15 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   const { projectId } = useParams();
   const { userProfile } = useUserProfile();
   const { layers: projectLayers, mutate: mutateProjectLayers } = useProjectLayers(projectId as string);
+  const { project } = useProject(projectId as string);
+  const canEditFeatures = canEditLayerFeatures({
+    currentUserId: userProfile?.id,
+    layerOwnerId: projectLayer.user_id,
+    projectOwnerId: project?.owned_by?.id,
+    isProjectEditor: isEditor,
+    layerSize: projectLayer.size,
+    inCatalog: projectLayer.in_catalog,
+  });
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const editLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
   const pendingFeatures = useAppSelector((state) => state.featureEditor.pendingFeatures);
@@ -182,9 +194,23 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   const [statsColumn, setStatsColumn] = useState<string | null>(null);
   const statsNavRef = useRef(false); // true when navigating via prev/next buttons
 
-  // Quick filter popover state
+  // Column filter popover state
   const [quickFilterAnchor, setQuickFilterAnchor] = useState<HTMLElement | null>(null);
   const [quickFilterColumn, setQuickFilterColumn] = useState<string | null>(null);
+
+  // Filters live on the project layer, shared with the layer Filter panel.
+  const filterController = useProjectLayerFilterController({
+    projectId: projectId as string,
+    projectLayer,
+    canEdit: isEditor,
+  });
+
+  // Drives the column menu's "Filter" vs "Edit filter" wording. Filter state is
+  // shown in the layer Filter panel and the toolbar's badge, not on the column.
+  const filteredColumns = useMemo(
+    () => new Set(filterController.expressions.map((e) => e.attribute)),
+    [filterController.expressions]
+  );
 
   // Row context menu state
   const [rowMenuAnchor, setRowMenuAnchor] = useState<{ top: number; left: number } | null>(null);
@@ -874,7 +900,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
             {t("edit_fields")}
           </Button>
         )}
-        {isEditor && (isEditing || (projectLayer.user_id === userProfile?.id && (!projectLayer.size || projectLayer.size <= MAX_EDITABLE_LAYER_SIZE))) && (
+        {isEditor && (isEditing || canEditFeatures) && (
           <Button
             size="small"
             variant="outlined"
@@ -1161,7 +1187,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                       onClick={(e) => handleColumnMenuOpen(e, field.name)}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <FieldKindIcon kind={columnMeta[field.name]?.iconKind ?? fieldIndicatorKind(field)} />
-                        <Typography variant="body2" fontWeight="bold" noWrap sx={{ flex: 1 }}>
+                        <Typography variant="body2" fontWeight="bold" noWrap sx={{ flex: 1, minWidth: 0 }}>
                           {field.name}
                         </Typography>
                       </Box>
@@ -1464,27 +1490,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
         anchorEl={columnMenuAnchor}
         open={!!columnMenuAnchor}
         onClose={handleColumnMenuClose}
-        slotProps={{
-          paper: {
-            sx: {
-              minWidth: 180,
-              "& .MuiMenuItem-root": {
-                py: 0.5,
-                minHeight: 32,
-                fontSize: "0.8rem",
-              },
-              "& .MuiListItemIcon-root": {
-                minWidth: 28,
-              },
-              "& .MuiListItemText-root .MuiTypography-root": {
-                fontSize: "0.8rem",
-              },
-              "& .MuiSvgIcon-root": {
-                fontSize: "1rem",
-              },
-            },
-          },
-        }}>
+        slotProps={{ paper: { sx: COLUMN_MENU_PAPER_SX } }}>
         <MenuItem
           onClick={() => {
             if (columnMenuField) handleSort(columnMenuField, "asc");
@@ -1505,7 +1511,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           </ListItemIcon>
           <ListItemText>{t("sort_desc", { defaultValue: "Sort Z-A" })}</ListItemText>
         </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
+        <Divider sx={COLUMN_MENU_DIVIDER_SX} />
         <MenuItem
           onClick={() => {
             if (columnMenuField) handleToggleFreeze(columnMenuField);
@@ -1524,7 +1530,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
               : t("freeze_column", { defaultValue: "Freeze column" })}
           </ListItemText>
         </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
+        <Divider sx={COLUMN_MENU_DIVIDER_SX} />
         {isEditor && (
           <MenuItem
             onClick={() => {
@@ -1554,14 +1560,18 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           onClick={() => {
             if (columnMenuField && columnMenuAnchor) {
               setQuickFilterColumn(columnMenuField);
-              setQuickFilterAnchor(columnMenuAnchor);
+              setQuickFilterAnchor(columnMenuAnchor.closest("th") ?? columnMenuAnchor);
             }
             handleColumnMenuClose();
           }}>
           <ListItemIcon>
             <FilterAltIcon />
           </ListItemIcon>
-          <ListItemText>{t("add_filter", { defaultValue: "Add filter" })}</ListItemText>
+          <ListItemText>
+            {columnMenuField && filteredColumns.has(columnMenuField)
+              ? t("edit_filter", { defaultValue: "Edit filter" })
+              : t("add_filter", { defaultValue: "Add filter" })}
+          </ListItemText>
         </MenuItem>
         {isEditor && (
           <MenuItem disabled>
@@ -1572,7 +1582,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           </MenuItem>
         )}
         {isEditor && [
-          <Divider key="delete-column-divider" sx={{ my: 0.5 }} />,
+          <Divider key="delete-column-divider" sx={COLUMN_MENU_DIVIDER_SX} />,
           <MenuItem
             key="delete-column"
             onClick={() => {
@@ -1621,14 +1631,22 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
         )}
       </Menu>
 
-      {/* Quick Filter Popover */}
+      {/* Column Filter Popover */}
       {quickFilterColumn && (
-        <QuickFilterPopover
+        <ColumnFilterPopover
+          key={quickFilterColumn}
           anchorEl={quickFilterAnchor}
           columnName={quickFilterColumn}
-          columnType={displayFields.find((f) => f.name === quickFilterColumn)?.type ?? "string"}
+          columnType={filterColumnType({
+            type: displayFields.find((f) => f.name === quickFilterColumn)?.type,
+            kind: columnMeta[quickFilterColumn]?.kind,
+          })}
+          iconKind={
+            columnMeta[quickFilterColumn]?.iconKind ??
+            fieldIndicatorKind(displayFields.find((f) => f.name === quickFilterColumn) ?? {})
+          }
           layerId={layerId}
-          projectLayer={projectLayer}
+          controller={filterController}
           onClose={() => {
             setQuickFilterAnchor(null);
             setQuickFilterColumn(null);

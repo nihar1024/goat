@@ -95,9 +95,17 @@ export const LayerLegendPanel = ({ properties, geometryType, itemTypographySx, h
 
   // 2. Helper to render a single legend row
   const renderRow = (label: string, iconNode: React.ReactNode) => {
+    // Always consume an index, even for hidden rows — the keys are positional,
+    // so skipping one would shift every later row's override onto its neighbour.
     const idx = rowIndex++;
     const overrideKey = `item_${idx}`;
     const displayLabel = editable && textOverrides?.[overrideKey] != null ? textOverrides[overrideKey] : label;
+
+    // Hide the row entirely when the user has cleared its label, so the icon
+    // goes with it instead of lingering on its own.
+    if (editable && textOverrides?.[overrideKey] != null && !displayLabel.trim()) {
+      return null;
+    }
 
     const handleBlur = (e: React.FocusEvent<HTMLSpanElement>) => {
       const newText = e.currentTarget.textContent ?? "";
@@ -360,9 +368,17 @@ const RasterLayerLegend = ({ style, itemTypographySx, editable, textOverrides, o
 
   // Helper to render a single legend row
   const renderRow = (label: string, color: string) => {
+    // Always consume an index, even for hidden rows — see the feature-layer
+    // renderRow above.
     const idx = rowIndex++;
     const overrideKey = `item_${idx}`;
     const displayLabel = editable && textOverrides?.[overrideKey] != null ? textOverrides[overrideKey] : label;
+
+    // Hide the row entirely when the user has cleared its label, so the colour
+    // swatch goes with it.
+    if (editable && textOverrides?.[overrideKey] != null && !displayLabel.trim()) {
+      return null;
+    }
 
     const handleBlur = (e: React.FocusEvent<HTMLSpanElement>) => {
       const newText = e.currentTarget.textContent ?? "";

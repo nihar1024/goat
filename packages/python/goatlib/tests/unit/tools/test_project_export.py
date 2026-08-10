@@ -14,8 +14,10 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -176,7 +178,12 @@ class TestProjectExportRunner:
         # Mock write_optimized_parquet to create a dummy parquet file
         with (
             patch("goatlib.io.parquet.write_optimized_parquet") as mock_wp,
-            patch.object(runner, "_gather_metadata", new_callable=AsyncMock, return_value=mock_metadata),
+            patch.object(
+                runner,
+                "_gather_metadata",
+                new_callable=AsyncMock,
+                return_value=mock_metadata,
+            ),
         ):
 
             def side_effect(
@@ -246,6 +253,124 @@ class TestProjectExportRunner:
             assert manifest["format_version"] == "1.1"
             assert manifest["project_name"] == "Test Project"
             assert manifest["layer_count"] == 1
+
+    async def test_gather_metadata_includes_field_config(
+        self, runner: ProjectExportRunner
+    ) -> None:
+        """Layer metadata carries `field_config` (formula/computed columns).
+
+        Regression: the layer SELECT omitted `field_config`, so formula
+        columns, computed kinds (area/perimeter/length) and per-field
+        display config were dropped from the archive.
+        """
+        layer_id = uuid.UUID("00000000-0000-0000-0000-aaaaaaaaaaaa")
+        project_id = uuid.UUID("00000000-0000-0000-0000-000000000099")
+        user_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+        field_config = {
+            "risk_score": {
+                "kind": "formula",
+                "formula": "(CASE WHEN broken THEN 1 ELSE 0 END) * 3000",
+                "depends_on": ["broken"],
+                "is_computed": True,
+                "output_kind": "number",
+                "display_config": {"decimals": 2},
+            }
+        }
+
+        layer_row: dict[str, Any] = {
+            "id": layer_id,
+            "name": "My Layer",
+            "description": None,
+            "type": "feature",
+            "data_store_id": None,
+            "url": None,
+            "data_type": None,
+            "feature_layer_type": "standard",
+            "feature_layer_geometry_type": "point",
+            "tool_type": None,
+            "job_id": None,
+            "properties": None,
+            "other_properties": None,
+            "attribute_mapping": {},
+            "upload_reference_system": None,
+            "upload_file_type": None,
+            "size": None,
+            "thumbnail_url": None,
+            "tags": None,
+            "license": None,
+            "data_category": None,
+            "geographical_code": None,
+            "language_code": None,
+            "distributor_name": None,
+            "distributor_email": None,
+            "distribution_url": None,
+            "attribution": None,
+            "data_reference_year": None,
+            "lineage": None,
+            "positional_accuracy": None,
+            "attribute_accuracy": None,
+            "completeness": None,
+            "in_catalog": False,
+            "user_id": user_id,
+            "folder_id": uuid.UUID("00000000-0000-0000-0000-ffffffffffff"),
+            "field_config": field_config,
+        }
+
+        queries: list[str] = []
+
+        async def fake_fetchrow(query: str, *args: object) -> dict[str, Any] | None:
+            queries.append(query)
+            if "FROM customer.project" in query:
+                return {
+                    "id": project_id,
+                    "name": "Test Project",
+                    "description": None,
+                    "basemap": None,
+                    "custom_basemaps": None,
+                    "max_extent": None,
+                    "builder_config": None,
+                    "tags": None,
+                    "thumbnail_url": None,
+                }
+            return None
+
+        link_row: dict[str, Any] = {
+            "id": 101,
+            "layer_id": layer_id,
+            "project_id": project_id,
+            "layer_project_group_id": None,
+            "order": 0,
+            "name": "My Layer",
+            "properties": None,
+            "other_properties": None,
+            "query": None,
+            "charts": None,
+        }
+
+        async def fake_fetch(query: str, *args: object) -> list[dict[str, Any]]:
+            queries.append(query)
+            if "FROM customer.layer_project\n" in query:
+                return [link_row]
+            if "FROM customer.layer\n" in query:
+                return [layer_row]
+            return []
+
+        conn = AsyncMock()
+        conn.fetchrow = AsyncMock(side_effect=fake_fetchrow)
+        conn.fetch = AsyncMock(side_effect=fake_fetch)
+        conn.set_type_codec = AsyncMock()
+        conn.close = AsyncMock()
+
+        with patch("goatlib.tools.project_export.asyncpg") as mock_asyncpg:
+            mock_asyncpg.connect = AsyncMock(return_value=conn)
+            metadata = await runner._gather_metadata(str(project_id), str(user_id))
+
+        layer_select = next(q for q in queries if "FROM customer.layer\n" in q)
+        assert "field_config" in layer_select, (
+            "layer SELECT must request field_config, got:\n" + layer_select
+        )
+        assert metadata["layers"][0]["field_config"] == field_config
 
     def test_run_preserves_multiple_links_for_same_layer(
         self, runner: ProjectExportRunner
@@ -345,17 +470,17 @@ class TestProjectExportRunner:
             names = zf.namelist()
 
             # The new archive layout puts links in a single root file.
-            assert "layer_project_links.json" in names, (
-                f"Expected layer_project_links.json in archive, got: {sorted(names)}"
-            )
+            assert (
+                "layer_project_links.json" in names
+            ), f"Expected layer_project_links.json in archive, got: {sorted(names)}"
 
             links_payload = json.loads(zf.read("layer_project_links.json"))
             links = links_payload["links"]
 
             # Both links must be present — not collapsed to one.
-            assert len(links) == 2, (
-                f"Expected 2 layer_project links, got {len(links)}: {links}"
-            )
+            assert (
+                len(links) == 2
+            ), f"Expected 2 layer_project links, got {len(links)}: {links}"
 
             # Each link carries its layer_id and unique fields.
             assert all(lk["layer_id"] == layer_id for lk in links)

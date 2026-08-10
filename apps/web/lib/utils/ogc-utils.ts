@@ -4,6 +4,7 @@
  * Transforms OGC input descriptions into UI-friendly structures
  * with support for sections, field ordering, and conditional visibility.
  */
+import { OPPORTUNITY_LAYER_HANDLES } from "@/types/map/ogc-processes";
 import type {
   InferredInputType,
   OGCInputDescription,
@@ -888,6 +889,21 @@ export function isInputVisible(input: ProcessedInput, values: Record<string, unk
   }
 
   return true;
+}
+
+/**
+ * Does this tool take its opportunity layers from the numbered canvas handles
+ * rather than the repeatable `opportunities` list?
+ *
+ * Read off the schema rather than a list of tool names: the backend declares the
+ * handles, so a renamed or newly added tool is picked up without a second place
+ * to update.
+ */
+export function hasOpportunityHandles(process: OGCProcessDescription | undefined): boolean {
+  // `some`, not `every`: declaring any numbered handle is what marks the tool.
+  // Requiring all of them would silently switch the feature off for every tool
+  // if the backend's MAX_OPPORTUNITY_LAYERS ever outgrew the list below.
+  return !!process?.inputs && OPPORTUNITY_LAYER_HANDLES.some((name) => name in process.inputs);
 }
 
 /**

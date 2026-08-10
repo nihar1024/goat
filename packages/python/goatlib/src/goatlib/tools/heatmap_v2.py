@@ -51,6 +51,11 @@ from goatlib.analysis.schemas.ui import (
     ui_sections,
 )
 from goatlib.models.io import DatasetMetadata
+from goatlib.tools._opportunity_handles import (
+    NUMBERED_OPPORTUNITY_FILTER_FIELDS,
+    NUMBERED_OPPORTUNITY_ID_FIELDS,
+    NumberedOpportunityLayersMixin,
+)
 from goatlib.tools._routing_limits import (
     DEFAULT_MAX_TIME_ACTIVE_MIN,
     budget_widget_options,
@@ -765,66 +770,6 @@ class HeatmapV2WindmillParams(ToolInputBase):
     )
 
     # =========================================================================
-    # Opportunity layers (Gravity / ClosestAverage — workflow-canvas
-    # connectors, so hidden in the form). Up to 3 layers.
-    # =========================================================================
-
-    opportunity_layer_1_id: str | None = Field(
-        None,
-        description="First opportunity layer.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=1,
-            widget="layer-selector",
-            label_key="opportunity_layer_1",
-            hidden=True,
-            visible_when={
-                "heatmap_type": {"$in": ["gravity", "closest_average"]}
-            },
-        ),
-    )
-    opportunity_layer_1_filter: dict[str, Any] | None = Field(
-        None,
-        json_schema_extra=ui_field(section="opportunities", field_order=2, hidden=True),
-    )
-    opportunity_layer_2_id: str | None = Field(
-        None,
-        description="Second opportunity layer.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=3,
-            widget="layer-selector",
-            label_key="opportunity_layer_2",
-            hidden=True,
-            visible_when={
-                "heatmap_type": {"$in": ["gravity", "closest_average"]}
-            },
-        ),
-    )
-    opportunity_layer_2_filter: dict[str, Any] | None = Field(
-        None,
-        json_schema_extra=ui_field(section="opportunities", field_order=4, hidden=True),
-    )
-    opportunity_layer_3_id: str | None = Field(
-        None,
-        description="Third opportunity layer.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=5,
-            widget="layer-selector",
-            label_key="opportunity_layer_3",
-            hidden=True,
-            visible_when={
-                "heatmap_type": {"$in": ["gravity", "closest_average"]}
-            },
-        ),
-    )
-    opportunity_layer_3_filter: dict[str, Any] | None = Field(
-        None,
-        json_schema_extra=ui_field(section="opportunities", field_order=6, hidden=True),
-    )
-
-    # =========================================================================
     # Opportunities list (toolbox UI: repeatable layer entries with per-layer
     # weight + sensitivity controls). Workflow-canvas numbered layer-IDs above
     # take precedence when present (the runner re-packs them into this list).
@@ -894,6 +839,38 @@ class HeatmapV2WindmillParams(ToolInputBase):
             for o in self.opportunities
         ]
 
+    @model_validator(mode="after")
+    def _fold_numbered_opportunities(self: Self) -> Self:
+        """Fold the workflow-canvas numbered handles into `opportunities`.
+
+        A canvas edge can only target a named input, so those nodes deliver bare
+        layer IDs on `opportunity_layer_{N}_id`. Folding them into the list here
+        leaves one shape for the runner to resolve instead of a second path.
+        Per-layer config doesn't exist on this route, so every entry takes the
+        form's aggregate budget.
+        """
+        if self.opportunities:
+            return self
+        numbered = [
+            (getattr(self, id_field, None), getattr(self, filter_field, None))
+            for id_field, filter_field in zip(
+                NUMBERED_OPPORTUNITY_ID_FIELDS, NUMBERED_OPPORTUNITY_FILTER_FIELDS
+            )
+        ]
+        if not any(layer_id for layer_id, _ in numbered):
+            return self
+        budget = int(self.aggregate_max_cost())
+        self.opportunities = [
+            OpportunityV2(
+                input_path=layer_id,
+                input_layer_filter=layer_filter,
+                max_cost=budget,
+            )
+            for layer_id, layer_filter in numbered
+            if layer_id
+        ]
+        return self
+
 
 # =========================================================================
 # Per-formula entry points
@@ -904,7 +881,9 @@ class HeatmapV2WindmillParams(ToolInputBase):
 # =========================================================================
 
 
-class HeatmapGravityV2WindmillParams(HeatmapV2WindmillParams):
+class HeatmapGravityV2WindmillParams(
+    NumberedOpportunityLayersMixin, HeatmapV2WindmillParams
+):
     """Gravity-based spatial accessibility analysis."""
 
     heatmap_type: HeatmapType = Field(
@@ -940,7 +919,9 @@ class HeatmapGravityV2WindmillParams(HeatmapV2WindmillParams):
     )
 
 
-class HeatmapClosestAverageV2WindmillParams(HeatmapV2WindmillParams):
+class HeatmapClosestAverageV2WindmillParams(
+    NumberedOpportunityLayersMixin, HeatmapV2WindmillParams
+):
     """Average distance/time to N closest destinations."""
 
     heatmap_type: HeatmapType = Field(
@@ -1141,7 +1122,9 @@ def _pt_arrival_unix_minutes(pt_day: Weekday, seconds_of_day: int) -> int:
     return int(arrival_dt.timestamp() // 60)
 
 
-class Heatmap2SFCAV2WindmillParams(HeatmapV2WindmillParams):
+class Heatmap2SFCAV2WindmillParams(
+    NumberedOpportunityLayersMixin, HeatmapV2WindmillParams
+):
     """Two-Step Floating Catchment Area accessibility analysis."""
 
     heatmap_type: HeatmapType = Field(
@@ -1269,50 +1252,17 @@ class HeatmapV2ToolRunner(BaseToolRunner[HeatmapV2WindmillParams]):
     ) -> list[OpportunityV2]:
         """Resolve opportunity layer IDs → parquet paths.
 
-        Two entry shapes:
-          (1) Toolbox form: `params.opportunities` holds OpportunityV2
-              instances where `input_path` is a layer UUID and the
-              per-layer fields (potential_type / potential_field /
-              potential_constant / potential_expression / sensitivity /
-              input_layer_filter / name) are already populated by the UI.
-              `resolve_layer_paths` swaps the UUID for an exported parquet
-              path, applies the CQL filter, and preserves every other
-              field on the model.
-          (2) Workflow canvas: the canvas connector only supplies layer
-              IDs via the numbered `opportunity_layer_{1,2,3}_id` fields;
-              per-layer config is unavailable, so we construct stub
-              OpportunityV2 entries with just `input_path`.
-        Workflow-canvas IDs take precedence when present.
-        """
-        numbered_ids = [
-            params.opportunity_layer_1_id,
-            params.opportunity_layer_2_id,
-            params.opportunity_layer_3_id,
-        ]
-        if any(numbered_ids):
-            # Workflow-canvas path: bare layer IDs, no per-layer config —
-            # take the form's resolved budget as the default for every
-            # canvas opportunity.
-            fallback_max_cost = int(params.aggregate_max_cost())
-            opps: list[OpportunityV2] = []
-            for layer_id in numbered_ids:
-                if not layer_id:
-                    continue
-                parquet_path = str(
-                    self.export_layer_to_parquet(
-                        layer_id=layer_id,
-                        user_id=params.user_id,
-                        project_id=params.project_id,
-                    )
-                )
-                opps.append(
-                    OpportunityV2(
-                        input_path=parquet_path,
-                        max_cost=fallback_max_cost,
-                    )
-                )
-            return opps
+        `params.opportunities` holds OpportunityV2 instances whose `input_path`
+        is a layer UUID, with the per-layer fields (potential_type /
+        potential_field / potential_constant / potential_expression /
+        sensitivity / input_layer_filter / name) already populated.
+        `resolve_layer_paths` swaps the UUID for an exported parquet path,
+        applies the CQL filter, and preserves every other field on the model.
 
+        Workflow-canvas nodes supply their layers through the numbered
+        `opportunity_layer_{N}_id` handles instead; those are folded into this
+        same list by `_fold_numbered_opportunities`, so there is one shape here.
+        """
         if not params.opportunities:
             raise ValueError(
                 "At least one opportunity layer is required "

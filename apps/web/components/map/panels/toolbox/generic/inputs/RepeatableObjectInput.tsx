@@ -5,7 +5,7 @@
  * Used for array fields with complex object items (e.g., opportunities in heatmap tools).
  */
 import { Box, Button, Divider, IconButton, Stack, Typography, useTheme } from "@mui/material";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 
@@ -205,11 +205,10 @@ export default function RepeatableObjectInput({
   const { t } = useTranslation("common");
   const theme = useTheme();
 
-  // Track filters for nested layer inputs
-  // Structure: itemFilters[itemIndex][layerFieldName] = filter
-  const [_itemFilters, setItemFilters] = useState<
-    Record<number, Record<string, Record<string, unknown> | undefined>>
-  >({});
+  // Filters for nested layer inputs, keyed itemFilters[itemIndex][layerFieldName].
+  // A ref rather than state: nothing here is rendered, it only accumulates so the
+  // whole set can be handed to the parent on every change.
+  const itemFiltersRef = useRef<Record<number, Record<string, Record<string, unknown> | undefined>>>({});
 
   // Get item schema (resolve $ref if needed)
   // Handle anyOf pattern for nullable arrays: anyOf: [{type: "array", items: {...}}, {type: "null"}]
@@ -356,29 +355,27 @@ export default function RepeatableObjectInput({
     [items, onChange, layerInputNames, itemSchema, schemaDefs]
   );
 
-  // Handle filter change for a nested layer input
+  // Handle filter change for a nested layer input. The parent is notified from
+  // the event handler itself — doing it inside a setState updater would run it
+  // during React's render pass and update the parent mid-render.
   const handleItemFilterChange = useCallback(
     (index: number, propName: string, filter: Record<string, unknown> | undefined) => {
-      setItemFilters((prev) => {
-        const newFilters = {
-          ...prev,
-          [index]: {
-            ...(prev[index] || {}),
-            [propName]: filter,
-          },
-        };
+      const newFilters = {
+        ...itemFiltersRef.current,
+        [index]: {
+          ...(itemFiltersRef.current[index] || {}),
+          [propName]: filter,
+        },
+      };
+      itemFiltersRef.current = newFilters;
 
-        // Notify parent immediately with updated filters
-        if (onNestedFiltersChange) {
-          const filtersArray: Record<string, Record<string, unknown> | undefined>[] = [];
-          for (let i = 0; i < items.length; i++) {
-            filtersArray.push(newFilters[i] || {});
-          }
-          onNestedFiltersChange(filtersArray);
+      if (onNestedFiltersChange) {
+        const filtersArray: Record<string, Record<string, unknown> | undefined>[] = [];
+        for (let i = 0; i < items.length; i++) {
+          filtersArray.push(newFilters[i] || {});
         }
-
-        return newFilters;
-      });
+        onNestedFiltersChange(filtersArray);
+      }
     },
     [items.length, onNestedFiltersChange]
   );

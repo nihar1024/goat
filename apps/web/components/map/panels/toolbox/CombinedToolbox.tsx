@@ -9,7 +9,6 @@ import { Search as SearchIcon, Settings as SettingsIcon } from "@mui/icons-mater
 import {
   Box,
   CircularProgress,
-  Divider,
   Grid,
   InputAdornment,
   Stack,
@@ -38,6 +37,7 @@ import { useCategorizedProcesses } from "@/hooks/map/useOgcProcesses";
 import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
 import SettingsGroupHeader from "@/components/builder/widgets/common/SettingsGroupHeader";
+import BetaSectionDivider from "@/components/common/BetaSectionDivider";
 import Container from "@/components/map/panels/Container";
 import WorkflowList from "@/components/map/panels/toolbox/WorkflowList";
 import WorkflowRunner from "@/components/map/panels/toolbox/WorkflowRunner";
@@ -238,35 +238,7 @@ function ToolsTabContent({ onSelectTool }: ToolsTabContentProps) {
                 </Grid>
                 {betaTools.length > 0 && (
                   <Box sx={{ mt: 3 }}>
-                    <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
-                      <Divider sx={{ width: 8, flexShrink: 0 }} />
-                      <Box
-                        sx={{
-                          flexShrink: 0,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          height: 14,
-                          minWidth: 28,
-                          px: 0.625,
-                          borderRadius: "4px",
-                          // Muted, inverted pill that adapts to the theme
-                          // (text.secondary is a mode-aware foreground; paper
-                          // is the surface behind it) instead of hardcoded hex
-                          // that read as a glaring light-grey chip in dark mode.
-                          bgcolor: theme.palette.text.secondary,
-                          color: theme.palette.background.paper,
-                          fontSize: "8px",
-                          fontWeight: 700,
-                          fontFamily: "Arial, sans-serif",
-                          lineHeight: 1,
-                          letterSpacing: "0.02em",
-                          textTransform: "none",
-                        }}>
-                        {t("beta")}
-                      </Box>
-                      <Divider sx={{ flexGrow: 1 }} />
-                    </Box>
+                    <BetaSectionDivider />
                     <Grid container spacing={4}>
                       {betaTools.map((tool) => (
                         <Grid item xs={4} key={tool.id}>

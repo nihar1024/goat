@@ -244,7 +244,7 @@
     },
     "reference_area_path": {
       "label": "Referenzgebiet",
-      "description": "Layer, der das Referenzgebiet definiert, in dem die Analyse durchgeführt wird"
+      "description": "Layer, der das Referenzgebiet definiert, in dem die Analyse durchgeführt wird."
     },
     "demand_field": {
       "label": "Nachfragefeld",
@@ -946,44 +946,44 @@
       "title": "Quell-Ziel-Beziehungen",
       "description": "Die Quell-Ziel-Beziehungen werden in verschiedenen Bereichen wie der Verkehrsplanung und Stadtplanung verwendet, um Bewegungen oder Flüsse zwischen verschiedenen Orten zu untersuchen."
     },
+    "heatmap_gravity_legacy": {
+      "title": "Heatmap Gravity (Legacy)",
+      "description": "Es wird die Erreichbarkeit ausgehend von jeder Rasterzelle zu mehreren Orten gleichzeitig berechnet. Die Reisezeiten werden hierfür mit einer Widerstandsfunktion gewichtet und aggregiert."
+    },
     "heatmap_gravity": {
       "title": "Heatmap Gravity",
       "description": "Es wird die Erreichbarkeit ausgehend von jeder Rasterzelle zu mehreren Orten gleichzeitig berechnet. Die Reisezeiten werden hierfür mit einer Widerstandsfunktion gewichtet und aggregiert."
     },
-    "heatmap_gravity_v2": {
-      "title": "Heatmap Gravity V2",
-      "description": "Es wird die Erreichbarkeit ausgehend von jeder Rasterzelle zu mehreren Orten gleichzeitig berechnet. Die Reisezeiten werden hierfür mit einer Widerstandsfunktion gewichtet und aggregiert."
+    "heatmap_closest_average_legacy": {
+      "title": "Heatmap Durchschnitt Reisezeit (Legacy)",
+      "description": "Es wird die durchschnittliche Reisezeit zu den nächsten N Zielen aufgezeigt ausgehend von jeder Rasterzelle."
     },
     "heatmap_closest_average": {
       "title": "Heatmap Durchschnitt Reisezeit",
       "description": "Es wird die durchschnittliche Reisezeit zu den nächsten N Zielen aufgezeigt ausgehend von jeder Rasterzelle."
     },
-    "heatmap_closest_average_v2": {
-      "title": "Heatmap Durchschnitt Reisezeit V2",
-      "description": "Es wird die durchschnittliche Reisezeit zu den nächsten N Zielen aufgezeigt ausgehend von jeder Rasterzelle."
+    "heatmap_connectivity_legacy": {
+      "title": "Heatmap Konnektivität (Legacy)",
+      "description": "Die Vernetzung der Verkehrswege wird ausgedrückt durch die Berechnung von Einzugsbereichen für jede Rasterzelle, wobei die erreichbare Fläche der Einzugsbereiche die Konnektivität ausdrückt."
     },
     "heatmap_connectivity": {
       "title": "Heatmap Konnektivität",
       "description": "Die Vernetzung der Verkehrswege wird ausgedrückt durch die Berechnung von Einzugsbereichen für jede Rasterzelle, wobei die erreichbare Fläche der Einzugsbereiche die Konnektivität ausdrückt."
     },
-    "heatmap_connectivity_v2": {
-      "title": "Heatmap Konnektivität V2",
-      "description": "Die Vernetzung der Verkehrswege wird ausgedrückt durch die Berechnung von Einzugsbereichen für jede Rasterzelle, wobei die erreichbare Fläche der Einzugsbereiche die Konnektivität ausdrückt."
+    "heatmap_2sfca_legacy": {
+      "title": "Heatmap 2SFCA (Legacy)",
+      "description": "Die 2SFCA-Methode (Two-Step Floating Catchment Area) misst die Erreichbarkeit mehrerer Einrichtungen, indem zunächst für jeden Standort ein Kapazitäts-Nachfrage-Verhältnis berechnet und anschließend die erreichbaren Verhältnisse je Rasterzelle aufsummiert werden."
     },
     "heatmap_2sfca": {
       "title": "Heatmap 2SFCA",
       "description": "Die 2SFCA-Methode (Two-Step Floating Catchment Area) misst die Erreichbarkeit mehrerer Einrichtungen, indem zunächst für jeden Standort ein Kapazitäts-Nachfrage-Verhältnis berechnet und anschließend die erreichbaren Verhältnisse je Rasterzelle aufsummiert werden."
     },
-    "heatmap_2sfca_v2": {
-      "title": "Heatmap 2SFCA V2",
-      "description": "Die 2SFCA-Methode (Two-Step Floating Catchment Area) misst die Erreichbarkeit mehrerer Einrichtungen, indem zunächst für jeden Standort ein Kapazitäts-Nachfrage-Verhältnis berechnet und anschließend die erreichbaren Verhältnisse je Rasterzelle aufsummiert werden."
+    "huff_model_legacy": {
+      "title": "Huff-Modell (Legacy)",
+      "description": "Das Huff-Modell prognostiziert die Wahrscheinlichkeit, dass Verbraucher in einem Referenzgebiet bestimmte Standorte besuchen, basierend auf der Attraktivität der Standorte und der Entfernung zu diesen Standorten, einschließlich der Konkurrenz zwischen den Gelegenheiten."
     },
     "huff_model": {
       "title": "Huff-Modell",
-      "description": "Das Huff-Modell prognostiziert die Wahrscheinlichkeit, dass Verbraucher in einem Referenzgebiet bestimmte Standorte besuchen, basierend auf der Attraktivität der Standorte und der Entfernung zu diesen Standorten, einschließlich der Konkurrenz zwischen den Gelegenheiten."
-    },
-    "huff_model_v2": {
-      "title": "Huff-Modell V2",
       "description": "Das Huff-Modell prognostiziert die Wahrscheinlichkeit, dass Verbraucher in einem Referenzgebiet bestimmte Standorte besuchen, basierend auf der Attraktivität der Standorte und der Entfernung zu diesen Standorten, einschließlich der Konkurrenz zwischen den Gelegenheiten."
     },
     "oev_gueteklassen": {

@@ -854,7 +854,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         # Compute max possible O-D distance using bbox corners.
         # The farthest O-D pair is bounded by the distance between the
         # farthest corners of the origin and destination bounding boxes.
-        R = 6371000.0
+        earth_radius_m = 6371000.0
         o_min_lat, o_max_lat = min(origin_lats), max(origin_lats)
         o_min_lon, o_max_lon = min(origin_lons), max(origin_lons)
         d_min_lat, d_max_lat = min(dest_lats), max(dest_lats)
@@ -865,8 +865,8 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         lon_span = max(abs(o_max_lon - d_min_lon), abs(d_max_lon - o_min_lon))
         avg_lat = math.radians(
             (o_min_lat + o_max_lat + d_min_lat + d_max_lat) / 4.0)
-        dy = math.radians(lat_span) * R
-        dx = math.radians(lon_span) * R * math.cos(avg_lat)
+        dy = math.radians(lat_span) * earth_radius_m
+        dx = math.radians(lon_span) * earth_radius_m * math.cos(avg_lat)
         extent_m = math.sqrt(dx * dx + dy * dy)
 
         # Validate max extent for routed modes.

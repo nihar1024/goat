@@ -244,7 +244,7 @@
     },
     "reference_area_path": {
       "label": "Reference area",
-      "description": "Layer defining the reference area where the analysis would be conducted"
+      "description": "Layer defining the reference area where the analysis would be conducted."
     },
     "demand_field": {
       "label": "Demand field",
@@ -930,44 +930,44 @@
       "title": "Origin-Destination",
       "description": "The Origin-Destination analysis is used in various fields such as transport planning and urban planning to study movements or flows between different locations."
     },
+    "heatmap_gravity_legacy": {
+      "title": "Heatmap Gravity (Legacy)",
+      "description": "The accessibility is calculated from each grid cell to multiple locations simultaneously. The travel times are weighted and aggregated using an impedance function."
+    },
     "heatmap_gravity": {
       "title": "Heatmap Gravity",
       "description": "The accessibility is calculated from each grid cell to multiple locations simultaneously. The travel times are weighted and aggregated using an impedance function."
     },
-    "heatmap_gravity_v2": {
-      "title": "Heatmap Gravity V2",
-      "description": "The accessibility is calculated from each grid cell to multiple locations simultaneously. The travel times are weighted and aggregated using an impedance function."
+    "heatmap_closest_average_legacy": {
+      "title": "Heatmap Closest Average (Legacy)",
+      "description": "The average travel time to the nearest N destinations is shown, starting from each grid cell."
     },
     "heatmap_closest_average": {
       "title": "Heatmap Closest Average",
       "description": "The average travel time to the nearest N destinations is shown, starting from each grid cell."
     },
-    "heatmap_closest_average_v2": {
-      "title": "Heatmap Closest Average V2",
-      "description": "The average travel time to the nearest N destinations is shown, starting from each grid cell."
+    "heatmap_connectivity_legacy": {
+      "title": "Heatmap Connectivity (Legacy)",
+      "description": "Connectivity of transport routes is determined by calculating catchment areas for each grid cell, where the reached area is the measure for connectivity."
     },
     "heatmap_connectivity": {
       "title": "Heatmap Connectivity",
       "description": "Connectivity of transport routes is determined by calculating catchment areas for each grid cell, where the reached area is the measure for connectivity."
     },
-    "heatmap_connectivity_v2": {
-      "title": "Heatmap Connectivity V2",
-      "description": "Connectivity of transport routes is determined by calculating catchment areas for each grid cell, where the reached area is the measure for connectivity."
+    "heatmap_2sfca_legacy": {
+      "title": "Heatmap 2SFCA (Legacy)",
+      "description": "The Two-Step Floating Catchment Area (2SFCA) method is used to measure spatial accessibility by considering both supply and demand within defined catchment areas."
     },
     "heatmap_2sfca": {
       "title": "Heatmap 2SFCA",
       "description": "The Two-Step Floating Catchment Area (2SFCA) method is used to measure spatial accessibility by considering both supply and demand within defined catchment areas."
     },
-    "heatmap_2sfca_v2": {
-      "title": "Heatmap 2SFCA V2",
-      "description": "The Two-Step Floating Catchment Area (2SFCA) method is used to measure spatial accessibility by considering both supply and demand within defined catchment areas."
+    "huff_model_legacy": {
+      "title": "Huff Model (Legacy)",
+      "description": "The Huff Model predicts the probability of consumers in a reference area visiting particular locations based on the attractiveness of the locations and the distance to those locations, including competition between opportunities."
     },
     "huff_model": {
       "title": "Huff Model",
-      "description": "The Huff Model predicts the probability of consumers in a reference area visiting particular locations based on the attractiveness of the locations and the distance to those locations, including competition between opportunities."
-    },
-    "huff_model_v2": {
-      "title": "Huff Model V2",
       "description": "The Huff Model predicts the probability of consumers in a reference area visiting particular locations based on the attractiveness of the locations and the distance to those locations, including competition between opportunities."
     },
     "oev_gueteklassen": {

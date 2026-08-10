@@ -879,13 +879,13 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                 "geometry",
             )
             # Convert WGS84 lon/lat to Web Mercator (EPSG:3857)
-            R = 6378137.0
+            earth_radius_m = 6378137.0
             con.execute(f"""
                 COPY (
                     SELECT
                         ROW_NUMBER() OVER () AS id,
-                        ST_X("{geom_col}") * PI() / 180.0 * {R} AS x_3857,
-                        LN(TAN(PI() / 4.0 + ST_Y("{geom_col}") * PI() / 360.0)) * {R} AS y_3857
+                        ST_X("{geom_col}") * PI() / 180.0 * {earth_radius_m} AS x_3857,
+                        LN(TAN(PI() / 4.0 + ST_Y("{geom_col}") * PI() / 360.0)) * {earth_radius_m} AS y_3857
                     FROM read_parquet('{raw_layer_path}')
                     WHERE "{geom_col}" IS NOT NULL
                 ) TO '{grid_parquet}' (FORMAT PARQUET)

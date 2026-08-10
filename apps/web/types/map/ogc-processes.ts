@@ -273,6 +273,18 @@ export const TOOL_ICON_MAP: Record<string, string> = {
 };
 
 /**
+ * Numbered canvas handles some tools expose instead of a repeatable list — a
+ * workflow edge can only target a named input, never a list element. In order;
+ * mirrors MAX_OPPORTUNITY_LAYERS in goatlib's `_opportunity_handles`, which
+ * declares the matching fields.
+ */
+export const OPPORTUNITY_LAYER_HANDLES = [
+  "opportunity_layer_1_id",
+  "opportunity_layer_2_id",
+  "opportunity_layer_3_id",
+];
+
+/**
  * Inputs that should be hidden from the generic form (handled automatically)
  */
 export const HIDDEN_INPUTS = ["user_id", "project_id", "save_results"];

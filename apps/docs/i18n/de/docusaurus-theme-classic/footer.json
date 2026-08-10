@@ -50,5 +50,13 @@
   "link.item.label.References": {
     "message": "Referenzen",
     "description": "Die Beschriftung des Fußzeilen-Links mit label=References verweist auf https://plan4better.de/references/"
+  },
+  "link.item.label.Privacy": {
+    "message": "Datenschutz",
+    "description": "Die Beschriftung des Fußzeilen-Links mit label=Privacy verweist auf /privacy"
+  },
+  "link.item.label.Imprint": {
+    "message": "Impressum",
+    "description": "Die Beschriftung des Fußzeilen-Links mit label=Imprint verweist auf https://plan4better.de/en/about-us/imprint"
   }
 }

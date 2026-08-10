@@ -29,6 +29,7 @@ const config = {
       },
     },
   },
+  clientModules: [require.resolve("./src/matomo.js")],
   presets: [
     [
       "classic",
@@ -159,6 +160,14 @@ const config = {
               {
                 label: "References",
                 href: "https://plan4better.de/en/references/",
+              },
+              {
+                label: "Privacy",
+                to: "/privacy",
+              },
+              {
+                label: "Imprint",
+                href: "https://plan4better.de/en/about-us/imprint",
               },
             ],
           },

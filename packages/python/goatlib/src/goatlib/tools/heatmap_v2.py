@@ -136,6 +136,15 @@ SECTION_RESULT_HM = UISection(
     depends_on={"routing_mode": {"$ne": None}},
 )
 
+# 2SFCA / Huff: the demand layer is a second input domain, not a routing
+# setting, so it gets its own section between configuration and opportunities.
+SECTION_DEMAND_HM = UISection(
+    id="demand",
+    order=3,
+    icon="people",
+    depends_on={"routing_mode": {"$ne": None}},
+)
+
 # Connectivity only: the reference area is a required input domain, so it gets
 # its own section (ordered right after configuration) rather than sharing the
 # advanced-clip slot the other heatmaps use.
@@ -1127,6 +1136,18 @@ class Heatmap2SFCAV2WindmillParams(
 ):
     """Two-Step Floating Catchment Area accessibility analysis."""
 
+    # The demand layer gets its own section, as in v1: it is a second input
+    # domain alongside the supply layers, not a routing setting.
+    model_config = ConfigDict(
+        json_schema_extra=ui_sections(
+            SECTION_ROUTING_HM,
+            SECTION_CONFIGURATION,
+            SECTION_DEMAND_HM,
+            SECTION_OPPORTUNITIES_HM,
+            SECTION_RESULT_HM,
+        )
+    )
+
     heatmap_type: HeatmapType = Field(
         default=HeatmapType.two_sfca,
         json_schema_extra=ui_field(section="configuration", hidden=True),
@@ -1161,24 +1182,22 @@ class Heatmap2SFCAV2WindmillParams(
         ...,
         description="Demand layer (e.g. population).",
         json_schema_extra=ui_field(
-            section="configuration",
-            field_order=6,
+            section="demand",
+            field_order=1,
             label_key="demand_path",
             widget="layer-selector",
         ),
     )
     demand_layer_filter: dict[str, Any] | None = Field(
         default=None,
-        json_schema_extra=ui_field(
-            section="configuration", field_order=7, hidden=True
-        ),
+        json_schema_extra=ui_field(section="demand", field_order=2, hidden=True),
     )
     demand_field: str = Field(
         ...,
         description="Field in the demand layer holding the demand value.",
         json_schema_extra=ui_field(
-            section="configuration",
-            field_order=8,
+            section="demand",
+            field_order=3,
             label_key="demand_field",
             widget="field-selector",
             widget_options={

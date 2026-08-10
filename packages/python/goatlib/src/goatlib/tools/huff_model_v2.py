@@ -24,7 +24,6 @@ from goatlib.analysis.schemas.catchment_area_v2 import (
 )
 from goatlib.analysis.schemas.heatmap import HuffmodelV2Params
 from goatlib.analysis.schemas.ui import (
-    UISection,
     ui_field,
     ui_sections,
 )
@@ -51,6 +50,7 @@ from goatlib.tools.catchment_area_v2 import (
 from goatlib.tools.heatmap_v2 import (
     HM_ROUTING_MODE_ICONS,
     HM_ROUTING_MODE_LABELS,
+    SECTION_DEMAND_HM,
     SECTION_OPPORTUNITIES_HM,
     SECTION_RESULT_HM,
     SECTION_ROUTING_HM,
@@ -82,17 +82,6 @@ def _pt_arrival_unix_minutes(pt_day: Weekday, seconds_of_day: int) -> int:
     return int(dt.timestamp() // 60)
 
 
-# Dedicated Demand section (its own layer selector), ordered between the
-# configuration (2) and opportunities (4) sections; revealed once a routing
-# mode is chosen, matching the v2 section convention.
-SECTION_DEMAND = UISection(
-    id="demand",
-    order=3,
-    icon="people",
-    depends_on={"routing_mode": {"$ne": None}},
-)
-
-
 class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     """Windmill-facing params. Paths are resolved from layer IDs in process();
     routing_mode/cost_type + PT arrival fields drive the live OD-matrix
@@ -105,7 +94,7 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         json_schema_extra=ui_sections(
             SECTION_ROUTING_HM,
             SECTION_CONFIGURATION,
-            SECTION_DEMAND,
+            SECTION_DEMAND_HM,
             SECTION_OPPORTUNITIES_HM,
             SECTION_RESULT_HM,
         )

@@ -405,6 +405,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                     ],
                     "message": "steps_exceeds_limit",
                     "max": 9,
+                    "min": 1,
                 },
             },
         ),

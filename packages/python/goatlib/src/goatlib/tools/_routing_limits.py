@@ -12,6 +12,11 @@ callers that bypass the UI.
 
 from typing import Any
 
+# The access/egress leg cap is owned by the analysis layer — that is what
+# consumes the lookup tables the cap describes. Imported rather than restated
+# so the form cap and the analysis field bound cannot drift apart.
+from goatlib.analysis.schemas.heatmap_v2 import MAX_LEG_TIME_LOOKUP_MIN
+
 # Defaults (minutes / metres).
 DEFAULT_MAX_TIME_ACTIVE_MIN = 15
 DEFAULT_MAX_TIME_CAR_MIN = 30
@@ -33,10 +38,6 @@ CAR_TIME_LIMIT_MSG = "car_time_limit_message"
 PT_TIME_LIMIT_MSG = "pt_time_limit_message"
 ACTIVE_DISTANCE_LIMIT_MSG = "active_mobility_distance_limit_message"
 CAR_DISTANCE_LIMIT_MSG = "car_distance_limit_message"
-
-# Access/egress legs served by a precomputed lookup table cannot exceed the
-# table's own horizon, which is shorter than a whole-journey budget.
-MAX_LEG_TIME_LOOKUP_MIN = 20
 
 # Floors: minutes are whole numbers from 1; distances are metres from 50.
 MIN_TIME_MIN = 1

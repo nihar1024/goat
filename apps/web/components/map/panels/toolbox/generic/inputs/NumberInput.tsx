@@ -133,11 +133,15 @@ export default function NumberInput({
       if (Number.isNaN(val)) return t("invalid_number");
       if (min !== undefined && val < min) return `Value must be at least ${min}`;
       if (max !== undefined && val > max) return `Value must be at most ${max}`;
+      // The bounds are interpolated into the message, so the limit strings never
+      // restate a number the backend owns — bumping a cap in `_routing_limits`
+      // updates the wording with it. Formatted via i18next's Intl integration
+      // so thousands separators follow the language.
       if (dynamicMin !== undefined && val < dynamicMin && dynamicMessage) {
-        return t(dynamicMessage);
+        return t(dynamicMessage, { min: dynamicMin, max: dynamicMax });
       }
       if (dynamicMax !== undefined && val > dynamicMax && dynamicMessage) {
-        return t(dynamicMessage);
+        return t(dynamicMessage, { min: dynamicMin, max: dynamicMax });
       }
       return null;
     },

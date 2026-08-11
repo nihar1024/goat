@@ -10,7 +10,7 @@ import { InputAdornment, Stack, TextField, Tooltip } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { getEffectiveSchema } from "@/lib/utils/ogc-utils";
+import { getDefaultFrom, getEffectiveSchema, getUnitFrom, resolveDefaultFrom } from "@/lib/utils/ogc-utils";
 
 import type { ProcessedInput } from "@/types/map/ogc-processes";
 
@@ -26,14 +26,39 @@ interface NumberInputProps {
   onValidationChange?: (hasError: boolean) => void;
 }
 
-export default function NumberInput({ input, value, onChange, disabled, formValues = {}, onValidationChange }: NumberInputProps) {
+export default function NumberInput({
+  input,
+  value,
+  onChange,
+  disabled,
+  formValues = {},
+  onValidationChange,
+}: NumberInputProps) {
   const { t } = useTranslation("common");
   const effectiveSchema = useMemo(() => getEffectiveSchema(input.schema), [input.schema]);
   const [error, setError] = useState<string | null>(null);
 
+  // A field with `default_from` has no single static default — its default
+  // depends on other fields (e.g. a budget keyed on routing_mode x cost_type).
+  // Resolve it here so the placeholder hint and the cleared-field fallback show
+  // the value that actually applies, not the schema's first-case default.
+  const effectiveDefault = useMemo(() => {
+    const conditional = resolveDefaultFrom(getDefaultFrom(input.schema), formValues);
+    return conditional !== undefined ? conditional : input.defaultValue;
+  }, [input.schema, input.defaultValue, formValues]);
+
+  // Qualify the label with the current unit, e.g. "Limit (min)". Needed where
+  // the label alone is ambiguous — a budget whose unit follows a cost_type
+  // toggle that is hidden for some modes (PT), leaving "Limit" unqualified.
+  const label = useMemo(() => {
+    const key = resolveDefaultFrom(getUnitFrom(input.schema), formValues);
+    const unit = typeof key === "string" && key ? t(key) : undefined;
+    return unit ? `${input.title} (${unit})` : input.title;
+  }, [input.schema, input.title, formValues, t]);
+
   // When a placeholder is configured and value equals the default, show empty field
   const customPlaceholder = input.uiMeta?.widget_options?.placeholder as string | undefined;
-  const showAsEmpty = customPlaceholder && value === input.defaultValue;
+  const showAsEmpty = customPlaceholder && value === effectiveDefault;
 
   // Local draft for the text field — only committed on blur/Enter
   const [draft, setDraft] = useState<string>(value !== undefined && !showAsEmpty ? String(value) : "");
@@ -58,17 +83,19 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
   //     gated by a `when` condition; per-entry message overrides top-level
   //   - { value, when?, message? }: literal cap, optionally gated; used to
   //     express per-enum-value caps (e.g. mode-specific speed limits)
-  // First matching entry wins. Falls back to top-level `max` if nothing matched.
+  // Any entry may also carry `min`, so one field can express a different floor
+  // per condition (e.g. 1 minute for time, 50 metres for distance).
+  // First matching entry wins. Falls back to top-level `max`/`min` if nothing matched.
   type MaxEntry =
     | string
-    | { field: string; when?: Record<string, string>; message?: string }
-    | { value: number; when?: Record<string, string>; message?: string };
+    | { field: string; when?: Record<string, string>; message?: string; min?: number }
+    | { value: number; when?: Record<string, string>; message?: string; min?: number };
   const maxValueFrom = input.uiMeta?.widget_options?.max_value_from as
     | { fields: MaxEntry[]; message: string; max?: number; min?: number }
     | undefined;
 
   const matched = useMemo(() => {
-    if (!maxValueFrom) return undefined as { max: number; message?: string } | undefined;
+    if (!maxValueFrom) return undefined as { max: number; message?: string; min?: number } | undefined;
     for (const entry of maxValueFrom.fields) {
       if (typeof entry === "string") {
         const v = formValues[entry];
@@ -80,11 +107,11 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
         if (!ok) continue;
       }
       if ("value" in entry) {
-        return { max: entry.value, message: entry.message };
+        return { max: entry.value, message: entry.message, min: entry.min };
       }
       const v = formValues[entry.field];
       if (v !== undefined && v !== null) {
-        return { max: Number(v), message: entry.message };
+        return { max: Number(v), message: entry.message, min: entry.min };
       }
     }
     return undefined;
@@ -97,22 +124,29 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
     return maxValueFrom.max;
   }, [maxValueFrom, matched]);
 
-  const dynamicMin = maxValueFrom?.min;
+  const dynamicMin = matched?.min ?? maxValueFrom?.min;
   const dynamicMessage = matched?.message ?? maxValueFrom?.message;
 
-  const validate = useCallback((val: number | undefined): string | null => {
-    if (val === undefined) return null;
-    if (Number.isNaN(val)) return t("invalid_number");
-    if (min !== undefined && val < min) return `Value must be at least ${min}`;
-    if (max !== undefined && val > max) return `Value must be at most ${max}`;
-    if (dynamicMin !== undefined && val < dynamicMin && dynamicMessage) {
-      return t(dynamicMessage);
-    }
-    if (dynamicMax !== undefined && val > dynamicMax && dynamicMessage) {
-      return t(dynamicMessage);
-    }
-    return null;
-  }, [min, max, dynamicMin, dynamicMax, dynamicMessage, t]);
+  const validate = useCallback(
+    (val: number | undefined): string | null => {
+      if (val === undefined) return null;
+      if (Number.isNaN(val)) return t("invalid_number");
+      if (min !== undefined && val < min) return `Value must be at least ${min}`;
+      if (max !== undefined && val > max) return `Value must be at most ${max}`;
+      // The bounds are interpolated into the message, so the limit strings never
+      // restate a number the backend owns — bumping a cap in `_routing_limits`
+      // updates the wording with it. Formatted via i18next's Intl integration
+      // so thousands separators follow the language.
+      if (dynamicMin !== undefined && val < dynamicMin && dynamicMessage) {
+        return t(dynamicMessage, { min: dynamicMin, max: dynamicMax });
+      }
+      if (dynamicMax !== undefined && val > dynamicMax && dynamicMessage) {
+        return t(dynamicMessage, { min: dynamicMin, max: dynamicMax });
+      }
+      return null;
+    },
+    [min, max, dynamicMin, dynamicMax, dynamicMessage, t]
+  );
 
   // Clear error when value becomes valid (e.g. when the referenced field changes)
   useEffect(() => {
@@ -146,7 +180,7 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
 
   const commit = () => {
     if (draft === "") {
-      const fallback = customPlaceholder ? (input.defaultValue as number | undefined) : undefined;
+      const fallback = customPlaceholder ? (effectiveDefault as number | undefined) : undefined;
       onChange(fallback);
       const err = validate(fallback);
       setError(err);
@@ -186,9 +220,9 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
   if (useSlider) {
     return (
       <Stack>
-        <FormLabelHelper label={input.title} tooltip={input.description} color="inherit" />
+        <FormLabelHelper label={label} tooltip={input.description} color="inherit" />
         <SliderInput
-          value={value ?? (input.defaultValue as number) ?? min ?? 0}
+          value={value ?? (effectiveDefault as number) ?? min ?? 0}
           isRange={false}
           min={min as number}
           max={max as number}
@@ -201,7 +235,7 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
 
   return (
     <Stack>
-      <FormLabelHelper label={input.title} tooltip={input.description} color="inherit" />
+      <FormLabelHelper label={label} tooltip={input.description} color="inherit" />
       <TextField
         type="text"
         inputMode="decimal"
@@ -229,7 +263,9 @@ export default function NumberInput({ input, value, onChange, disabled, formValu
         placeholder={
           customPlaceholder !== undefined
             ? t(customPlaceholder)
-            : (input.defaultValue != null ? String(input.defaultValue) : undefined)
+            : effectiveDefault != null
+              ? String(effectiveDefault)
+              : undefined
         }
         fullWidth
       />

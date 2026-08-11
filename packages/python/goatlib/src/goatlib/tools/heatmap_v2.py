@@ -16,7 +16,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 
 from goatlib.analysis.accessibility import HeatmapV2Tool
 from goatlib.analysis.schemas.catchment_area import WEEKDAY_LABELS
@@ -51,22 +51,20 @@ from goatlib.analysis.schemas.ui import (
     ui_sections,
 )
 from goatlib.models.io import DatasetMetadata
+from goatlib.tools._opportunity_handles import (
+    NUMBERED_OPPORTUNITY_FILTER_FIELDS,
+    NUMBERED_OPPORTUNITY_ID_FIELDS,
+    NumberedOpportunityLayersMixin,
+)
 from goatlib.tools._routing_limits import (
-    ACTIVE_DISTANCE_LIMIT_MSG,
-    ACTIVE_TIME_LIMIT_MSG,
-    CAR_DISTANCE_LIMIT_MSG,
-    CAR_TIME_LIMIT_MSG,
-    DEFAULT_MAX_DISTANCE_ACTIVE_M,
-    DEFAULT_MAX_DISTANCE_CAR_M,
     DEFAULT_MAX_TIME_ACTIVE_MIN,
-    DEFAULT_MAX_TIME_CAR_MIN,
-    DEFAULT_MAX_TIME_PT_MIN,
-    MAX_DISTANCE_ACTIVE_M,
-    MAX_DISTANCE_CAR_M,
-    MAX_TIME_ACTIVE_MIN,
-    MAX_TIME_CAR_MIN,
-    MAX_TIME_PT_MIN,
-    PT_TIME_LIMIT_MSG,
+    budget_widget_options,
+    leg_budget_widget_options,
+    resolve_budget_input,
+    resolve_leg_names,
+    validate_budget,
+    validate_cost_type,
+    validate_leg_budget,
 )
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.catchment_area_v2 import (
@@ -138,6 +136,15 @@ SECTION_RESULT_HM = UISection(
     depends_on={"routing_mode": {"$ne": None}},
 )
 
+# 2SFCA / Huff: the demand layer is a second input domain, not a routing
+# setting, so it gets its own section between configuration and opportunities.
+SECTION_DEMAND_HM = UISection(
+    id="demand",
+    order=3,
+    icon="people",
+    depends_on={"routing_mode": {"$ne": None}},
+)
+
 # Connectivity only: the reference area is a required input domain, so it gets
 # its own section (ordered right after configuration) rather than sharing the
 # advanced-clip slot the other heatmaps use.
@@ -176,9 +183,9 @@ GRAVITY_DECAY_LABELS: dict[str, str] = {
 
 class OpportunityV2PointBase(OpportunityV2):
     """Shared form-layer base for v2 opportunity cards. Accepts point or
-    polygon layers, splits the per-opportunity budget into time/distance
-    variants (gated by the outer cost_type), and hides formula-specific extras;
-    the gravity / closest-average subclasses re-expose what each needs."""
+    polygon layers, carries the per-opportunity budget (unit follows the outer
+    cost_type), and hides formula-specific extras; the gravity /
+    closest-average subclasses re-expose what each needs."""
 
     input_path: str = Field(
         ...,
@@ -204,126 +211,20 @@ class OpportunityV2PointBase(OpportunityV2):
         ),
     )
 
-    # Hide the inherited analysis-layer scalar `max_cost`. The runner sets
-    # it via resolve_max_cost(cost_type) before handing the opportunity to
-    # the analysis layer.
+    # Single per-opportunity travel budget — same name/meaning as the analysis
+    # schema and the C++ engine. Default, floor and cap resolve from the parent
+    # routing_mode x cost_type rules.
     max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
         gt=0,
-        json_schema_extra=ui_field(section="opportunities", hidden=True),
-    )
-
-    max_cost_time: int = Field(
-        default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        ge=1,
-        description="Maximum travel time in minutes.",
+        description="Upper limit for this opportunity, in the selected measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="opportunities",
             field_order=2,
-            label_key="max_cost_time",
-            visible_when={
-                "$and": [
-                    {"input_path": {"$ne": None}},
-                    {"cost_type": "time"},
-                ]
-            },
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {
-                        "walking": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "bicycle": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "pedelec": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "car": DEFAULT_MAX_TIME_CAR_MIN,
-                        "pt": DEFAULT_MAX_TIME_PT_MIN,
-                    },
-                },
-                "max_value_from": {
-                    "fields": [
-                        {
-                            "value": MAX_TIME_ACTIVE_MIN,
-                            "when": {"routing_mode": "walking"},
-                            "message": ACTIVE_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_ACTIVE_MIN,
-                            "when": {"routing_mode": "bicycle"},
-                            "message": ACTIVE_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_ACTIVE_MIN,
-                            "when": {"routing_mode": "pedelec"},
-                            "message": ACTIVE_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_CAR_MIN,
-                            "when": {"routing_mode": "car"},
-                            "message": CAR_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_PT_MIN,
-                            "when": {"routing_mode": "pt"},
-                            "message": PT_TIME_LIMIT_MSG,
-                        },
-                    ],
-                    "min": 1,
-                    "message": ACTIVE_TIME_LIMIT_MSG,
-                },
-            },
-        ),
-    )
-
-    max_cost_distance: int = Field(
-        default=DEFAULT_MAX_DISTANCE_ACTIVE_M,
-        ge=50,
-        description="Maximum travel distance in meters.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=2,
-            label_key="max_cost_distance",
-            visible_when={
-                "$and": [
-                    {"input_path": {"$ne": None}},
-                    {"cost_type": "distance"},
-                ]
-            },
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {
-                        "walking": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "bicycle": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "pedelec": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "car": DEFAULT_MAX_DISTANCE_CAR_M,
-                    },
-                },
-                "max_value_from": {
-                    "fields": [
-                        {
-                            "value": MAX_DISTANCE_ACTIVE_M,
-                            "when": {"routing_mode": "walking"},
-                            "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_DISTANCE_ACTIVE_M,
-                            "when": {"routing_mode": "bicycle"},
-                            "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_DISTANCE_ACTIVE_M,
-                            "when": {"routing_mode": "pedelec"},
-                            "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_DISTANCE_CAR_M,
-                            "when": {"routing_mode": "car"},
-                            "message": CAR_DISTANCE_LIMIT_MSG,
-                        },
-                    ],
-                    "min": 50,
-                    "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                },
-            },
+            label_key="limit",
+            description_key="limit",
+            visible_when={"input_path": {"$ne": None}},
+            widget_options=budget_widget_options(),
         ),
     )
 
@@ -358,13 +259,6 @@ class OpportunityV2PointBase(OpportunityV2):
         json_schema_extra=ui_field(section="opportunities", hidden=True),
     )
 
-    def resolve_max_cost(self: Self, cost_type: CostType) -> int:
-        """Return the active per-opp budget for the outer cost_type —
-        minutes when time, meters when distance."""
-        return (
-            self.max_cost_distance if cost_type == CostType.distance
-            else self.max_cost_time
-        )
 
 
 class OpportunityV2PointGravity(OpportunityV2PointBase):
@@ -483,9 +377,8 @@ class HeatmapV2WindmillParams(ToolInputBase):
     """Windmill-facing params for HeatmapV2.
 
     Mode/cost/PT fields mirror catchment_area_v2's structure exactly. The
-    runner's `process()` resolves the per-mode budget fields into a single
-    `max_cost`, builds the analysis-level `HeatmapV2Params`, and hands off
-    to `HeatmapV2Tool`.
+    runner's `process()` builds the analysis-level `HeatmapV2Params` from these
+    and hands off to `HeatmapV2Tool`.
     """
 
     model_config = ConfigDict(
@@ -528,6 +421,9 @@ class HeatmapV2WindmillParams(ToolInputBase):
             label_key="routing_mode",
             enum_icons=HM_ROUTING_MODE_ICONS,
             enum_labels=HM_ROUTING_MODE_LABELS,
+            # Changing the transport mode restarts the form: it decides which
+            # measures, budgets and legs apply, so nothing should carry over.
+            widget_options={"resets_form": True},
         ),
     )
 
@@ -624,7 +520,7 @@ class HeatmapV2WindmillParams(ToolInputBase):
     # access/egress lookup table is precomputed. The mode selector stays visible
     # for consistency with the other legs/config, but is restricted to the
     # single "walk" option (== AccessEgressMode.walk) via the Literal type.
-    pt_access_mode: Literal["walk"] = Field(
+    access_mode: Literal["walk"] = Field(
         default="walk",
         description="Mode to reach transit stops (walk-only for PT heatmaps).",
         # Literal keeps validation walk-only (emits `const`); the explicit
@@ -648,44 +544,44 @@ class HeatmapV2WindmillParams(ToolInputBase):
             "enum": [AccessEgressMode.walk.value],
         },
     )
-    pt_access_max_time: int = Field(
+    access_cost_type: Literal["time"] = Field(
+        default="time",
+        description="Access leg cost type. Time-only: the access/egress "
+                    "lookup tables are built on travel time.",
+        json_schema_extra={
+            **ui_field(
+                section="configuration", field_order=21, label_key="measure_type",
+                enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+                inline_group="access_cost",
+                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            ),
+            "enum": ["time"],
+        },
+    )
+
+    access_max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        # No ge/le: bounds come from widget_options.max_value_from (a plain
-        # number input). Pydantic ge+le would emit schema min+max, which the
-        # form renders as a slider — catchment avoids this the same way.
-        description="Access leg budget in minutes (≤ the lookup table max).",
+        description="Access leg budget (≤ the lookup table max).",
         json_schema_extra=ui_field(
-            section="configuration",
-            field_order=21,
-            label_key="time_limit",
-            inline_group="pt_access_cost",
-            inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"routing_mode": "pt"},
-                    {"show_advanced": True},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "pt_access_time_limit_message",
-                    "max": 20,
-                    "min": 1,
-                },
-            },
+            section="configuration", field_order=22, label_key="limit", description_key="limit",
+            inline_group="access_cost", inline_flex="1 0 0",
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            widget_options=leg_budget_widget_options(
+                "access_cost_type", "pt_access_time_limit_message",
+                lookup_table=True,
+            ),
         ),
     )
-    pt_egress_mode: Literal["walk"] = Field(
+    egress_mode: Literal["walk"] = Field(
         default="walk",
         description="Mode from transit stops to the opportunity "
                     "(walk-only for PT heatmaps).",
-        # See pt_access_mode: Literal for validation + explicit enum so the
+        # See access_mode: Literal for validation + explicit enum so the
         # frontend renders a (single-option) dropdown.
         json_schema_extra={
             **ui_field(
                 section="configuration",
-                field_order=22,
+                field_order=23,
                 label_key="pt_egress_mode",
                 group_label="groups.egress_leg",
                 enum_icons=ACCESS_EGRESS_MODE_ICONS,
@@ -700,35 +596,37 @@ class HeatmapV2WindmillParams(ToolInputBase):
             "enum": [AccessEgressMode.walk.value],
         },
     )
-    pt_egress_max_time: int = Field(
+    egress_cost_type: Literal["time"] = Field(
+        default="time",
+        description="Egress leg cost type. Time-only: the access/egress "
+                    "lookup tables are built on travel time.",
+        json_schema_extra={
+            **ui_field(
+                section="configuration", field_order=24, label_key="measure_type",
+                enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+                inline_group="egress_cost",
+                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            ),
+            "enum": ["time"],
+        },
+    )
+
+    egress_max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        # No ge/le — see pt_access_max_time (avoids the slider; number input).
-        description="Egress leg budget in minutes (≤ the lookup table max).",
+        description="Egress leg budget (≤ the lookup table max).",
         json_schema_extra=ui_field(
-            section="configuration",
-            field_order=23,
-            label_key="time_limit",
-            inline_group="pt_egress_cost",
-            inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"routing_mode": "pt"},
-                    {"show_advanced": True},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "pt_egress_time_limit_message",
-                    "max": 20,
-                    "min": 1,
-                },
-            },
+            section="configuration", field_order=25, label_key="limit", description_key="limit",
+            inline_group="egress_cost", inline_flex="1 0 0",
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            widget_options=leg_budget_widget_options(
+                "egress_cost_type", "pt_egress_time_limit_message",
+                lookup_table=True,
+            ),
         ),
     )
     pt_max_transfers: int = Field(
         default=5,
-        # No ge/le — see pt_access_max_time (avoids the slider; number input).
+        # No ge/le — see access_max_cost (avoids the slider; number input).
         description="Maximum number of transit transfers.",
         json_schema_extra=ui_field(
             section="configuration",
@@ -881,66 +779,6 @@ class HeatmapV2WindmillParams(ToolInputBase):
     )
 
     # =========================================================================
-    # Opportunity layers (Gravity / ClosestAverage — workflow-canvas
-    # connectors, so hidden in the form). Up to 3 layers.
-    # =========================================================================
-
-    opportunity_layer_1_id: str | None = Field(
-        None,
-        description="First opportunity layer.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=1,
-            widget="layer-selector",
-            label_key="opportunity_layer_1",
-            hidden=True,
-            visible_when={
-                "heatmap_type": {"$in": ["gravity", "closest_average"]}
-            },
-        ),
-    )
-    opportunity_layer_1_filter: dict[str, Any] | None = Field(
-        None,
-        json_schema_extra=ui_field(section="opportunities", field_order=2, hidden=True),
-    )
-    opportunity_layer_2_id: str | None = Field(
-        None,
-        description="Second opportunity layer.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=3,
-            widget="layer-selector",
-            label_key="opportunity_layer_2",
-            hidden=True,
-            visible_when={
-                "heatmap_type": {"$in": ["gravity", "closest_average"]}
-            },
-        ),
-    )
-    opportunity_layer_2_filter: dict[str, Any] | None = Field(
-        None,
-        json_schema_extra=ui_field(section="opportunities", field_order=4, hidden=True),
-    )
-    opportunity_layer_3_id: str | None = Field(
-        None,
-        description="Third opportunity layer.",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=5,
-            widget="layer-selector",
-            label_key="opportunity_layer_3",
-            hidden=True,
-            visible_when={
-                "heatmap_type": {"$in": ["gravity", "closest_average"]}
-            },
-        ),
-    )
-    opportunity_layer_3_filter: dict[str, Any] | None = Field(
-        None,
-        json_schema_extra=ui_field(section="opportunities", field_order=6, hidden=True),
-    )
-
-    # =========================================================================
     # Opportunities list (toolbox UI: repeatable layer entries with per-layer
     # weight + sensitivity controls). Workflow-canvas numbered layer-IDs above
     # take precedence when present (the runner re-packs them into this list).
@@ -970,31 +808,77 @@ class HeatmapV2WindmillParams(ToolInputBase):
         cost_type: minutes for time, meters for distance."""
         if not self.opportunities:
             return 30.0
-        budgets = [
-            o.resolve_max_cost(self.cost_type)
-            if isinstance(o, OpportunityV2PointBase)
-            else o.max_cost
-            for o in self.opportunities
-        ]
-        return float(max(budgets))
+        return float(max(o.max_cost for o in self.opportunities))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_opportunity_budget(cls, data: Any) -> Any:
+        """Per-opportunity budgets used to be a time/distance pair; map a
+        pre-collapse payload onto max_cost using the form's own cost type."""
+        if not isinstance(data, dict) or not isinstance(data.get("opportunities"), list):
+            return data
+        ctx = {
+            "routing_mode": data.get("routing_mode"),
+            "cost_type": data.get("cost_type"),
+        }
+        fixed = []
+        for o in data["opportunities"]:
+            if isinstance(o, dict) and o.get("max_cost") is None:
+                merged = resolve_budget_input({**ctx, **o})
+                if merged.get("max_cost") is not None:
+                    o = {**o, "max_cost": merged["max_cost"]}
+            fixed.append(o)
+        return {**resolve_leg_names(data), "opportunities": fixed}
+
+    @model_validator(mode="after")
+    def _check_opportunity_budgets(self: Self) -> Self:
+        validate_cost_type(self.routing_mode, self.cost_type)
+        for o in self.opportunities or []:
+            validate_budget(self.routing_mode, self.cost_type, o.max_cost)
+        return self
 
     def resolved_opportunities(self: Self) -> list[OpportunityV2]:
-        """Project form opportunities to analysis-layer OpportunityV2,
-        collapsing max_cost_time / max_cost_distance into max_cost based on
-        the form's cost_type."""
+        """Project form opportunities to analysis-layer OpportunityV2."""
         if not self.opportunities:
             return []
-        out: list[OpportunityV2] = []
-        for o in self.opportunities:
-            if isinstance(o, OpportunityV2PointBase):
-                data = o.model_dump(
-                    exclude={"max_cost_time", "max_cost_distance"}
-                )
-                data["max_cost"] = o.resolve_max_cost(self.cost_type)
-                out.append(OpportunityV2(**data))
-            else:
-                out.append(o)
-        return out
+        return [
+            OpportunityV2(**o.model_dump())
+            if isinstance(o, OpportunityV2PointBase)
+            else o
+            for o in self.opportunities
+        ]
+
+    @model_validator(mode="after")
+    def _fold_numbered_opportunities(self: Self) -> Self:
+        """Fold the workflow-canvas numbered handles into `opportunities`.
+
+        A canvas edge can only target a named input, so those nodes deliver bare
+        layer IDs on `opportunity_layer_{N}_id`. Folding them into the list here
+        leaves one shape for the runner to resolve instead of a second path.
+        Per-layer config doesn't exist on this route, so every entry takes the
+        form's aggregate budget.
+        """
+        if self.opportunities:
+            return self
+        numbered = [
+            (getattr(self, id_field, None), getattr(self, filter_field, None))
+            for id_field, filter_field in zip(
+                NUMBERED_OPPORTUNITY_ID_FIELDS, NUMBERED_OPPORTUNITY_FILTER_FIELDS
+            )
+        ]
+        if not any(layer_id for layer_id, _ in numbered):
+            return self
+        budget = int(self.aggregate_max_cost())
+        self.opportunities = [
+            OpportunityV2(
+                input_path=layer_id,
+                input_layer_filter=layer_filter,
+                max_cost=budget,
+            )
+            for layer_id, layer_filter in numbered
+            if layer_id
+        ]
+        return self
 
 
 # =========================================================================
@@ -1006,7 +890,9 @@ class HeatmapV2WindmillParams(ToolInputBase):
 # =========================================================================
 
 
-class HeatmapGravityV2WindmillParams(HeatmapV2WindmillParams):
+class HeatmapGravityV2WindmillParams(
+    NumberedOpportunityLayersMixin, HeatmapV2WindmillParams
+):
     """Gravity-based spatial accessibility analysis."""
 
     heatmap_type: HeatmapType = Field(
@@ -1042,7 +928,9 @@ class HeatmapGravityV2WindmillParams(HeatmapV2WindmillParams):
     )
 
 
-class HeatmapClosestAverageV2WindmillParams(HeatmapV2WindmillParams):
+class HeatmapClosestAverageV2WindmillParams(
+    NumberedOpportunityLayersMixin, HeatmapV2WindmillParams
+):
     """Average distance/time to N closest destinations."""
 
     heatmap_type: HeatmapType = Field(
@@ -1134,115 +1022,21 @@ class HeatmapConnectivityV2WindmillParams(HeatmapV2WindmillParams):
         ),
     )
 
-    # Travel budget — two fields gated by cost_type. Per-mode caps come from
-    # widget_options.max_value_from (active vs. car). Same pattern as the
-    # per-opportunity max_cost on OpportunityV2Point.
-    max_cost_time: int = Field(
+    # Single travel budget — same name/meaning as the analysis schema and the
+    # C++ engine. Default, floor and cap come from the mode x cost_type rules.
+    max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        ge=1,
-        description="Maximum travel time in minutes.",
+        gt=0,
+        description="Upper limit for the selected measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=3,
-            label_key="max_cost_time",
-            visible_when={"cost_type": "time"},
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {
-                        "walking": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "bicycle": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "pedelec": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "car": DEFAULT_MAX_TIME_CAR_MIN,
-                        "pt": DEFAULT_MAX_TIME_PT_MIN,
-                    },
-                },
-                "max_value_from": {
-                    "fields": [
-                        {
-                            "value": MAX_TIME_ACTIVE_MIN,
-                            "when": {"routing_mode": "walking"},
-                            "message": ACTIVE_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_ACTIVE_MIN,
-                            "when": {"routing_mode": "bicycle"},
-                            "message": ACTIVE_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_ACTIVE_MIN,
-                            "when": {"routing_mode": "pedelec"},
-                            "message": ACTIVE_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_CAR_MIN,
-                            "when": {"routing_mode": "car"},
-                            "message": CAR_TIME_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_TIME_PT_MIN,
-                            "when": {"routing_mode": "pt"},
-                            "message": PT_TIME_LIMIT_MSG,
-                        },
-                    ],
-                    "min": 1,
-                    "message": ACTIVE_TIME_LIMIT_MSG,
-                },
-            },
+            label_key="limit",
+            description_key="limit",
+            widget_options=budget_widget_options(),
         ),
     )
 
-    max_cost_distance: int = Field(
-        default=DEFAULT_MAX_DISTANCE_ACTIVE_M,
-        ge=50,
-        description="Maximum travel distance in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=3,
-            label_key="max_cost_distance",
-            visible_when={"cost_type": "distance"},
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {
-                        "walking": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "bicycle": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "pedelec": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "car": DEFAULT_MAX_DISTANCE_CAR_M,
-                    },
-                },
-                "max_value_from": {
-                    "fields": [
-                        {
-                            "value": MAX_DISTANCE_ACTIVE_M,
-                            "when": {"routing_mode": "walking"},
-                            "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_DISTANCE_ACTIVE_M,
-                            "when": {"routing_mode": "bicycle"},
-                            "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_DISTANCE_ACTIVE_M,
-                            "when": {"routing_mode": "pedelec"},
-                            "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                        },
-                        {
-                            "value": MAX_DISTANCE_CAR_M,
-                            "when": {"routing_mode": "car"},
-                            "message": CAR_DISTANCE_LIMIT_MSG,
-                        },
-                    ],
-                    "min": 50,
-                    "message": ACTIVE_DISTANCE_LIMIT_MSG,
-                },
-            },
-        ),
-    )
-
-    # Connectivity requires the reference area; promote the inherited
-    # optional+advanced field to required, in its own dedicated section.
     reference_area_layer_id: str = Field(
         ...,
         description="Layer ID for the reference area polygon.",
@@ -1274,10 +1068,21 @@ class HeatmapConnectivityV2WindmillParams(HeatmapV2WindmillParams):
 
     def aggregate_max_cost(self: Self) -> float:
         """Connectivity budget — minutes (time) or meters (distance)."""
-        return float(
-            self.max_cost_distance if self.cost_type == CostType.distance
-            else self.max_cost_time
-        )
+        return float(self.max_cost)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_budget(cls, data: Any) -> Any:
+        return resolve_leg_names(resolve_budget_input(data))
+
+    @model_validator(mode="after")
+    def _check_budget(self: Self) -> Self:
+        validate_budget(self.routing_mode, self.cost_type, self.max_cost)
+        validate_leg_budget(self.access_cost_type, self.access_max_cost,
+                            "access", lookup_table=True)
+        validate_leg_budget(self.egress_cost_type, self.egress_max_cost,
+                            "egress", lookup_table=True)
+        return self
 
 
 # =========================================================================
@@ -1326,8 +1131,22 @@ def _pt_arrival_unix_minutes(pt_day: Weekday, seconds_of_day: int) -> int:
     return int(arrival_dt.timestamp() // 60)
 
 
-class Heatmap2SFCAV2WindmillParams(HeatmapV2WindmillParams):
+class Heatmap2SFCAV2WindmillParams(
+    NumberedOpportunityLayersMixin, HeatmapV2WindmillParams
+):
     """Two-Step Floating Catchment Area accessibility analysis."""
+
+    # The demand layer gets its own section, as in v1: it is a second input
+    # domain alongside the supply layers, not a routing setting.
+    model_config = ConfigDict(
+        json_schema_extra=ui_sections(
+            SECTION_ROUTING_HM,
+            SECTION_CONFIGURATION,
+            SECTION_DEMAND_HM,
+            SECTION_OPPORTUNITIES_HM,
+            SECTION_RESULT_HM,
+        )
+    )
 
     heatmap_type: HeatmapType = Field(
         default=HeatmapType.two_sfca,
@@ -1363,24 +1182,22 @@ class Heatmap2SFCAV2WindmillParams(HeatmapV2WindmillParams):
         ...,
         description="Demand layer (e.g. population).",
         json_schema_extra=ui_field(
-            section="configuration",
-            field_order=6,
+            section="demand",
+            field_order=1,
             label_key="demand_path",
             widget="layer-selector",
         ),
     )
     demand_layer_filter: dict[str, Any] | None = Field(
         default=None,
-        json_schema_extra=ui_field(
-            section="configuration", field_order=7, hidden=True
-        ),
+        json_schema_extra=ui_field(section="demand", field_order=2, hidden=True),
     )
     demand_field: str = Field(
         ...,
         description="Field in the demand layer holding the demand value.",
         json_schema_extra=ui_field(
-            section="configuration",
-            field_order=8,
+            section="demand",
+            field_order=3,
             label_key="demand_field",
             widget="field-selector",
             widget_options={
@@ -1454,50 +1271,17 @@ class HeatmapV2ToolRunner(BaseToolRunner[HeatmapV2WindmillParams]):
     ) -> list[OpportunityV2]:
         """Resolve opportunity layer IDs → parquet paths.
 
-        Two entry shapes:
-          (1) Toolbox form: `params.opportunities` holds OpportunityV2
-              instances where `input_path` is a layer UUID and the
-              per-layer fields (potential_type / potential_field /
-              potential_constant / potential_expression / sensitivity /
-              input_layer_filter / name) are already populated by the UI.
-              `resolve_layer_paths` swaps the UUID for an exported parquet
-              path, applies the CQL filter, and preserves every other
-              field on the model.
-          (2) Workflow canvas: the canvas connector only supplies layer
-              IDs via the numbered `opportunity_layer_{1,2,3}_id` fields;
-              per-layer config is unavailable, so we construct stub
-              OpportunityV2 entries with just `input_path`.
-        Workflow-canvas IDs take precedence when present.
-        """
-        numbered_ids = [
-            params.opportunity_layer_1_id,
-            params.opportunity_layer_2_id,
-            params.opportunity_layer_3_id,
-        ]
-        if any(numbered_ids):
-            # Workflow-canvas path: bare layer IDs, no per-layer config —
-            # take the form's resolved budget as the default for every
-            # canvas opportunity.
-            fallback_max_cost = int(params.aggregate_max_cost())
-            opps: list[OpportunityV2] = []
-            for layer_id in numbered_ids:
-                if not layer_id:
-                    continue
-                parquet_path = str(
-                    self.export_layer_to_parquet(
-                        layer_id=layer_id,
-                        user_id=params.user_id,
-                        project_id=params.project_id,
-                    )
-                )
-                opps.append(
-                    OpportunityV2(
-                        input_path=parquet_path,
-                        max_cost=fallback_max_cost,
-                    )
-                )
-            return opps
+        `params.opportunities` holds OpportunityV2 instances whose `input_path`
+        is a layer UUID, with the per-layer fields (potential_type /
+        potential_field / potential_constant / potential_expression /
+        sensitivity / input_layer_filter / name) already populated.
+        `resolve_layer_paths` swaps the UUID for an exported parquet path,
+        applies the CQL filter, and preserves every other field on the model.
 
+        Workflow-canvas nodes supply their layers through the numbered
+        `opportunity_layer_{N}_id` handles instead; those are folded into this
+        same list by `_fold_numbered_opportunities`, so there is one shape here.
+        """
         if not params.opportunities:
             raise ValueError(
                 "At least one opportunity layer is required "
@@ -1619,10 +1403,12 @@ class HeatmapV2ToolRunner(BaseToolRunner[HeatmapV2WindmillParams]):
                 else None
             ),
             max_transfers=params.pt_max_transfers,
-            access_mode=_ACCESS_EGRESS_MODE_MAP[params.pt_access_mode],
-            egress_mode=_ACCESS_EGRESS_MODE_MAP[params.pt_egress_mode],
-            access_max_time=params.pt_access_max_time,
-            egress_max_time=params.pt_egress_max_time,
+            access_mode=_ACCESS_EGRESS_MODE_MAP[params.access_mode],
+            egress_mode=_ACCESS_EGRESS_MODE_MAP[params.egress_mode],
+            # Analysis/C++ HeatmapConfig names these *_max_time (time-only
+            # lookup tables); the tool layer uses the shared *_max_cost shape.
+            access_max_time=params.access_max_cost,
+            egress_max_time=params.egress_max_cost,
             # Output
             output_path=str(output_path),
         )

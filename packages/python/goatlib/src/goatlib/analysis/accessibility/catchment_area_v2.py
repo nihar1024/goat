@@ -29,6 +29,17 @@ logger = logging.getLogger(__name__)
 
 WEB_MERCATOR_RADIUS_M = 6378137.0
 
+# Per-leg speed fallback when the user leaves the advanced speed blank, so the
+# C++ access/egress validation always has a positive speed. Car is 0: its cost
+# comes from per-edge OSM maxspeed, not a user speed.
+_PT_LEG_DEFAULT_SPEED_KMH: dict[AccessEgressMode, float] = {
+    AccessEgressMode.walk: 5.0,
+    AccessEgressMode.bicycle: 15.0,
+    AccessEgressMode.pedelec: 23.0,
+    AccessEgressMode.car: 0.0,
+}
+
+
 class CatchmentAreaToolV2(AnalysisTool):
     """Compute catchment areas via the local C++ routing package.
 
@@ -180,19 +191,13 @@ class CatchmentAreaToolV2(AnalysisTool):
             # access/egress validation has a positive speed to work with.
             # Car has no user-facing speed → 0 (C++ ignores user speed for car
             # routing cost; per-edge OSM maxspeed governs).
-            _PT_LEG_DEFAULTS = {
-                AccessEgressMode.walk: 5.0,
-                AccessEgressMode.bicycle: 15.0,
-                AccessEgressMode.pedelec: 23.0,
-                AccessEgressMode.car: 0.0,
-            }
             cfg.access_speed_km_h = (
                 params.access_speed if params.access_speed is not None
-                else _PT_LEG_DEFAULTS.get(params.access_mode, 0.0)
+                else _PT_LEG_DEFAULT_SPEED_KMH.get(params.access_mode, 0.0)
             )
             cfg.egress_speed_km_h = (
                 params.egress_speed if params.egress_speed is not None
-                else _PT_LEG_DEFAULTS.get(params.egress_mode, 0.0)
+                else _PT_LEG_DEFAULT_SPEED_KMH.get(params.egress_mode, 0.0)
             )
 
             if params.transit_modes:

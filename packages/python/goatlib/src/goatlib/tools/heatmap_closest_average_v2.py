@@ -6,6 +6,8 @@ heatmap_type=closest_average.
 
 from goatlib.tools.heatmap_v2 import (
     HeatmapClosestAverageV2ToolRunner as HeatmapClosestAverageV2ToolRunner,
+)
+from goatlib.tools.heatmap_v2 import (
     HeatmapClosestAverageV2WindmillParams as HeatmapClosestAverageV2WindmillParams,
 )
 

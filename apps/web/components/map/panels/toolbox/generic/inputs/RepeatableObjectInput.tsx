@@ -5,13 +5,19 @@
  * Used for array fields with complex object items (e.g., opportunities in heatmap tools).
  */
 import { Box, Button, Divider, IconButton, Stack, Typography, useTheme } from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import { formatInputName, getVisibleInputs } from "@/lib/utils/ogc-utils";
+import {
+  defaultFromDependencies,
+  formatInputName,
+  getDefaultFrom,
+  getVisibleInputs,
+  resolveDefaultFrom,
+} from "@/lib/utils/ogc-utils";
 
 import type { OGCInputSchema, ProcessedInput } from "@/types/map/ogc-processes";
 
@@ -103,7 +109,10 @@ export function processObjectProperties(
     inputs.push({
       name: propName,
       title: resolvedSchema.title || formatInputName(propName),
-      description: resolvedSchema.description,
+      // Prefer the translated x-ui description: only that one honours
+      // `description_key`, whereas the raw schema description keeps the
+      // field-name translation (same precedence LayerInput uses).
+      description: uiMeta?.description ?? resolvedSchema.description,
       inputType,
       required: isRequired,
       schema: resolvedSchema,
@@ -128,10 +137,10 @@ export function processObjectProperties(
  * Get default values for a new object item.
  *
  * `parentValues` are the enclosing form's current values. They let a nested
- * field's `default_by_field` (keyed off a parent field such as `routing_mode`)
- * resolve when the item is created — otherwise it would silently fall back to
- * the schema default (e.g. a PT opportunity would default to the walking
- * time-limit instead of the PT one).
+ * field's `default_by_field` or `default_from` (keyed off parent fields such as
+ * `routing_mode` / `cost_type`) resolve when the item is created — otherwise it
+ * would silently fall back to the schema default (e.g. a PT opportunity would
+ * default to the walking time-limit instead of the PT one).
  */
 export function getObjectDefaults(
   objectSchema: OGCInputSchema,
@@ -170,6 +179,13 @@ export function getObjectDefaults(
         if (dynamic !== undefined) defaults[propName] = dynamic;
       }
     }
+
+    // default_from: same purpose, matched across several parent fields at once
+    // (e.g. a per-item budget keyed on the parent routing_mode and cost_type).
+    if (parentValues) {
+      const resolved = resolveDefaultFrom(getDefaultFrom(resolvedSchema), parentValues);
+      if (resolved !== undefined) defaults[propName] = resolved;
+    }
   }
 
   return defaults;
@@ -189,11 +205,10 @@ export default function RepeatableObjectInput({
   const { t } = useTranslation("common");
   const theme = useTheme();
 
-  // Track filters for nested layer inputs
-  // Structure: itemFilters[itemIndex][layerFieldName] = filter
-  const [_itemFilters, setItemFilters] = useState<
-    Record<number, Record<string, Record<string, unknown> | undefined>>
-  >({});
+  // Filters for nested layer inputs, keyed itemFilters[itemIndex][layerFieldName].
+  // A ref rather than state: nothing here is rendered, it only accumulates so the
+  // whole set can be handed to the parent on every change.
+  const itemFiltersRef = useRef<Record<number, Record<string, Record<string, unknown> | undefined>>>({});
 
   // Get item schema (resolve $ref if needed)
   // Handle anyOf pattern for nullable arrays: anyOf: [{type: "array", items: {...}}, {type: "null"}]
@@ -255,6 +270,44 @@ export default function RepeatableObjectInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, minItems, itemSchema, schemaDefs]);
 
+  // Re-resolve nested `default_from` fields when a parent field they depend on
+  // changes. Existing items would otherwise keep a value carrying the previous
+  // unit (e.g. a 15-minute budget left behind after switching to distance),
+  // which then fails validation on submit. Top-level fields get the same
+  // treatment in GenericTool.handleInputChange.
+  const defaultFromDeps = useMemo(() => {
+    const deps: Record<string, unknown> = {};
+    for (const i of itemInputs) {
+      for (const f of defaultFromDependencies(getDefaultFrom(i.schema))) {
+        deps[f] = formValues[f];
+      }
+    }
+    return deps;
+  }, [itemInputs, formValues]);
+  const depsKey = JSON.stringify(defaultFromDeps);
+  const prevDepsKeyRef = useRef(depsKey);
+
+  useEffect(() => {
+    if (prevDepsKeyRef.current === depsKey) return;
+    prevDepsKeyRef.current = depsKey;
+    if (!value?.length) return;
+    let changed = false;
+    const next = value.map((item) => {
+      const updated = { ...item } as Record<string, unknown>;
+      for (const i of itemInputs) {
+        const resolved = resolveDefaultFrom(getDefaultFrom(i.schema), formValues);
+        if (resolved !== undefined && updated[i.name] !== resolved) {
+          updated[i.name] = resolved;
+          changed = true;
+        }
+      }
+      return updated;
+    });
+    if (changed) onChange(next);
+    // onChange/value excluded: this fires on dependency change, not identity
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depsKey, itemInputs]);
+
   // Add new item
   const handleAdd = useCallback(() => {
     if (items.length >= maxItems || !itemSchema) return;
@@ -302,29 +355,27 @@ export default function RepeatableObjectInput({
     [items, onChange, layerInputNames, itemSchema, schemaDefs]
   );
 
-  // Handle filter change for a nested layer input
+  // Handle filter change for a nested layer input. The parent is notified from
+  // the event handler itself — doing it inside a setState updater would run it
+  // during React's render pass and update the parent mid-render.
   const handleItemFilterChange = useCallback(
     (index: number, propName: string, filter: Record<string, unknown> | undefined) => {
-      setItemFilters((prev) => {
-        const newFilters = {
-          ...prev,
-          [index]: {
-            ...(prev[index] || {}),
-            [propName]: filter,
-          },
-        };
+      const newFilters = {
+        ...itemFiltersRef.current,
+        [index]: {
+          ...(itemFiltersRef.current[index] || {}),
+          [propName]: filter,
+        },
+      };
+      itemFiltersRef.current = newFilters;
 
-        // Notify parent immediately with updated filters
-        if (onNestedFiltersChange) {
-          const filtersArray: Record<string, Record<string, unknown> | undefined>[] = [];
-          for (let i = 0; i < items.length; i++) {
-            filtersArray.push(newFilters[i] || {});
-          }
-          onNestedFiltersChange(filtersArray);
+      if (onNestedFiltersChange) {
+        const filtersArray: Record<string, Record<string, unknown> | undefined>[] = [];
+        for (let i = 0; i < items.length; i++) {
+          filtersArray.push(newFilters[i] || {});
         }
-
-        return newFilters;
-      });
+        onNestedFiltersChange(filtersArray);
+      }
     },
     [items.length, onNestedFiltersChange]
   );

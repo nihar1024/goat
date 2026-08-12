@@ -17,6 +17,9 @@ import type { ProcessedInput } from "@/types/map/ogc-processes";
 import FormLabelHelper from "@/components/common/FormLabelHelper";
 import SliderInput from "@/components/map/panels/common/SliderInput";
 
+const DECIMAL_INPUT_PATTERN = /^-?\d*\.?\d*$/;
+const INTEGER_INPUT_PATTERN = /^-?\d*$/;
+
 interface NumberInputProps {
   input: ProcessedInput;
   value: number | undefined;
@@ -75,6 +78,7 @@ export default function NumberInput({
   const min = effectiveSchema.minimum;
   const max = effectiveSchema.maximum;
   const hasRange = min !== undefined && max !== undefined;
+  const isInteger = effectiveSchema.type === "integer";
 
   // Resolve dynamic max from another field's value (or a literal cap).
   // Each entry in `fields` can be:
@@ -131,6 +135,10 @@ export default function NumberInput({
     (val: number | undefined): string | null => {
       if (val === undefined) return null;
       if (Number.isNaN(val)) return t("invalid_number");
+      // Reject rather than round: a fraction the user never sees corrected is
+      // a silently different request. Typing one is already blocked, so this
+      // catches values arriving from a saved config or a stale default.
+      if (isInteger && !Number.isInteger(val)) return t("invalid_whole_number");
       if (min !== undefined && val < min) return `Value must be at least ${min}`;
       if (max !== undefined && val > max) return `Value must be at most ${max}`;
       // The bounds are interpolated into the message, so the limit strings never
@@ -145,7 +153,7 @@ export default function NumberInput({
       }
       return null;
     },
-    [min, max, dynamicMin, dynamicMax, dynamicMessage, t]
+    [min, max, isInteger, dynamicMin, dynamicMax, dynamicMessage, t]
   );
 
   // Clear error when value becomes valid (e.g. when the referenced field changes)
@@ -167,13 +175,13 @@ export default function NumberInput({
     onChange(newValue);
   };
 
-  // Allow only characters that can form a valid (signed, decimal) number.
-  // Empty string is allowed (means "cleared"). Anything else must match the
-  // pattern below — no letters, no scientific notation, no double signs/dots.
-  const NUMERIC_INPUT_PATTERN = /^-?\d*\.?\d*$/;
+  // Allow only characters that can form a valid signed number. Empty string is
+  // allowed (means "cleared"). Anything else must match the pattern — no
+  // letters, no scientific notation, no double signs/dots. An `integer` schema
+  // drops the decimal point, so a fractional value can't be typed or pasted.
   const handleTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
-    if (next === "" || NUMERIC_INPUT_PATTERN.test(next)) {
+    if (next === "" || (isInteger ? INTEGER_INPUT_PATTERN : DECIMAL_INPUT_PATTERN).test(next)) {
       setDraft(next);
     }
   };
@@ -238,7 +246,7 @@ export default function NumberInput({
       <FormLabelHelper label={label} tooltip={input.description} color="inherit" />
       <TextField
         type="text"
-        inputMode="decimal"
+        inputMode={isInteger ? "numeric" : "decimal"}
         size="small"
         value={draft}
         onChange={handleTextChange}

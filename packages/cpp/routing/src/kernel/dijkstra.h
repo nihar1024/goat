@@ -12,20 +12,20 @@
 namespace routing::kernel
 {
 
-    // Reusable scratch for running many bounded single-source Dijkstras over
-    // the *same* graph (e.g. one per opportunity in a heatmap). Avoids the
-    // dominant cost of the naive version — reallocating and zero-filling two
-    // node_count-sized arrays per call — by generation-stamping: `dist[v]` is
-    // valid only when `gen[v] == cur`, so resetting a run is O(1) (++cur).
+    // Reusable scratch for running many bounded Dijkstras over the *same* graph
+    // (e.g. one per opportunity in a heatmap). Avoids the dominant cost of the
+    // naive version — reallocating and zero-filling two node_count-sized arrays
+    // per call — by generation-stamping: `cost[v]` is valid only when
+    // `gen[v] == cur`, so resetting a run is O(1) (++cur).
     struct DijkstraScratch
     {
-        std::vector<double> dist;
-        std::vector<std::uint32_t> gen;   // gen[v]==cur ⟺ dist[v] set this run
+        std::vector<double> cost;
+        std::vector<std::uint32_t> gen;   // gen[v]==cur ⟺ cost[v] set this run
         std::vector<std::uint32_t> done;  // done[v]==cur ⟺ v settled this run
         std::uint32_t cur = 0u;
 
-        explicit DijkstraScratch(std::size_t n)
-            : dist(n), gen(n, 0u), done(n, 0u) {}
+        explicit DijkstraScratch(std::size_t node_count)
+            : cost(node_count), gen(node_count, 0u), done(node_count, 0u) {}
 
         void begin()
         {
@@ -41,71 +41,29 @@ namespace routing::kernel
         bool reached(std::int32_t v) const { return gen[v] == cur; }
     };
 
-    // Bounded single-source Dijkstra using reusable scratch. Returns the list
-    // of settled nodes (final cost < travel_budget); their cost is in
-    // scratch.dist[v]. Work is O(reached · log reached), not O(node_count).
+    // Bounded multi-source Dijkstra over reusable scratch: every source is
+    // seeded at cost 0, so cost[v] is the cost to the nearest source. Returns
+    // the reached nodes (cost < travel_budget); read their costs from
+    // scratch.cost. Work is O(reached · log reached), not O(node_count).
     inline std::vector<std::int32_t>
-    dijkstra_reuse(std::vector<std::vector<AdjEntry>> const &adj,
-                   std::int32_t start, double travel_budget, bool use_distance,
-                   DijkstraScratch &s)
+    dijkstra_reached(std::vector<std::vector<AdjEntry>> const &adj,
+                     std::vector<std::int32_t> const &sources,
+                     double travel_budget, bool use_distance,
+                     DijkstraScratch &scratch)
     {
-        s.begin();
-        std::vector<std::int32_t> settled;
-        if (start < 0 || start >= static_cast<std::int32_t>(adj.size()))
-            return settled;
-
+        scratch.begin();
+        std::vector<std::int32_t> reached;
         using PQEntry = std::pair<double, std::int32_t>;
         std::priority_queue<PQEntry, std::vector<PQEntry>, std::greater<>> pq;
-        s.dist[start] = 0.0;
-        s.gen[start] = s.cur;
-        pq.push({0.0, start});
-
-        while (!pq.empty())
+        for (std::int32_t src : sources)
         {
-            auto [d, u] = pq.top();
-            pq.pop();
-            if (d >= travel_budget)
-                break;
-            if (s.done[u] == s.cur)
-                continue;  // stale / already settled
-            s.done[u] = s.cur;
-            settled.push_back(u);
-
-            for (auto const &[v, w] : adj[u])
-            {
-                double const edge_cost = use_distance ? w : (w / 60.0);
-                double const new_dist = d + edge_cost;
-                if (s.gen[v] != s.cur || new_dist < s.dist[v])
-                {
-                    s.dist[v] = new_dist;
-                    s.gen[v] = s.cur;
-                    pq.push({new_dist, v});
-                }
-            }
-        }
-        return settled;
-    }
-
-    // Multi-source variant: all starts seeded at cost 0, so dist[v] is the cost
-    // to the nearest start.
-    inline std::vector<std::int32_t>
-    dijkstra_reuse(std::vector<std::vector<AdjEntry>> const &adj,
-                   std::vector<std::int32_t> const &starts, double travel_budget,
-                   bool use_distance, DijkstraScratch &s)
-    {
-        s.begin();
-        std::vector<std::int32_t> settled;
-        using PQEntry = std::pair<double, std::int32_t>;
-        std::priority_queue<PQEntry, std::vector<PQEntry>, std::greater<>> pq;
-        for (std::int32_t start : starts)
-        {
-            if (start < 0 || start >= static_cast<std::int32_t>(adj.size()))
+            if (src < 0 || src >= static_cast<std::int32_t>(adj.size()))
                 continue;
-            if (s.gen[start] != s.cur)
+            if (scratch.gen[src] != scratch.cur)
             {
-                s.dist[start] = 0.0;
-                s.gen[start] = s.cur;
-                pq.push({0.0, start});
+                scratch.cost[src] = 0.0;
+                scratch.gen[src] = scratch.cur;
+                pq.push({0.0, src});
             }
         }
         while (!pq.empty())
@@ -114,23 +72,23 @@ namespace routing::kernel
             pq.pop();
             if (d >= travel_budget)
                 break;
-            if (s.done[u] == s.cur)
+            if (scratch.done[u] == scratch.cur)
                 continue;
-            s.done[u] = s.cur;
-            settled.push_back(u);
+            scratch.done[u] = scratch.cur;
+            reached.push_back(u);
             for (auto const &[v, w] : adj[u])
             {
                 double const edge_cost = use_distance ? w : (w / 60.0);
-                double const new_dist = d + edge_cost;
-                if (s.gen[v] != s.cur || new_dist < s.dist[v])
+                double const new_cost = d + edge_cost;
+                if (scratch.gen[v] != scratch.cur || new_cost < scratch.cost[v])
                 {
-                    s.dist[v] = new_dist;
-                    s.gen[v] = s.cur;
-                    pq.push({new_dist, v});
+                    scratch.cost[v] = new_cost;
+                    scratch.gen[v] = scratch.cur;
+                    pq.push({new_cost, v});
                 }
             }
         }
-        return settled;
+        return reached;
     }
 
     // Build adjacency list from flat SubNetwork arrays.
@@ -176,29 +134,33 @@ namespace routing::kernel
         return adj;
     }
 
-    // One-to-all Dijkstra from multiple start vertices.
-    // travel_budget: maximum cost to explore (seconds for time mode, meters for
-    // distance). Returns cost array of size node_count (unreachable = +inf).
+    // Bounded multi-source Dijkstra returning a cost array of size node_count
+    // (unreachable = +inf). travel_budget caps exploration: minutes for time
+    // mode, meters for distance. Each source carries its own initial cost — PT
+    // egress seeds destination stops at their transit cost; the overload below
+    // seeds every source at 0.
     inline std::vector<double>
     dijkstra(std::vector<std::vector<AdjEntry>> const &adj,
-             std::vector<int32_t> const &start_vertices,
+             std::vector<std::pair<std::int32_t, double>> const &sources,
              double travel_budget, bool use_distance)
     {
-        int32_t n = static_cast<int32_t>(adj.size());
+        std::int32_t const node_count = static_cast<std::int32_t>(adj.size());
         constexpr double kInf = std::numeric_limits<double>::infinity();
-        std::vector<double> dist(n, kInf);
-        std::vector<bool> visited(n, false);
+        std::vector<double> cost(node_count, kInf);
+        std::vector<bool> visited(node_count, false);
 
-        // min-heap: (cost, node)
-        using PQEntry = std::pair<double, int32_t>;
+        using PQEntry = std::pair<double, std::int32_t>;
         std::priority_queue<PQEntry, std::vector<PQEntry>, std::greater<>> pq;
 
-        for (auto s : start_vertices)
+        for (auto const &[src, initial_cost] : sources)
         {
-            if (s >= 0 && s < n)
+            if (src >= 0 && src < node_count && initial_cost < travel_budget)
             {
-                dist[s] = 0.0;
-                pq.push({0.0, s});
+                if (initial_cost < cost[src])
+                {
+                    cost[src] = initial_cost;
+                    pq.push({initial_cost, src});
+                }
             }
         }
 
@@ -214,68 +176,29 @@ namespace routing::kernel
 
             for (auto const &[v, w] : adj[u])
             {
-                // Convert cost to minutes if time-based (costs stored in seconds)
-                double edge_cost = use_distance ? w : (w / 60.0);
-                double new_dist = dist[u] + edge_cost;
-                if (new_dist < dist[v])
+                double const edge_cost = use_distance ? w : (w / 60.0);
+                double const new_cost = cost[u] + edge_cost;
+                if (new_cost < cost[v])
                 {
-                    dist[v] = new_dist;
-                    pq.push({new_dist, v});
+                    cost[v] = new_cost;
+                    pq.push({new_cost, v});
                 }
             }
         }
-        return dist;
+        return cost;
     }
 
-    // Multi-source Dijkstra where each source starts with a pre-set cost.
-    // Used for egress: destination stops seed the search at their transit cost.
+    // Zero-cost sources: every source enters the search at 0.
     inline std::vector<double>
     dijkstra(std::vector<std::vector<AdjEntry>> const &adj,
-             std::vector<std::pair<int32_t, double>> const &starts_with_costs,
-             double travel_budget, bool use_distance)
+             std::vector<std::int32_t> const &sources, double travel_budget,
+             bool use_distance)
     {
-        int32_t n = static_cast<int32_t>(adj.size());
-        constexpr double kInf = std::numeric_limits<double>::infinity();
-        std::vector<double> dist(n, kInf);
-        std::vector<bool> visited(n, false);
-
-        using PQEntry = std::pair<double, int32_t>;
-        std::priority_queue<PQEntry, std::vector<PQEntry>, std::greater<>> pq;
-
-        for (auto const &[s, initial_cost] : starts_with_costs)
-        {
-            if (s >= 0 && s < n && initial_cost < travel_budget)
-            {
-                if (initial_cost < dist[s])
-                {
-                    dist[s] = initial_cost;
-                    pq.push({initial_cost, s});
-                }
-            }
-        }
-
-        while (!pq.empty())
-        {
-            auto [d, u] = pq.top();
-            pq.pop();
-            if (d >= travel_budget)
-                break;
-            if (visited[u])
-                continue;
-            visited[u] = true;
-
-            for (auto const &[v, w] : adj[u])
-            {
-                double edge_cost = use_distance ? w : (w / 60.0);
-                double new_dist  = dist[u] + edge_cost;
-                if (new_dist < dist[v])
-                {
-                    dist[v] = new_dist;
-                    pq.push({new_dist, v});
-                }
-            }
-        }
-        return dist;
+        std::vector<std::pair<std::int32_t, double>> seeded;
+        seeded.reserve(sources.size());
+        for (std::int32_t src : sources)
+            seeded.emplace_back(src, 0.0);
+        return dijkstra(adj, seeded, travel_budget, use_distance);
     }
 
 } // namespace routing::kernel

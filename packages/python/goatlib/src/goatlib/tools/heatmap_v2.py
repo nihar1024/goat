@@ -355,13 +355,26 @@ class OpportunityV2PointClosestAverage(OpportunityV2PointBase):
             field_order=5,
             label_key="n_destinations",
             widget="number",
-            # min/max live in widget_options (not ge/le) so the field renders
-            # as a number input rather than a slider; the 1–10 bound is
-            # enforced server-side by the analysis-layer schema.
+            # Bounds go through max_value_from, which NumberInput validates and
+            # messages on. Deliberately NOT ge/le: those emit schema
+            # minimum/maximum, and NumberInput switches to a slider whenever
+            # both are set and their range is <= 10000 — a 1..10 field would
+            # become a slider. Bare widget_options min/max are read by nothing.
+            # Out-of-range payloads are still rejected server-side by the
+            # analysis-layer OpportunityV2 (ge=1, le=10) and the C++ closest_k
+            # check.
             widget_options={
-                "min": N_DESTINATIONS_MIN,
-                "max": N_DESTINATIONS_MAX,
                 "step": 1,
+                "max_value_from": {
+                    "fields": [
+                        {
+                            "value": N_DESTINATIONS_MAX,
+                            "min": N_DESTINATIONS_MIN,
+                            "message": "n_destinations_limit_message",
+                        }
+                    ],
+                    "message": "n_destinations_limit_message",
+                },
             },
             visible_when={"input_path": {"$ne": None}},
         ),

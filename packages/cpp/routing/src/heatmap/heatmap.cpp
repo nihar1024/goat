@@ -4,6 +4,7 @@
 
 #include "../data/duckdb_setup.h"
 #include "../kernel/dijkstra.h"
+#include "../kernel/dijkstra_k_nearest.h"
 #include "../output/hex_resolution.h"
 #include "../output/sql_export.h"
 #include "../pt/nigiri_routing.h"
@@ -37,6 +38,15 @@ using output::write_query_to_parquet;
 
 namespace
 {
+
+// Arc-length spacing for sampling a reached edge's polyline, in metres.
+// Coarser than the catchment hexagon builder's 20 m: heatmaps bin to H3 8/9/10,
+// whose cells are wide enough that 40 m still lands a sample in every covered
+// cell. Do not raise this as a performance tweak — it moves where sample points
+// fall, so boundary cells gain or lose their only sample and their min cost
+// shifts. Measured at 50 m: 14% fewer samples, no wall-clock gain at 300k
+// samples, and 4 cells plus one score changed by >100%.
+constexpr double kHeatmapSampleSpacingM = 40.0;
 
 // Resettable stopwatch — each call returns ms since the previous call
 // (or since construction).
@@ -118,7 +128,7 @@ void build_reach_per_opp(duckdb::Connection &con,
                          std::string const &node_dir, int32_t h3_resolution,
                          double spacing_m, std::string const &out_table,
                          std::vector<std::pair<int32_t, int32_t>> const &seed_offsets,
-                         PhaseTimer &timer)
+                         PhaseTimer &timer, int32_t closest_k = 1)
 {
     network::HeatmapNetworkPrepInput prep_in{
         .opportunities = opp_points,
@@ -140,7 +150,7 @@ void build_reach_per_opp(duckdb::Connection &con,
     auto const &net = prep.net;
 
     // Incident edges by source node, as a CSR built once and reused across all
-    // opportunities, so reachability sampling can walk only the edges touched
+    // opportunities, so reachability sampling can walk only the edges labelled
     // by each reached subgraph instead of scanning every edge per opportunity.
     std::vector<int32_t> inc_off(net.node_count + 1, 0);
     for (size_t i = 0; i < net.source.size(); ++i)
@@ -213,9 +223,57 @@ void build_reach_per_opp(duckdb::Connection &con,
             refresh_pointers();
             chunk_pos = 0;
         };
+
         size_t unsnapped = 0;
         size_t total_samples = 0;
         size_t last_drain_at = 0;
+
+        // Walk one reached edge, emitting a sample every spacing_m of arc
+        // length with cost linear in the arc fraction between the endpoint
+        // costs. Uses the edge polyline when geometry is loaded and the
+        // endpoint chord otherwise. Shared by both sampling paths below, which
+        // differ only in how they obtain (cost_u, cost_t) for an opportunity.
+        auto sample_edge = [&](int32_t const eidx, int32_t const u,
+                               int32_t const t, int32_t const opp_idx,
+                               double const cost_u, double const cost_t) {
+            auto const &geom = net.edges[eidx].geometry;
+            Point3857 const chord[2] = {net.node_coords[u], net.node_coords[t]};
+            Point3857 const *pts = (geom.size() >= 2) ? geom.data() : chord;
+            size_t const npts = (geom.size() >= 2) ? geom.size() : 2;
+
+            double total = 0.0;
+            for (size_t j = 1; j < npts; ++j)
+            {
+                double const ex = pts[j].x - pts[j - 1].x;
+                double const ey = pts[j].y - pts[j - 1].y;
+                total += std::sqrt(ex * ex + ey * ey);
+            }
+            if (total <= spacing_m) return;  // endpoints suffice
+
+            double next_s = spacing_m;  // interior points only
+            double acc = 0.0;
+            for (size_t j = 1; j < npts && next_s < total; ++j)
+            {
+                double const ex = pts[j].x - pts[j - 1].x;
+                double const ey = pts[j].y - pts[j - 1].y;
+                double const seg = std::sqrt(ex * ex + ey * ey);
+                while (next_s < total && next_s <= acc + seg)
+                {
+                    double const segfrac = (seg > 0.0) ? (next_s - acc) / seg : 0.0;
+                    double const frac = next_s / total;
+                    double const cost = cost_u + frac * (cost_t - cost_u);
+                    next_s += spacing_m;
+                    if (cost > max_cost) continue;
+                    lng_col[chunk_pos] = merc_x_to_lng(pts[j - 1].x + segfrac * ex);
+                    lat_col[chunk_pos] = merc_y_to_lat(pts[j - 1].y + segfrac * ey);
+                    opp_col[chunk_pos] = opp_idx;
+                    cost_col[chunk_pos] = cost;
+                    if (++chunk_pos == STANDARD_VECTOR_SIZE) flush_chunk();
+                    ++total_samples;
+                }
+                acc += seg;
+            }
+        };
         // Aggregate the current batch of _hm_samples into <out_table> and clear
         // the scratch. Called only at opportunity boundaries (see invariant
         // above). Recreating the table avoids MVCC bloat from repeated DELETEs.
@@ -231,8 +289,102 @@ void build_reach_per_opp(duckdb::Connection &con,
             appender = std::make_unique<duckdb::Appender>(con, "_hm_samples");
             last_drain_at = total_samples;
         };
-        for (size_t oi = 0; oi < seed_offsets.size(); ++oi)
+        // ------------------------------------------------------------------
+        // k > 1 ClosestAverage: one k-nearest traversal instead of one
+        // Dijkstra per opportunity. Each node keeps its k cheapest distinct
+        // opportunities; samples are emitted per label, so the output shape
+        // and the reducer are unchanged.
+        //
+        // Edge samples need the same opportunity at both endpoints, and
+        // pruning can drop one side, so an edge-crossed cell may miss a
+        // candidate the per-opportunity path would have found. Validate
+        // against that path before trusting this for a given workload.
+        // ------------------------------------------------------------------
+        if (closest_k > 1)
         {
+            std::vector<kernel::DijkstraSource> sources;
+            sources.reserve(prep.opportunity_nodes.size());
+            for (size_t oi = 0; oi < seed_offsets.size(); ++oi)
+            {
+                auto const [start_seed, count] = seed_offsets[oi];
+                bool any = false;
+                for (int32_t j = 0; j < count; ++j)
+                {
+                    int32_t const n = prep.opportunity_nodes[start_seed + j];
+                    if (n < 0) continue;
+                    sources.push_back({n, static_cast<int32_t>(oi)});
+                    any = true;
+                }
+                if (!any) ++unsnapped;
+            }
+
+            kernel::KNearestScratch k_scratch(
+                static_cast<size_t>(net.node_count), closest_k);
+            auto const labelled = kernel::dijkstra_k_nearest(
+                prep.rev_adj, sources, max_cost, use_distance, k_scratch);
+
+            for (int32_t u : labelled)
+            {
+                auto const &c = net.node_coords[u];
+                double const lng = merc_x_to_lng(c.x);
+                double const lat = merc_y_to_lat(c.y);
+                std::size_t const b = k_scratch.base(u);
+                int32_t const n = k_scratch.n_labels(u);
+                for (int32_t i = 0; i < n; ++i)
+                {
+                    lng_col[chunk_pos] = lng;
+                    lat_col[chunk_pos] = lat;
+                    opp_col[chunk_pos] = k_scratch.group[b + i];
+                    cost_col[chunk_pos] = k_scratch.cost[b + i];
+                    if (++chunk_pos == STANDARD_VECTOR_SIZE) flush_chunk();
+                    ++total_samples;
+                }
+            }
+            for (int32_t u : labelled)
+            {
+                std::size_t const bu = k_scratch.base(u);
+                int32_t const nu = k_scratch.n_labels(u);
+                if (nu == 0) continue;
+                for (int32_t ei = inc_off[u]; ei < inc_off[u + 1]; ++ei)
+                {
+                    int32_t const eidx = inc_edges[ei];
+                    int32_t const t = net.target[eidx];
+                    if (t < 0 || k_scratch.n_labels(t) == 0) continue;
+
+                    for (int32_t li = 0; li < nu; ++li)
+                    {
+                        int32_t const opp = k_scratch.group[bu + li];
+                        double const cost_u = k_scratch.cost[bu + li];
+                        double cost_t = k_scratch.cost_of(t, opp);
+                        if (cost_t < 0.0)
+                        {
+                            // Pruned or unreached at the far end. A label cost is the
+                            // cost from a node *to* the opportunity, so if the
+                            // edge is traversable t->u then
+                            //   cost(t->opp) <= reverse_cost + cost(u->opp),
+                            // a valid upper bound. Using it keeps the
+                            // opportunity in play instead of dropping the whole
+                            // interpolation (which loses edge-crossed cells).
+                            // Bounds only overestimate, so a sample can come out
+                            // too expensive but never too cheap. One-way edges
+                            // admit no bound and still skip.
+                            double const rc = net.reverse_cost[eidx];
+                            if (rc < 0.0 || rc >= 99999.0) continue;
+                            cost_t = cost_u + (use_distance ? rc : rc / 60.0);
+                        }
+                        sample_edge(eidx, u, t, opp, cost_u, cost_t);
+                    }
+                    // A single pass cannot drain on opportunity boundaries, so
+                    // batches may split a (cell, opp) group; the consolidation
+                    // after the loop folds those duplicates back together.
+                    if (total_samples - last_drain_at >= kAggFlushRows) drain();
+                }
+            }
+            drain();
+        }
+        else
+        for (size_t oi = 0; oi < seed_offsets.size(); ++oi)
+        {   // per-opportunity path (gravity, 2SFCA, ClosestAverage k == 1)
             auto const [start_seed, count] = seed_offsets[oi];
             std::vector<int32_t> group_nodes;
             group_nodes.reserve(count);
@@ -243,7 +395,7 @@ void build_reach_per_opp(duckdb::Connection &con,
             }
             if (group_nodes.empty()) { ++unsnapped; continue; }
             // cost[v] = distance from v to the nearest seed.
-            auto const reached = kernel::dijkstra_reuse(
+            auto const reached = kernel::dijkstra_reached(
                 prep.rev_adj, group_nodes, max_cost, use_distance, scratch);
             int32_t const opp_idx = static_cast<int32_t>(oi);
 
@@ -255,65 +407,21 @@ void build_reach_per_opp(duckdb::Connection &con,
                 lng_col[chunk_pos] = merc_x_to_lng(c.x);
                 lat_col[chunk_pos] = merc_y_to_lat(c.y);
                 opp_col[chunk_pos] = opp_idx;
-                cost_col[chunk_pos] = scratch.dist[u];
+                cost_col[chunk_pos] = scratch.cost[u];
                 if (++chunk_pos == STANDARD_VECTOR_SIZE) flush_chunk();
                 ++total_samples;
             }
             for (int32_t u : reached)
             {
-                double const su = scratch.dist[u];
+                double const cost_u = scratch.cost[u];
                 for (int32_t k = inc_off[u]; k < inc_off[u + 1]; ++k)
                 {
                     int32_t const eidx = inc_edges[k];
                     int32_t const t = net.target[eidx];
                     if (t < 0 || !scratch.reached(t)) continue;
-                    double const tcost = scratch.dist[t];
+                    double const cost_t = scratch.cost[t];
 
-                    // Walk the edge polyline (source->target): a sample every
-                    // spacing_m of arc length, cost linear by arc fraction;
-                    // chord fallback if geometry missing.
-                    auto const &geom = net.edges[eidx].geometry;
-                    Point3857 const chord[2] = {net.node_coords[u],
-                                                net.node_coords[t]};
-                    Point3857 const *pts =
-                        (geom.size() >= 2) ? geom.data() : chord;
-                    size_t const npts = (geom.size() >= 2) ? geom.size() : 2;
-
-                    double total = 0.0;
-                    for (size_t j = 1; j < npts; ++j)
-                    {
-                        double const ex = pts[j].x - pts[j - 1].x;
-                        double const ey = pts[j].y - pts[j - 1].y;
-                        total += std::sqrt(ex * ex + ey * ey);
-                    }
-                    if (total <= spacing_m) continue;  // endpoints suffice
-
-                    double next_s = spacing_m;  // interior points only
-                    double acc = 0.0;
-                    for (size_t j = 1; j < npts && next_s < total; ++j)
-                    {
-                        double const ex = pts[j].x - pts[j - 1].x;
-                        double const ey = pts[j].y - pts[j - 1].y;
-                        double const seg = std::sqrt(ex * ex + ey * ey);
-                        while (next_s < total && next_s <= acc + seg)
-                        {
-                            double const segfrac =
-                                (seg > 0.0) ? (next_s - acc) / seg : 0.0;
-                            double const frac = next_s / total;
-                            double const cost = su + frac * (tcost - su);
-                            next_s += spacing_m;
-                            if (cost > max_cost) continue;
-                            lng_col[chunk_pos] =
-                                merc_x_to_lng(pts[j - 1].x + segfrac * ex);
-                            lat_col[chunk_pos] =
-                                merc_y_to_lat(pts[j - 1].y + segfrac * ey);
-                            opp_col[chunk_pos] = opp_idx;
-                            cost_col[chunk_pos] = cost;
-                            if (++chunk_pos == STANDARD_VECTOR_SIZE) flush_chunk();
-                            ++total_samples;
-                        }
-                        acc += seg;
-                    }
+                    sample_edge(eidx, u, t, opp_idx, cost_u, cost_t);
                 }
             }
             // Opportunity boundary: safe to aggregate the batch (this opp's
@@ -321,6 +429,16 @@ void build_reach_per_opp(duckdb::Connection &con,
             if (total_samples - last_drain_at >= kAggFlushRows) drain();
         }
         drain();
+        if (closest_k > 1)
+        {
+            auto cc = con.Query(
+                "CREATE OR REPLACE TEMP TABLE " + out_table + " AS SELECT cell,"
+                " opp_idx, MIN(min_cost) AS min_cost FROM " + out_table +
+                " GROUP BY cell, opp_idx");
+            if (cc->HasError())
+                throw std::runtime_error("k-nearest consolidation failed: " +
+                                         cc->GetError());
+        }
         std::fprintf(stderr,
                      "[Pipeline] Dijkstras + sampling (%zu opps, %zu unsnapped, "
                      "%zu samples): %.0f ms\n",
@@ -754,7 +872,7 @@ void run_pt(HeatmapConfig const &cfg, duckdb::Connection &con,
     build_reach_per_opp(con, grp_points, cfg.access_mode, CostType::Time,
                         static_cast<double>(cfg.access_max_time),
                         default_mode_speed(cfg.access_mode), cfg.edge_dir,
-                        cfg.node_dir, output_resolution, /*spacing_m=*/40.0,
+                        cfg.node_dir, output_resolution, kHeatmapSampleSpacingM,
                         "_direct_per_opp", direct_offsets, timer);
 
     // 6b. PT-chain cells: boarding-stop cost + access walk, per (cell, group).
@@ -887,16 +1005,53 @@ void run_street(HeatmapConfig const &cfg, duckdb::Connection &con,
     }
 
     int32_t const h3_resolution = output::hex_resolution_for_mode(cfg.mode);
-    // 40 m sampling for heatmaps (vs the catchment hexagon builder's 20 m):
-    // H3-9/10 cells are large enough that 40 m still lands a sample in every
-    // covered cell.
-    constexpr double kHeatmapSampleSpacingM = 40.0;
 
+    // ClosestAverage with k = 1 asks only "how far is the nearest opportunity",
+    // which one multi-source Dijkstra answers directly — cost[v] is already the
+    // cost to the nearest source. Collapsing every opportunity into a single group
+    // replaces N per-opportunity traversals with one.
+    //
+    // Exact, not an approximation: a cell's cost is the min over its sampled
+    // points, and min commutes with the min over opportunities, so
+    //   min_p min_o cost(p,o) == min_o min_p cost(p,o) == the cell's nearest.
+    // The reducer then sees one row per cell; with k = 1 its take is that row,
+    // so its output is unchanged.
+    //
+    // k > 1 still needs per-opportunity costs (the k smallest distinct
+    // opportunities per cell), so it keeps the per-opportunity path.
+    bool const collapse_to_nearest =
+        cfg.heatmap_type == HeatmapType::ClosestAverage && cfg.closest_k == 1;
+    if (collapse_to_nearest)
+    {
+        seed_offsets.assign(
+            1, {0, static_cast<int32_t>(opp_points.size())});
+    }
+
+    // k == 1 collapses to a single nearest-source traversal above; k > 1 uses
+    // the k-nearest traversal inside build_reach_per_opp. Every other formula
+    // needs per-opportunity costs and keeps closest_k = 1.
+    int32_t const closest_k =
+        (cfg.heatmap_type == HeatmapType::ClosestAverage && !collapse_to_nearest)
+            ? std::max(1, cfg.closest_k)
+            : 1;
     build_reach_per_opp(con, opp_points, cfg.mode, cfg.cost_type, cfg.max_cost,
                         cfg.speed_km_h, cfg.edge_dir, cfg.node_dir,
                         h3_resolution, kHeatmapSampleSpacingM, "_hm_per_opp",
-                        seed_offsets, timer);
-    build_opp_meta(con, cfg.opportunities, h3_resolution);
+                        seed_offsets, timer, closest_k);
+    if (collapse_to_nearest)
+    {
+        // One synthetic meta row to match the single emitted opp_idx. weight and
+        // rep are unused by the ClosestAverage reducer (it reads only opp_count),
+        // and opp_count = 1 gives take = 1 at k = 1.
+        std::vector<Opportunity> collapsed(1);
+        collapsed[0].weight = 1.0;
+        collapsed[0].rep = cfg.opportunities.front().rep;
+        build_opp_meta(con, collapsed, h3_resolution);
+    }
+    else
+    {
+        build_opp_meta(con, cfg.opportunities, h3_resolution);
+    }
     // _hm_per_opp + _hm_opp_meta are now built; build_reachability_relation's
     // emit callback decides whether to reduce (heatmap) or export (OD matrix).
 }

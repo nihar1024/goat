@@ -70,7 +70,49 @@ Legen Sie fest, wie Ihr Dashboard beim Teilen in sozialen Medien oder Messenger-
 
 ## Interaktionen
 
-Klicken Sie auf `Interaktionen verwalten`, um den Interaktionseditor zu öffnen. Interaktionen verknüpfen Dashboard-Elemente miteinander — zum Beispiel kann das Klicken auf eine Layer-Gruppe den aktiven Tab in einem Widget wechseln. Klicken Sie auf `Interaktion hinzufügen`, um eine neue Interaktion zu erstellen.
+Interaktionen verknüpfen Dashboard-Elemente miteinander, sodass eine Aktion des Betrachters automatisch eine passende Änderung an einem anderen Element auslöst. Zum Beispiel kann das Aktivieren einer Layer-Gruppe den aktiven Tab in einem Widget wechseln, oder das Ein- und Ausblenden eines Layers kann zugehörige Layer ebenfalls anzeigen und ausblenden.
+
+Klicken Sie auf `Interaktionen verwalten`, um den Interaktionseditor zu öffnen. Jede Interaktion ist eine Regel aus einem **Auslöser** (`Wenn` etwas passiert) und einer **Aktion** (was daraufhin geschieht). Klicken Sie auf `Interaktion hinzufügen`, um eine neue Regel zu erstellen, und wählen Sie anschließend den Auslöser unter `Wenn`. Mit dem Schalter `Aktiviert` können Sie eine einzelne Interaktion ein- oder ausschalten, ohne sie zu löschen.
+
+GOAT unterstützt zwei Arten von Interaktionen:
+
+### Layer-Gruppe aktiviert → Tab wechseln
+
+Wenn ein Betrachter eine Layer-Gruppe aktiviert, wechselt ein Tabs-Widget zu einem von Ihnen gewählten Tab.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Setzen Sie <code>Wenn</code> auf <code>Layer-Gruppe aktiviert</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Wählen Sie das <code>Ziel-Widget</code> — das Tabs-Widget, dessen aktiver Tab gewechselt werden soll.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Ordnen Sie unter <code>Layer-Gruppe</code> und <code>Tab</code> jeder Layer-Gruppe den Tab zu, der geöffnet werden soll. Klicken Sie auf <code>Zuordnung hinzufügen</code>, um weitere Paare hinzuzufügen.</div>
+</div>
+
+### Layer-Sichtbarkeit geändert → Sichtbarkeit synchronisieren
+
+Wenn ein Betrachter einen Layer ein- oder ausblendet, werden ein oder mehrere andere Layer entsprechend ein- oder ausgeblendet.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Setzen Sie <code>Wenn</code> auf <code>Layer-Sichtbarkeit geändert</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Wählen Sie den <code>Quell-Layer</code> — den Layer, dessen Sichtbarkeit überwacht wird.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Fügen Sie einen oder mehrere <code>Ziel-Layer</code> hinzu, welche die Sichtbarkeit des Quell-Layers übernehmen sollen. Klicken Sie auf <code>Ziel-Layer hinzufügen</code>, um weitere hinzuzufügen.</div>
+</div>
 
 ---
 

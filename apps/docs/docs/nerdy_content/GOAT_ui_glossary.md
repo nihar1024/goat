@@ -384,6 +384,22 @@ This comprehensive glossary provides English to German translations for all the 
 | Value Labels | Wertbeschriftungen | Show data values on chart elements |
 | Selection Response | Auswahlverhalten | How a widget reacts to map selection |
 | Cross-filter Options | Optionen querfiltern | Settings for cross-widget filtering interaction |
+| **Interactions** | **Interaktionen** | Rules linking dashboard elements so one action triggers a change in another |
+| Manage Interactions | Interaktionen verwalten | Open the interactions editor |
+| Add Interaction | Interaktion hinzufügen | Create a new interaction rule |
+| Enabled | Aktiviert | Toggle an individual interaction on or off |
+| When | Wenn | The trigger condition of an interaction |
+| Layer group activated | Layer-Gruppe aktiviert | Trigger: a layer group is activated |
+| Layer visibility changed | Layer-Sichtbarkeit geändert | Trigger: a layer is shown or hidden |
+| Switch tab | Tab wechseln | Action: switch the active tab of a Tabs widget |
+| Sync visibility | Sichtbarkeit synchronisieren | Action: mirror a layer's visibility onto other layers |
+| Target widget | Ziel-Widget | The Tabs widget whose active tab is changed |
+| Layer group | Layer-Gruppe | The layer group used as an interaction source |
+| Tab | Tab | The tab a widget switches to |
+| Add mapping | Zuordnung hinzufügen | Add a layer group → tab pair |
+| Source layer | Quell-Layer | The layer whose visibility is watched |
+| Target layers | Ziel-Layer | Layers that mirror the source layer's visibility |
+| Add target layer | Ziel-Layer hinzufügen | Add a target layer to sync |
 
 ## Expression & Formula Builder
 

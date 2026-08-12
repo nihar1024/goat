@@ -70,7 +70,49 @@ Customize how your dashboard appears when shared via social media or messaging a
 
 ## Interactions
 
-Click `Manage Interactions` to open the interactions editor. Interactions link dashboard elements together — for example, clicking a layer group can switch the active tab in a widget. Click `Add Interaction` to create a new one.
+Interactions link dashboard elements together, so that one action by the viewer automatically triggers a matching change in another element. For example, activating a layer group can switch the active tab in a widget, or toggling one layer's visibility can show and hide related layers.
+
+Click `Manage Interactions` to open the interactions editor. Each interaction is a rule made of a **trigger** (`When` something happens) and an **action** (what happens in response). Click `Add Interaction` to create a new rule, then choose the trigger under `When`. Use the `Enabled` toggle to turn an individual interaction on or off without deleting it.
+
+GOAT supports two types of interaction:
+
+### Layer group activated → Switch tab
+
+When a viewer activates a layer group, a Tabs widget switches to a tab you choose.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Set <code>When</code> to <code>Layer group activated</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Select the <code>Target widget</code> — the Tabs widget whose active tab should change.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Under <code>Layer group</code> and <code>Tab</code>, map each layer group to the tab it should open. Click <code>Add mapping</code> to add more pairs.</div>
+</div>
+
+### Layer visibility changed → Sync visibility
+
+When a viewer shows or hides a layer, one or more other layers are shown or hidden to match.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Set <code>When</code> to <code>Layer visibility changed</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Select the <code>Source layer</code> — the layer whose visibility is watched.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Add one or more <code>Target layers</code> that should mirror the source layer's visibility. Click <code>Add target layer</code> to add more.</div>
+</div>
 
 ---
 

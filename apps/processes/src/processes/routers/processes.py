@@ -624,11 +624,21 @@ async def execute_process(
             job_inputs["access_token"] = access_token
         # refresh_token is passed from the frontend in the inputs — same exposure as access_token
 
-    # Auto-populate od_matrix_path for heatmap tools based on routing_mode
-    # This allows the field to be hidden in the UI while still being required by the analysis
+    # Auto-populate od_matrix_path from routing_mode so the field can stay hidden
+    # in the UI while the analysis layer still gets it.
+    #
+    # Gated on the tool actually declaring the input rather than on it merely
+    # having a routing_mode: the v2 heatmaps, Huff v2, catchment v2 and the
+    # travel cost matrix all route on the fly and have no od_matrix_path, so
+    # injecting one only put a misleading precomputed-matrix path into their
+    # Windmill job arguments.
+    od_tool = tool_registry.get_tool(process_id)
     if (
-        "od_matrix_path" not in job_inputs or job_inputs.get("od_matrix_path") is None
-    ) and "routing_mode" in job_inputs:
+        od_tool is not None
+        and "od_matrix_path" in od_tool.params_class.model_fields
+        and job_inputs.get("od_matrix_path") is None
+        and "routing_mode" in job_inputs
+    ):
         routing_mode = job_inputs["routing_mode"]
         job_inputs["od_matrix_path"] = (
             f"{settings.TRAVELTIME_MATRICES_DIR}/{routing_mode}/"

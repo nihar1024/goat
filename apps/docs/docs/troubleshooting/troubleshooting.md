@@ -63,7 +63,7 @@ For example, if you use the public transport trip count indicator in an area and
     style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover", marginRight: "8px" }} 
   />
   <span>
-    <strong> To accurately set your starting points on the map, you can visualize the network either directly with the basemap or by using the street network layer in the scenario. </strong>
+    <strong> To accurately set your starting points on the map, you can visualize the network either directly with the basemap or by using the street network layer. </strong>
   </span>
 </div>
 

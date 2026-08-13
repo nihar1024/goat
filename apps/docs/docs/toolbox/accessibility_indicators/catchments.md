@@ -30,13 +30,7 @@ Catchment Area includes the following additional features:
 - **Access and egress mode** — configure how users travel to and from PT stations (walking, cycling, or car).
 
 :::info
-Catchment Area computation is available in specific regions.
-
-When selecting a `Routing type`, GOAT displays a map overlay showing coverage.
-For `Walk`, `Bicycle`, `Pedelec`, and `Car`: **over 30 European countries** are supported.
-For `Public Transport`: Germany, Switzerland, and the Haut-Rhin region of France are supported.
-
-If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll discuss further options.
+Catchment Area computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/).
 :::
 
 ## 2. Example use cases

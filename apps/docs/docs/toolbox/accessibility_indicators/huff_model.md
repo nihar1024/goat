@@ -35,7 +35,7 @@ You can configure the routing type, opportunity layers (with capacity fields), d
 
 :::info
 
-The Huff Model is available in certain regions. Upon selecting a `Routing type`, GOAT displays a map overlay showing the supported coverage area. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us").
+Huff Model computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us").
 
 :::
 

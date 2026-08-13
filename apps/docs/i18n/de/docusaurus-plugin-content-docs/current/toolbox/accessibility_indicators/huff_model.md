@@ -34,7 +34,7 @@ Sie können das Verkehrsmittel, den Gelegenheiten-Layer (mit Kapazitätsfeldern)
 
 :::info
 
-Das Huff-Modell ist in bestimmten Regionen verfügbar. Nach Auswahl eines `Verkehrsmittels` zeigt GOAT eine Kartenüberlagerung mit der unterstützten Abdeckung an. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/kontakt/ "Kontaktieren Sie uns") gerne.
+Die Berechnung des Huff-Modells ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/de/contact/ "Kontaktieren Sie uns") gerne.
 
 :::
 

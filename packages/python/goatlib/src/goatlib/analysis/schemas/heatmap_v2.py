@@ -51,6 +51,7 @@ class GravityDecay(StrEnum):
     exponential = "exponential"
     linear = "linear"
     power = "power"
+    cumulative = "cumulative"
 
 
 class TwoSFCAType(StrEnum):

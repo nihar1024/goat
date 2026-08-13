@@ -180,6 +180,7 @@ namespace routing
         Exponential,  // exp(-(sensitivity/max_sensitivity) × cost/max_cost)
         Linear,       // max(0, 1 - cost/max_cost)
         Power,        // (cost/max_cost)^(-sensitivity/max_sensitivity)
+        Cumulative,   // 1 if cost <= max_cost else 0
     };
 
     enum class TwoSFCAType : uint8_t

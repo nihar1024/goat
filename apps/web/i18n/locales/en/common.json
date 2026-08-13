@@ -540,7 +540,8 @@
       "gaussian": "Gaussian",
       "exponential": "Exponential",
       "linear": "Linear",
-      "power": "Power"
+      "power": "Power",
+      "cumulative": "Cumulative"
     },
     "heatmap_type": {
       "gravity": "Gravity",

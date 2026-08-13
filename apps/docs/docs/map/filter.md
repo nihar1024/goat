@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Filter
 
-**Filter limits data visibility on your map** using logical expressions (e.g., supermarkets with specific names) or spatial expressions (e.g., points within a bounding box). **The filter allows you to focus on relevant information without altering original data.** It works with **point layers** and **polygon layers** containing `number` and `string` data types. 
+**Filter limits data visibility on your map** using logical expressions (e.g., supermarkets with specific names) or spatial expressions (e.g., points within a bounding box). **The filter allows you to focus on relevant information without altering original data.** It works with **point layers** and **polygon layers** containing `number`, `string`, `datetime`, and `boolean` data types. 
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
   <img src={require('/img/map/filter/filter_clicking.gif').default} alt="Filter tool in GOAT" style={{ maxHeight: "auto", maxWidth: "80%", objectFit: "cover"}}/>
@@ -47,7 +47,7 @@ import TabItem from '@theme/TabItem';
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Choose the <code>Operator</code>. Available options vary by data type: number and string.</div>
+  <div class="content">Choose the <code>Operator</code>. Available options vary by data type (<code>number</code>, <code>string</code>, <code>datetime</code>, and <code>boolean</code>).</div>
 </div>
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -58,6 +58,8 @@ import TabItem from '@theme/TabItem';
 | is not  | is not |
 | includes  | includes  |
 | excludes  |  excludes |
+| is blank | is blank |
+| is not blank | is not blank |
 | is at least  | starts with |
 | is less than | ends with |
 | is at most | contains the text |
@@ -66,6 +68,25 @@ import TabItem from '@theme/TabItem';
 |  | is not empty string |
 
 </div>
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
+| Expressions for `datetime` | Expressions for `boolean` |
+| -------|----|
+| is on | is true |
+| is not on | is false |
+| is before | is blank |
+| is after | is not blank |
+| in the last |  |
+| not in the last |  |
+| is between |  |
+| is not between |  |
+
+</div>
+
+:::tip Hint
+For `datetime` fields, choose a date from the **date picker**. **"is between"** uses two dates (**From** and **To**), and **"in the last"** takes a **number of days**. For `boolean` fields, the operator already sets the condition, so no value is needed.
+:::
 
 
 :::tip Hint

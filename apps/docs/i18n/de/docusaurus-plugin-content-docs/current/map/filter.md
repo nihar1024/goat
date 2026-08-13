@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 # Filter
 
 
-**Filter begrenzt die Datensichtbarkeit auf Ihrer Karte** durch logische Ausdrücke (z.B. Supermärkte mit bestimmten Namen) oder räumliche Ausdrücke (z.B. Punkte innerhalb eines Begrenzungsrahmens). **Das Filter-Tool ermöglicht es Ihnen, sich auf relevante Informationen zu konzentrieren, ohne die ursprünglichen Daten zu verändern.** Es funktioniert mit **Punkt-Layern** und **Polygon-Layern**, die `Zahlen` und `String`-Datentypen enthalten.
+**Filter begrenzt die Datensichtbarkeit auf Ihrer Karte** durch logische Ausdrücke (z.B. Supermärkte mit bestimmten Namen) oder räumliche Ausdrücke (z.B. Punkte innerhalb eines Begrenzungsrahmens). **Das Filter-Tool ermöglicht es Ihnen, sich auf relevante Informationen zu konzentrieren, ohne die ursprünglichen Daten zu verändern.** Es funktioniert mit **Punkt-Layern** und **Polygon-Layern**, die `Zahlen`-, `String`-, `Datum`- und `Boolean`-Datentypen enthalten.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
@@ -51,7 +51,7 @@ import TabItem from '@theme/TabItem';
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Wählen Sie den <code>Operator</code>. Verfügbare Optionen variieren je nach Datentyp: Zahl und String.</div>
+  <div class="content">Wählen Sie den <code>Operator</code>. Verfügbare Optionen variieren je nach Datentyp (<code>Zahl</code>, <code>String</code>, <code>Datum</code> und <code>Boolean</code>).</div>
 </div>
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -62,6 +62,8 @@ import TabItem from '@theme/TabItem';
 | ist nicht            | ist nicht              |
 | enthält              | enthält                |
 | schließt aus         | schließt aus           |
+| ist leer             | ist leer               |
+| ist nicht leer       | ist nicht leer         |
 | ist mindestens       | beginnt mit            |
 | ist weniger als      | endet mit              |
 | ist höchstens        | enthält den Text       |
@@ -70,6 +72,25 @@ import TabItem from '@theme/TabItem';
 |                      | ist kein leerer String |
 
 </div>
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+
+| Ausdrücke für `Datum` | Ausdrücke für `Boolean` |
+| --------------------- | ----------------------- |
+| ist am                | ist wahr                |
+| ist nicht am          | ist falsch              |
+| ist vorher            | ist leer                |
+| ist danach            | ist nicht leer          |
+| im letzten            |                         |
+| nicht im letzten      |                         |
+| liegt zwischen        |                         |
+| liegt nicht dazwischen |                        |
+
+</div>
+
+:::tip Hinweis
+Bei `Datum`-Feldern wählen Sie ein Datum über den **Datumsauswähler**. **"liegt zwischen"** verwendet zwei Daten (**Von** und **Bis**), und **"im letzten"** erwartet eine **Anzahl von Tagen**. Bei `Boolean`-Feldern legt der Operator die Bedingung bereits fest, sodass kein Wert erforderlich ist.
+:::
 
 :::tip Hinweis
 Für die Ausdrücke **"enthält"** und **"schließt aus"** können mehrere Werte ausgewählt werden.

@@ -49,7 +49,7 @@ When you share a dataset/project with a Team/Organization, all members will have
 
 ---
 
-## Managing access to a Dataset or Project
+## Managing access to a Dataset, Project, or Folder
 
 <div class="step">
    <div class="step-number">1</div>
@@ -74,6 +74,27 @@ When you share a dataset/project with a Team/Organization, all members will have
    <div class="step-number">4</div>
    <div class="content">If you want to withdraw access, click the <code>More options</code> <img src={require('/img/icons/3dots.png').default} alt="More options" style={{ maxHeight: '20px', maxWidth: '20px'}}/> menu on your dataset or project and select <code>no access</code>.</div>
 </div>
+
+### Sharing a Folder
+
+You can also share an entire **folder** at once. Sharing a folder grants access to **all datasets and projects inside it**, so you don't have to share each item individually.
+
+<div class="step">
+   <div class="step-number">1</div>
+   <div class="content">Click the <code>More options</code> <img src={require('/img/icons/3dots.png').default} alt="More options" style={{ maxHeight: '20px', maxWidth: '20px'}}/> menu on a folder you own and select <code>Share</code>.</div>
+</div>
+<div class="step">
+   <div class="step-number">2</div>
+   <div class="content">Choose an <code>Organization</code> or <code>Team</code> and grant <code>viewer</code> or <code>editor</code> access as needed.</div>
+</div>
+<div class="step">
+   <div class="step-number">3</div>
+   <div class="content">To withdraw access, open the <code>Share</code> dialog again and set the role back to <code>no access</code>.</div>
+</div>
+
+:::info
+A folder can be shared with **either one Organization or one Team, not both at the same time**. Items inside a shared folder inherit the folder's access, so sharing them individually is not needed.
+:::
 
 ### Accessing Shared Items
 

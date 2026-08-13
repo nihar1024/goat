@@ -44,7 +44,7 @@ Sobald der Layer erstellt wurde, können Sie Features direkt auf der Karte hinzu
 
 ## Daten ansehen
 
-**Daten ansehen** ermöglicht es Ihnen, Ihre Layer-Daten als Tabelle anzuzeigen und zu bearbeiten. Öffnen Sie die Ansicht über das <code>Weitere Optionen</code>-Menü des Layers, um Felder zu verwalten, Attributwerte direkt in der Tabelle zu bearbeiten oder den Bearbeitungsmodus zu starten.
+**Daten ansehen** ermöglicht es Ihnen, Ihre Layer-Daten als Tabelle anzuzeigen und zu bearbeiten. Öffnen Sie die Ansicht über das <img src={require('/img/icons/3dots.png').default} alt="Optionen" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Weitere Optionen</code>-Menü des Layers, um Felder zu verwalten, Attributwerte direkt in der Tabelle zu bearbeiten oder den Bearbeitungsmodus zu starten.
 
 <div class="step">
   <div class="step-number">1</div>
@@ -53,10 +53,40 @@ Sobald der Layer erstellt wurde, können Sie Features direkt auf der Karte hinzu
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Klicken Sie auf <code>+ Feld hinzufügen</code>, um den Dialog <b>Felder bearbeiten</b> zu öffnen. Fügen Sie ein neues Feld hinzu, indem Sie einen <b>Feldnamen</b> eingeben und den <b>Feldtyp</b> auswählen. Um ein Feld zu entfernen, klicken Sie auf das <code>—</code>-Symbol daneben. Klicken Sie auf <code>Speichern</code>, wenn Sie fertig sind.</div>
+  <div class="content">Klicken Sie in der Tabellen-Symbolleiste auf <code>Felder bearbeiten</code>, um den Dialog <b>Felder bearbeiten</b> zu öffnen, und klicken Sie dann auf <code>+ Feld hinzufügen</code>. Ein neues Feld wird der Liste hinzugefügt — wählen Sie rechts seinen <b>Feldtyp</b> (<code>Text</code>, <code>Number</code>, <code>Date</code>, <code>Boolean</code> oder <code>Formula</code>, ein berechnetes Feld, siehe <a href="#formelfelder">Formelfelder</a> unten) und benennen Sie das Feld in der Liste um. Um ein Feld zu entfernen, klicken Sie auf das <code>—</code>-Symbol daneben. Klicken Sie auf <code>Speichern</code>, wenn Sie fertig sind.</div>
 </div>
 
 <div class="step">
   <div class="step-number">3</div>
   <div class="content">Klicken Sie auf <code>Features bearbeiten</code> in der Tabellen-Leiste, um den Bearbeitungsmodus zu aktivieren. Sie können <strong>direkt auf eine Zelle klicken</strong>, um Attributwerte inline zu bearbeiten, den <strong>Auswahl-Cursor</strong> auf der Karte verwenden, um ein vorhandenes Feature auszuwählen und dessen Attribute im Panel <b>Feature-Attribute</b> zu aktualisieren, oder <code>+</code> nutzen, um ein neues Feature zu zeichnen. Klicken Sie auf <code>Speichern</code> oder <code>Verwerfen</code>, wenn Sie fertig sind.</div>
 </div>
+
+### Formelfelder
+
+Der Wert eines <b>Formula</b>-Felds wird aus einem Ausdruck berechnet, den Sie schreiben — ähnlich wie eine Formelspalte in einer Tabellenkalkulation. Der Ausdruck kann Ihre anderen Felder referenzieren — teilen Sie zum Beispiel die Bevölkerung durch die Fläche, um die Dichte zu erhalten — oder Textfelder zusammenführen. Das Ergebnis wird auf jedes Feature im Layer angewendet.
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">Klicken Sie auf <code>Felder bearbeiten</code>, um den Dialog <b>Felder bearbeiten</b> zu öffnen, klicken Sie auf <code>+ Feld hinzufügen</code>, und setzen Sie bei ausgewähltem neuen Feld rechts seinen <code>Feldtyp</code> auf <code>Formula</code> (und benennen Sie das Feld in der Liste um).</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Klicken Sie auf <code>Formel hinzufügen</code>, um den <b>Formel-Editor</b> zu öffnen. Schreiben Sie einen Ausdruck und referenzieren Sie Ihre anderen Felder über ihren Namen in doppelten Anführungszeichen (zum Beispiel <code>"population"</code>). Über den Tab <b>Aufbau</b> können Sie Felder, Operatoren und Funktionen einfügen, und der Tab <b>Vorschau</b> zeigt ein Beispielergebnis. Ein grünes Häkchen bestätigt, dass der Ausdruck gültig ist.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Klicken Sie auf <code>Anwenden</code> und anschließend im Dialog „Felder bearbeiten" auf <code>Speichern</code>. GOAT berechnet die Werte für alle Features und hält sie automatisch aktuell.</div>
+</div>
+
+**Beispiele:**
+
+- <code>"population" / "area_km2"</code> — Bevölkerungsdichte
+- <code>round("population" / "area_km2", 1)</code> — Dichte auf eine Nachkommastelle gerundet
+- <code>concat_ws(', ', "city", "country")</code> — Textfelder zusammenführen (z. B. `Berlin, Germany`)
+- <code>if("population" &gt; 100000, 'large', 'small')</code> — nach einem Schwellenwert klassifizieren
+
+:::info
+Die Werte einer Formel werden automatisch aktualisiert, wenn sich die referenzierten Felder ändern. Eine Formel muss einen Zahlen-, Text-, Wahr/Falsch- oder Datumswert ergeben. Formelfelder sind nur für bereits vorhandene Layer verfügbar.
+:::

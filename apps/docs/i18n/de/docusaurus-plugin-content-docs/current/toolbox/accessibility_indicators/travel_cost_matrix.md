@@ -128,7 +128,7 @@ Reisekosten werden mit der **gleichen Routing-Engine wie das Einzugsgebiet-Tool*
 
 - Die Anzahl der Berechnungen skaliert als **U × Z** (Anzahl der Ursprünge × Anzahl der Ziele). Große Datensätze mit vielen Ursprüngen und Zielen benötigen mehr Verarbeitungszeit.
 - Ein realistisches **maximales Reisekostenlimit** reduziert die Berechnungszeit und die Ausgabegröße erheblich.
-- Für den **Öffentlichen Verkehr** stellt der Reisekostenwert die durchschnittliche Reisezeit für alle möglichen Fahrten dar, die innerhalb des festgelegten Zeitfensters abfahren.
+- Für den **Öffentlichen Verkehr** wertet die Engine jede Abfahrtsminute innerhalb des festgelegten Zeitfensters aus und behält die **schnellste** Fahrt zu jedem Ziel (es handelt sich nicht um einen Durchschnitt über das Zeitfenster).
 
 ### Grenzen für unbeschränkte Berechnungen
 

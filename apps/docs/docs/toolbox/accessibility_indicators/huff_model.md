@@ -74,7 +74,7 @@ Huff Model computation is available across **over 30 European countries** for `W
 | Bicycle | All paths accessible by bicycle (surface, smoothness, slope) |
 | Pedelec | All paths accessible by pedelec (surface, smoothness) |
 | Car | All paths accessible by car (speed limits, one-way restrictions) |
-| Public Transport | Public transport network (GTFS schedules) with walking, cycling, or car access and egress to and from stations |
+| Public Transport | Public transport network (GTFS schedules) with walking access and egress (up to 30 minutes) to and from stations |
 
 ### Configuration
 

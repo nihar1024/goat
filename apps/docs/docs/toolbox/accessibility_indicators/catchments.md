@@ -207,6 +207,10 @@ The result layer is automatically styled with a color scale ranging from the sho
 | Walk / Bicycle / Pedelec / Car | 1,000 |
 | Public Transport | 100 |
 
+### Time window
+
+For public transport, the catchment is computed over a **time window** — defined by a day of the week and a start and end time — rather than for a single departure. The engine evaluates **every departure minute** within this window and retains the **fastest** journey to each reachable location. The result is not an average across departures, but the best case among them, yielding the largest possible catchment area. A journey is considered within the window based solely on its start time, independent of its end time or duration.
+
 ### Visualization
 
 The algorithm used to derive the catchment shape depends on the routing mode:

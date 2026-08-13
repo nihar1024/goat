@@ -74,7 +74,7 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
 | Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) |
 | Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) |
 | Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) |
-| Öffentlicher Verkehr | ÖV-Netz (GTFS-Fahrpläne) mit Zu-Fuß-, Fahrrad- oder Auto-Zugang und -Abgang zu und von den Haltestellen |
+| Öffentlicher Verkehr | ÖV-Netz (GTFS-Fahrpläne) mit Zu-Fuß-Zugang und -Abgang (bis zu 30 Minuten) zu und von den Haltestellen |
 
 ### Konfiguration
 

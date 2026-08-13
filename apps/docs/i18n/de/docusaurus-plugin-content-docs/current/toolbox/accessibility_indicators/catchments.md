@@ -206,6 +206,10 @@ Der Ergebnislayer wird automatisch mit einer Farbskala von der kürzesten bis zu
 | Zu Fuß / Fahrrad / Pedelec / Auto | 1.000 |
 | ÖPNV | 100 |
 
+### Zeitfenster
+
+Für den öffentlichen Verkehr wird das Einzugsgebiet über ein **Zeitfenster** berechnet – definiert durch einen Wochentag sowie eine Start- und Endzeit – anstatt für eine einzelne Abfahrt. Die Engine wertet **jede Abfahrtsminute** innerhalb dieses Zeitfensters aus und behält die **schnellste** Verbindung zu jedem erreichbaren Ort. Das Ergebnis ist kein Durchschnitt über die Abfahrten, sondern der beste Fall unter ihnen, wodurch das größtmögliche Einzugsgebiet entsteht. Eine Verbindung gilt ausschließlich anhand ihrer Startzeit als innerhalb des Zeitfensters liegend, unabhängig von ihrer Endzeit oder Gesamtdauer.
+
 ### Visualisierung
 
 Der verwendete Algorithmus zur Ableitung der Einzugsgebietsform hängt vom Routing-Modus ab:

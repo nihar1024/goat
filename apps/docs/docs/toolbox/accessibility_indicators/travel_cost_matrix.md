@@ -128,7 +128,7 @@ Travel costs are computed using the **same routing engine as the Catchment Area 
 
 - The number of calculations scales as **O × D** (number of origins × number of destinations). Large datasets with many origins and destinations will take longer to process.
 - Using a realistic **maximum travel cost** limit significantly reduces computation time and output size.
-- For **Public Transport**, the travel cost represents the average travel time for all feasible trips departing within the specified time window.
+- For **Public Transport**, the engine evaluates every departure minute within the specified time window and keeps the **fastest** trip to each destination (it is not an average over the window).
 
 ### Unbounded calculation limits
 

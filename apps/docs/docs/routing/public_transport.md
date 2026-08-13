@@ -34,7 +34,7 @@ A public transport trip consists of three legs: an **access leg** from the origi
   <img src={require('/img/routing/pt_trip_structure.png').default} alt="PT trip structure and example combinations" style={{ maxWidth: "100%", objectFit: "contain"}}/>
 </div>
 
-Public transport routing is performed by GOAT's own high-performance routing engine, which wraps the open-source **[nigiri](https://github.com/motis-project/nigiri)** library. Nigiri is a C++ library from the **[MOTIS project](https://github.com/motis-project)** that provides one-to-all public transport connection search using the **RAPTOR** algorithm.
+Public transport routing is performed by GOAT's own high-performance routing engine, which wraps the open-source **[nigiri](https://github.com/motis-project/nigiri)** library. Nigiri is a C++ library from the **[MOTIS project](https://github.com/motis-project/motis)** that provides one-to-all public transport connection search using the **RAPTOR** algorithm.
 
 The **transit leg** is computed by nigiri, while the **access and egress legs** (first and last mile) use GOAT's own **Dijkstra** implementation — the same routing used for active mobility and car. This keeps street-level routing consistent across all transport modes.
 

@@ -34,7 +34,7 @@ Eine ÖPNV-Fahrt besteht aus drei Abschnitten: dem **Zugangsweg** vom Startpunkt
   <img src={require('/img/routing/pt_trip_structure_de.png').default} alt="Struktur und Beispielkombinationen einer ÖPNV-Fahrt" style={{ maxWidth: "100%", objectFit: "contain"}}/>
 </div>
 
-Das Routing für den öffentlichen Verkehr wird von GOATs eigener leistungsstarker Routing-Engine durchgeführt, die die Open-Source-Bibliothek **[nigiri](https://github.com/motis-project/nigiri)** einbindet. Nigiri ist eine C++-Bibliothek aus dem **[MOTIS-Projekt](https://github.com/motis-project)**, die eine One-to-All-Verbindungssuche im öffentlichen Verkehr mithilfe des **RAPTOR**-Algorithmus bereitstellt.
+Das Routing für den öffentlichen Verkehr wird von GOATs eigener leistungsstarker Routing-Engine durchgeführt, die die Open-Source-Bibliothek **[nigiri](https://github.com/motis-project/nigiri)** einbindet. Nigiri ist eine C++-Bibliothek aus dem **[MOTIS-Projekt](https://github.com/motis-project/motis)**, die eine One-to-All-Verbindungssuche im öffentlichen Verkehr mithilfe des **RAPTOR**-Algorithmus bereitstellt.
 
 Die **Transit-Etappe** wird von nigiri berechnet, während die **Zugangs- und Abgangs-Etappen** (erste und letzte Meile) GOATs eigene **Dijkstra**-Implementierung verwenden – dasselbe Routing wie für aktive Mobilität und Auto. Dadurch bleibt das straßenbasierte Routing über alle Verkehrsträger hinweg konsistent.
 

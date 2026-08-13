@@ -68,12 +68,13 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
   <div class="content">Wählen Sie das <code>Verkehrsmittel</code> für die Heatmap aus.</div>
 </div>
 
-| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
-|----------------|----------------|----------------------------|
-| Zu Fuß | Alle zu Fuß begehbaren Wege | 5 km/h |
-| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
-| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
-| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
+| Verkehrsmittel | Berücksichtigt |
+|----------------|----------------|
+| Zu Fuß | Alle zu Fuß begehbaren Wege |
+| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) |
+| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) |
+| Öffentlicher Verkehr | ÖV-Netz (GTFS-Fahrpläne) mit Zu-Fuß-, Fahrrad- oder Auto-Zugang und -Abgang zu und von den Haltestellen |
 
 ### Konfiguration
 
@@ -299,7 +300,7 @@ Es können jedoch auch andere Klassifizierungsmethoden verwendet werden. Mehr da
 
 ### Visualisierung
 
-Heatmaps in GOAT nutzen die **[Uber H3 grid-basierte](../../further_reading/glossary#h3-grid)** Lösung für effiziente Berechnung und leicht verständliche Visualisierung. Im Hintergrund wird für jedes *Verkehrsmittel* eine vorab berechnete Reisezeitmatrix verwendet, die in Echtzeit abgefragt und weiterverarbeitet wird, um die Erreichbarkeit zu berechnen und die finale Heatmap zu erzeugen.
+Heatmaps in GOAT nutzen die **[Uber H3 grid-basierte](../../further_reading/glossary#h3-grid)** Lösung für effiziente Berechnung und leicht verständliche Visualisierung. Im Hintergrund wird die Erreichbarkeit direkt zur Laufzeit von GOATs eigener Routing-Engine berechnet. Für jedes *Verkehrsmittel* routet die Engine von den Gelegenheiten ausgehend nach außen, um die erreichbaren H3-Zellen und deren Reisekosten zu ermitteln, und aggregiert diese anschließend zu einem Erreichbarkeitswert pro Zelle. Der öffentliche Verkehr nutzt die RAPTOR-basierte Engine, während die Verkehrsträger der aktiven Mobilität und das Auto GOATs Dijkstra-Implementierung verwenden.
 
 Die Auflösung und Dimensionen des verwendeten hexagonalen Rasters hängen vom gewählten *Verkehrsmittel* ab:
 
@@ -309,6 +310,7 @@ Die Auflösung und Dimensionen des verwendeten hexagonalen Rasters hängen vom g
 | Bicycle | 9 | 78.999,4 m² | 174,4 m |
 | Pedelec | 9 | 78.999,4 m² | 174,4 m |
 | Car | 8 | 552.995,7 m² | 461,4 m |
+| Public Transport | 9 | 78.999,4 m² | 174,4 m |
 
 :::tip Hinweis
 

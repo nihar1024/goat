@@ -68,12 +68,13 @@ The Huff Model is available in certain regions. Upon selecting a `Routing type`,
   <div class="content">Pick the <code>Transport mode</code> you would like to use for the analysis.</div>
 </div>
 
-| Mode | Considers | Speed assumed |
-|------|-----------|---------------|
-| Walk | All paths accessible by foot | 5 km/h |
-| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) | 15 km/h |
-| Pedelec | All paths accessible by pedelec (surface, smoothness) | 23 km/h |
-| Car | All paths accessible by car (speed limits, one-way restrictions) | — |
+| Mode | Considers |
+|------|-----------|
+| Walk | All paths accessible by foot |
+| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) |
+| Pedelec | All paths accessible by pedelec (surface, smoothness) |
+| Car | All paths accessible by car (speed limits, one-way restrictions) |
+| Public Transport | Public transport network (GTFS schedules) with walking, cycling, or car access and egress to and from stations |
 
 ### Configuration
 

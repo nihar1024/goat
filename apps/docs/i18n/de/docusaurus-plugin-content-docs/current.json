@@ -127,14 +127,6 @@
     "message": "Als Geobearbeitungswerkzeug können Sie Puffer um Geometrien herum erstellen.",
     "description": "Die generierte Beschreibung der Indexseite für die Kategorie Geoverarbeitung in der Seitenleiste tutorialSidebar"
   },
-  "sidebar.tutorialSidebar.category.Scenarios": {
-    "message": "Szenarien",
-    "description": "Die Bezeichnung für die Kategorie Szenarien in der Seitenleiste tutorialSidebar"
-  },
-  "sidebar.tutorialSidebar.category.Scenarios.link.generated-index.description": {
-    "message": "Neben der Analyse vorhandener realer Daten und Situationen können Sie mit GOAT auch benutzerdefinierte Szenarien erstellen, wie z. B. Netzwerkänderungen oder neue Infrastrukturprojekte. Wege, Punkte und Polygone können hinzugefügt, bearbeitet oder entfernt werden und ihre Auswirkungen auf die Erreichbarkeit analysiert werden.",
-    "description": "Die generierte Beschreibung der Indexseite für die Kategorie Szenarien in der Seitenleiste tutorialSidebar"
-  },
   "sidebar.tutorialSidebar.category.Routing": {
     "message": "Routing",
     "description": "Das Label für die Kategorie Routing in der Seitenleiste tutorialSidebar"

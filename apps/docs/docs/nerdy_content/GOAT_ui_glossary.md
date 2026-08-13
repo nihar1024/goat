@@ -31,7 +31,6 @@ This comprehensive glossary provides English to German translations for all the 
 | **Filter** | **Filter** | Data filtering tools |
 | **Toolbox** | **Werkzeuge** | Spatial analysis tools |
 | **Workflows** | **Workflows** | Visual analysis workflow editor |
-| **Scenarios** | **Szenarien** | Scenario planning tools |
 
 ## Spatial Analysis Tools
 
@@ -462,24 +461,16 @@ This comprehensive glossary provides English to German translations for all the 
 | Measure Line | Linie messen | Measure length along a drawn line |
 | Measure Flight Distance | Luftlinie | Straight-line (as-the-crow-flies) distance |
 
-## Scenarios
+## Feature Editing
 
 | English | German | Description |
 |---------|--------|-------------|
-| **Scenarios** | **Szenarien** | Scenario planning tools |
-| Create Scenario | Szenario erstellen | Create a new planning scenario |
-| Edit Scenario | Szenario bearbeiten | Modify an existing scenario |
-| Delete Scenario | Szenario löschen | Remove a scenario |
-| Select Scenario | Szenario auswählen | Switch to a different scenario |
-| Scenario Features | Szenariofunktionen | Features modified within a scenario |
-| Show Scenario Features | Szenariofunktionen anzeigen | Display scenario-modified features |
-| Hide Scenario Features | Szenariofunktionen ausblenden | Hide scenario-modified features |
 | **Draw** | **Zeichnen** | Draw new features on the map |
-| Draw Feature | Neue Funktion hinzufügen | Add a new spatial feature to the scenario |
+| Draw Feature | Neue Funktion hinzufügen | Add a new spatial feature to a layer |
 | Modify Attributes | Attribute ändern | Edit feature attribute values |
 | Modify Geometry | Geometrie ändern | Edit the spatial shape of a feature |
-| Delete Feature | Funktion löschen | Remove a feature from the scenario |
-| Feature Editor Tools | Editierfunktionen Objekte | Toolbar for editing scenario features |
+| Delete Feature | Funktion löschen | Remove a feature from a layer |
+| Feature Editor Tools | Editierfunktionen Objekte | Toolbar for editing features |
 
 ## Data Analysis & Statistics
 

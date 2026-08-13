@@ -27,16 +27,10 @@ Einzugsgebiet bietet folgende zusätzliche Funktionen:
 **Nur für den öffentlichen Verkehr:**
 
 - **Maximale Anzahl an Umstiegen** — begrenzt die Anzahl der ÖV-Verbindungen pro Fahrt.
-- **Zugangsart und Abgangsart** — konfiguriert, wie Nutzer zu ÖV-Haltestellen und von diesen weg gelangen (zu Fuß, mit dem Fahrrad oder mit dem Auto).
+- **Zugangsart und Abgangsart** — konfiguriert, wie Nutzer zu ÖV-Haltestellen und von diesen weg gelangen (zu Fuß, mit dem Fahrrad, mit dem Pedelec oder mit dem Auto).
 
 :::info
-Die Berechnung ist in bestimmten Regionen verfügbar.
-
-Nach Auswahl eines `Routentyps` zeigt GOAT eine Kartenüberlagerung mit der Abdeckung an.
-Für `Zu Fuß`, `Fahrrad`, `Pedelec` und `Auto`: **über 30 europäische Länder** werden unterstützt.
-Für `ÖPNV`: Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich werden unterstützt.
-
-Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns gerne](https://plan4better.de/en/contact/) — wir besprechen weitere Möglichkeiten.
+Die Berechnung der Einzugsgebiete ist für `Zu Fuß`, `Fahrrad`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns gerne](https://plan4better.de/de/contact/).
 :::
 
 ## 2. Anwendungsbeispiele
@@ -58,27 +52,28 @@ Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns g
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Wählen Sie den <code>Routentyp</code> aus und konfigurieren Sie die Parameter für den gewählten Modus gemäß den folgenden Schritten.</div>
+  <div class="content">Wählen Sie den <code>Routentyp</code> für Ihre Analyse aus.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Konfigurieren Sie die Parameter für den gewählten <code>Routentyp</code>. Die verfügbaren Felder hängen vom Modus ab:</div>
 </div>
 
 <Tabs>
 <TabItem value="active-car" label="Zu Fuß / Fahrrad / Pedelec / Auto" default className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Wählen Sie, ob das Einzugsgebiet auf Basis von <code>Zeit</code> oder <code>Entfernung</code> berechnet werden soll, und setzen Sie das entsprechende Limit. Bei Wahl von <code>Zeit</code> können Sie auch die <code>Geschwindigkeit</code> konfigurieren.</div>
-</div>
+- Wählen Sie, ob das Einzugsgebiet auf Basis von <code>Zeit</code> oder <code>Entfernung</code> berechnet werden soll, und setzen Sie das entsprechende Limit. Bei Wahl von <code>Zeit</code> können Sie auch die <code>Geschwindigkeit</code> konfigurieren.
+- Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von:
+  - <code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.
+  - <code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.
+  - <code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.
 
 :::tip Hinweis
 
 Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) der Stadt Chemnitz.
 
 :::
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
-</div>
 
 </TabItem>
 
@@ -86,10 +81,12 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 **Berücksichtigt alle per öffentlichem Verkehr erreichbaren Orte, einschließlich intermodaler Umstiege und Haltestellen-Zugang.**
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Wählen Sie die <code>Öffentlichen Verkehrsmittel</code> für die Analyse: Bus, Straßenbahn, Bahn, U-Bahn, Fähre, Seilbahn, Gondel und/oder Standseilbahn, und konfigurieren Sie das <code>Reisezeitlimit</code> in Minuten.</div>
-</div>
+- Wählen Sie die <code>Öffentlichen Verkehrsmittel</code> für die Analyse: Bus, Straßenbahn, Bahn, U-Bahn, Fähre, Seilbahn, Gondel und/oder Standseilbahn, und konfigurieren Sie das <code>Reisezeitlimit</code> in Minuten.
+- Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von:
+  - <code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.
+  - <code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.
+  - <code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.
+- Wählen Sie <code>Tag</code>, <code>Startzeit</code> und <code>Endzeit</code> für das Analysezeitfenster.
 
 :::tip Hinweis
 
@@ -97,28 +94,18 @@ Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](
 
 :::
 
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Wählen Sie die <code>Form des Einzugsgebiets</code>. Bei Wahl von: <ul><li><code>Polygon</code> oder <code>Netzwerk</code>: können Sie <code>Schritte</code> und <code>Schrittgrößen</code> festlegen.</li><li><code>Sechseckiges Gitter</code>: keine weitere Konfiguration erforderlich.</li><li><code>Punktraster</code>: Sie müssen den <code>Punktraster-Layer</code> auswählen, auf den die Werte angewendet werden.</li></ul></div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Wählen Sie <code>Tag</code>, <code>Startzeit</code> und <code>Endzeit</code> für das Analysezeitfenster.</div>
-</div>
-
 </TabItem>
 </Tabs>
 
 ### Erweiterte Optionen
 
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um weitere Einstellungen vorzunehmen. Die verfügbaren Optionen hängen vom gewählten <code>Routentyp</code> ab:</div>
+</div>
+
 <Tabs>
 <TabItem value="non-pt" label="Zu Fuß / Fahrrad / Pedelec / Auto" default className="tabItemBox">
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um weitere Einstellungen vorzunehmen.</div>
-</div>
 
 #### Form der Geometrien
 
@@ -142,10 +129,7 @@ Wählen Sie, wie die Isochronen-Schritte dargestellt werden:
 
 <TabItem value="pt-advanced" label="ÖPNV" className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Optional können Sie auf <code>Erweiterte Optionen</code> klicken, um die <code>Darstellung der Schritte</code>, die <code>Maximalen Umstiege</code>, die <code>Zugangsart</code> und die <code>Abgangsart</code> zu konfigurieren.</div>
-</div>
+Für den öffentlichen Verkehr können Sie über die Erweiterten Optionen die <code>Darstellung der Schritte</code>, die <code>Maximalen Umstiege</code>, die <code>Zugangsart</code> und die <code>Abgangsart</code> konfigurieren.
 
 #### Darstellung der Schritte
 
@@ -175,24 +159,24 @@ Für jeden Modus können Sie die **maximale Reisezeit oder Entfernung** sowie di
 ### Startpunkte
 
 <div class="step">
-  <div class="step-number">6</div>
+  <div class="step-number">5</div>
   <div class="content">Wählen Sie die <code>Methode zur Startpunktauswahl</code>: Wählen Sie <code>Auf der Karte auswählen</code> und klicken Sie auf die Karte, um Startpunkte zu setzen, oder wählen Sie <code>Aus Layer auswählen</code> und wählen Sie einen Punktlayer mit den gewünschten Startpunkten. Alle Features des Layers werden als Startpunkte verwendet.</div>
 </div>
 
 ### Ergebnis-Layer
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">6</div>
   <div class="content">Legen Sie den <code>Name der Ergebnislayer</code> für den Ausgabe-Einzugsgebiet-Layer fest.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">7</div>
   <div class="content">Legen Sie den <code>Name des Startpunkte-Layer</code> für den Ausgabe-Startpunkte-Layer fest.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">8</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>, um die Berechnung zu starten.</div>
 </div>
 
@@ -221,6 +205,10 @@ Der Ergebnislayer wird automatisch mit einer Farbskala von der kürzesten bis zu
 | --- | --- |
 | Zu Fuß / Fahrrad / Pedelec / Auto | 1.000 |
 | ÖPNV | 100 |
+
+### Zeitfenster
+
+Für den öffentlichen Verkehr wird das Einzugsgebiet über ein **Zeitfenster** berechnet – definiert durch einen Wochentag sowie eine Start- und Endzeit – anstatt für eine einzelne Abfahrt. Die Engine wertet **jede Abfahrtsminute** innerhalb dieses Zeitfensters aus und behält die **schnellste** Verbindung zu jedem erreichbaren Ort. Das Ergebnis ist kein Durchschnitt über die Abfahrten, sondern der beste Fall unter ihnen, wodurch das größtmögliche Einzugsgebiet entsteht. Eine Verbindung gilt ausschließlich anhand ihrer Startzeit als innerhalb des Zeitfensters liegend, unabhängig von ihrer Endzeit oder Gesamtdauer.
 
 ### Visualisierung
 

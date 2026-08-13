@@ -19,7 +19,7 @@ Die Heatmap verwendet ein farbkodiertes sechseckiges Gitter, um **zu zeigen, wie
 
 :::info
 
-Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/en/contact/) gerne.
+Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/de/contact/) gerne.
 
 :::
 
@@ -49,12 +49,13 @@ Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **üb
   <div class="content">Wählen Sie das <code>Verkehrsmittel</code> für die Heatmap.</div>
 </div>
 
-| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
-|----------------|----------------|----------------------------|
-| Zu Fuß | Alle zu Fuß begehbaren Wege | 5 km/h |
-| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
-| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
-| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
+| Verkehrsmittel | Berücksichtigt |
+|----------------|----------------|
+| Zu Fuß | Alle zu Fuß begehbaren Wege |
+| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) |
+| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) |
+| Öffentlicher Verkehr | ÖV-Netz (GTFS-Fahrpläne) mit Zu-Fuß-Zugang und -Abgang (bis zu 30 Minuten) zu und von den Haltestellen |
 
 <div class="step">
   <div class="step-number">4</div>
@@ -121,7 +122,7 @@ Die Konnektivitäts-Formel berechnet die Gesamtfläche (in Quadratmetern), von d
 
 ### Rasterzellen 
 
-Heatmaps in GOAT nutzen **[Ubers H3-rasterbasierte](../../further_reading/glossary#h3-grid)** Lösung für effiziente Berechnungen und leicht verständliche Visualisierung. Im Hintergrund wird eine vorberechnete Reisezeitmatrix für jeden *Verkehrsmittel* abgefragt und in Echtzeit weiterverarbeitet, um die Erreichbarkeit zu berechnen und eine endgültige Heatmap zu erstellen.
+Heatmaps in GOAT nutzen **[Ubers H3-rasterbasierte](../../further_reading/glossary#h3-grid)** Lösung für effiziente Berechnungen und leicht verständliche Visualisierung. Im Hintergrund wird die Erreichbarkeit direkt zur Laufzeit von GOATs eigener Routing-Engine berechnet. Für jedes *Verkehrsmittel* routet die Engine von den Gelegenheiten ausgehend nach außen, um die erreichbaren H3-Zellen und deren Reisekosten zu ermitteln, und aggregiert diese anschließend zu einem Erreichbarkeitswert pro Zelle. Der öffentliche Verkehr nutzt die RAPTOR-basierte Engine, während die Verkehrsträger der aktiven Mobilität und das Auto GOATs Dijkstra-Implementierung verwenden.
 
 Die Auflösung und Abmessungen des verwendeten sechseckigen Rasters hängen vom gewählten *Verkehrsmittel* ab:
 
@@ -131,6 +132,7 @@ Die Auflösung und Abmessungen des verwendeten sechseckigen Rasters hängen vom 
 | Bicycle | 9 | 78.999,4 m² | 174,4 m |
 | Pedelec | 9 | 78.999,4 m² | 174,4 m |
 | Car | 8 | 552.995,7 m² | 461,4 m |
+| Public Transport | 9 | 78.999,4 m² | 174,4 m |
 
 :::tip Tipp
 

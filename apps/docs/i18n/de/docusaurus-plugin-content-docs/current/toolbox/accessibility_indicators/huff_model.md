@@ -34,7 +34,7 @@ Sie können das Verkehrsmittel, den Gelegenheiten-Layer (mit Kapazitätsfeldern)
 
 :::info
 
-Das Huff-Modell ist in bestimmten Regionen verfügbar. Nach Auswahl eines `Verkehrsmittels` zeigt GOAT eine Kartenüberlagerung mit der unterstützten Abdeckung an. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/kontakt/ "Kontaktieren Sie uns") gerne.
+Die Berechnung des Huff-Modells ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/de/contact/ "Kontaktieren Sie uns") gerne.
 
 :::
 
@@ -67,12 +67,13 @@ Das Huff-Modell ist in bestimmten Regionen verfügbar. Nach Auswahl eines `Verke
   <div class="content">Wählen Sie das <code>Verkehrsmittel</code>, das Sie für die Analyse verwenden möchten.</div>
 </div>
 
-| Verkehrsmittel | Berücksichtigt | Angenommene Geschwindigkeit |
-|----------------|----------------|----------------------------|
-| Zu Fuß | Alle zu Fuß begehbaren Wege | 5 km/h |
-| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) | 15 km/h |
-| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) | 23 km/h |
-| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) | — |
+| Verkehrsmittel | Berücksichtigt |
+|----------------|----------------|
+| Zu Fuß | Alle zu Fuß begehbaren Wege |
+| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) |
+| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) |
+| Öffentlicher Verkehr | ÖV-Netz (GTFS-Fahrpläne) mit Zu-Fuß-Zugang und -Abgang (bis zu 30 Minuten) zu und von den Haltestellen |
 
 ### Konfiguration
 

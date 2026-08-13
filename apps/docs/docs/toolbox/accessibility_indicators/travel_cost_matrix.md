@@ -39,29 +39,17 @@ The Travel Cost Matrix is designed for **batch computation across many origins a
 
 ### Configuration
 
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Configure the options for your selected <code>Transport mode</code>. The available fields depend on the mode:</div>
+</div>
+
 <Tabs>
 <TabItem value="active-car" label="Walk / Bicycle / Pedelec / Car" default className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Under <code>Calculate by</code>, select <code>Time (min)</code> or <code>Distance (m)</code>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">If calculating by <code>Time (min)</code>, set the <code>Travel speed (km/h)</code>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Optionally, enable <code>Advanced options</code> to set a maximum cost limit: <code>Limit - Time (min)</code> when calculating by time, or <code>Limit - Distance (m)</code> when calculating by distance. If no limit is set, the calculation is unbounded (see limits table in Technical details).</div>
-</div>
-
-:::tip Hint
-
-For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
-
-:::
+- Under <code>Calculate by</code>, select <code>Time (min)</code> or <code>Distance (m)</code>.
+- If calculating by <code>Time (min)</code>, set the <code>Travel speed (km/h)</code>.
+- Optionally, enable <code>Advanced options</code> to set a maximum cost limit: <code>Limit - Time (min)</code> when calculating by time, or <code>Limit - Distance (m)</code> when calculating by distance.
 
 </TabItem>
 <TabItem value="flight" label="Flight Distance" className="tabItemBox">
@@ -71,25 +59,10 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 </TabItem>
 <TabItem value="pt" label="Public Transport (PT)" className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Select the <code>Choose PT Modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Select the <code>Day</code> (<code>Weekday</code>, <code>Saturday</code>, or <code>Sunday</code>) and set the <code>Start Time</code> and <code>End Time</code> for the analysis time window.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Set the <code>Travel time limit (min)</code> — the maximum journey duration to consider.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Optionally, enable <code>Advanced options</code> to configure <code>Max. transfers</code>, <code>Access Mode</code>, and <code>Egress Mode</code>.</div>
-</div>
+- Select the <code>Choose PT Modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular.
+- Select the <code>Day</code> (<code>Weekday</code>, <code>Saturday</code>, or <code>Sunday</code>) and set the <code>Start Time</code> and <code>End Time</code> for the analysis time window.
+- Set the <code>Travel time limit (min)</code> — the maximum journey duration to consider.
+- Optionally, enable <code>Advanced options</code> to configure <code>Max. transfers</code>, <code>Access Mode</code>, and <code>Egress Mode</code>.
 
 </TabItem>
 </Tabs>
@@ -97,29 +70,29 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 ### Input
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">4</div>
   <div class="content">Under <b>Origins</b>, select your <code>Origins layer</code> (a point layer where each feature is a starting location) and set the <code>Origins label</code> — the column used to identify origins in the result matrix.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">5</div>
   <div class="content">Under <b>Destinations</b>, select your <code>Destinations layer</code> (a point layer where each feature is a target location) and set the <code>Destinations label</code> — the column used to identify destinations in the result matrix.</div>
 </div>
 
 ### Result layer
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">6</div>
   <div class="content">Set the <code>Destinations layer name</code> for the output destinations point layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">10</div>
+  <div class="step-number">7</div>
   <div class="content">Set the <code>Matrix layer name</code> for the output table layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">11</div>
+  <div class="step-number">8</div>
   <div class="content">Click on <code>Run</code>.</div>
 </div>
 
@@ -141,7 +114,7 @@ Once the calculation finishes, a **table layer** is added to the map panel. Each
 
 O-D pairs that exceed the maximum travel cost are excluded from the output.
 
-A **Destinations** point layer is also added, containing all original destination attributes enriched with the computed **travel_cost** value for each point.
+A **Destinations** point layer is also added, containing all original destination attributes enriched with a computed **travel_cost** value for each point — the **minimum cost from any origin** to that destination. This makes the layer easy to map and style, showing how reachable each destination is from the nearest origin.
 
 :::tip Tip
 Want to use this matrix for further analysis? Connect the result table as input to other tools in a [Workflow](../../map/layers.md) or export it as CSV for use in external tools.
@@ -155,11 +128,11 @@ Travel costs are computed using the **same routing engine as the Catchment Area 
 
 - The number of calculations scales as **O × D** (number of origins × number of destinations). Large datasets with many origins and destinations will take longer to process.
 - Using a realistic **maximum travel cost** limit significantly reduces computation time and output size.
-- For **Public Transport**, the travel cost represents the average travel time for all feasible trips departing within the specified time window.
+- For **Public Transport**, the engine evaluates every departure minute within the specified time window and keeps the **fastest** trip to each destination (it is not an average over the window).
 
 ### Unbounded calculation limits
 
-When no maximum travel cost is set, the following limits apply based on the bounding-box diagonal of all origin–destination pairs:
+When no maximum travel cost is set, the following limits apply based on the bounding-box diagonal of all origin–destination pairs (the straight-line distance across the smallest rectangle that contains all your origin and destination points — in other words, how far apart your two most distant points are):
 
 | Routing mode | Maximum O-D extent (bounding-box diagonal) |
 |---|---|

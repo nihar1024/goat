@@ -49,13 +49,7 @@ Die Reisekostenmatrix ist für die **Massenberechnung über viele Ursprünge und
 
 - Wählen Sie unter <code>Berechnung nach</code> die Option <code>Zeit (Min)</code> oder <code>Entfernung (m)</code>.
 - Bei Berechnung nach <code>Zeit (Min)</code> legen Sie die <code>Reisegeschwindigkeit (km/h)</code> fest.
-- Optional können Sie <code>Erweiterte Optionen</code> aktivieren, um ein maximales Kostenlimit festzulegen: <code>Limit - Zeit (Min)</code> bei Berechnung nach Zeit oder <code>Limit - Distanz (m)</code> bei Berechnung nach Entfernung. Ohne Limit ist die Berechnung unbeschränkt (siehe Tabelle in den Technischen Details).
-
-:::tip Hinweis
-
-Geeignete Reisezeitlimits nach Einrichtungstyp finden Sie im [Standortwerkzeug](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) der Stadt Chemnitz.
-
-:::
+- Optional können Sie <code>Erweiterte Optionen</code> aktivieren, um ein maximales Kostenlimit festzulegen: <code>Limit - Zeit (Min)</code> bei Berechnung nach Zeit oder <code>Limit - Distanz (m)</code> bei Berechnung nach Entfernung.
 
 </TabItem>
 <TabItem value="flight" label="Luftlinie" className="tabItemBox">
@@ -120,7 +114,7 @@ Nach Abschluss der Berechnung wird ein **Tabellen-Layer** zum Kartenpanel hinzug
 
 OD-Paare, die den maximalen Reisekostenwert überschreiten, werden aus der Ausgabe ausgeschlossen.
 
-Ein **Ziel**-Punktlayer wird ebenfalls hinzugefügt, der alle ursprünglichen Zielattribute um den berechneten **travel_cost**-Wert für jeden Punkt ergänzt.
+Ein **Ziel**-Punktlayer wird ebenfalls hinzugefügt, der alle ursprünglichen Zielattribute um einen berechneten **travel_cost**-Wert für jeden Punkt ergänzt — die **minimalen Kosten von einem beliebigen Ursprung** zu diesem Ziel. Dadurch lässt sich der Layer leicht darstellen und gestalten und zeigt, wie gut jedes Ziel vom nächstgelegenen Ursprung aus erreichbar ist.
 
 :::tip Tipp
 Möchten Sie diese Matrix für weitere Analysen verwenden? Verwenden Sie die Ergebnistabelle als Eingabe für andere Tools in einem [Workflow](../../map/layers.md) oder exportieren Sie sie als CSV für externe Tools.
@@ -138,7 +132,7 @@ Reisekosten werden mit der **gleichen Routing-Engine wie das Einzugsgebiet-Tool*
 
 ### Grenzen für unbeschränkte Berechnungen
 
-Wenn kein maximales Reisekostenlimit gesetzt wird, gelten folgende Grenzen basierend auf der Begrenzungsrahmen-Diagonale aller Ursprungs-Ziel-Paare:
+Wenn kein maximales Reisekostenlimit gesetzt wird, gelten folgende Grenzen basierend auf der Begrenzungsrahmen-Diagonale aller Ursprungs-Ziel-Paare (die Luftliniendistanz über das kleinste Rechteck, das alle Ihre Ursprungs- und Zielpunkte enthält — also wie weit Ihre beiden am weitesten voneinander entfernten Punkte auseinanderliegen):
 
 | Verkehrsmittel | Maximale OD-Ausdehnung (Begrenzungsrahmen-Diagonale) |
 |---|---|

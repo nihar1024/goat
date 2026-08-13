@@ -49,13 +49,7 @@ The Travel Cost Matrix is designed for **batch computation across many origins a
 
 - Under <code>Calculate by</code>, select <code>Time (min)</code> or <code>Distance (m)</code>.
 - If calculating by <code>Time (min)</code>, set the <code>Travel speed (km/h)</code>.
-- Optionally, enable <code>Advanced options</code> to set a maximum cost limit: <code>Limit - Time (min)</code> when calculating by time, or <code>Limit - Distance (m)</code> when calculating by distance. If no limit is set, the calculation is unbounded (see limits table in Technical details).
-
-:::tip Hint
-
-For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
-
-:::
+- Optionally, enable <code>Advanced options</code> to set a maximum cost limit: <code>Limit - Time (min)</code> when calculating by time, or <code>Limit - Distance (m)</code> when calculating by distance.
 
 </TabItem>
 <TabItem value="flight" label="Flight Distance" className="tabItemBox">
@@ -120,7 +114,7 @@ Once the calculation finishes, a **table layer** is added to the map panel. Each
 
 O-D pairs that exceed the maximum travel cost are excluded from the output.
 
-A **Destinations** point layer is also added, containing all original destination attributes enriched with the computed **travel_cost** value for each point.
+A **Destinations** point layer is also added, containing all original destination attributes enriched with a computed **travel_cost** value for each point — the **minimum cost from any origin** to that destination. This makes the layer easy to map and style, showing how reachable each destination is from the nearest origin.
 
 :::tip Tip
 Want to use this matrix for further analysis? Connect the result table as input to other tools in a [Workflow](../../map/layers.md) or export it as CSV for use in external tools.
@@ -138,7 +132,7 @@ Travel costs are computed using the **same routing engine as the Catchment Area 
 
 ### Unbounded calculation limits
 
-When no maximum travel cost is set, the following limits apply based on the bounding-box diagonal of all origin–destination pairs:
+When no maximum travel cost is set, the following limits apply based on the bounding-box diagonal of all origin–destination pairs (the straight-line distance across the smallest rectangle that contains all your origin and destination points — in other words, how far apart your two most distant points are):
 
 | Routing mode | Maximum O-D extent (bounding-box diagonal) |
 |---|---|

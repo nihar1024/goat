@@ -34,7 +34,9 @@ A public transport trip consists of three legs: an **access leg** from the origi
   <img src={require('/img/routing/pt_trip_structure.png').default} alt="PT trip structure and example combinations" style={{ maxWidth: "100%", objectFit: "contain"}}/>
 </div>
 
-Public transport routing is performed using the **[R5 Routing Engine](https://github.com/conveyal/r5)** (_Rapid Realistic Routing on Real-world and Reimagined networks_). R5 is the routing engine from **[Conveyal](https://conveyal.com/)**, a web-based platform that allows users to create transportation scenarios and evaluate them in terms of cumulative opportunities and accessibility indicators.
+Public transport routing is performed by GOAT's own high-performance routing engine, which wraps the open-source **[nigiri](https://github.com/motis-project/nigiri)** library. Nigiri is a C++ library from the **[MOTIS project](https://github.com/motis-project)** that provides one-to-all public transport connection search using the **RAPTOR** algorithm.
+
+The **transit leg** is computed by nigiri, while the **access and egress legs** (first and last mile) use GOAT's own **Dijkstra** implementation — the same routing used for active mobility and car. This keeps street-level routing consistent across all transport modes.
 
 
 ### Routing Options
@@ -55,23 +57,18 @@ The day of the week to consider for public transport routing. Choose between `We
 
 #### Start and End time
 
-A time window for public transport routing. All the fastest journeys during this time window are considered, resulting in for example, the largest possible catchment area from your specified origin point. A journey is considered to fall within the time window solely based on its start time, regardless of its end time or duration.
+A time window for public transport routing. The engine evaluates **every departure minute** within this window and keeps the **fastest** journey to each reachable location — it is not an average over the window. The result is therefore the best-case, largest possible catchment area from your specified origin point. A journey is considered to fall within the time window solely based on its start time, regardless of its end time or duration.
 
-#### Other (Default Configurations)
+#### Maximum transfers
 
-The following default configurations are used while performing public transport routing. They are not currently user-configurable.
+The maximum number of transfers a PT journey may include. A maximum of `5` transfers is supported.
 
-- **Access Mode:** walk
-- **Egress Mode:** walk
-- **Decay function type:** logistic
-- **Standard deviation:** 12 minutes
-- **Width:** 10 minutes
-- **Walk speed:** 5 km/h
-- **Maximum walk time:** 20 minutes
-- **Bike speed:** 15 km/h
-- **Maximum bike time:** 20 minutes
-- **Bike traffic stress:** 4
-- **Maximum rides:** 4
-- **Zoom level:** 9
-- **Percentiles:** 1st
-- **Monte Carlo draws:** 200
+#### Access and Egress
+
+The **access leg** (origin to the first PT station) and the **egress leg** (last PT station to the destination) are configured independently. For each, you can set:
+
+- **Mode** — how users travel to and from the stations: `Walk`, `Bicycle`, `Pedelec`, or `Car`.
+- **Calculate by** — whether the leg is limited by `Time` or `Distance`, and the corresponding **Limit**.
+- **Speed** — the travel speed used for the leg (when calculating by `Time`).
+
+By default, both the access and egress legs use `Walk`, a `Time` limit of `15 min`, and a speed of `5 km/h`.

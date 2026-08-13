@@ -34,7 +34,9 @@ Eine ÖPNV-Fahrt besteht aus drei Abschnitten: dem **Zugangsweg** vom Startpunkt
   <img src={require('/img/routing/pt_trip_structure_de.png').default} alt="Struktur und Beispielkombinationen einer ÖPNV-Fahrt" style={{ maxWidth: "100%", objectFit: "contain"}}/>
 </div>
 
-Das Routing für den öffentlichen Verkehr wird mit der **[R5 Routing Engine](https://github.com/conveyal/r5)** (_Rapid Realistic Routing on Real-world and Reimagined networks_) durchgeführt. R5 ist die Routing-Engine von **[Conveyal](https://conveyal.com/)**, einer webbasierten Plattform, die es den Nutzern ermöglicht, Planungsszenarien zu erstellen und verschiedene Erreichbarkeitsindikatoren zu berechnen.
+Das Routing für den öffentlichen Verkehr wird von GOATs eigener leistungsstarker Routing-Engine durchgeführt, die die Open-Source-Bibliothek **[nigiri](https://github.com/motis-project/nigiri)** einbindet. Nigiri ist eine C++-Bibliothek aus dem **[MOTIS-Projekt](https://github.com/motis-project)**, die eine One-to-All-Verbindungssuche im öffentlichen Verkehr mithilfe des **RAPTOR**-Algorithmus bereitstellt.
+
+Die **Transit-Etappe** wird von nigiri berechnet, während die **Zugangs- und Abgangs-Etappen** (erste und letzte Meile) GOATs eigene **Dijkstra**-Implementierung verwenden – dasselbe Routing wie für aktive Mobilität und Auto. Dadurch bleibt das straßenbasierte Routing über alle Verkehrsträger hinweg konsistent.
 
 
 ### Routing-Optionen
@@ -55,24 +57,20 @@ Der Wochentag, der beim Routing im öffentlichen Verkehr berücksichtigt wird. W
 
 #### Start- und Endzeit
 
-Ein Zeitfenster für das Routing im öffentlichen Verkehr. Es werden alle schnellstmöglichen Verbindungen innerhalb dieses Zeitfensters berücksichtigt, was z.B. zu einem möglichst großen Einzugsgebiet vom angegebenen Startpunkt führen kann.  
+Ein Zeitfenster für das Routing im öffentlichen Verkehr. Die Engine wertet **jede Abfahrtsminute** innerhalb dieses Zeitfensters aus und behält die **schnellste** Verbindung zu jedem erreichbaren Ort – es handelt sich nicht um einen Durchschnitt über das Zeitfenster. Das Ergebnis ist daher das bestmögliche, größtmögliche Einzugsgebiet vom angegebenen Startpunkt.  
 Eine Verbindung gilt als innerhalb des Zeitfensters liegend, **ausschließlich basierend auf ihrer Startzeit** – unabhängig von ihrer Endzeit oder Gesamtdauer.
 
 
-#### Sonstiges (Standardkonfigurationen)
+#### Maximale Umstiege
 
-Die folgenden Standardkonfigurationen werden beim Routing für den öffentlichen Verkehr verwendet. Sie sind derzeit nicht vom Benutzer konfigurierbar.
-- **Zugang:** Wie Nutzer von ihrem Ausgangsort zur Haltestelle gelangen (`Fuß`).
-- **Abgang:** Wie Nutzer von der Haltestelle zu ihrem Zielort gelangen (`Fuß`).
-- **Decay function type:** logistic
-- **Standard deviation:** 12 minutes
-- **Width:** 10 minutes
-- **Walk speed:** 5 km/h
-- **Maximum walk time:** 20 minutes
-- **Bike speed:** 15 km/h
-- **Maximum bike time:** 20 minutes
-- **Bike traffic stress:** 4
-- **Maximum rides:** 4
-- **Zoom level:** 9
-- **Percentiles:** 5
-- **Monte Carlo draws:** 200
+Die maximale Anzahl an Umstiegen, die eine ÖV-Verbindung enthalten darf. Es werden maximal `5` Umstiege unterstützt.
+
+#### Zugang und Abgang
+
+Die **Zugangs-Etappe** (vom Ausgangsort zur ersten ÖV-Haltestelle) und die **Abgangs-Etappe** (von der letzten ÖV-Haltestelle zum Ziel) werden unabhängig voneinander konfiguriert. Für jede können Sie festlegen:
+
+- **Verkehrsmittel** — wie Nutzer zu den Haltestellen und von diesen weg gelangen: `Zu Fuß`, `Fahrrad`, `Pedelec` oder `Auto`.
+- **Berechnen nach** — ob die Etappe durch `Zeit` oder `Entfernung` begrenzt wird, sowie das entsprechende **Limit**.
+- **Geschwindigkeit** — die für die Etappe verwendete Reisegeschwindigkeit (bei Berechnung nach `Zeit`).
+
+Standardmäßig verwenden die Zugangs- und die Abgangs-Etappe `Zu Fuß`, ein `Zeit`-Limit von `15 Min` und eine Geschwindigkeit von `5 km/h`.

@@ -145,6 +145,12 @@ Berechnet Gewichte unter Verwendung einer Potenzfunktion. Der Sensitivitätspara
 
 </TabItem>
 
+<TabItem value="cumulative" label="Kumulativ" className="tabItemBox">
+
+Wendet innerhalb des Reisezeitlimits ein volles Gewicht von 1 auf jede Einrichtung an und 0 darüber hinaus, ohne Distanzabfall. Anders als die übrigen Funktionen verwendet sie den Sensitivitätsparameter nicht – alle erreichbaren Einrichtungen zählen gleich. Details siehe [Technische Details](#calculation).
+
+</TabItem>
+
 </Tabs>
 
 ### Bedarf
@@ -368,6 +374,21 @@ Durch Nutzung der *Sensitivität*, die Sie definieren, ermöglicht Ihnen die Gau
   </div>
 </MathJax.Provider>
 </div>  
+
+*Kumulative Gelegenheiten (`Kumulativ` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{für } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{sonst}
+    \\end{cases}`} />
+  </div>
+</MathJax.Provider>
+</div>
+
+Die kumulative Funktion wendet **keinen Distanzabfall** an und verwendet den Parameter *Sensitivität* nicht: Jede Einrichtung innerhalb des Reisezeitlimits **t̄** trägt mit vollem Gewicht bei. Mit kumulativen Gewichten reduzieren sich E2SFCA und M2SFCA darauf, erreichbare Einrichtungen gleich zu zählen, statt sie nach Entfernung zu differenzieren.
 
 
 ### Klassifizierung

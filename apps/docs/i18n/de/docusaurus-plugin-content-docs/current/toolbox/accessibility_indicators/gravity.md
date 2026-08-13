@@ -109,6 +109,12 @@ Diese Funktion berechnet die Erreichbarkeit basierend auf einer Potenzkurve, die
 
 </TabItem>
 
+<TabItem value="cumulative" label="Kumulativ" default className="tabItemBox">
+
+Diese Funktion zählt jedes Ziel innerhalb des Reisezeitlimits gleich und wendet keinen Distanzabfall an: Ziele, die innerhalb des Limits erreichbar sind, erhalten das volle Gewicht (moduliert durch ihr `Destinationspotenzial`), während weiter entfernte Ziele unberücksichtigt bleiben. Der Parameter `Sensitivität` wird dabei nicht verwendet. Für weitere Details siehe den Abschnitt [Technische Details](#4-technische-details).
+
+</TabItem>
+
 </Tabs>
 
 ### Ziele
@@ -218,7 +224,7 @@ Einfach gesagt, die Erreichbarkeit (**A**) einer Zelle (**i**) hängt ab von:
 - der **Anzahl oder Bedeutung der Ziele** (**O**) in der Nähe und  
 - der **Reisezeit** (**tᵢⱼ**) zu diesen Zielen.
 
-Die Funktion **f(tᵢⱼ)** reduziert den Einfluss weiter entfernter Ziele – dies ist die **Widerstandsfunktion**. In GOAT können Sie zwischen verschiedenen Widerstandstypen wählen: `Gauß`, `Linear`, `Exponential` oder `Potenz`.
+Die Funktion **f(tᵢⱼ)** reduziert den Einfluss weiter entfernter Ziele – dies ist die **Widerstandsfunktion**. In GOAT können Sie zwischen verschiedenen Widerstandstypen wählen: `Gauß`, `Linear`, `Exponential`, `Potenz` oder `Kumulativ`.
 
 und einstellen, wie stark die Entfernung die Erreichbarkeit beeinflusst, mit dem **Sensitivitätsparameter (β)**. Falls ein **Destinationspotenzial** enthalten ist, erhöht dies zusätzlich das Gewicht von Zielen mit höherer Kapazität oder Qualität (z. B. größere Geschäfte oder häufige Haltestellen).
 
@@ -276,6 +282,21 @@ Mit der von Ihnen gewählten *Sensitivität* ermöglicht die Gaußfunktion, dies
   </div>
 </MathJax.Provider>
 </div>  
+
+*Kumulative Gelegenheiten (`Kumulativ` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{für } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{sonst}
+    \\end{cases}`}/>
+  </div>
+</MathJax.Provider>
+</div>
+
+Anders als die übrigen Funktionen wendet die kumulative Funktion **keinen Distanzabfall** innerhalb des Reisezeitlimits **t̄** an: Jedes erreichbare Ziel zählt gleich. Sie verwendet daher den Parameter *Sensitivität (β)* nicht – sie zählt einfach die innerhalb des Limits erreichbaren Gelegenheiten.
 
 Reisezeiten werden in Minuten gemessen. Für ein maximales Reisezeitlimit von 30 Minuten werden Ziele, die weiter entfernt sind, als nicht erreichbar betrachtet und gehen nicht in die Berechnung ein. Der *Sensitivitätsparameter* bestimmt, wie sich die Erreichbarkeit mit zunehmender Reisezeit verändert. Da der *Sensitivitätsparameter* entscheidend für die Messung der Erreichbarkeit ist, können Sie diesen in GOAT einstellen. Das Diagramm zeigt, wie die Bereitschaft zu Fuß zu gehen mit zunehmender Reisezeit je nach gewählter Widerstandsfunktion und Sensitivitätswert (β) abnimmt.
 

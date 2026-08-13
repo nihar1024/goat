@@ -145,6 +145,12 @@ Calculates weights using a power function. The sensitivity parameter controls th
 
 </TabItem>
 
+<TabItem value="cumulative" label="Cumulative" className="tabItemBox">
+
+Applies a full weight of 1 to every facility within the travel time limit and 0 beyond it, with no distance decay. Unlike the other functions, it does not use the sensitivity parameter — all reachable facilities count equally. For details, see [Technical details](#calculation).
+
+</TabItem>
+
 </Tabs>
 
 ### Demand
@@ -305,7 +311,7 @@ The three variants differ in how the impedance function *f(d)* is applied:
 | **E2SFCA** | *f(d) = w(d)* | *f(d) = w(d)* |
 | **M2SFCA** | *f(d) = w(d)* | *f(d) = w(d)<sup>2</sup>* |
 
-Where *w(d)* is the selected impedance function (Gaussian, Linear, Exponential, or Power). 
+Where *w(d)* is the selected impedance function (Gaussian, Linear, Exponential, Power, or Cumulative). 
 
 ### Comparison of variants
 
@@ -382,6 +388,21 @@ Leveraging the *sensitivity* you define, the Gaussian function allows you to mod
   </div>
 </MathJax.Provider>
 </div>  
+
+*Cumulative Opportunities (`cumulative` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{for } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{otherwise}
+    \\end{cases}`} />
+  </div>
+</MathJax.Provider>
+</div>
+
+The cumulative function applies **no distance decay** and does not use the *sensitivity* parameter: every facility within the travel time limit **t̄** contributes with full weight. Note that with cumulative weights, E2SFCA and M2SFCA reduce to counting reachable facilities equally rather than distance-differentiating them.
 
 
 ### Classification

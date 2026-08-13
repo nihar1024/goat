@@ -108,6 +108,12 @@ This function calculates accessibilities based on a power curve, which is influe
 
 </TabItem>
 
+<TabItem value="cumulative" label="Cumulative" default className="tabItemBox">
+
+This function counts every destination within the travel time limit equally, applying no distance decay: destinations reachable within the limit receive full weight (modulated by their `destination_potential`), while those beyond it are ignored. It does not use the `sensitivity` parameter. For a more in-depth understanding, refer to the [Technical details](./gravity#4-technical-details) section.
+
+</TabItem>
+
 </Tabs>
 
 ### Opportunities
@@ -220,7 +226,7 @@ In simple terms, the accessibility (**A**) of a cell (**i**) depends on:
 - the **number or importance of destinations** (**O**) nearby, and  
 - the **travel time** (**tᵢⱼ**) needed to reach them.
 
-The function **f(tᵢⱼ)** reduces the influence of destinations that are farther away — this is called the **impedance function**. In GOAT you can choose between different impedance types: `gaussian`, `linear`, `exponential`, or `power`.
+The function **f(tᵢⱼ)** reduces the influence of destinations that are farther away — this is called the **impedance function**. In GOAT you can choose between different impedance types: `gaussian`, `linear`, `exponential`, `power`, or `cumulative`.
 
 and adjust how strongly distance affects accessibility using the **sensitivity (β)** parameter. If **destination potential** is included, it further increases the weight of destinations with higher capacity or quality (e.g., larger stores or frequent transit stops).
 
@@ -280,6 +286,21 @@ Leveraging the *sensitivity* you define, the Gaussian function allows you to mod
   </div>
 </MathJax.Provider>
 </div>  
+
+*Cumulative Opportunities (`cumulative` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{for } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{otherwise}
+    \\end{cases}`} />
+  </div>
+</MathJax.Provider>
+</div>
+
+Unlike the other functions, the cumulative function applies **no distance decay** within the travel time limit **t̄**: every reachable destination counts equally. It therefore does not use the *sensitivity (β)* parameter — it simply counts the opportunities reachable within the limit.
 
 Travel times are measured in minutes. For a maximum travel time of 30 minutes, destinations that are farther than 30 minutes are considered non-accessible and therefore not considered in the calculation of the accessibility. The *sensitivity* parameter determines how accessibility changes with increasing travel time. As the *sensitivity* parameter is decisive when measuring accessibility, GOAT allows you to adjust this. The graph shows how the willingness to walk decreases with increasing travel time based on the selected impedance function and sensitivity value (β).
 

@@ -9,9 +9,9 @@ Das **Verkehrsmittel ÖPNV** in GOAT ist essentiell für die Durchführung von A
 
 ## 1. Zielsetzung
 
-Das ÖPNV-Routing erleichtert die **intermodale Analyse** durch die Wahl von Zu- und Abgang, wie z.B. zu Fuß oder mit dem Fahrrad zum und vom Bahnhof. Dies ist komplexer als die anderen Routing-Modi, da es die Zusammenführung verschiedener Datensätze (z. B. Bürgersteige und Radwege, Haltestellen und Fahrpläne des öffentlichen Verkehrs usw.) und Berechnungsansätze erfordert.
+Das ÖPNV-Routing erleichtert die **intermodale Analyse** durch die Wahl von Zu- und Abgang, wie z.B. zu Fuß, mit dem Fahrrad oder mit dem Auto zum und vom Bahnhof. Dies ist komplexer als die anderen Routing-Modi, da es die Zusammenführung verschiedener Datensätze (z. B. Bürgersteige und Radwege, Haltestellen und Fahrpläne des öffentlichen Verkehrs usw.) und Berechnungsansätze erfordert.
 
-Das Routing im öffentlichen Verkehr wird in GOAT für Indikatoren wie [Einzugsgebiete](../toolbox/accessibility_indicators/catchments) verwendet.
+Das Routing im öffentlichen Verkehr wird in GOAT für Indikatoren wie [Einzugsgebiete](../toolbox/accessibility_indicators/catchments) und [Heatmaps](../toolbox/accessibility_indicators/connectivity) verwendet.
 
 
 ## 2. Daten

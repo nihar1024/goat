@@ -39,23 +39,17 @@ The Travel Cost Matrix is designed for **batch computation across many origins a
 
 ### Configuration
 
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Configure the options for your selected <code>Transport mode</code>. The available fields depend on the mode:</div>
+</div>
+
 <Tabs>
 <TabItem value="active-car" label="Walk / Bicycle / Pedelec / Car" default className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Under <code>Calculate by</code>, select <code>Time (min)</code> or <code>Distance (m)</code>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">If calculating by <code>Time (min)</code>, set the <code>Travel speed (km/h)</code>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Optionally, enable <code>Advanced options</code> to set a maximum cost limit: <code>Limit - Time (min)</code> when calculating by time, or <code>Limit - Distance (m)</code> when calculating by distance. If no limit is set, the calculation is unbounded (see limits table in Technical details).</div>
-</div>
+- Under <code>Calculate by</code>, select <code>Time (min)</code> or <code>Distance (m)</code>.
+- If calculating by <code>Time (min)</code>, set the <code>Travel speed (km/h)</code>.
+- Optionally, enable <code>Advanced options</code> to set a maximum cost limit: <code>Limit - Time (min)</code> when calculating by time, or <code>Limit - Distance (m)</code> when calculating by distance. If no limit is set, the calculation is unbounded (see limits table in Technical details).
 
 :::tip Hint
 
@@ -71,25 +65,10 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 </TabItem>
 <TabItem value="pt" label="Public Transport (PT)" className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Select the <code>Choose PT Modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Select the <code>Day</code> (<code>Weekday</code>, <code>Saturday</code>, or <code>Sunday</code>) and set the <code>Start Time</code> and <code>End Time</code> for the analysis time window.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Set the <code>Travel time limit (min)</code> — the maximum journey duration to consider.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">6</div>
-  <div class="content">Optionally, enable <code>Advanced options</code> to configure <code>Max. transfers</code>, <code>Access Mode</code>, and <code>Egress Mode</code>.</div>
-</div>
+- Select the <code>Choose PT Modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular.
+- Select the <code>Day</code> (<code>Weekday</code>, <code>Saturday</code>, or <code>Sunday</code>) and set the <code>Start Time</code> and <code>End Time</code> for the analysis time window.
+- Set the <code>Travel time limit (min)</code> — the maximum journey duration to consider.
+- Optionally, enable <code>Advanced options</code> to configure <code>Max. transfers</code>, <code>Access Mode</code>, and <code>Egress Mode</code>.
 
 </TabItem>
 </Tabs>
@@ -97,29 +76,29 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 ### Input
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">4</div>
   <div class="content">Under <b>Origins</b>, select your <code>Origins layer</code> (a point layer where each feature is a starting location) and set the <code>Origins label</code> — the column used to identify origins in the result matrix.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">5</div>
   <div class="content">Under <b>Destinations</b>, select your <code>Destinations layer</code> (a point layer where each feature is a target location) and set the <code>Destinations label</code> — the column used to identify destinations in the result matrix.</div>
 </div>
 
 ### Result layer
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">6</div>
   <div class="content">Set the <code>Destinations layer name</code> for the output destinations point layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">10</div>
+  <div class="step-number">7</div>
   <div class="content">Set the <code>Matrix layer name</code> for the output table layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">11</div>
+  <div class="step-number">8</div>
   <div class="content">Click on <code>Run</code>.</div>
 </div>
 

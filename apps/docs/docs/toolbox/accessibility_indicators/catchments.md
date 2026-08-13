@@ -58,27 +58,28 @@ If you need analyses beyond these regions, feel free to [contact us](https://pla
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Select the <code>Routing Type</code> and configure the parameters for your chosen mode following the steps below.</div>
+  <div class="content">Select the <code>Routing Type</code> for your analysis.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">Configure the parameters for your chosen <code>Routing Type</code>. The available fields depend on the mode:</div>
 </div>
 
 <Tabs>
 <TabItem value="active-car" label="Walk / Bicycle / Pedelec / Car" default className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Choose whether to calculate the catchment area based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit. If choosing <code>Time</code>, you can also configure the <code>Speed</code>.</div>
-</div>
+- Choose whether to calculate the catchment area based on <code>Time</code> or <code>Distance</code>, and set the corresponding limit. If choosing <code>Time</code>, you can also configure the <code>Speed</code>.
+- Choose the <code>Catchment area shape</code>. If choosing:
+  - <code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.
+  - <code>Hexagonal grid</code>: no further configuration is necessary.
+  - <code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.
 
 :::tip Hint
 
 For suitable travel time limits by amenity type, see the [Location Tool](https://www.chemnitz.de/chemnitz/media/unsere-stadt/verkehr/verkehrsplanung/vep2040_standortwerkzeug.pdf) from the City of Chemnitz.
 
 :::
-
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
-</div>
 
 </TabItem>
 
@@ -86,10 +87,12 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 
 **Considers all locations accessible by public transport, including inter-modal transfers and station access.**
 
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">Select the <code>Public transport modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular, and configure the <code>Travel time limit</code> in minutes.</div>
-</div>
+- Select the <code>Public transport modes</code> to analyze: Bus, Tram, Rail, Subway, Ferry, Cable Car, Gondola, and/or Funicular, and configure the <code>Travel time limit</code> in minutes.
+- Choose the <code>Catchment area shape</code>. If choosing:
+  - <code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.
+  - <code>Hexagonal grid</code>: no further configuration is necessary.
+  - <code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.
+- Select the <code>Day</code>, <code>Start Time</code>, and <code>End Time</code> for the analysis time window.
 
 :::tip Hint
 
@@ -97,28 +100,18 @@ For suitable travel time limits by amenity type, see the [Location Tool](https:/
 
 :::
 
-<div class="step">
-  <div class="step-number">4</div>
-  <div class="content">Choose the <code>Catchment area shape</code>. If choosing: <ul><li><code>Polygon</code> or <code>Network</code>: you can select the <code>Steps</code> and <code>Step sizes</code>.</li><li><code>Hexagonal grid</code>: no further configuration is necessary.</li><li><code>Point grid</code>: you need to select the <code>Point grid layer</code> where the values will be applied.</li></ul></div>
-</div>
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Select the <code>Day</code>, <code>Start Time</code>, and <code>End Time</code> for the analysis time window.</div>
-</div>
-
 </TabItem>
 </Tabs>
 
 ### Advanced Options
 
+<div class="step">
+  <div class="step-number">4</div>
+  <div class="content">Optionally, click on <code>Advanced Options</code> to configure additional settings. The available options depend on the selected <code>Routing Type</code>:</div>
+</div>
+
 <Tabs>
 <TabItem value="non-pt" label="Walk / Bicycle / Pedelec / Car" default className="tabItemBox">
-
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Optionally, click on <code>Advanced Options</code> to configure additional settings.</div>
-</div>
 
 #### Shape style
 
@@ -142,10 +135,7 @@ Choose how the isochrone steps are displayed:
 
 <TabItem value="pt-advanced" label="Public Transport (PT)" className="tabItemBox">
 
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">Optionally, click on <code>Advanced Options</code> to configure the <code>Steps style</code>, <code>Maximum Transfers</code>, <code>Access mode</code>, and <code>Egress mode</code>.</div>
-</div>
+For Public Transport, Advanced Options let you configure the <code>Steps style</code>, <code>Maximum Transfers</code>, <code>Access mode</code>, and <code>Egress mode</code>.
 
 #### Steps style
 
@@ -175,7 +165,7 @@ For each mode, configure the **maximum travel time or distance** and the **trave
 ### Starting Points
 
 <div class="step">
-  <div class="step-number">6</div>
+  <div class="step-number">5</div>
   <div class="content">Select the <code>Starting point method</code>: <code>Select on map</code> and <b>click on the map to place starting point(s)</b>. Or <code>Select from layer</code> and <b>choose a Point layer</b> containing your desired starting point(s). All features in the layer will be used as starting points.</div>
 </div>
 
@@ -183,17 +173,17 @@ For each mode, configure the **maximum travel time or distance** and the **trave
 ### Result Layer
 
 <div class="step">
-  <div class="step-number">7</div>
+  <div class="step-number">6</div>
   <div class="content">Set the <code>Result layer name</code> for the output catchment area layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">8</div>
+  <div class="step-number">7</div>
   <div class="content">Set the <code>Starting points layer name</code> for the output starting points layer.</div>
 </div>
 
 <div class="step">
-  <div class="step-number">9</div>
+  <div class="step-number">8</div>
   <div class="content">Click on <code>Run</code> to start the calculation.</div>
 </div>
 

@@ -170,6 +170,7 @@ GRAVITY_DECAY_LABELS: dict[str, str] = {
     "exponential": "enums.gravity_decay.exponential",
     "linear": "enums.gravity_decay.linear",
     "power": "enums.gravity_decay.power",
+    "cumulative": "enums.gravity_decay.cumulative",
 }
 
 
@@ -280,7 +281,19 @@ class OpportunityV2PointGravity(OpportunityV2PointBase):
                 "max": SENSITIVITY_MAX,
                 "step": 1000,
             },
-            visible_when={"input_path": {"$ne": None}},
+            # Cumulative (in-budget step) and linear (1 - cost/max_cost) have
+            # no sensitivity term, so the field would do nothing under them.
+            # Card fields are evaluated against the parent form's values merged
+            # with the item's, so `decay` (a tool-level field) is in scope here.
+            visible_when={
+                "input_path": {"$ne": None},
+                "decay": {
+                    "$nin": [
+                        GravityDecay.cumulative.value,
+                        GravityDecay.linear.value,
+                    ]
+                },
+            },
         ),
     )
     potential_type: PotentialType = Field(
@@ -670,7 +683,8 @@ class HeatmapV2WindmillParams(ToolInputBase):
             field_order=1,
             label_key="impedance",
             enum_labels=GRAVITY_DECAY_LABELS,
-            visible_when={"heatmap_type": "gravity"},
+            # 2SFCA overrides this field with its own condition and ordering.
+            visible_when={"heatmap_type": HeatmapType.gravity.value},
         ),
     )
 
@@ -1173,6 +1187,24 @@ class Heatmap2SFCAV2WindmillParams(
             field_order=5,
             label_key="two_sfca_type",
             enum_labels=TwoSFCAType_LABELS,
+        ),
+    )
+    # E2SFCA and M2SFCA feed the decay curve into both 2SFCA steps, so they need
+    # the selector; standard 2SFCA weights every reached cell equally (W = 1) and
+    # ignores it. Ordered after two_sfca_type, which decides whether it applies.
+    decay: GravityDecay = Field(
+        default=GravityDecay.gaussian,
+        description="Shape of the distance-decay curve applied to travel cost.",
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=6,
+            label_key="impedance",
+            enum_labels=GRAVITY_DECAY_LABELS,
+            visible_when={
+                "two_sfca_type": {
+                    "$in": [TwoSFCAType.e2sfca.value, TwoSFCAType.m2sfca.value]
+                }
+            },
         ),
     )
     # Supply layers — capacity is carried by the opportunity potential fields.

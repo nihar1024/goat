@@ -517,6 +517,14 @@ void reduce_and_export(HeatmapConfig const &cfg, duckdb::Connection &con,
                 ", 1e-9), -1.0 * (1.0 / " +
                 std::to_string(inv_sensitivity_norm) + "))";
             break;
+        case GravityDecay::Cumulative:
+            // Typed DOUBLE so the score column matches the other decays: bare
+            // literals here are DECIMAL, and summing them against an integer
+            // weight would emit DECIMAL(38,1) instead.
+            decay_expr =
+                "CASE WHEN min_cost <= " + std::to_string(cfg.max_cost) +
+                " THEN 1.0::DOUBLE ELSE 0.0::DOUBLE END";
+            break;
         }
 
         if (cfg.heatmap_type == HeatmapType::TwoSFCA)

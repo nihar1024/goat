@@ -797,7 +797,8 @@
       "gaussian": "Gauß",
       "exponential": "Exponentiell",
       "linear": "Linear",
-      "power": "Potenz"
+      "power": "Potenz",
+      "cumulative": "Kumulativ"
     },
     "heatmap_type": {
       "gravity": "Gravitation",

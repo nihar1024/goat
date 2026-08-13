@@ -296,6 +296,7 @@ class HeatmapV2Tool(HeatmapToolBase):
             GravityDecay.exponential: routing.GravityDecay.Exponential,
             GravityDecay.linear: routing.GravityDecay.Linear,
             GravityDecay.power: routing.GravityDecay.Power,
+            GravityDecay.cumulative: routing.GravityDecay.Cumulative,
         }
 
         cfg = routing.HeatmapConfig()

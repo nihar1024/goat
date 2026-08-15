@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 # e.g. "cancelled by majkshkurti (reason: User requested dismissal)" -> "cancelled (reason: User requested dismissal)"
 _CANCEL_USER_RE = re.compile(r"cancelled by \S+")
 
+# Numbered opportunity-layer canvas handles, e.g. "opportunity_layer_2_id"
+_NUMBERED_OPPORTUNITY = re.compile(r"opportunity_layer_(\d+)_id")
+
 
 def _sanitize_error_msg(msg: str) -> str:
     """Remove usernames from Windmill cancellation error messages."""
@@ -624,44 +627,49 @@ def build_tool_inputs(
             if input_paths:
                 inputs["input_paths"] = input_paths
 
-    # For heatmap gravity/closest_average: build opportunities list from
-    # numbered opportunity_layer_N_id inputs and per-opportunity config keys.
-    if process_id in ("heatmap_gravity", "heatmap_closest_average", "heatmap_2sfca"):
-        opp_keys = sorted(
-            k
-            for k in list(inputs)
-            if k.startswith("opportunity_layer_") and k.endswith("_id")
+    # Heatmaps expose numbered opportunity_layer_N_id handles on the canvas
+    # instead of the repeatable opportunities list. Keyed on the input shape,
+    # not the tool name, so legacy and v2 heatmaps are handled alike — the
+    # per-opportunity field names are the same in both (v2's opportunity model
+    # inherits v1's). The number is required: Huff takes a single
+    # `opportunity_layer_id` that must stay a plain layer id.
+    # Ordered by the handle number, not the key text, so a tenth handle can't
+    # sort ahead of the second.
+    numbered = sorted(
+        (
+            (int(match.group(1)), key)
+            for key in list(inputs)
+            if (match := _NUMBERED_OPPORTUNITY.fullmatch(key))
         )
-        if opp_keys:
-            opportunities: list[dict[str, Any]] = []
-            for key in opp_keys:
-                layer_id = inputs.pop(key)
-                if not layer_id:
-                    continue
-                # Pop the corresponding filter
-                filter_key = key.replace("_id", "_filter")
-                layer_filter = inputs.pop(filter_key, None)
+    )
+    if numbered:
+        opportunities: list[dict[str, Any]] = []
+        for opp_num, key in numbered:
+            layer_id = inputs.pop(key)
+            if not layer_id:
+                continue
+            # Pop the corresponding filter
+            filter_key = key.replace("_id", "_filter")
+            layer_filter = inputs.pop(filter_key, None)
 
-                # Extract the number (e.g. "1" from "opportunity_layer_1_id")
-                opp_num = key.split("_")[2]
-                # Collect per-opportunity config (opportunity_1_max_cost, etc.)
-                prefix = f"opportunity_{opp_num}_"
-                opp_config: dict[str, Any] = {}
-                for cfg_key in list(inputs):
-                    if cfg_key.startswith(prefix):
-                        param_name = cfg_key[len(prefix) :]
-                        opp_config[param_name] = inputs.pop(cfg_key)
+            # Collect per-opportunity config (opportunity_1_max_cost, etc.)
+            prefix = f"opportunity_{opp_num}_"
+            opp_config: dict[str, Any] = {}
+            for cfg_key in list(inputs):
+                if cfg_key.startswith(prefix):
+                    param_name = cfg_key[len(prefix) :]
+                    opp_config[param_name] = inputs.pop(cfg_key)
 
-                opportunity: dict[str, Any] = {
-                    "input_path": layer_id,
-                    **opp_config,
-                }
-                if layer_filter:
-                    opportunity["input_layer_filter"] = layer_filter
-                opportunities.append(opportunity)
+            opportunity: dict[str, Any] = {
+                "input_path": layer_id,
+                **opp_config,
+            }
+            if layer_filter:
+                opportunity["input_layer_filter"] = layer_filter
+            opportunities.append(opportunity)
 
-            if opportunities:
-                inputs["opportunities"] = opportunities
+        if opportunities:
+            inputs["opportunities"] = opportunities
 
     # Add workflow context
     inputs["user_id"] = params.user_id

@@ -31,6 +31,13 @@ SENSITIVITY_MAX = 1_000_000
 N_DESTINATIONS_MIN = 1
 N_DESTINATIONS_MAX = 10
 
+# Ceiling for a PT access/egress leg, in minutes. Must match the max_min the
+# precomputed lookup tables were built with: the engine only filters rows a
+# table already contains, so a higher limit here truncates silently rather than
+# erroring. Lives in the analysis layer because that is what the tables feed;
+# the tool layer re-exports it as the form's cap via `_routing_limits`.
+MAX_LEG_TIME_LOOKUP_MIN = 30
+
 
 class HeatmapType(StrEnum):
     gravity = "gravity"
@@ -44,6 +51,7 @@ class GravityDecay(StrEnum):
     exponential = "exponential"
     linear = "linear"
     power = "power"
+    cumulative = "cumulative"
 
 
 class TwoSFCAType(StrEnum):
@@ -124,7 +132,7 @@ class HeatmapV2Params(BaseModel):
     # ---- Public transport (routing_mode == pt) -------------------------------
     # Arrive-by reverse RAPTOR + precomputed per-mode access/egress lookup
     # tables. access/egress modes pick which table is loaded; their max times
-    # are capped at the table's built max (20 min). Ignored for street modes.
+    # are capped at the table's built max. Ignored for street modes.
     arrival_time: int | None = Field(
         default=None,
         description="Arrive-by time, unix minutes since epoch (PT only).",
@@ -138,11 +146,11 @@ class HeatmapV2Params(BaseModel):
         description="Egress leg mode (alighting stop→opportunity); selects its lookup table.",
     )
     access_max_time: int = Field(
-        default=15, ge=1, le=20,
+        default=15, ge=1, le=MAX_LEG_TIME_LOOKUP_MIN,
         description="Max access-leg minutes (≤ the access table's built max).",
     )
     egress_max_time: int = Field(
-        default=15, ge=1, le=20,
+        default=15, ge=1, le=MAX_LEG_TIME_LOOKUP_MIN,
         description="Max egress-leg minutes (≤ the egress table's built max).",
     )
     transit_modes: list[str] | None = Field(

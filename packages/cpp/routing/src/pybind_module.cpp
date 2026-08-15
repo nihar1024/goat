@@ -133,7 +133,8 @@ PYBIND11_MODULE(_routing, m)
         .value("Gaussian",    routing::GravityDecay::Gaussian)
         .value("Exponential", routing::GravityDecay::Exponential)
         .value("Linear",      routing::GravityDecay::Linear)
-        .value("Power",       routing::GravityDecay::Power);
+        .value("Power",       routing::GravityDecay::Power)
+        .value("Cumulative",  routing::GravityDecay::Cumulative);
 
     py::class_<routing::Opportunity>(m, "Opportunity")
         .def(py::init<>())

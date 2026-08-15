@@ -532,9 +532,9 @@ SCHEMA_PREDICTORS: dict[str, Any] = {
     "geocoding": predict_geocoding_schema,
     # Accessibility tools
     "catchment_area": predict_catchment_area_schema,
-    "heatmap_gravity": predict_heatmap_schema,
-    "heatmap_closest_average": predict_heatmap_schema,
-    "heatmap_connectivity": predict_heatmap_schema,
+    "heatmap_gravity_legacy": predict_heatmap_schema,
+    "heatmap_closest_average_legacy": predict_heatmap_schema,
+    "heatmap_connectivity_legacy": predict_heatmap_schema,
 }
 
 # Tools that take two layer inputs (need special handling for legacy predictors)

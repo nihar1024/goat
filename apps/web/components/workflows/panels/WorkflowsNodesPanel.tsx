@@ -43,6 +43,7 @@ import type { ToolCategory } from "@/types/map/ogc-processes";
 import { useCategorizedProcesses } from "@/hooks/map/useOgcProcesses";
 
 import SettingsGroupHeader from "@/components/builder/widgets/common/SettingsGroupHeader";
+import BetaSectionDivider from "@/components/common/BetaSectionDivider";
 import {
   SIDE_PANEL_WIDTH,
   SidePanelContainer,
@@ -96,6 +97,7 @@ interface ToolItem {
   id: string;
   title: string;
   description?: string;
+  beta?: boolean;
 }
 
 // Draggable tool card component - styled same as ReportsElementsPanel
@@ -205,6 +207,7 @@ const ToolsTabContent: React.FC<ToolsTabContentProps> = ({ onDragStart }) => {
         id: process.id,
         title: process.title,
         description: process.description,
+        beta: process["x-ui-beta"] === true,
       });
     }
 
@@ -324,20 +327,35 @@ const ToolsTabContent: React.FC<ToolsTabContentProps> = ({ onDragStart }) => {
             </Typography>
           )}
 
-          {/* Tool Categories */}
+          {/* Tool Categories — beta tools sit under a labelled rule at the
+              bottom of their category, matching the map toolbox. */}
           {sortedCategories.map(([category, tools]) => {
             const categoryConfig = CATEGORY_CONFIG[category as ToolCategory];
+            const betaTools = tools.filter((tool) => tool.beta);
+            const mainTools = tools.filter((tool) => !tool.beta);
 
             return (
               <Box key={category} sx={{ mb: 4 }}>
                 <SettingsGroupHeader label={t(categoryConfig?.name ?? category)} />
                 <Grid container spacing={4}>
-                  {tools.map((tool) => (
+                  {mainTools.map((tool) => (
                     <Grid item xs={4} key={tool.id}>
                       <DraggableToolCard tool={tool} onDragStart={handleToolDragStart} />
                     </Grid>
                   ))}
                 </Grid>
+                {betaTools.length > 0 && (
+                  <Box sx={{ mt: 3 }}>
+                    <BetaSectionDivider />
+                    <Grid container spacing={4}>
+                      {betaTools.map((tool) => (
+                        <Grid item xs={4} key={tool.id}>
+                          <DraggableToolCard tool={tool} onDragStart={handleToolDragStart} />
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
               </Box>
             );
           })}

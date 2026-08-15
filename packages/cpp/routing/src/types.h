@@ -154,7 +154,7 @@ namespace routing
         // Reverse mode (street only): seed the search from the destination side
         // on the transposed graph, so cost[origin->destination] is recovered
         // while running one Dijkstra per destination. Output schema unchanged.
-        // (Reverse PT is served by compute_heatmap's od_output_path, not here.)
+        // (Reverse PT is served by compute_od_costs, not here.)
         bool reverse = false;
         bool sparse = false;  // emit only reachable pairs
     };
@@ -180,6 +180,7 @@ namespace routing
         Exponential,  // exp(-(sensitivity/max_sensitivity) × cost/max_cost)
         Linear,       // max(0, 1 - cost/max_cost)
         Power,        // (cost/max_cost)^(-sensitivity/max_sensitivity)
+        Cumulative,   // 1 if cost <= max_cost else 0
     };
 
     enum class TwoSFCAType : uint8_t

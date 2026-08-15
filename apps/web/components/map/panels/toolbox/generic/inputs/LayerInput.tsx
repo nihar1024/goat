@@ -45,6 +45,14 @@ function mapGeometryToLayerType(geometry: string): string {
   return normalized;
 }
 
+/** Empty-state message per layer type, matching the wording v1 tools use */
+const EMPTY_MESSAGE_KEY: Record<string, string> = {
+  polygon: "no_polygon_layer_found",
+  point: "no_point_layer_found",
+  line: "no_line_layer_found",
+  no_geometry: "no_table_layers",
+};
+
 export default function LayerInput({
   input,
   value,
@@ -142,6 +150,13 @@ export default function LayerInput({
   // Get label from uiMeta (already translated) or fallback to title
   const label = input.uiMeta?.label || input.title;
 
+  // Name the geometry the field needs, so an empty selector explains itself
+  const emptyMessage = useMemo(() => {
+    const types = [...new Set((input.geometryConstraints ?? []).map(mapGeometryToLayerType))];
+    const key = types.length === 1 ? EMPTY_MESSAGE_KEY[types[0]] : undefined;
+    return t(key ?? "no_layers_found");
+  }, [input.geometryConstraints, t]);
+
   return (
     <Selector
       selectedItems={selectedItem}
@@ -150,7 +165,7 @@ export default function LayerInput({
       label={label}
       tooltip={tooltip}
       placeholder={t("select_layer")}
-      emptyMessage={t("no_layers_found")}
+      emptyMessage={emptyMessage}
       emptyMessageIcon={ICON_NAME.LAYERS}
       disabled={disabled}
     />

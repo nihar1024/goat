@@ -56,13 +56,12 @@ DEFAULT_H3_RESOLUTION: dict[RoutingMode, int] = {
 }
 
 # PT access/egress lookup tables are precomputed per mode at a fixed H3
-# resolution and built max-time, named `accessegress_{mode}_r{res}_{max}min`
-# and stored beside the nigiri timetable (gtfs.bin). The runtime
-# access/egress max-time params filter rows from these tables; they cannot
-# exceed the built max. RoutingMode → table mode-name follows the precompute
-# tool's CLI (walking is spelled "walk").
+# resolution, named `accessegress_{mode}_r{res}` and stored beside the nigiri
+# timetable (gtfs.bin). The mode segment is the RoutingMode value verbatim. The
+# runtime access/egress max-time params filter rows from these tables and cannot
+# exceed the budget a table was built with — that budget belongs in the table's
+# metadata, not its name.
 _PT_ACCESSEGRESS_RES = 9
-_PT_ACCESSEGRESS_MAX_MIN = 20
 
 # Connectivity rasterizes the reference area to H3 cells; each cell is a per-cell
 # routing origin. Rasterization uses the fixed per-mode DEFAULT_H3_RESOLUTION
@@ -74,18 +73,16 @@ _PT_ACCESSEGRESS_MAX_MIN = 20
 # (reverse-RAPTOR for PT, Dijkstra for street) — CPU-bound, not the temp-disk-
 # bound sampled-opportunity workload the generic cap guards against.
 _CONNECTIVITY_MAX_CELLS = 50_000
-_PT_TABLE_MODE_NAME: dict[RoutingMode, str] = {
-    RoutingMode.walking: "walk",
-    RoutingMode.bicycle: "bicycle",
-    RoutingMode.pedelec: "pedelec",
-    RoutingMode.car: "car",
-}
-_PT_TABLE_MODE_NAME: dict[RoutingMode, str] = {
-    RoutingMode.walking: "walk",
-    RoutingMode.bicycle: "bicycle",
-    RoutingMode.pedelec: "pedelec",
-    RoutingMode.car: "car",
-}
+# Modes a PT leg can be made in — each has its own precomputed table. PT itself
+# is never an access/egress mode.
+_PT_ACCESSEGRESS_MODES = frozenset(
+    {
+        RoutingMode.walking,
+        RoutingMode.bicycle,
+        RoutingMode.pedelec,
+        RoutingMode.car,
+    }
+)
 
 # Hard cap on total opportunity SEED points across all layers (gravity /
 # closest_average / two_sfca). Seeds are the routing sources — a polygon
@@ -123,13 +120,9 @@ class HeatmapV2Tool(HeatmapToolBase):
 
     def _accessegress_table_path(self: Self, mode: RoutingMode) -> str:
         """Resolve the precomputed access/egress lookup parquet for a mode."""
-        name = _PT_TABLE_MODE_NAME.get(mode)
-        if name is None:
+        if mode not in _PT_ACCESSEGRESS_MODES:
             raise ValueError(f"Unsupported PT access/egress mode: {mode}")
-        fname = (
-            f"accessegress_{name}_r{_PT_ACCESSEGRESS_RES}"
-            f"_{_PT_ACCESSEGRESS_MAX_MIN}min.parquet"
-        )
+        fname = f"accessegress_{mode.value}_r{_PT_ACCESSEGRESS_RES}.parquet"
         return str(Path(self._pt_network_dir) / fname)
 
     # --------------------------------------------------------- opportunities
@@ -303,6 +296,7 @@ class HeatmapV2Tool(HeatmapToolBase):
             GravityDecay.exponential: routing.GravityDecay.Exponential,
             GravityDecay.linear: routing.GravityDecay.Linear,
             GravityDecay.power: routing.GravityDecay.Power,
+            GravityDecay.cumulative: routing.GravityDecay.Cumulative,
         }
 
         cfg = routing.HeatmapConfig()

@@ -159,6 +159,7 @@ async def extended_test_schemas(postgres_pool: Any, test_schemas: None) -> None:
             ("attribution", "TEXT"),
             ("data_reference_year", "INTEGER"),
             ("data_category", "TEXT"),
+            ("field_config", "JSONB NOT NULL DEFAULT '{}'::jsonb"),
         ]
         for col_name, col_type in layer_cols:
             await conn.execute(f"""
@@ -310,8 +311,32 @@ async def test_export_import_round_trip(
         feature_layer_type="standard",
     )
 
+    # A formula column on the internal layer: its definition lives in
+    # customer.layer.field_config, so it only survives the round-trip if
+    # both the export and the import carry that column.
+    field_config = {
+        "name_length": {
+            "kind": "formula",
+            "formula": "length(name)",
+            "depends_on": ["name"],
+            "is_computed": True,
+            "output_kind": "number",
+            "display_config": {"decimals": 0},
+        }
+    }
+
     # Create external layer metadata in PG (WMS, no DuckLake table)
     async with postgres_pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {TEST_CUSTOMER_SCHEMA}.layer
+            SET field_config = $2::jsonb
+            WHERE id = $1
+            """,
+            uuid.UUID(layer_id_1),
+            json.dumps(field_config),
+        )
+
         await conn.execute(
             f"""
             INSERT INTO {TEST_CUSTOMER_SCHEMA}.layer
@@ -516,6 +541,10 @@ async def test_export_import_round_trip(
             project_json = json.loads(zf.read("project.json"))
             assert project_json["name"] == "Test Export Project"
 
+            # Formula column definition travels with the layer metadata
+            internal_meta = json.loads(zf.read(f"layers/{layer_id_1}/metadata.json"))
+            assert internal_meta["field_config"] == field_config
+
             # Workflow config preserved
             wf_json = json.loads(zf.read(f"workflows/{workflow_id}.json"))
             assert wf_json["name"] == "Test Workflow"
@@ -614,6 +643,13 @@ async def test_export_import_round_trip(
             layer_names = {r["name"] for r in layers}
             assert "German Cities" in layer_names
             assert "External WMS" in layer_names
+
+            # The formula column definition is restored on the new layer row.
+            imported_internal = next(r for r in layers if r["name"] == "German Cities")
+            imported_field_config = imported_internal["field_config"]
+            if isinstance(imported_field_config, str):
+                imported_field_config = json.loads(imported_field_config)
+            assert imported_field_config == field_config
 
             # layer_project links
             links = await conn.fetch(

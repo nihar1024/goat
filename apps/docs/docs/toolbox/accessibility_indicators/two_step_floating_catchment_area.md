@@ -40,7 +40,7 @@ You can configure the **routing type**, **opportunity layers** (with capacity fi
 
 :::info
 
-Heatmap computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll discuss further options.
+Heatmap computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/).
 
 :::
 
@@ -71,12 +71,13 @@ Heatmap computation is available across **over 30 European countries** for `Walk
   <div class="content">Pick the <code>Transport mode</code> you would like to use for the heatmap.</div>
 </div>
 
-| Mode | Considers | Speed assumed |
-|------|-----------|---------------|
-| Walk | All paths accessible by foot | 5 km/h |
-| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) | 15 km/h |
-| Pedelec | All paths accessible by pedelec (surface, smoothness) | 23 km/h |
-| Car | All paths accessible by car (speed limits, one-way restrictions) | — |
+| Mode | Considers |
+|------|-----------|
+| Walk | All paths accessible by foot |
+| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) |
+| Pedelec | All paths accessible by pedelec (surface, smoothness) |
+| Car | All paths accessible by car (speed limits, one-way restrictions) |
+| Public Transport | Public transport network (GTFS schedules) with walking access and egress (up to 30 minutes) to and from stations |
 
 ### Configuration
 
@@ -141,6 +142,12 @@ Calculates weights using an exponential decay curve, controlled by the sensitivi
 <TabItem value="power" label="Power" className="tabItemBox">
 
 Calculates weights using a power function. The sensitivity parameter controls the exponent, determining how quickly weights decrease with travel time. For details, see [Technical details](#calculation).
+
+</TabItem>
+
+<TabItem value="cumulative" label="Cumulative" className="tabItemBox">
+
+Applies a full weight of 1 to every facility within the travel time limit and 0 beyond it, with no distance decay. Unlike the other functions, it does not use the sensitivity parameter — all reachable facilities count equally. For details, see [Technical details](#calculation).
 
 </TabItem>
 
@@ -304,7 +311,7 @@ The three variants differ in how the impedance function *f(d)* is applied:
 | **E2SFCA** | *f(d) = w(d)* | *f(d) = w(d)* |
 | **M2SFCA** | *f(d) = w(d)* | *f(d) = w(d)<sup>2</sup>* |
 
-Where *w(d)* is the selected impedance function (Gaussian, Linear, Exponential, or Power). 
+Where *w(d)* is the selected impedance function (Gaussian, Linear, Exponential, Power, or Cumulative). 
 
 ### Comparison of variants
 
@@ -382,6 +389,21 @@ Leveraging the *sensitivity* you define, the Gaussian function allows you to mod
 </MathJax.Provider>
 </div>  
 
+*Cumulative Opportunities (`cumulative` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{for } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{otherwise}
+    \\end{cases}`} />
+  </div>
+</MathJax.Provider>
+</div>
+
+The cumulative function applies **no distance decay** and does not use the *sensitivity* parameter: every facility within the travel time limit **t̄** contributes with full weight. Note that with cumulative weights, E2SFCA and M2SFCA reduce to counting reachable facilities equally rather than distance-differentiating them.
+
 
 ### Classification
 
@@ -390,7 +412,7 @@ However, various other classification methods may be used instead. Read more in 
 
 ### Visualization 
 
-Heatmaps in GOAT utilize **[Uber's H3 grid-based](../../further_reading/glossary#h3-grid)** solution for efficient computation and easy-to-understand visualization. Behind the scenes, a pre-computed travel time matrix for each *routing type* utilizes this solution and is queried and further processed in real-time to compute accessibility and produce a final heatmap.
+Heatmaps in GOAT utilize **[Uber's H3 grid-based](../../further_reading/glossary#h3-grid)** solution for efficient computation and easy-to-understand visualization. Behind the scenes, accessibility is computed on-the-fly by GOAT's own routing engine. For each *routing type*, the engine routes outward from the opportunities to discover the reachable H3 cells and their travel costs, then aggregates these into a per-cell accessibility score. Public transport uses the RAPTOR-based engine, while the active mobility and car modes use GOAT's Dijkstra implementation.
 
 The resolution and dimensions of the hexagonal grid used depend on the selected *routing type*:
 
@@ -400,6 +422,7 @@ The resolution and dimensions of the hexagonal grid used depend on the selected 
 | Bicycle | 9 | 78,999.4 m² | 174.4 m |
 | Pedelec | 9 | 78,999.4 m² | 174.4 m |
 | Car | 8 | 552,995.7 m² | 461.4 m |
+| Public Transport | 9 | 78,999.4 m² | 174.4 m |
 
 
 :::tip Hint

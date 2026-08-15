@@ -41,15 +41,18 @@ _MODE_SPEED_DEFAULTS: dict[RoutingMode, float] = {
 # heatmap_v2.MAX_SEED_POINTS_TOTAL.
 MAX_SEED_POINTS_TOTAL = 50_000
 
-# PT access/egress precomputed lookup tables: accessegress_{name}_r9_20min.parquet.
+# PT access/egress precomputed lookup tables: accessegress_{mode}_r9.parquet.
 _PT_ACCESSEGRESS_RES = 9
-_PT_ACCESSEGRESS_MAX_MIN = 20
-_PT_TABLE_MODE_NAME: dict[RoutingMode, str] = {
-    RoutingMode.walking: "walk",
-    RoutingMode.bicycle: "bicycle",
-    RoutingMode.pedelec: "pedelec",
-    RoutingMode.car: "car",
-}
+# Modes a PT leg can be made in — each has its own precomputed table. PT itself
+# is never an access/egress mode.
+_PT_ACCESSEGRESS_MODES = frozenset(
+    {
+        RoutingMode.walking,
+        RoutingMode.bicycle,
+        RoutingMode.pedelec,
+        RoutingMode.car,
+    }
+)
 
 
 class HuffmodelV2Tool(HeatmapToolBase):
@@ -63,13 +66,9 @@ class HuffmodelV2Tool(HeatmapToolBase):
         self._pt_network_dir = str(Path(self._timetable_path).parent)
 
     def _accessegress_table_path(self: Self, mode: RoutingMode) -> str:
-        name = _PT_TABLE_MODE_NAME.get(mode)
-        if name is None:
+        if mode not in _PT_ACCESSEGRESS_MODES:
             raise ValueError(f"Unsupported PT access/egress mode: {mode}")
-        fname = (
-            f"accessegress_{name}_r{_PT_ACCESSEGRESS_RES}"
-            f"_{_PT_ACCESSEGRESS_MAX_MIN}min.parquet"
-        )
+        fname = f"accessegress_{mode.value}_r{_PT_ACCESSEGRESS_RES}.parquet"
         return str(Path(self._pt_network_dir) / fname)
 
     # ------------------------------------------------------------- rasterization

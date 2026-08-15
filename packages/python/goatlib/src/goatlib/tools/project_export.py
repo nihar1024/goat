@@ -166,7 +166,7 @@ class ProjectExportRunner(SimpleToolRunner):
                            distributor_email, distribution_url, attribution,
                            data_reference_year, lineage, positional_accuracy,
                            attribute_accuracy, completeness, in_catalog,
-                           user_id, folder_id
+                           user_id, folder_id, field_config
                     FROM {schema}.layer
                     WHERE id = ANY($1)
                     """,
@@ -216,6 +216,10 @@ class ProjectExportRunner(SimpleToolRunner):
                         "in_catalog": row["in_catalog"],
                         "user_id": str(row["user_id"]),
                         "folder_id": str(row["folder_id"]),
+                        # Per-column metadata: formula/computed kinds and
+                        # display config. Without it, imported layers keep
+                        # the values but lose the definitions.
+                        "field_config": row["field_config"] or {},
                     }
 
             # Exclude system layers (e.g. street_network) from export

@@ -3,9 +3,9 @@ sidebar_position: 8
 ---
 
 
-# Anzahl Abfahrten
+# Anzahl Abfahrten Haltepunkte
 
-Dieser Indikator zeigt die **durchschnittliche Anzahl der Abfahrten öffentlicher Verkehrsmittel** pro Stunde für jede Haltestelle des öffentlichen Verkehrs an.
+Dieser Indikator zeigt die **durchschnittliche Anzahl der Abfahrten öffentlicher Verkehrsmittel** pro Stunde für jeden Haltepunkt des öffentlichen Verkehrs an.
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
 <iframe  width="674" height="378" src="https://www.youtube.com/embed/psnuUksG7W4?si=dhLw5Gp0ThYHFd5l&amp;start=46" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
@@ -13,13 +13,13 @@ Dieser Indikator zeigt die **durchschnittliche Anzahl der Abfahrten öffentliche
 
 ## 1. Erklärung
 
-**Anzahl Abfahrten** zeigt die **durchschnittliche Anzahl der Abfahrten pro Stunde für ein ausgewähltes Zeitintervall an jeder Haltestelle des öffentlichen Verkehrs**. Sie können die Summe für alle Verkehrsmittel anzeigen oder sich auf ein bestimmtes Verkehrsmittel konzentrieren (z.B. Bus, Straßenbahn, U-Bahn, Bahn).
+**Anzahl Abfahrten Haltepunkte** zeigt die **durchschnittliche Anzahl der Abfahrten pro Stunde für ein ausgewähltes Zeitintervall an jedem Haltepunkt des öffentlichen Verkehrs**. Sie können die Summe für alle Verkehrsmittel anzeigen oder sich auf ein bestimmtes Verkehrsmittel konzentrieren (z.B. Bus, Straßenbahn, U-Bahn, Bahn).
 
 Dieser Indikator ist die Grundlage für die [ÖV-Güteklassen](./oev_gueteklassen.md) und ist nützlich für **Schwachstellenanalysen von lokalen Verkehrsplänen** (siehe unter anderem [Richtlinie für die Nahverkehrsplanung in Bayern](https://www.demografie-leitfaden-bayern.de/index.html)).
 
 :::info
 
-Die Berechnung der Anzahl Abfahrten ist für Gebiete verfügbar, in denen GTFS-Daten des öffentlichen Verkehrs in GOAT integriert sind. Derzeit unterstützte Regionen umfassen **Deutschland, Österreich und die Schweiz**. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns gerne](https://plan4better.de/de/contact/) — wir prüfen, was möglich ist.
+Die Berechnung der Anzahl Abfahrten ist für Gebiete verfügbar, in denen GTFS-Daten des öffentlichen Verkehrs in GOAT integriert sind. Derzeit unterstützte Regionen umfassen **Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich**. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns gerne](https://plan4better.de/de/contact/).
 
 :::
 
@@ -38,7 +38,7 @@ Die Berechnung der Anzahl Abfahrten ist für Gebiete verfügbar, in denen GTFS-D
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Unter <code>Erreichbarkeitsindikatoren</code> wählen Sie <code>Anzahl Abfahrten</code>, um das Einstellungsmenü zu öffnen.</div>
+  <div class="content">Unter <code>Erreichbarkeitsindikatoren</code> wählen Sie <code>Anzahl Abfahrten Haltepunkte</code>, um das Einstellungsmenü zu öffnen.</div>
 </div>
 
 ### Berechnungszeit
@@ -69,9 +69,9 @@ Die Berechnung der Anzahl Abfahrten ist für Gebiete verfügbar, in denen GTFS-D
 
 ### Ergebnisse
 
-Nach Abschluss der Berechnung wird ein neuer Layer namens <b>"Trip Count Station"</b> zur Karte hinzugefügt.
+Nach Abschluss der Berechnung wird ein neuer Layer namens <b>"Anzahl Abfahrten Haltepunkte"</b> zur Karte hinzugefügt.
 
-Klicken Sie auf Stationen, um Details anzuzeigen, einschließlich **Stationsname**, **Gesamtanzahl der Abfahrten** und **Abfahrten pro Verkehrsmittel**.
+Klicken Sie auf Haltepunkte, um Details anzuzeigen, einschließlich **Name des Haltepunkts**, **Gesamtanzahl der Abfahrten** und **Abfahrten pro Verkehrsmittel**.
 
 
 

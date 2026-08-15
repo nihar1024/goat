@@ -17,8 +17,8 @@ import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 import { v4 as uuidv4 } from "uuid";
 
-import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import { type TOOL_ICON_NAME, toolIconMap } from "@p4b/ui/assets/svg/ToolIcons";
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import type { AppDispatch } from "@/lib/store";
 import { selectNodes } from "@/lib/store/workflow/selectors";
@@ -28,8 +28,11 @@ import {
   extractInputDataType,
   extractOutputDataType,
   formatDataType,
+  hasOpportunityHandles,
 } from "@/lib/utils/ogc-utils";
 import type { ToolNodeData } from "@/lib/validations/workflow";
+
+import { OPPORTUNITY_LAYER_HANDLES } from "@/types/map/ogc-processes";
 
 import { useProcessDescription } from "@/hooks/map/useOgcProcesses";
 
@@ -196,17 +199,14 @@ const ToolNode: React.FC<ToolNodeProps> = ({ id, data, selected }) => {
     return missing;
   }, [process, data.config, t]);
 
-  // For heatmap opportunity tools, check that at least one opportunity is connected
-  const isHeatmapOpportunityTool =
-    data.processId === "heatmap_gravity" ||
-    data.processId === "heatmap_closest_average" ||
-    data.processId === "heatmap_2sfca";
+  // For tools taking opportunity layers from numbered canvas handles, check
+  // that at least one is connected.
+  const takesOpportunityHandles = hasOpportunityHandles(process);
   const missingOpportunities = useMemo(() => {
-    if (!isHeatmapOpportunityTool) return false;
+    if (!takesOpportunityHandles) return false;
     const incomingEdges = edges.filter((e) => e.target === id);
-    const oppHandles = ["opportunity_layer_1_id", "opportunity_layer_2_id", "opportunity_layer_3_id"];
-    return !incomingEdges.some((e) => e.targetHandle && oppHandles.includes(e.targetHandle));
-  }, [isHeatmapOpportunityTool, edges, id]);
+    return !incomingEdges.some((e) => e.targetHandle && OPPORTUNITY_LAYER_HANDLES.includes(e.targetHandle));
+  }, [takesOpportunityHandles, edges, id]);
 
   const hasWarning = missingLayerInputs.length > 0 || missingConfig.length > 0 || missingOpportunities;
 

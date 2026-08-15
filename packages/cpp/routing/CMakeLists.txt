@@ -161,6 +161,8 @@ file(GLOB_RECURSE SOURCES
     src/heatmap/*.cpp
     src/network/*.cpp
     src/preprocessing/*.cpp
+    src/catchment/*.cpp
+    src/matrix/*.cpp
     src/pipeline.cpp
 )
 

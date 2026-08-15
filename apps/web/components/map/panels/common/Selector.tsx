@@ -7,7 +7,6 @@ import {
   ListSubheader,
   MenuItem,
   Select,
-  Stack,
   TextField,
   Typography,
   useTheme,
@@ -19,6 +18,7 @@ import { type ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import type { SelectorItem } from "@/types/map/common";
 
 import FormLabelHelper from "@/components/common/FormLabelHelper";
+import NoValuesFound from "@/components/map/common/NoValuesFound";
 
 // Stable empty array reference to prevent re-renders
 const EMPTY_ARRAY: never[] = [];
@@ -79,17 +79,17 @@ const Selector = (props: SelectorProps) => {
     }
   }, [multiple, selectedItems]);
 
-  // Return early if no items to prevent MUI empty state loop
+  // Return early if no items to prevent MUI empty state loop. The Select is not
+  // rendered here, so surface emptyMessage in place of it instead of leaving a
+  // bare label behind.
   if (!items || items.length === 0) {
-    return label ? (
+    if (!label && !emptyMessage) return null;
+    return (
       <FormControl size="small" fullWidth>
-        <FormLabelHelper
-          label={label}
-          color={theme.palette.text.secondary}
-          tooltip={tooltip}
-        />
+        {label && <FormLabelHelper label={label} color={theme.palette.text.secondary} tooltip={tooltip} />}
+        {emptyMessage && <NoValuesFound text={emptyMessage} icon={emptyMessageIcon} />}
       </FormControl>
-    ) : null;
+    );
   }
 
   return (
@@ -219,24 +219,7 @@ const Selector = (props: SelectorProps) => {
           </ListSubheader>
         )}
         {emptyMessage && emptyMessageIcon && displayedItems.length === 0 && (
-          <Stack
-            direction="column"
-            spacing={2}
-            sx={{
-              my: 2,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}>
-            {emptyMessageIcon && (
-              <Icon iconName={emptyMessageIcon} fontSize="small" htmlColor={theme.palette.text.secondary} />
-            )}
-            {emptyMessage && (
-              <Typography variant="body2" fontWeight="bold" color={theme.palette.text.secondary}>
-                {emptyMessage}
-              </Typography>
-            )}
-          </Stack>
+          <NoValuesFound text={emptyMessage} icon={emptyMessageIcon} />
         )}
 
         {displayedItems.map((item) => (

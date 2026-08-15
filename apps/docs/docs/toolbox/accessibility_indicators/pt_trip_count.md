@@ -4,7 +4,7 @@ sidebar_position: 8
 
 # Trip Count Platform
 
-This indicator displays the **average number of public transport departures** per hour for each public transport stop.
+This indicator displays the **average number of public transport departures** per hour for each public transport platform.
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
 <iframe width="560" height="315" src="https://www.youtube.com/embed/2oRxWow9LBQ?si=IYvAqZcpSO02yDaA&amp;start=46" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
@@ -12,13 +12,13 @@ This indicator displays the **average number of public transport departures** pe
 
 ## 1. Explanation
 
-The **Trip Count Platform** shows the **average number of departures per hour for a selected time interval at each public transport stop**. You can view the sum for all modes or focus on a specific mode (e.g., bus, tram, metro, rail).
+The **Trip Count Platform** shows the **average number of departures per hour for a selected time interval at each public transport platform**. You can view the sum for all modes or focus on a specific mode (e.g., bus, tram, metro, rail).
 
 This indicator is the foundation for the [ÖV-Güteklassen](./oev_gueteklassen.md) and is useful for **weak point analyses of local transport plans** (see, among others, [Guideline for Local Transport Planning in Bavaria](https://www.demografie-leitfaden-bayern.de/index.html)).
 
 :::info
 
-Trip Count Platform computation is available for areas where public transport GTFS data is integrated into GOAT. Currently supported regions include **Germany, Austria, and Switzerland**. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/) and we'll check what is possible.
+Trip Count Platform computation is available for areas where public transport GTFS data is integrated into GOAT. Currently supported regions include **Germany, Switzerland, and the Haut-Rhin region of France**. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/).
 
 :::
 
@@ -69,9 +69,9 @@ Trip Count Platform computation is available for areas where public transport GT
 
 ### Results
 
-When the calculation is finished, a new layer called <b>"Trip Count Station"</b> will be added to the map.
+When the calculation is finished, a new layer called <b>"Trip Count Platform"</b> will be added to the map.
 
-Click on stations to view details including **station name**, **total departure count**, and **departure counts per mode**.
+Click on platforms to view details including **platform name**, **total departure count**, and **departure counts per mode**.
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
 

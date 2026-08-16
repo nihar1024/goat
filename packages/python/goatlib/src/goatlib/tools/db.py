@@ -18,6 +18,10 @@ from typing import Any, Literal, Self
 import asyncpg
 from pydantic import BaseModel, Field, model_validator
 
+from goatlib.models.bundle import (
+    BundleStatus,
+    BundleTypeName,
+)
 from goatlib.tools.style import get_default_style
 
 logger = logging.getLogger(__name__)
@@ -256,6 +260,154 @@ class ToolDatabaseService:
         )
         return properties
 
+    async def create_bundle(
+        self: Self,
+        bundle_id: str,
+        user_id: str,
+        folder_id: str,
+        name: str,
+        bundle_type: "BundleTypeName | str",
+        description: str | None = None,
+        properties: dict[str, Any] | None = None,
+    ) -> None:
+        """Create a bundle record in customer.bundle."""
+        type_value = getattr(bundle_type, "value", bundle_type)
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.bundle (
+                id, user_id, folder_id, name, description,
+                bundle_type, properties, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+            """,
+            uuid_module.UUID(bundle_id),
+            uuid_module.UUID(user_id),
+            uuid_module.UUID(folder_id),
+            name,
+            description,
+            type_value,
+            json.dumps(properties) if properties else None,
+        )
+        logger.info(
+            f"Created bundle: {bundle_id} ({name}) "
+            f"type={type_value} in folder {folder_id}"
+        )
+
+    async def get_bundle_name(self: Self, bundle_id: str) -> str | None:
+        """Return the bundle's display name (customer.bundle.name)."""
+        row = await self.pool.fetchrow(
+            f"SELECT name FROM {self.schema}.bundle WHERE id = $1",
+            uuid_module.UUID(bundle_id),
+        )
+        return row["name"] if row else None
+
+    async def update_package_status(
+        self: Self,
+        bundle_id: str,
+        status: "BundleStatus | str",
+    ) -> None:
+        """Update a bundle's processing status."""
+        status_value = getattr(status, "value", status)
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle
+            SET status = $2, updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(bundle_id),
+            status_value,
+        )
+        logger.info(f"Bundle {bundle_id} status -> {status_value}")
+
+    async def create_artifact(
+        self: Self,
+        bundle_id: str,
+        kind: str,
+        status: str = "building",
+        job_id: str | None = None,
+    ) -> str:
+        """Create a bundle_artifact row (one per (bundle_id, kind)). Returns id."""
+        kind_value = getattr(kind, "value", kind)
+        status_value = getattr(status, "value", status)
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO {self.schema}.bundle_artifact (
+                bundle_id, kind, status, job_id, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            RETURNING id
+            """,
+            uuid_module.UUID(bundle_id),
+            kind_value,
+            status_value,
+            uuid_module.UUID(job_id) if job_id else None,
+        )
+        logger.info(
+            f"Created artifact {row['id']} ({kind_value}) for bundle {bundle_id}"
+        )
+        return str(row["id"])
+
+    async def update_artifact_status(
+        self: Self,
+        artifact_id: str,
+        status: str,
+        s3_key: str | None = None,
+        size: int | None = None,
+    ) -> None:
+        """Update an artifact's build status and (on success) its stored blob."""
+        status_value = getattr(status, "value", status)
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle_artifact
+            SET status = $2,
+                s3_key = COALESCE($3, s3_key),
+                size = COALESCE($4, size),
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(artifact_id),
+            status_value,
+            s3_key,
+            size,
+        )
+        logger.info(f"Artifact {artifact_id} status -> {status_value}")
+
+    async def get_bundle_artifact_s3_key(
+        self: Self, bundle_id: str, kind: str
+    ) -> str | None:
+        """S3 key of a bundle's ready artifact of the given kind (or None)."""
+        kind_value = getattr(kind, "value", kind)
+        row = await self.pool.fetchrow(
+            f"""
+            SELECT s3_key FROM {self.schema}.bundle_artifact
+            WHERE bundle_id = $1 AND kind = $2 AND status = 'ready'
+              AND s3_key IS NOT NULL
+            LIMIT 1
+            """,
+            uuid_module.UUID(bundle_id),
+            kind_value,
+        )
+        return row["s3_key"] if row else None
+
+    async def add_layer_to_package(
+        self: Self,
+        bundle_id: str,
+        layer_id: str,
+        role: str | None = None,
+    ) -> None:
+        """Link a layer to a bundle with its role
+        (customer.bundle_layer)."""
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.bundle_layer (
+                bundle_id, layer_id, role
+            ) VALUES ($1, $2, $3)
+            """,
+            uuid_module.UUID(bundle_id),
+            uuid_module.UUID(layer_id),
+            role,
+        )
+        logger.info(f"Linked layer {layer_id} to bundle {bundle_id} as role={role}")
+
     async def add_to_project(
         self: Self,
         layer_id: str,
@@ -263,6 +415,7 @@ class ToolDatabaseService:
         name: str,
         properties: dict[str, Any] | None = None,
         other_properties: dict[str, Any] | None = None,
+        group_id: int | None = None,
     ) -> int:
         """Link a layer to a project.
 
@@ -275,6 +428,8 @@ class ToolDatabaseService:
             name: Display name for the layer in this project
             properties: Layer properties for this project context
             other_properties: Additional properties
+            group_id: Layer group to place the link in (e.g. a bundle-backed
+                group); None leaves the layer at the project root
 
         Returns:
             layer_project_id: The ID of the created link record
@@ -297,9 +452,9 @@ class ToolDatabaseService:
             f"""
             INSERT INTO {self.schema}.layer_project (
                 layer_id, project_id, name, "order", properties, other_properties,
-                created_at, updated_at
+                layer_project_group_id, created_at, updated_at
             )
-            VALUES ($1, $2, $3, 0, $4::jsonb, $5::jsonb, NOW(), NOW())
+            VALUES ($1, $2, $3, 0, $4::jsonb, $5::jsonb, $6, NOW(), NOW())
             RETURNING id
             """,
             record.layer_id,
@@ -307,6 +462,7 @@ class ToolDatabaseService:
             record.name,
             properties_json,
             other_props_json,
+            group_id,
         )
         layer_project_id = row["id"]
 
@@ -327,6 +483,45 @@ class ToolDatabaseService:
             f"(layer_project_id={layer_project_id})"
         )
         return layer_project_id
+
+    async def create_bundle_project_group(
+        self: Self, project_id: str, bundle_id: str, name: str
+    ) -> int:
+        """Create a bundle-backed layer group in a project (locked membership),
+        placed after existing groups. Returns the new group's id."""
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO {self.schema}.layer_project_group (
+                project_id, bundle_id, name, "order", created_at, updated_at
+            )
+            VALUES (
+                $1, $2, $3,
+                COALESCE(
+                    (SELECT MAX("order") + 1 FROM {self.schema}.layer_project_group
+                     WHERE project_id = $1),
+                    0
+                ),
+                NOW(), NOW()
+            )
+            RETURNING id
+            """,
+            uuid_module.UUID(project_id),
+            uuid_module.UUID(bundle_id),
+            name,
+        )
+        logger.info(
+            f"Created bundle group {row['id']} for bundle {bundle_id} "
+            f"in project {project_id}"
+        )
+        return row["id"]
+
+    async def delete_layer_project_group(self: Self, group_id: int) -> None:
+        """Delete a project layer group (cascades its layer_project links). Used
+        to roll back a partially-created bundle group on failure."""
+        await self.pool.execute(
+            f"DELETE FROM {self.schema}.layer_project_group WHERE id = $1",
+            int(group_id),
+        )
 
     async def delete_layer(self: Self, layer_id: str) -> None:
         """Delete a layer record from customer.layer.

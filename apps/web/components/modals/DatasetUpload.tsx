@@ -28,6 +28,11 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
+import {
+  BUNDLE_TYPES,
+  detectBundleType,
+  requestBundleImport,
+} from "@/lib/api/bundles";
 import { requestDatasetUpload } from "@/lib/api/datasets";
 import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { createLayer } from "@/lib/api/layers";
@@ -84,6 +89,11 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
     const ext = fileValue.name.split(".").pop()?.toLowerCase();
     return ext === "csv" || ext === "xlsx" || ext === "xls";
   }, [fileValue]);
+
+  // If the file is a recognised bundle type (e.g. GTFS), it's imported
+  // as a bundle (many layers) instead of a single layer. Detection is
+  // registry-driven, so new bundle types need no changes here.
+  const bundleType = useMemo(() => detectBundleType(fileValue), [fileValue]);
 
   const steps = useMemo(() => {
     const base = [t("select_file"), t("destination_and_metadata"), t("confirmation")];
@@ -224,21 +234,41 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
       // Upload file to S3 directly
       await uploadFileToS3(fileValue, presigned);
 
-      // Tell backend to promote → dataset
-      const payload = createLayerFromDatasetSchema.parse({
-        ...getValues(),
-        folder_id: selectedFolder?.id,
-        s3_key: presigned.fields.key,
-        ...(isTabular && { has_header: hasHeader }),
-        ...(isTabular && selectedSheet && { sheet_name: selectedSheet }),
-      });
+      let jobId: string | null | undefined;
+      if (bundleType) {
+        // Recognised bundle (e.g. GTFS) → import as a bundle (many
+        // layers). The backend infers the exact type from the file.
+        const values = getValues();
+        const response = await requestBundleImport({
+          s3_key: presigned.fields.key,
+          folder_id: selectedFolder?.id as string,
+          name: values.name,
+          description: values.description || undefined,
+          // Uploading from within a project → add the bundle to it once imported.
+          ...(projectId && { project_id: projectId }),
+        });
+        jobId = response.job_id;
+      } else {
+        // Tell backend to promote → single dataset layer
+        const payload = createLayerFromDatasetSchema.parse({
+          ...getValues(),
+          folder_id: selectedFolder?.id,
+          s3_key: presigned.fields.key,
+          ...(isTabular && { has_header: hasHeader }),
+          ...(isTabular && selectedSheet && { sheet_name: selectedSheet }),
+        });
+        // Kick off layer creation via OGC API Processes
+        const response = await createLayer(payload, projectId);
+        // OGC Job response has jobID not job_id
+        jobId = response?.jobID;
+      }
 
-      // Kick off layer creation via OGC API Processes
-      const response = await createLayer(payload, projectId);
-
-      // OGC Job response has jobID not job_id
-      const jobId = response?.jobID;
       if (jobId) {
+        // Bundle import runs in the background — surface a "started"
+        // toast like other jobs (completion is toasted by the job-status poller).
+        if (bundleType) {
+          toast.info(`"${t("bundle_import")}" - ${t("job_started")}`);
+        }
         mutate();
         dispatch(setRunningJobIds([...runningJobIds, jobId]));
       }
@@ -287,7 +317,17 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
             <Typography variant="caption">
               {t("supported")} <b>GeoPackage</b>, <b>GeoJSON</b>, <b>Shapefile (.zip)</b>, <b>KML</b>,{" "}
               <b>CSV</b>, <b>XLSX</b>, <b>Parquet</b>
+              {BUNDLE_TYPES.map((dpt) => (
+                <span key={dpt.type}>
+                  , <b>{dpt.uploadHint}</b>
+                </span>
+              ))}
             </Typography>
+            {bundleType && (
+              <Typography variant="caption" color="primary" sx={{ display: "block", mt: 1 }}>
+                {t("bundle_detected_note", { type: t(bundleType.labelKey) })}
+              </Typography>
+            )}
           </>
         )}
         {activeStep === previewStep && isTabular && (
@@ -405,6 +445,11 @@ const DatasetUploadModal: React.FC<DatasetUploadDialogProps> = ({ open, onClose,
             <Typography variant="body2">
               <b>{t("destination")}:</b> {selectedFolder?.name}
             </Typography>
+            {bundleType && (
+              <Typography variant="body2">
+                <b>{t("type")}:</b> {t(bundleType.labelKey)}
+              </Typography>
+            )}
             <Typography variant="body2">
               <b>{t("name")}:</b> {getValues("name")}
             </Typography>

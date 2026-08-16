@@ -22,6 +22,7 @@ from core.db.models.organization import Organization
 if TYPE_CHECKING:
     from core.db.models.organization import Organization
 
+    from .bundle import Bundle
     from .layer import Layer
     from .project import Project
     from .role import Role
@@ -119,6 +120,19 @@ class LayerProjectGroup(DateTimeBase, table=True):
                 f"{settings.SCHEMA}.layer_project_group.id", ondelete="CASCADE"
             ),
             nullable=True,
+        ),
+    )
+
+    # Bundle-backed group: when set, this group holds a bundle's member layers and
+    # its membership is locked (layers cannot be dragged in/out or removed
+    # individually). CASCADE so deleting the bundle removes the group everywhere.
+    bundle_id: Optional[UUID] = Field(
+        default=None,
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
+            nullable=True,
+            index=True,
         ),
     )
 
@@ -763,4 +777,128 @@ sa.Index(
     "idx_resource_grant_grantee",
     ResourceGrant.__table__.c.grantee_type,
     ResourceGrant.__table__.c.grantee_id,
+)
+
+
+class BundleLayerLink(SQLModel, table=True):
+    """Membership of a layer within a bundle, tagged with the role the
+    layer plays in it (e.g. 'edges', 'stops').
+
+    One bundle per layer (``UNIQUE(layer_id)``) and at most one layer per
+    ``(bundle_id, role)`` — Postgres treats NULL roles as distinct, so
+    unassigned members are allowed while each named role is filled once. Both FKs
+    cascade, so deleting either side drops the membership row.
+    """
+
+    __tablename__ = "bundle_layer"
+    __table_args__ = (
+        UniqueConstraint("layer_id", name="uq_bundle_layer_layer"),
+        UniqueConstraint(
+            "bundle_id", "role", name="uq_bundle_layer_role"
+        ),
+        {"schema": settings.SCHEMA},
+    )
+
+    id: Optional[int] = Field(
+        sa_column=Column(Integer, primary_key=True, autoincrement=True)
+    )
+    bundle_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    layer_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.layer.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    role: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description="Role the layer plays within the bundle (a spec role key)",
+    )
+
+    # Relationships
+    bundle: "Bundle" = Relationship(back_populates="layer_links")
+    layer: "Layer" = Relationship(
+        back_populates="bundle_link",
+        sa_relationship_kwargs={"uselist": False},
+    )
+
+
+sa.Index(
+    "idx_bundle_layer_bundle",
+    BundleLayerLink.__table__.c.bundle_id,
+)
+
+
+class BundleDependencyLink(SQLModel, table=True):
+    """A dependency of one bundle on another.
+
+    e.g. a GTFS bundle depends on a street network bundle to build its routable
+    graph and stop-to-street mapping. One dependency per
+    ``(bundle_id, dependency_kind)``; both FKs point at
+    ``bundle`` and cascade.
+    """
+
+    __tablename__ = "bundle_dependency"
+    __table_args__ = (
+        UniqueConstraint(
+            "bundle_id",
+            "dependency_kind",
+            name="uq_bundle_dependency_kind",
+        ),
+        {"schema": settings.SCHEMA},
+    )
+
+    id: Optional[int] = Field(
+        sa_column=Column(Integer, primary_key=True, autoincrement=True)
+    )
+    bundle_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        description="The dependent bundle (e.g. the GTFS bundle)",
+    )
+    depends_on_bundle_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        description="The bundle depended on (e.g. the street network bundle)",
+    )
+    dependency_kind: str = Field(
+        sa_column=Column(Text, nullable=False),
+        description="Dependency slot (a spec dependency kind, e.g. 'street_network')",
+    )
+
+    # Two FKs to bundle -> relationships must name their foreign key.
+    bundle: "Bundle" = Relationship(
+        back_populates="dependency_links",
+        sa_relationship_kwargs={
+            "foreign_keys": "[BundleDependencyLink.bundle_id]"
+        },
+    )
+    depends_on_bundle: "Bundle" = Relationship(
+        back_populates="dependent_links",
+        sa_relationship_kwargs={
+            "foreign_keys": "[BundleDependencyLink.depends_on_bundle_id]"
+        },
+    )
+
+
+sa.Index(
+    "idx_bundle_dependency_bundle",
+    BundleDependencyLink.__table__.c.bundle_id,
+)
+sa.Index(
+    "idx_bundle_dependency_depends_on",
+    BundleDependencyLink.__table__.c.depends_on_bundle_id,
 )

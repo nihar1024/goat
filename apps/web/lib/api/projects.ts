@@ -294,6 +294,21 @@ export const addProjectLayers = async (projectId: string, layerIds: string[]) =>
   return await response.json();
 };
 
+export const addBundleToProject = async (projectId: string, bundleId: string) => {
+  // Creates a bundle-backed layer group and places the bundle's member layers
+  // into it (locked membership). Returns the created group.
+  const response = await apiRequestAuth(`${PROJECTS_API_BASE_URL}/${projectId}/bundle/${bundleId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("Failed to add bundle to project");
+  }
+  return await response.json();
+};
+
 export const updateProject = async (projectId: string, payload: PostProject) => {
   const response = await apiRequestAuth(`${PROJECTS_API_BASE_URL}/${projectId}`, {
     method: "PUT",

@@ -11,6 +11,7 @@ DECLARE
     layer_id_loop       UUID;
     status_check        BOOLEAN := FALSE;
     folder_grant_role   TEXT;
+    bundle_grant_role TEXT;
     resource_method_arr TEXT[];
 BEGIN
 
@@ -176,6 +177,71 @@ BEGIN
         END IF;
 
         IF folder_grant_role = 'folder-viewer'
+           AND resource_method_arr IS NOT NULL
+           AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
+        THEN
+            status_check := TRUE;
+            CONTINUE;
+        END IF;
+
+        /* 9. Dataset-bundle grant
+         *
+         *  Layers that belong to a bundle are never shared
+         *  individually — they inherit the bundle's sharing. Access is derived
+         *  from the bundle rather than from the layer's own grant rows:
+         *    - the bundle owner always has full access to its member layers;
+         *    - if the bundle is shared (resource_grant, resource_type
+         *      'bundle') with a team/organisation the user belongs to,
+         *      the bundle role decides (mirrors the folder block above):
+         *        bundle-editor → full access (any HTTP method)
+         *        bundle-viewer → read-only (resource must not include
+         *                                 POST / PUT / DELETE / PATCH)
+         */
+        IF EXISTS (
+            SELECT 1
+            FROM   customer.bundle_layer dpl
+            JOIN   customer.bundle       dp ON dp.id = dpl.bundle_id
+            WHERE  dpl.layer_id = layer_id_loop
+              AND  dp.user_id   = user_id_input
+        ) THEN
+            status_check := TRUE;
+            CONTINUE;
+        END IF;
+
+        SELECT r.name
+        INTO   bundle_grant_role
+        FROM   customer.bundle_layer dpl
+        JOIN   customer.resource_grant   rg
+            ON rg.resource_type = 'bundle'
+           AND rg.resource_id   = dpl.bundle_id
+        JOIN   customer.role             r  ON r.id = rg.role_id
+        WHERE  dpl.layer_id = layer_id_loop
+          AND  (
+               (    rg.grantee_type = 'team'
+                AND EXISTS (
+                        SELECT 1
+                        FROM   customer.user_team ut
+                        WHERE  ut.team_id = rg.grantee_id
+                          AND  ut.user_id = user_id_input
+                    )
+               )
+            OR (    rg.grantee_type = 'organization'
+                AND EXISTS (
+                        SELECT 1
+                        FROM   customer."user" u
+                        WHERE  u.id              = user_id_input
+                          AND  u.organization_id = rg.grantee_id
+                    )
+               )
+          )
+        LIMIT 1;
+
+        IF bundle_grant_role = 'bundle-editor' THEN
+            status_check := TRUE;
+            CONTINUE;
+        END IF;
+
+        IF bundle_grant_role = 'bundle-viewer'
            AND resource_method_arr IS NOT NULL
            AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
         THEN

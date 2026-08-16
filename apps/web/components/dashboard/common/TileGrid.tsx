@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
+import { isBundleTile } from "@/lib/api/bundles";
 import type { Layer } from "@/lib/validations/layer";
 import type { Folder } from "@/lib/validations/folder";
 import type { Project } from "@/lib/validations/project";
@@ -24,6 +25,9 @@ interface TileGridProps {
   onClick?: (item: Project | Layer) => void;
   onAction?: (action: ContentActions, item: Project | Layer) => void;
   selected?: Project | Layer;
+  /** Allow selecting bundle tiles (e.g. the project dataset picker). Off elsewhere
+   *  since bundles have no detail page. */
+  selectableBundles?: boolean;
   /** Pass folders + currentUserId to show ownership/access role chips on cards */
   folders?: Folder[];
   currentUserId?: string;
@@ -153,7 +157,9 @@ const TileGrid = (props: TileGridProps) => {
               <Grid
                 item
                 onClick={() => {
-                  if (props.onClick) {
+                  // Bundles are shown as tiles but have no detail page — only
+                  // selectable where the consumer opts in (project picker).
+                  if (props.onClick && (props.selectableBundles || !isBundleTile(item))) {
                     props.onClick(item);
                   }
                 }}

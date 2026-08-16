@@ -154,8 +154,13 @@ class CRUDLayerProject(CRUDBase):
         async_session: AsyncSession,
         project_id: UUID,
         layer_ids: List[UUID],
+        group_id: int | None = None,
     ) -> List[BaseModel]:
-        """Create a link between a project and a layer"""
+        """Create a link between a project and a layer.
+
+        When ``group_id`` is given, the new links are placed into that layer
+        group (used when adding a bundle's member layers into its group).
+        """
 
         # Remove duplicate layer_ids
         layer_ids = list(set(layer_ids))
@@ -220,6 +225,7 @@ class CRUDLayerProject(CRUDBase):
                 name=layer_name,
                 properties=properties,
                 other_properties=other_properties,
+                layer_project_group_id=group_id,
             )
 
             # Add to database

@@ -14,6 +14,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
+import {
+  BUNDLES_API_BASE_URL,
+  isBundleTile,
+  updateBundle,
+} from "@/lib/api/bundles";
 import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { LAYERS_API_BASE_URL, updateDataset } from "@/lib/api/layers";
 import { PROJECTS_API_BASE_URL, updateProject } from "@/lib/api/projects";
@@ -69,7 +74,10 @@ const ContentMoveToFolderModal: React.FC<ContentMoveToFolderDialogProps> = ({
       const payload = {
         folder_id: selectedFolder?.id,
       };
-      if (type === "layer") {
+      if (isBundleTile(content)) {
+        await updateBundle(content.id, { folder_id: selectedFolder?.id });
+        mutate((key) => key === BUNDLES_API_BASE_URL);
+      } else if (type === "layer") {
         payload["id"] = content.id;
         await updateDataset(content.id, payload as PostDataset);
         mutate((key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL);

@@ -134,6 +134,10 @@ class CatchmentAreaV2Params(BaseModel):
     grid_points_path: str | None = Field(default=None, description="Parquet with grid points (id, x_3857, y_3857)")
     grid_snap_distance: float = Field(default=0.0, ge=0.0, description="PointGrid snap distance in meters (0 = default 500m)")
 
+    # PT routing: override the timetable .bin (e.g. a bundle's routing graph).
+    # None uses the engine's default global PT network.
+    timetable_path: str | None = Field(default=None, description="Path to a nigiri .bin timetable to use for PT routing")
+
     @model_validator(mode="after")
     def validate_pt_settings(self: Self) -> Self:
         if self.routing_mode == RoutingMode.pt:

@@ -47,12 +47,12 @@ async def add_layers_to_project(
     project_id: UUID4 = Path(
         ...,
         description="The ID of the project to get",
-        example="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     ),
     layer_ids: List[UUID4] = Query(
         ...,
         description="List of layer IDs to add to the project",
-        example=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+        examples=[["3fa85f64-5717-4562-b3fc-2c963f66afa6"]],
     ),
 ) -> List[
     IFeatureStandardProjectRead
@@ -115,7 +115,7 @@ async def get_layers_from_project(
     project_id: UUID4 = Path(
         ...,
         description="The ID of the project to get",
-        example="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     ),
 ) -> List[
     IFeatureStandardProjectRead
@@ -151,12 +151,12 @@ async def get_layer_from_project(
     project_id: UUID4 = Path(
         ...,
         description="The ID of the project to get",
-        example="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     ),
     layer_project_id: int = Path(
         ...,
         description="Layer project ID to get",
-        example="1",
+        examples=["1"],
     ),
 ) -> Union[
     IFeatureStandardProjectRead
@@ -192,16 +192,16 @@ async def update_layer_in_project(
     project_id: UUID4 = Path(
         ...,
         description="The ID of the project to get",
-        example="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     ),
     layer_project_id: int = Path(
         ...,
         description="Layer Project ID to update",
-        example="1",
+        examples=["1"],
     ),
     layer_in: Dict[str, Any] = Body(
         ...,
-        example=project_request_examples["update_layer"],
+        examples=[project_request_examples["update_layer"]],
         description="Layer to update",
     ),
 ) -> Union[
@@ -257,12 +257,12 @@ async def delete_layer_from_project(
     project_id: UUID4 = Path(
         ...,
         description="The ID of the project",
-        example="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
     ),
     layer_project_id: int = Query(
         ...,
         description="Layer ID to delete",
-        example="1",
+        examples=["1"],
     ),
 ) -> None:
     """Delete layer from a project by its ID."""

@@ -35,6 +35,7 @@ import { useDateFnsLocale } from "@/i18n/utils";
 
 import { predictNodeSchema, useTempLayerFeatures, useWorkflowMetadata } from "@/lib/api/workflows";
 import type { InputSchemaInfo } from "@/lib/api/workflows";
+import { OEV_STATION_CONFIG_DEFAULT } from "@/lib/constants/oev-gueteklassen";
 import type { AppDispatch, RootState } from "@/lib/store";
 import {
   selectActiveDataPanelView,
@@ -44,14 +45,18 @@ import {
 } from "@/lib/store/workflow/selectors";
 import { requestMapView, requestTableView, updateNode } from "@/lib/store/workflow/slice";
 import {
+  applyDynamicDefaults,
   getDefaultValues,
   getVisibleInputs,
+  hasOpportunityHandles,
+  isFormResetField,
   isSectionEnabled,
   processInputsWithSections,
 } from "@/lib/utils/ogc-utils";
 import type { ProjectLayer } from "@/lib/validations/project";
 import type { ExportNodeData, WorkflowNode } from "@/lib/validations/workflow";
 
+import { OPPORTUNITY_LAYER_HANDLES } from "@/types/map/ogc-processes";
 import type { ProcessedSection } from "@/types/map/ogc-processes";
 
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
@@ -61,6 +66,7 @@ import Container from "@/components/map/panels/Container";
 import SectionHeader from "@/components/map/panels/common/SectionHeader";
 import SectionOptions from "@/components/map/panels/common/SectionOptions";
 import ToolsHeader from "@/components/map/panels/common/ToolsHeader";
+import OevStationConfigInput from "@/components/map/panels/toolbox/generic/inputs/OevStationConfigInput";
 import {
   getObjectDefaults,
   processObjectProperties,
@@ -211,11 +217,18 @@ export default function WorkflowNodeSettings({
   const { layers: fetchedLayers } = useFilteredProjectLayers(projectId as string);
   const layers = fetchedLayers || projectLayers;
 
-  // Initialize values from node data or defaults
+  // Initialize values from node data or defaults.
+  //
+  // The saved config is seeded into the resolution so fields keyed on another
+  // field settle on load: `speed` derives from `routing_mode`, which has no
+  // schema default, so without the seed it can only resolve at the moment the
+  // user changes the mode. A node saved with a mode already set never fires
+  // that change and would show an empty speed.
+  const savedConfig = node.data.type === "tool" ? node.data.config : undefined;
   const defaultValues = useMemo(() => {
     if (!process) return {};
-    return getDefaultValues(process);
-  }, [process]);
+    return getDefaultValues(process, savedConfig ?? {});
+  }, [process, savedConfig]);
 
   // Detect connected layer inputs and create virtual values for them
   // This ensures depends_on conditions like {input_layer_id: {$ne: None}} are satisfied
@@ -294,6 +307,23 @@ export default function WorkflowNodeSettings({
       setAdvancedCollapsed(advCollapsed);
     }
   }, [process, sections]);
+
+  // The oev_gueteklassen schema doesn't expose station_config as an input, so seed
+  // the default here and render a fallback control (same special-casing as GenericTool).
+  useEffect(() => {
+    if (processId !== "oev_gueteklassen") {
+      return;
+    }
+    setValues((prev) => {
+      if (prev.station_config) {
+        return prev;
+      }
+      return {
+        ...prev,
+        station_config: OEV_STATION_CONFIG_DEFAULT,
+      };
+    });
+  }, [processId]);
 
   // Get all inputs from all sections
   const allInputs = useMemo(() => {
@@ -455,9 +485,8 @@ export default function WorkflowNodeSettings({
     return mapping;
   }, [layers, allInputs, values, defaultValues, connectedLayerValues, getLayerIdFromSourceNode]);
 
-  // Heatmap tools with per-opportunity config
-  const isHeatmapOpportunityTool =
-    processId === "heatmap_gravity" || processId === "heatmap_closest_average" || processId === "heatmap_2sfca";
+  // Tools taking opportunity layers from numbered canvas handles
+  const takesOpportunityHandles = hasOpportunityHandles(process);
 
   // Compute predicted columns for connected tool outputs
   // This enables field selectors to show fields from upstream tool nodes
@@ -466,57 +495,53 @@ export default function WorkflowNodeSettings({
 
   // Compute connected opportunity handles and per-opportunity field definitions
   const connectedOpportunities = useMemo(() => {
-    if (!isHeatmapOpportunityTool || !process) return [];
+    if (!takesOpportunityHandles || !process) return [];
 
     // Find which opportunity_layer_N_id handles have incoming edges
     const incomingEdges = edges.filter((e) => e.target === node.id);
-    const handles = ["opportunity_layer_1_id", "opportunity_layer_2_id", "opportunity_layer_3_id"];
+    return OPPORTUNITY_LAYER_HANDLES.map((handle) => {
+      const edge = incomingEdges.find((e) => e.targetHandle === handle);
+      if (!edge) return null;
 
-    return handles
-      .map((handle) => {
-        const edge = incomingEdges.find((e) => e.targetHandle === handle);
-        if (!edge) return null;
+      const sourceNode = nodes.find((n) => n.id === edge.source);
+      const sourceLabel = sourceNode
+        ? (sourceNode.data as { label?: string }).label || sourceNode.id
+        : edge.source;
+      const oppNum = handle.split("_")[2]; // "1", "2", or "3"
 
-        const sourceNode = nodes.find((n) => n.id === edge.source);
-        const sourceLabel = sourceNode
-          ? (sourceNode.data as { label?: string }).label || sourceNode.id
-          : edge.source;
-        const oppNum = handle.split("_")[2]; // "1", "2", or "3"
-
-        // Resolve source dataset ID for field selectors (e.g. potential_field)
-        // The opportunity schema uses source_layer="input_path", so we map input_path
-        // to the connected layer's dataset ID
-        let sourceDatasetId: string | undefined;
-        let sourcePredictedCols: Record<string, string> | undefined;
-        if (sourceNode?.data?.type === "dataset" && sourceNode.data.layerId) {
-          const layerIdValue = sourceNode.data.layerId as string;
-          const isUUID = layerIdValue.includes("-") && layerIdValue.length > 20;
-          if (isUUID) {
-            sourceDatasetId = layerIdValue;
-          } else {
-            const numericId = parseInt(layerIdValue, 10);
-            const layer = layers?.find((l) => l.id === numericId);
-            sourceDatasetId = layer?.layer_id;
-          }
-        } else if (sourceNode?.data?.type === "tool") {
-          // For tool source nodes, check for predicted/executed columns
-          if (workflowMetadata?.nodes[sourceNode.id]?.columns) {
-            sourcePredictedCols = workflowMetadata.nodes[sourceNode.id].columns!;
-          } else if (predictedColumns[handle]) {
-            // Fallback to predicted columns from the main prediction effect
-            // This handles un-executed tool sources (e.g. custom_sql → heatmap)
-            sourcePredictedCols = predictedColumns[handle];
-          }
+      // Resolve source dataset ID for field selectors (e.g. potential_field)
+      // The opportunity schema uses source_layer="input_path", so we map input_path
+      // to the connected layer's dataset ID
+      let sourceDatasetId: string | undefined;
+      let sourcePredictedCols: Record<string, string> | undefined;
+      if (sourceNode?.data?.type === "dataset" && sourceNode.data.layerId) {
+        const layerIdValue = sourceNode.data.layerId as string;
+        const isUUID = layerIdValue.includes("-") && layerIdValue.length > 20;
+        if (isUUID) {
+          sourceDatasetId = layerIdValue;
+        } else {
+          const numericId = parseInt(layerIdValue, 10);
+          const layer = layers?.find((l) => l.id === numericId);
+          sourceDatasetId = layer?.layer_id;
         }
+      } else if (sourceNode?.data?.type === "tool") {
+        // For tool source nodes, check for predicted/executed columns
+        if (workflowMetadata?.nodes[sourceNode.id]?.columns) {
+          sourcePredictedCols = workflowMetadata.nodes[sourceNode.id].columns!;
+        } else if (predictedColumns[handle]) {
+          // Fallback to predicted columns from the main prediction effect
+          // This handles un-executed tool sources (e.g. custom_sql → heatmap)
+          sourcePredictedCols = predictedColumns[handle];
+        }
+      }
 
-        return { handle, oppNum, sourceLabel, sourceDatasetId, sourcePredictedCols };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-  }, [isHeatmapOpportunityTool, process, edges, node.id, nodes, layers, workflowMetadata, predictedColumns]);
+      return { handle, oppNum, sourceLabel, sourceDatasetId, sourcePredictedCols };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [takesOpportunityHandles, process, edges, node.id, nodes, layers, workflowMetadata, predictedColumns]);
 
   // Get per-opportunity field definitions from the opportunities schema
   const opportunityFields = useMemo(() => {
-    if (!isHeatmapOpportunityTool || !process) return [];
+    if (!takesOpportunityHandles || !process) return [];
 
     // Find the 'opportunities' input and resolve its item schema
     const oppInput = process.inputs?.opportunities;
@@ -536,11 +561,11 @@ export default function WorkflowNodeSettings({
     return fields.filter(
       (f) => f.name !== "input_path" && f.name !== "input_layer_filter" && f.name !== "name"
     );
-  }, [isHeatmapOpportunityTool, process]);
+  }, [takesOpportunityHandles, process]);
 
   // Get default values for opportunity fields
   const opportunityDefaults = useMemo(() => {
-    if (!isHeatmapOpportunityTool || !process) return {};
+    if (!takesOpportunityHandles || !process) return {};
 
     const oppInput = process.inputs?.opportunities;
     if (!oppInput) return {};
@@ -552,8 +577,11 @@ export default function WorkflowNodeSettings({
     const itemSchema = process.$defs[refName];
     if (!itemSchema) return {};
 
-    return getObjectDefaults(itemSchema, process.$defs);
-  }, [isHeatmapOpportunityTool, process]);
+    // Pass the node's own values so nested default_by_field / default_from
+    // resolve against routing_mode and cost_type — otherwise a distance-based
+    // heatmap would persist the time-based schema default as its budget.
+    return getObjectDefaults(itemSchema, process.$defs, { ...defaultValues, ...values });
+  }, [takesOpportunityHandles, process, defaultValues, values]);
 
   // Auto-persist opportunity defaults to node config when connections are made.
   // Without this, default values are only used for display but never written to
@@ -698,7 +726,7 @@ export default function WorkflowNodeSettings({
         // Recursively resolve a node's output columns (same pattern as SqlToolSettings)
         const resolveNodeColumns = async (
           nodeId: string,
-          visited: Set<string>,
+          visited: Set<string>
         ): Promise<Record<string, string>> => {
           if (visited.has(nodeId)) return {};
           visited.add(nodeId);
@@ -835,35 +863,20 @@ export default function WorkflowNodeSettings({
     layers, // Re-fetch when layers become available
   ]);
 
-  // Compute new values with dynamic defaults applied
-  const computeNewValues = useCallback(
-    (prev: Record<string, unknown>, name: string, value: unknown) => {
-      const newValues = { ...prev, [name]: value };
-
-      // Check for dynamic defaults
-      for (const input of allInputs) {
-        const defaultByField = input.uiMeta?.widget_options?.default_by_field as
-          | { field: string; values: Record<string, unknown> }
-          | undefined;
-
-        if (defaultByField && defaultByField.field === name) {
-          const dynamicDefault = defaultByField.values[String(value)];
-          if (dynamicDefault !== undefined) {
-            newValues[input.name] = dynamicDefault;
-          }
-        }
-      }
-
-      return newValues;
-    },
-    [allInputs]
-  );
-
   // Update a single input value
   const handleInputChange = useCallback(
     (name: string, value: unknown) => {
-      // Compute new values based on current state
-      const newValues = computeNewValues(values, name, value);
+      // A field marked `resets_form` starts the node's form over when it
+      // changes — same rule as the toolbox form. Seeding the new value rebuilds
+      // the defaults that are keyed on it.
+      const resets =
+        !!process &&
+        isFormResetField(allInputs, name) &&
+        values[name] !== undefined &&
+        values[name] !== value;
+      const newValues = resets
+        ? getDefaultValues(process, { [name]: value })
+        : applyDynamicDefaults(allInputs, values, name, value);
 
       // Update local state
       setValues(newValues);
@@ -884,7 +897,7 @@ export default function WorkflowNodeSettings({
         );
       }
     },
-    [computeNewValues, values, dispatch, node]
+    [allInputs, process, values, dispatch, node]
   );
 
   // Update filter for a layer input
@@ -954,11 +967,7 @@ export default function WorkflowNodeSettings({
   }
 
   // Render Custom SQL tool settings (special case)
-  if (
-    node.type === "tool" &&
-    node.data.type === "tool" &&
-    node.data.processId === "custom_sql"
-  ) {
+  if (node.type === "tool" && node.data.type === "tool" && node.data.processId === "custom_sql") {
     return <SqlToolSettings node={node} onBack={onBack} />;
   }
 
@@ -1025,9 +1034,7 @@ export default function WorkflowNodeSettings({
                 <Chip
                   label={nodeStatus ? t(nodeStatus, { defaultValue: nodeStatus }) : t("idle")}
                   size="small"
-                  icon={
-                    nodeStatus === "skipped" ? <BlockIcon sx={{ fontSize: 14 }} /> : undefined
-                  }
+                  icon={nodeStatus === "skipped" ? <BlockIcon sx={{ fontSize: 14 }} /> : undefined}
                   color={
                     nodeStatus === "completed"
                       ? "primary"
@@ -1056,10 +1063,10 @@ export default function WorkflowNodeSettings({
                 // Starting points and opportunities come from connected input nodes
                 // Result sections are not supported in workflows
                 const workflowHiddenSections = ["starting", "result"];
-                // Only hide opportunities section for tools with repeatable per-opportunity config
-                // (gravity, closest_average, 2sfca). Other tools like huff_model have
-                // non-repeatable fields in the opportunities section that must remain visible.
-                if (isHeatmapOpportunityTool) {
+                // Tools whose opportunity layers arrive on numbered canvas handles
+                // get the section hidden; ones with non-repeatable opportunity
+                // fields (huff_model) must keep it visible.
+                if (takesOpportunityHandles) {
                   workflowHiddenSections.push("opportunities");
                 }
                 if (workflowHiddenSections.includes(section.id)) {
@@ -1087,6 +1094,10 @@ export default function WorkflowNodeSettings({
                 const baseInputs = visibleInputs.filter((input) => !input.advanced);
                 const advancedInputs = visibleInputs.filter((input) => input.advanced);
                 const hasAdvancedOptions = advancedInputs.length > 0;
+                const shouldRenderOevStationConfigFallback =
+                  processId === "oev_gueteklassen" &&
+                  section.id === "configuration" &&
+                  !visibleInputs.some((input) => input.name === "station_config");
 
                 const isCollapsed = collapsedSections[section.id] ?? section.collapsed;
                 const isAdvancedCollapsed = advancedCollapsed[section.id] ?? true;
@@ -1148,6 +1159,13 @@ export default function WorkflowNodeSettings({
                                 variables={variables}
                               />
                             ))}
+                            {shouldRenderOevStationConfigFallback && (
+                              <OevStationConfigInput
+                                input={{ name: "station_config", title: "Station configuration" }}
+                                value={effectiveValues.station_config}
+                                onChange={(value) => handleInputChange("station_config", value)}
+                              />
+                            )}
                           </Stack>
                         }
                         advancedOptions={
@@ -1186,7 +1204,7 @@ export default function WorkflowNodeSettings({
               })}
 
               {/* Per-opportunity config for heatmap tools */}
-              {isHeatmapOpportunityTool && connectedOpportunities.length > 0 && (
+              {takesOpportunityHandles && connectedOpportunities.length > 0 && (
                 <Box>
                   <SectionHeader
                     active={true}
@@ -1255,7 +1273,9 @@ export default function WorkflowNodeSettings({
                                     }}
                                     predictedColumns={{
                                       ...predictedColumns,
-                                      ...(opp.sourcePredictedCols ? { input_path: opp.sourcePredictedCols } : {}),
+                                      ...(opp.sourcePredictedCols
+                                        ? { input_path: opp.sourcePredictedCols }
+                                        : {}),
                                     }}
                                     variables={variables}
                                   />

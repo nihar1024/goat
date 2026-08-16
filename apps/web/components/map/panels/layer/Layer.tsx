@@ -35,8 +35,10 @@ import {
   useProject,
 } from "@/lib/api/projects";
 import { useUserProfile } from "@/lib/api/users";
-import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
-import { startEditing } from "@/lib/store/featureEditor/slice";
+import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
+import useStartEditingGuard from "@/hooks/map/useStartEditingGuard";
+
+import ConfirmModal from "@/components/modals/Confirm";
 import { setActiveLayer } from "@/lib/store/layer/slice";
 import {
   setActiveLeftPanel,
@@ -295,6 +297,7 @@ const LayerPanel = ({ projectId }: PanelProps) => {
   const { map } = useMap();
   const dispatch = useAppDispatch();
   const { userProfile } = useUserProfile();
+  const startEditingGuard = useStartEditingGuard();
   const [previousRightPanel, setPreviousRightPanel] = useState<MapSidebarItemID | undefined>(undefined);
   const activeLayerId = useAppSelector((state) => state.layers.activeLayerId);
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
@@ -576,8 +579,14 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                               !!layer.charts,
                               layer.in_catalog,
                               false,
-                              layer.user_id === userProfile?.id &&
-                                (!layer.size || layer.size <= MAX_EDITABLE_LAYER_SIZE),
+                              canEditLayerFeatures({
+                                currentUserId: userProfile?.id,
+                                layerOwnerId: layer.user_id,
+                                projectOwnerId: project?.owned_by?.id,
+                                isProjectEditor: true,
+                                layerSize: layer.size,
+                                inCatalog: layer.in_catalog,
+                              }),
                               true,
                             )}
                             menuButton={
@@ -599,12 +608,11 @@ const LayerPanel = ({ projectId }: PanelProps) => {
                                 }
                               } else if (menuItem.id === MapLayerActions.EDIT_FEATURES) {
                                 if (layer.feature_layer_geometry_type) {
-                                  dispatch(
-                                    startEditing({
-                                      layerId: layer.layer_id,
-                                      geometryType: layer.feature_layer_geometry_type,
-                                    })
-                                  );
+                                  startEditingGuard.requestStartEditing({
+                                    layerId: layer.layer_id,
+                                    geometryType: layer.feature_layer_geometry_type,
+                                    projectLayerId: layer.id,
+                                  });
                                 }
                               } else if (menuItem.id === ContentActions.TABLE) {
                                 if (mapMode === "data") {
@@ -629,6 +637,15 @@ const LayerPanel = ({ projectId }: PanelProps) => {
           {projectLayers?.length === 0 && (
             <EmptySection label={t("no_layers_added")} icon={ICON_NAME.LAYERS} />
           )}
+          <ConfirmModal
+            open={startEditingGuard.confirmOpen}
+            title={t("stop_editing")}
+            body={t("discard_edits_confirmation")}
+            closeText={t("cancel")}
+            confirmText={t("stop_editing")}
+            onClose={startEditingGuard.cancel}
+            onConfirm={startEditingGuard.confirm}
+          />
         </>
       }
       action={<AddLayerSection projectId={projectId} />}

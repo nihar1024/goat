@@ -332,7 +332,9 @@ class FeatureWriteService:
         values: list[Any] = []
 
         if geometry and geometry_column:
-            set_clauses.append(f'"{geometry_column}" = ST_MakeValid(ST_GeomFromGeoJSON(?))')
+            set_clauses.append(
+                f'"{geometry_column}" = ST_MakeValid(ST_GeomFromGeoJSON(?))'
+            )
             values.append(json.dumps(geometry))
 
         for col_name, col_value in properties.items():
@@ -434,32 +436,26 @@ class FeatureWriteService:
     # --- Column Management ---
 
     def get_column_names(self, layer_info: LayerInfo) -> list[str]:
-        """Get current column names for a layer."""
+        """Get current column names for a layer.
+
+        DESCRIBE loads only this table's metadata; information_schema.columns
+        would lazily load every table in the catalog to answer.
+        """
         with ducklake_write_manager.connection() as con:
             result = con.execute(
-                f"""
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_catalog = 'lake'
-                AND table_schema = '{layer_info.schema_name}'
-                AND table_name = '{layer_info.table_name}'
-                ORDER BY ordinal_position
-                """
+                f'DESCRIBE lake."{layer_info.schema_name}"."{layer_info.table_name}"'
             ).fetchall()
             return [row[0] for row in result]
 
     def get_column_types(self, layer_info: LayerInfo) -> dict[str, str]:
-        """Get column name -> data_type mapping for a layer."""
+        """Get column name -> data_type mapping for a layer.
+
+        DESCRIBE loads only this table's metadata; information_schema.columns
+        would lazily load every table in the catalog to answer.
+        """
         with ducklake_write_manager.connection() as con:
             result = con.execute(
-                f"""
-                SELECT column_name, data_type
-                FROM information_schema.columns
-                WHERE table_catalog = 'lake'
-                AND table_schema = '{layer_info.schema_name}'
-                AND table_name = '{layer_info.table_name}'
-                ORDER BY ordinal_position
-                """
+                f'DESCRIBE lake."{layer_info.schema_name}"."{layer_info.table_name}"'
             ).fetchall()
             return {row[0]: row[1] for row in result}
 
@@ -523,6 +519,25 @@ class FeatureWriteService:
             if compute_sql is not None:
                 backfill = f'UPDATE {table} SET "{name}" = {compute_sql}'
                 con.execute(backfill)
+
+    def backfill_column(
+        self,
+        layer_info: LayerInfo,
+        name: str,
+        compute_sql: str,
+    ) -> None:
+        """Recompute every row of an existing column from a SQL expression.
+
+        Used when a formula column's expression changes without changing its
+        result type. `compute_sql` must already be validated and
+        parenthesized by the caller.
+        """
+        table = layer_info.full_table_name
+        existing_columns = self.get_column_names(layer_info)
+        _validate_column_name(name, existing_columns)
+
+        with ducklake_write_manager.connection() as con:
+            con.execute(f'UPDATE {table} SET "{name}" = {compute_sql}')
 
     def rename_column(
         self,

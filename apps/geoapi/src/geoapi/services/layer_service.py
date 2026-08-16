@@ -13,7 +13,7 @@ import asyncpg
 from cachetools import TTLCache
 
 from geoapi.config import settings
-from geoapi.dependencies import LayerInfo
+from geoapi.dependencies import LayerInfo, normalize_layer_id
 from geoapi.tile_cache import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -411,29 +411,27 @@ class LayerService:
         columns = []
         try:
             with ducklake_manager.connection() as con:
-                # Get column info from DuckDB for the 'lake' attached catalog
+                # DESCRIBE loads only this table's metadata;
+                # information_schema.columns would lazily load every table
+                # in the catalog to answer.
                 result = con.execute(
-                    f"""
-                    SELECT column_name, data_type
-                    FROM information_schema.columns
-                    WHERE table_catalog = 'lake'
-                    AND table_schema = '{layer_info.schema_name}'
-                    AND table_name = '{layer_info.table_name}'
-                    ORDER BY ordinal_position
-                    """
+                    f'DESCRIBE lake."{layer_info.schema_name}"'
+                    f'."{layer_info.table_name}"'
                 ).fetchall()
 
                 for row in result:
-                    col_name, col_type = row
+                    col_name, col_type = row[0], row[1]
                     # Map DuckDB types to JSON schema types
                     json_type = self._duckdb_to_json_type(col_type)
-                    columns.append(
-                        {
-                            "name": col_name,
-                            "type": col_type,
-                            "json_type": json_type,
-                        }
-                    )
+                    col_meta: dict[str, Any] = {
+                        "name": col_name,
+                        "type": col_type,
+                        "json_type": json_type,
+                    }
+                    json_format = self._duckdb_to_json_format(col_type)
+                    if json_format:
+                        col_meta["format"] = json_format
+                    columns.append(col_meta)
         except Exception:
             # If DuckLake query fails, return empty columns
             pass
@@ -461,6 +459,19 @@ class LayerService:
             return "string"  # ISO format
         else:
             return "string"
+
+    @staticmethod
+    def _duckdb_to_json_format(duckdb_type: str) -> str | None:
+        """TIMESTAMP/TIMESTAMPTZ/DATE -> "date-time"; TIME and non-temporal -> None.
+
+        DATE deliberately collapses into the single datetime field kind.
+        """
+        type_lower = duckdb_type.lower()
+        if "timestamp" in type_lower:
+            return "date-time"
+        if "date" in type_lower:
+            return "date-time"
+        return None
 
     async def is_layer_in_public_project(self, layer_id: UUID) -> bool:
         """Check if a layer belongs to any published (public) project.
@@ -491,6 +502,121 @@ class LayerService:
             fetch_one=True,
         )
         return bool(row and row["is_public"])
+
+    async def user_can_edit_layer(self, layer_id: UUID | str, user_id: UUID) -> bool:
+        """Check whether a non-owner may write to a layer.
+
+        A user who does not own the layer may still write to it when the
+        layer's owner has deliberately brought it into a workspace they both
+        edit: there is a project containing the layer on which *both* the
+        requesting user and the layer owner hold an edit grant
+        (project-owner / project-editor, directly or via team, organization
+        or a folder-editor grant on the project's folder).
+
+        The owner-side condition is what keeps read access from converting
+        into write access. Adding a layer to a project only requires
+        ``read-layer``, so without it any user could add a catalog layer — or
+        one shared with them as viewer — to a project they own and inherit
+        write access to someone else's dataset.
+
+        Ownership is checked by the caller and is not covered here.
+
+        Args:
+            layer_id: Layer UUID (hyphenated or 32-char hex)
+            user_id: Requesting user's UUID
+
+        Returns:
+            True if the shared-workspace rule admits the write
+        """
+        if not self._pool:
+            raise RuntimeError("LayerService not initialized")
+
+        row = await self._execute_with_retry(
+            """
+            WITH candidate_projects AS (
+                SELECT DISTINCT lp.project_id
+                FROM customer.layer_project lp
+                WHERE lp.layer_id = $1::uuid
+            ),
+            layer_owner AS (
+                SELECT l.user_id FROM customer.layer l WHERE l.id = $1::uuid
+            ),
+            /* (project_id, user_id) pairs holding an edit grant on a
+               candidate project, by every route that grants one. */
+            project_editors AS (
+                SELECT cp.project_id, p.user_id
+                FROM candidate_projects cp
+                JOIN customer.project p ON p.id = cp.project_id
+
+                UNION
+
+                SELECT cp.project_id, pu.user_id
+                FROM candidate_projects cp
+                JOIN customer.project_user pu ON pu.project_id = cp.project_id
+                JOIN customer.role r ON r.id = pu.role_id
+                WHERE r.name IN ('project-owner', 'project-editor')
+
+                UNION
+
+                SELECT cp.project_id, ut.user_id
+                FROM candidate_projects cp
+                JOIN customer.project_team pt ON pt.project_id = cp.project_id
+                JOIN customer.role r ON r.id = pt.role_id
+                JOIN customer.user_team ut ON ut.team_id = pt.team_id
+                WHERE r.name IN ('project-owner', 'project-editor')
+
+                UNION
+
+                SELECT cp.project_id, u.id
+                FROM candidate_projects cp
+                JOIN customer.project_organization po
+                    ON po.project_id = cp.project_id
+                JOIN customer.role r ON r.id = po.role_id
+                JOIN customer."user" u ON u.organization_id = po.organization_id
+                WHERE r.name IN ('project-owner', 'project-editor')
+
+                UNION
+
+                SELECT cp.project_id, ut.user_id
+                FROM candidate_projects cp
+                JOIN customer.project p
+                    ON p.id = cp.project_id AND p.folder_id IS NOT NULL
+                JOIN customer.resource_grant rg
+                    ON rg.resource_type = 'folder'
+                   AND rg.resource_id = p.folder_id
+                   AND rg.grantee_type = 'team'
+                JOIN customer.role r ON r.id = rg.role_id
+                   AND r.name = 'folder-editor'
+                JOIN customer.user_team ut ON ut.team_id = rg.grantee_id
+
+                UNION
+
+                SELECT cp.project_id, u.id
+                FROM candidate_projects cp
+                JOIN customer.project p
+                    ON p.id = cp.project_id AND p.folder_id IS NOT NULL
+                JOIN customer.resource_grant rg
+                    ON rg.resource_type = 'folder'
+                   AND rg.resource_id = p.folder_id
+                   AND rg.grantee_type = 'organization'
+                JOIN customer.role r ON r.id = rg.role_id
+                   AND r.name = 'folder-editor'
+                JOIN customer."user" u ON u.organization_id = rg.grantee_id
+            )
+            SELECT EXISTS (
+                SELECT 1
+                FROM project_editors requester
+                JOIN project_editors owner
+                    ON owner.project_id = requester.project_id
+                WHERE requester.user_id = $2::uuid
+                  AND owner.user_id = (SELECT user_id FROM layer_owner)
+            ) AS can_edit
+            """,
+            normalize_layer_id(str(layer_id)),
+            str(user_id),
+            fetch_one=True,
+        )
+        return bool(row and row["can_edit"])
 
     async def list_layers(
         self,

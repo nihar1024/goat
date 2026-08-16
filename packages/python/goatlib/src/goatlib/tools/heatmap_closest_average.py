@@ -21,6 +21,10 @@ from goatlib.analysis.schemas.ui import (
     ui_sections,
 )
 from goatlib.models.io import DatasetMetadata
+from goatlib.tools._opportunity_handles import (
+    WORKFLOW_ONLY_OPPORTUNITY_FIELDS,
+    NumberedOpportunityLayersMixin,
+)
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.schemas import (
     ScenarioSelectorMixin,
@@ -33,7 +37,10 @@ logger = logging.getLogger(__name__)
 
 
 class HeatmapClosestAverageToolParams(
-    ScenarioSelectorMixin, ToolInputBase, HeatmapClosestAverageParams
+    NumberedOpportunityLayersMixin,
+    ScenarioSelectorMixin,
+    ToolInputBase,
+    HeatmapClosestAverageParams,
 ):
     """Parameters for heatmap closest average tool.
 
@@ -82,58 +89,6 @@ class HeatmapClosestAverageToolParams(
         None,
         description="CQL2-JSON filter to apply to the reference area layer",
         json_schema_extra=ui_field(section="configuration", field_order=5, hidden=True),
-    )
-
-    # Numbered opportunity layer inputs for workflow canvas handles (up to 3)
-    # These generate input handles on the workflow node; workflow_runner.py
-    # maps them to the `opportunities` list before tool execution.
-    opportunity_layer_1_id: str | None = Field(
-        None,
-        description="First opportunity layer (connected from workflow)",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=1,
-            widget="layer-selector",
-            label_key="opportunity_layer_1",
-            hidden=True,
-        ),
-    )
-    opportunity_layer_1_filter: dict[str, Any] | None = Field(
-        None,
-        description="CQL2-JSON filter for first opportunity layer",
-        json_schema_extra=ui_field(section="opportunities", field_order=2, hidden=True),
-    )
-    opportunity_layer_2_id: str | None = Field(
-        None,
-        description="Second opportunity layer (connected from workflow)",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=3,
-            widget="layer-selector",
-            label_key="opportunity_layer_2",
-            hidden=True,
-        ),
-    )
-    opportunity_layer_2_filter: dict[str, Any] | None = Field(
-        None,
-        description="CQL2-JSON filter for second opportunity layer",
-        json_schema_extra=ui_field(section="opportunities", field_order=4, hidden=True),
-    )
-    opportunity_layer_3_id: str | None = Field(
-        None,
-        description="Third opportunity layer (connected from workflow)",
-        json_schema_extra=ui_field(
-            section="opportunities",
-            field_order=5,
-            widget="layer-selector",
-            label_key="opportunity_layer_3",
-            hidden=True,
-        ),
-    )
-    opportunity_layer_3_filter: dict[str, Any] | None = Field(
-        None,
-        description="CQL2-JSON filter for third opportunity layer",
-        json_schema_extra=ui_field(section="opportunities", field_order=6, hidden=True),
     )
 
     # Override result_layer_name with tool-specific defaults
@@ -251,13 +206,8 @@ class HeatmapClosestAverageToolRunner(BaseToolRunner[HeatmapClosestAverageToolPa
                     "project_id",
                     "output_name",
                     "opportunities",  # Use resolved opportunities
-                    # Exclude workflow-only numbered input fields
-                    "opportunity_layer_1_id",
-                    "opportunity_layer_1_filter",
-                    "opportunity_layer_2_id",
-                    "opportunity_layer_2_filter",
-                    "opportunity_layer_3_id",
-                    "opportunity_layer_3_filter",
+                    # Canvas-only plumbing, already folded into opportunities
+                    *WORKFLOW_ONLY_OPPORTUNITY_FIELDS,
                     "reference_area_path",
                     "reference_area_layer_id",
                     "reference_area_layer_filter",

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import asyncpg
+import duckdb
 from pydantic import BaseModel, Field
 
 from goatlib.tools.base import SimpleToolRunner
@@ -165,7 +166,7 @@ class ProjectExportRunner(SimpleToolRunner):
                            distributor_email, distribution_url, attribution,
                            data_reference_year, lineage, positional_accuracy,
                            attribute_accuracy, completeness, in_catalog,
-                           user_id, folder_id
+                           user_id, folder_id, field_config
                     FROM {schema}.layer
                     WHERE id = ANY($1)
                     """,
@@ -215,6 +216,10 @@ class ProjectExportRunner(SimpleToolRunner):
                         "in_catalog": row["in_catalog"],
                         "user_id": str(row["user_id"]),
                         "folder_id": str(row["folder_id"]),
+                        # Per-column metadata: formula/computed kinds and
+                        # display config. Without it, imported layers keep
+                        # the values but lose the definitions.
+                        "field_config": row["field_config"] or {},
                     }
 
             # Exclude system layers (e.g. street_network) from export
@@ -405,19 +410,14 @@ class ProjectExportRunner(SimpleToolRunner):
 
         table_path = self.get_layer_table_path(owner_id, layer_id)
 
-        # Check table exists
+        # Check table exists. DESCRIBE probes only this table;
+        # information_schema.tables would lazily load every table in the
+        # catalog to answer.
         user_schema = f"user_{owner_id.replace('-', '')}"
         table_name = f"t_{layer_id.replace('-', '')}"
-        result = self.duckdb_con.execute(
-            f"""
-            SELECT COUNT(*) FROM information_schema.tables
-            WHERE table_catalog = 'lake'
-            AND table_schema = '{user_schema}'
-            AND table_name = '{table_name}'
-            """
-        ).fetchone()
-
-        if not result or result[0] == 0:
+        try:
+            self.duckdb_con.execute(f'DESCRIBE lake."{user_schema}"."{table_name}"')
+        except duckdb.CatalogException:
             logger.warning("DuckLake table not found: %s", table_path)
             return 0
 

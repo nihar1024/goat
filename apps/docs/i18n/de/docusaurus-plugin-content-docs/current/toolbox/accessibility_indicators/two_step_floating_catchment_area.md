@@ -37,29 +37,10 @@ Sie können den **Routing-Modus**, **Ziele-Layer** (mit Kapazitätsfeld), **Beda
 
 **Wesentlicher Unterschied:** Im Gegensatz zur *Gravitationsbasierten Heatmap*, die die allgemeine Erreichbarkeit von Zielen misst, modelliert die *2SFCA Heatmap* explizit das **Gleichgewicht von Angebot und Nachfrage** – und zeigt, wo die Kapazität im Verhältnis zur bedürftigen Bevölkerung ausreichend oder unzureichend ist.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps sind in bestimmten Regionen verfügbar. Bei Auswahl eines `Routing-Modus` wird ein **Geofence** auf der Karte angezeigt, um die unterstützten Regionen hervorzuheben.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Abdeckung für 2SFCA Heatmaps", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, können Sie uns gerne [kontaktieren](https://plan4better.de/kontakt/ "Kontaktieren Sie uns"). Wir besprechen gerne weitere Optionen.
+Die Heatmap-Berechnung ist für `Walk`, `Bicycle`, `Pedelec` und `Auto` in **über 30 europäischen Ländern** verfügbar. Für `Öffentliche Verkehrsmittel` werden Deutschland, die Schweiz und die Region Haut-Rhin in Frankreich unterstützt. Wenn Sie Analysen außerhalb dieser Regionen benötigen, [kontaktieren Sie uns](https://plan4better.de/de/contact/) gerne.
 
 :::
 
@@ -87,36 +68,16 @@ Wenn Sie Analysen über diesen Geofence hinaus durchführen möchten, können Si
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Wählen Sie den <code>Routing-Modus</code>, den Sie für die Heatmap verwenden möchten.</div>
+  <div class="content">Wählen Sie das <code>Verkehrsmittel</code>, das Sie für die Heatmap verwenden möchten.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-**Berücksichtigt alle zu Fuß erreichbaren Wege**. Für Heatmaps wird eine Gehgeschwindigkeit von 5 km/h angenommen.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Fahrrad befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche, Ebenheit und Steigung von Straßen. Für Heatmaps wird eine Fahrradgeschwindigkeit von 15 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Pedelec befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit die Oberfläche und Ebenheit von Straßen. Für Heatmaps wird eine Pedelec-Geschwindigkeit von 23 km/h angenommen.
-
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-**Berücksichtigt alle mit dem Auto befahrbaren Wege**. Dieser Routing-Modus berücksichtigt bei der Berechnung der Erreichbarkeit Geschwindigkeitsbegrenzungen und Einbahnstraßenbeschränkungen.
-
-</TabItem>
-
-</Tabs>
+| Verkehrsmittel | Berücksichtigt |
+|----------------|----------------|
+| Zu Fuß | Alle zu Fuß begehbaren Wege |
+| Fahrrad | Alle mit dem Fahrrad befahrbaren Wege (Oberfläche, Glätte, Steigung) |
+| Pedelec | Alle mit dem Pedelec befahrbaren Wege (Oberfläche, Glätte) |
+| Auto | Alle mit dem Auto befahrbaren Wege (Tempolimits, Einbahnstraßen) |
+| Öffentlicher Verkehr | ÖV-Netz (GTFS-Fahrpläne) mit Zu-Fuß-Zugang und -Abgang (bis zu 30 Minuten) zu und von den Haltestellen |
 
 ### Konfiguration
 
@@ -184,13 +145,19 @@ Berechnet Gewichte unter Verwendung einer Potenzfunktion. Der Sensitivitätspara
 
 </TabItem>
 
+<TabItem value="cumulative" label="Kumulativ" className="tabItemBox">
+
+Wendet innerhalb des Reisezeitlimits ein volles Gewicht von 1 auf jede Einrichtung an und 0 darüber hinaus, ohne Distanzabfall. Anders als die übrigen Funktionen verwendet sie den Sensitivitätsparameter nicht – alle erreichbaren Einrichtungen zählen gleich. Details siehe [Technische Details](#calculation).
+
+</TabItem>
+
 </Tabs>
 
 ### Bedarf
 
 <div class="step">
   <div class="step-number">6</div>
-  <div class="content">Wählen Sie Ihren <code>Bedarfs-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Bevölkerungs- oder Nutzerdaten enthalten (z. B. Zensusdaten mit Einwohnerzahlen).</div>
+  <div class="content">Wählen Sie Ihren <code>Nachfrage-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Bevölkerungs- oder Nutzerdaten enthalten (z. B. Zensusdaten mit Einwohnerzahlen).</div>
 </div>
 
 <div class="step">
@@ -202,17 +169,22 @@ Berechnet Gewichte unter Verwendung einer Potenzfunktion. Der Sensitivitätspara
 
 <div class="step">
   <div class="step-number">8</div>
-  <div class="content">Wählen Sie Ihren <code>Ziele-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Standorte von Einrichtungen enthalten (z. B. Krankenhäuser, Schulen, Geschäfte).</div>
+  <div class="content">Wählen Sie Ihren <code>Eingabe-Layer</code> aus dem Dropdown-Menü. Dieser Layer sollte Standorte von Einrichtungen enthalten (z. B. Krankenhäuser, Schulen, Geschäfte).</div>
 </div>
 
 <div class="step">
   <div class="step-number">9</div>
-  <div class="content">Wählen Sie das <code>Kapazitätsfeld</code> – ein numerisches Feld, das die Angebotskapazität jeder Einrichtung darstellt (z. B. Anzahl der Betten, Sitze oder Quadratmeter).</div>
+  <div class="content">Legen Sie das <code>Reisezeitlimit</code> fest, das das maximale Einzugsgebiet in Minuten definiert.</div>
 </div>
 
 <div class="step">
   <div class="step-number">10</div>
-  <div class="content">Legen Sie das <code>Reisezeitlimit</code> fest, das das maximale Einzugsgebiet in Minuten definiert.</div>
+  <div class="content">Wählen Sie einen <code>Potenzialtyp</code>, um festzulegen, wie die Kapazität jeder Einrichtung bestimmt wird:
+    <ul>
+      <li><b>Constant</b> — alle Einrichtungen haben die gleiche Kapazität. Geben Sie einen numerischen Wert ein (Standard: 1.0).</li>
+      <li><b>Field</b> — verwenden Sie ein numerisches Feld aus dem <i>Eingabe-Layer</i> als Kapazität (z. B. Anzahl der Betten, Sitze oder Quadratmeter).</li>
+    </ul>
+  </div>
 </div>
 
 :::tip Hinweis
@@ -228,11 +200,23 @@ Benötigen Sie Hilfe bei der Auswahl einer geeigneten Reisezeitgrenze für versc
 
 <div class="step">
   <div class="step-number">12</div>
-  <div class="content">Optional können Sie weitere Ziele-Layer hinzufügen, indem Sie auf <code>+ Ziele hinzufügen</code> klicken. Mehrere Einrichtungstypen können in einer einzigen Analyse kombiniert werden.</div>
+  <div class="content">Optional können Sie weitere Gelegenheiten hinzufügen, indem Sie auf <code>+ Hinzufügen Gelegenheiten</code> klicken. Mehrere Einrichtungstypen können in einer einzigen Analyse kombiniert werden.</div>
 </div>
 
 <div class="step">
   <div class="step-number">13</div>
+  <div class="content">Optional können Sie unter <code>Erweiterte Optionen</code> ein <code>Referenzgebiet</code> auswählen — einen Polygon-Layer, der das vollständige Untersuchungsgebiet definiert. Wenn festgelegt, erweitert sich die Heatmap auf alle H3-Zellen innerhalb dieses Polygons; Zellen außerhalb der berechneten Erreichbarkeit werden als <code>NULL</code> dargestellt und zeigen so Versorgungslücken und unterversorgte Gebiete auf.</div>
+</div>
+
+### Ergebnis-Layer
+
+<div class="step">
+  <div class="step-number">14</div>
+  <div class="content">Legen Sie den <code>Name der Ergebnislayer</code> für den Ausgabe-Heatmap-Layer fest.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">15</div>
   <div class="content">Klicken Sie auf <code>Ausführen</code>, um die Berechnung zu starten.</div>
 </div>
 
@@ -391,6 +375,21 @@ Durch Nutzung der *Sensitivität*, die Sie definieren, ermöglicht Ihnen die Gau
 </MathJax.Provider>
 </div>  
 
+*Kumulative Gelegenheiten (`Kumulativ` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{für } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{sonst}
+    \\end{cases}`} />
+  </div>
+</MathJax.Provider>
+</div>
+
+Die kumulative Funktion wendet **keinen Distanzabfall** an und verwendet den Parameter *Sensitivität* nicht: Jede Einrichtung innerhalb des Reisezeitlimits **t̄** trägt mit vollem Gewicht bei. Mit kumulativen Gewichten reduzieren sich E2SFCA und M2SFCA darauf, erreichbare Einrichtungen gleich zu zählen, statt sie nach Entfernung zu differenzieren.
+
 
 ### Klassifizierung
 
@@ -399,42 +398,14 @@ Es können jedoch auch verschiedene andere Klassifizierungsmethoden verwendet we
 
 ### Visualisierung 
 
-Heatmaps in GOAT nutzen **[Ubers H3-Raster](../../further_reading/glossary#h3-grid)**-Lösung für effiziente Berechnung und leicht verständliche Visualisierung. Im Hintergrund nutzt eine vorberechnete Reisezeitmatrix für jeden *Routing-Modus* diese Lösung und wird in Echtzeit abgefragt und weiterverarbeitet, um die Erreichbarkeit zu berechnen und eine finale Heatmap zu erstellen.
+Heatmaps in GOAT nutzen **[Ubers H3-Raster](../../further_reading/glossary#h3-grid)**-Lösung für effiziente Berechnung und leicht verständliche Visualisierung. Im Hintergrund wird die Erreichbarkeit direkt zur Laufzeit von GOATs eigener Routing-Engine berechnet. Für jeden *Routing-Modus* routet die Engine von den Gelegenheiten ausgehend nach außen, um die erreichbaren H3-Zellen und deren Reisekosten zu ermitteln, und aggregiert diese anschließend zu einem Erreichbarkeitswert pro Zelle. Der öffentliche Verkehr nutzt die RAPTOR-basierte Engine, während die Verkehrsträger der aktiven Mobilität und das Auto GOATs Dijkstra-Implementierung verwenden.
 
 Die Auflösung und Dimensionen des verwendeten hexagonalen Rasters hängen vom gewählten *Routing-Modus* ab:
 
-<div style={{ marginLeft: '20px' }}>
-
-<Tabs>
-
-<TabItem value="walk" label="Zu Fuß" default className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 10`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 11285.6 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 65.9 m`}</li>
-</TabItem>
-  
-<TabItem value="cycling" label="Fahrrad" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 174.4 m`}</li>
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 9`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 78999.4 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 174.4 m`}</li> 
-</TabItem>
-
-<TabItem value="car" label="Auto" className="tabItemBox">
-
-<li parentName="ul">{`Auflösung: 8`}</li>
-<li parentName="ul">{`Durchschnittliche Hexagon-Fläche: 552995.7 m²`}</li>
-<li parentName="ul">{`Durchschnittliche Kantenlänge Hexagon: 461.4 m`}</li>
-
-</TabItem>
-
-</Tabs>
-</div>
+| Verkehrsmittel | Auflösung | Durchschnittliche Sechseckfläche | Durchschnittliche Kantenlänge |
+|----------------|-----------|----------------------------------|-------------------------------|
+| Walk | 10 | 11.285,6 m² | 65,9 m |
+| Bicycle | 9 | 78.999,4 m² | 174,4 m |
+| Pedelec | 9 | 78.999,4 m² | 174,4 m |
+| Car | 8 | 552.995,7 m² | 461,4 m |
+| Public Transport | 9 | 78.999,4 m² | 174,4 m |

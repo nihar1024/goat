@@ -1,12 +1,12 @@
 import SearchIcon from "@mui/icons-material/Search";
 import {
+  Box,
   Checkbox,
   FormControl,
   InputAdornment,
   ListSubheader,
   MenuItem,
   Select,
-  Stack,
   TextField,
   Typography,
   useTheme,
@@ -18,6 +18,7 @@ import { type ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import type { SelectorItem } from "@/types/map/common";
 
 import FormLabelHelper from "@/components/common/FormLabelHelper";
+import NoValuesFound from "@/components/map/common/NoValuesFound";
 
 // Stable empty array reference to prevent re-renders
 const EMPTY_ARRAY: never[] = [];
@@ -78,17 +79,17 @@ const Selector = (props: SelectorProps) => {
     }
   }, [multiple, selectedItems]);
 
-  // Return early if no items to prevent MUI empty state loop
+  // Return early if no items to prevent MUI empty state loop. The Select is not
+  // rendered here, so surface emptyMessage in place of it instead of leaving a
+  // bare label behind.
   if (!items || items.length === 0) {
-    return label ? (
+    if (!label && !emptyMessage) return null;
+    return (
       <FormControl size="small" fullWidth>
-        <FormLabelHelper
-          label={label}
-          color={theme.palette.text.secondary}
-          tooltip={tooltip}
-        />
+        {label && <FormLabelHelper label={label} color={theme.palette.text.secondary} tooltip={tooltip} />}
+        {emptyMessage && <NoValuesFound text={emptyMessage} icon={emptyMessageIcon} />}
       </FormControl>
-    ) : null;
+    );
   }
 
   return (
@@ -154,16 +155,22 @@ const Selector = (props: SelectorProps) => {
           if (!multiple && !Array.isArray(selectedItems) && selectedItems)
             return (
               <div style={{ display: "flex", alignItems: "center" }}>
-                {selectedItems.icon && (
-                  <Icon
-                    iconName={selectedItems.icon}
-                    style={{
-                      fontSize: "14px",
-                      color: theme.palette.text.secondary,
-                    }}
-                    sx={{ mr: 2 }}
-                    color="inherit"
-                  />
+                {selectedItems.iconNode ? (
+                  <Box component="span" sx={{ mr: 2, display: "inline-flex" }}>
+                    {selectedItems.iconNode}
+                  </Box>
+                ) : (
+                  selectedItems.icon && (
+                    <Icon
+                      iconName={selectedItems.icon}
+                      style={{
+                        fontSize: "14px",
+                        color: theme.palette.text.secondary,
+                      }}
+                      sx={{ mr: 2 }}
+                      color="inherit"
+                    />
+                  )
                 )}
                 <Typography variant="body2" fontWeight="bold">
                   {selectedItems.label}
@@ -212,24 +219,7 @@ const Selector = (props: SelectorProps) => {
           </ListSubheader>
         )}
         {emptyMessage && emptyMessageIcon && displayedItems.length === 0 && (
-          <Stack
-            direction="column"
-            spacing={2}
-            sx={{
-              my: 2,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }}>
-            {emptyMessageIcon && (
-              <Icon iconName={emptyMessageIcon} fontSize="small" htmlColor={theme.palette.text.secondary} />
-            )}
-            {emptyMessage && (
-              <Typography variant="body2" fontWeight="bold" color={theme.palette.text.secondary}>
-                {emptyMessage}
-              </Typography>
-            )}
-          </Stack>
+          <NoValuesFound text={emptyMessage} icon={emptyMessageIcon} />
         )}
 
         {displayedItems.map((item) => (
@@ -241,16 +231,22 @@ const Selector = (props: SelectorProps) => {
                 checked={selectedValue?.findIndex((selected) => selected === item.value) > -1}
               />
             )}
-            {item.icon && (
-              <Icon
-                iconName={item.icon}
-                style={{
-                  fontSize: "14px",
-                  color: theme.palette.text.secondary,
-                }}
-                sx={{ mr: 2 }}
-                color="inherit"
-              />
+            {item.iconNode ? (
+              <Box component="span" sx={{ mr: 2, display: "inline-flex" }}>
+                {item.iconNode}
+              </Box>
+            ) : (
+              item.icon && (
+                <Icon
+                  iconName={item.icon}
+                  style={{
+                    fontSize: "14px",
+                    color: theme.palette.text.secondary,
+                  }}
+                  sx={{ mr: 2 }}
+                  color="inherit"
+                />
+              )
             )}
             <Typography
               variant="body2"

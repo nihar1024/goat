@@ -12,7 +12,7 @@ Das ** Verkehrsmittel Fahrrad/Pedelec** wird für alle Analysen in GOAT verwende
  
 ## 1. Zielsetzung
 
-Das Fahrrad-/Pedelec-Routing wird für viele Indikatoren in GOAT verwendet, wie z.B. [Einzugsgebiete](../toolbox/accessibility_indicators/catchments "Dokumente der Einzugsgebiete"), [Heatmaps](../toolbox/accessibility_indicators/connectivity "Dokumente der Heatmaps") und [Nahgeölegene ÖV-Haltestellen](../toolbox/accessibility_indicators/nearby_stations "Dokumente der nahgelegenden ÖV-Haltestellen"). Da GOAT auch die Erstellung von [Szenarien für das Straßennetz](../Scenarios#4-straßennetz---kanten) erlaubt, wird ein **angepasster Routing-Algorithmus** benötigt, der auch die Änderungen des Szenarios in den Erreichbarkeitsanalysen widerspiegelt. Für den Verkehrsträger Fahrrad/Pedelec werden dabei **nur Wege berücksichtigt, die für den Radverkehr geeignet sind**. Darüber hinaus haben die `Oberfläche` und die `Steigung` einen Einfluss auf die Radfahrgeschwindigkeit und werden daher bei der Routenplanung berücksichtigt. Die durchschnittliche `Geschwindigkeit` einer radfahrender Person kann vom Benutzer bei jeder Erreichbarkeitsanalyse angepasst werden. Abhängig von der Steigung und Oberfläche eines Wegabschnitts wird die Geschwindigkeit entsprechend angepasst. 
+Das Fahrrad-/Pedelec-Routing wird für viele Indikatoren in GOAT verwendet, wie z.B. [Einzugsgebiete](../toolbox/accessibility_indicators/catchments "Dokumente der Einzugsgebiete"), [Heatmaps](../toolbox/accessibility_indicators/connectivity "Dokumente der Heatmaps"), das [Huff-Modell](../toolbox/accessibility_indicators/huff_model "Dokumente des Huff-Modells") und die [Reisekostenmatrix](../toolbox/accessibility_indicators/travel_cost_matrix "Dokumente der Reisekostenmatrix"). Für den Verkehrsträger Fahrrad/Pedelec wird ein **angepasster Routing-Algorithmus** verwendet, der dabei **nur Wege berücksichtigt, die für den Radverkehr geeignet sind**. Darüber hinaus haben die `Oberfläche` und die `Steigung` einen Einfluss auf die Radfahrgeschwindigkeit und werden daher bei der Routenplanung berücksichtigt. Die durchschnittliche `Geschwindigkeit` einer radfahrender Person kann vom Benutzer bei jeder Erreichbarkeitsanalyse angepasst werden. Abhängig von der Steigung und Oberfläche eines Wegabschnitts wird die Geschwindigkeit entsprechend angepasst. 
 
 
 ## 2. Daten
@@ -67,6 +67,14 @@ Kostenfunktion für **Pedelec**:
 `Kosten = (Länge * (1 + Oberflächenwiderstand)) / Geschwindigkeit`
 
 Wenn eine Kante der Klasse `Fußgänger` oder `Zebrastreifen` angehört, gehen wir davon aus, dass der Fahrer absteigt und sein Fahrrad/Pedelec schiebt. Die Kosten für diese Art von Segmenten sind: `Kosten = Länge / Geschwindigkeit`
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0.75rem' }}>
+  <img src={require('/img/routing/bicycle_edge_cost_de.png').default} alt="Fahrradnetzwerk Kantenkosten nach Topologie — Belag- und Steigungsmultiplikatoren" style={{ maxWidth: "100%", objectFit: "contain"}}/>
+</div>
+
+:::note
+Die Kostenmultiplikatorwerte sind illustrative Beispiele. Die tatsächlichen Widerstandswerte variieren je nach spezifischem Belag und Steigungsgradient des jeweiligen Wegabschnitts.
+:::
 
 #### Netzausbreitung
 

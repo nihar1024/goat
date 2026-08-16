@@ -5,10 +5,10 @@ description = "GOAT GeoAPI - OGC Features and Tiles API powered by DuckDB/DuckLa
 authors = [{ name = "Plan4Better GmbH", email = "dev@plan4better.de" }]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi[standard]>=0.115.0",
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.115.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "duckdb>=1.4.3",
+    "duckdb>=1.5.4",
     "asyncpg>=0.29.0",
     "pygeofilter>=0.2.0",
     "sqlglot>=26.0.0",
@@ -42,6 +42,11 @@ dev = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "network: Tests that access external network services (WFS, HTTP, etc.)",
+]
 
 [tool.ruff]
 target-version = "py311"

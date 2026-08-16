@@ -800,6 +800,134 @@ class TestProjectImportRunner:
                 f" got {group_serial!r}. Full args: {args}"
             )
 
+    def test_import_restores_field_config(self, runner: ProjectImportRunner) -> None:
+        """An archive carrying `field_config` restores it on the new layer row.
+
+        Regression: formula columns (and the other computed kinds) live in
+        `customer.layer.field_config`. The importer's layer INSERT omitted
+        the column, so imported layers lost their formulas and the values
+        stopped being recomputed on edit.
+        """
+        user_id = "00000000-0000-0000-0000-000000000001"
+        folder_id = "00000000-0000-0000-0000-ffffffffffff"
+        layer_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+        field_config = {
+            "risk_score": {
+                "kind": "formula",
+                "formula": "(CASE WHEN broken THEN 1 ELSE 0 END) * 3000",
+                "depends_on": ["broken"],
+                "is_computed": True,
+                "output_kind": "number",
+                "display_config": {"decimals": 2},
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as build_dir:
+            zip_path = Path(build_dir) / "export.zip"
+
+            project_data = {"name": "Formula Project"}
+            layer_meta = {
+                "id": layer_id,
+                "name": "Stops",
+                "type": "feature",
+                "data_type": None,
+                "field_config": field_config,
+            }
+            layer_index = {"layers": [layer_meta]}
+            layer_project_links = {
+                "links": [
+                    {"id": 101, "layer_id": layer_id, "name": "Stops", "order": 0}
+                ]
+            }
+
+            checksums: dict[str, str] = {}
+
+            def _cs(b: bytes) -> str:
+                return f"sha256:{hashlib.sha256(b).hexdigest()}"
+
+            project_bytes = json.dumps(project_data, indent=2).encode()
+            checksums["project.json"] = _cs(project_bytes)
+
+            index_bytes = json.dumps(layer_index, indent=2).encode()
+            checksums["layers/index.json"] = _cs(index_bytes)
+
+            meta_bytes = json.dumps(layer_meta, indent=2).encode()
+            checksums[f"layers/{layer_id}/metadata.json"] = _cs(meta_bytes)
+
+            links_bytes = json.dumps(layer_project_links, indent=2).encode()
+            checksums["layer_project_links.json"] = _cs(links_bytes)
+
+            manifest = {
+                "format_version": "1.1",
+                "exported_at": "2025-06-01T00:00:00Z",
+                "project_name": "Formula Project",
+                "checksums": checksums,
+                "layer_count": 1,
+                "internal_layer_count": 1,
+                "external_layer_count": 0,
+                "workflow_count": 0,
+                "report_count": 0,
+            }
+
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("project.json", project_bytes)
+                zf.writestr("layers/index.json", index_bytes)
+                zf.writestr(f"layers/{layer_id}/metadata.json", meta_bytes)
+                zf.writestr(f"layers/{layer_id}/data.parquet", b"FAKE_PARQUET")
+                zf.writestr("layer_project_links.json", links_bytes)
+                zf.writestr("manifest.json", json.dumps(manifest, indent=2).encode())
+
+            zip_bytes = zip_path.read_bytes()
+
+        params = ProjectImportParams(
+            user_id=user_id,
+            s3_key="imports/formula.zip",
+            target_folder_id=folder_id,
+        )
+
+        def mock_download_file(**kwargs: object) -> None:
+            Path(str(kwargs["Filename"])).write_bytes(zip_bytes)
+
+        runner._s3_client.download_file.side_effect = mock_download_file
+        runner._duckdb_con.execute.return_value.fetchall.return_value = [
+            ("id", "INTEGER"),
+            ("risk_score", "DOUBLE"),
+            ("geometry", "GEOMETRY"),
+        ]
+
+        layer_insert_calls: list[tuple[str, tuple[object, ...]]] = []
+
+        mock_asyncpg_conn = AsyncMock()
+        mock_asyncpg_conn.set_type_codec = AsyncMock()
+        mock_txn = MagicMock()
+        mock_txn.__aenter__ = AsyncMock(return_value=mock_txn)
+        mock_txn.__aexit__ = AsyncMock(return_value=False)
+        mock_asyncpg_conn.transaction = MagicMock(return_value=mock_txn)
+
+        async def tracking_execute(query: str, *args: object) -> None:
+            if "INSERT INTO customer.layer\n" in query:
+                layer_insert_calls.append((query, args))
+            return None
+
+        mock_asyncpg_conn.execute = AsyncMock(side_effect=tracking_execute)
+        mock_asyncpg_conn.fetchval = AsyncMock(return_value=1)
+
+        with patch("goatlib.tools.project_import.asyncpg") as mock_asyncpg:
+            mock_asyncpg.connect = AsyncMock(return_value=mock_asyncpg_conn)
+            runner.run(params)
+
+        assert (
+            len(layer_insert_calls) == 1
+        ), f"Expected 1 layer insert, got {len(layer_insert_calls)}"
+        query, args = layer_insert_calls[0]
+        assert "field_config" in query, (
+            "layer INSERT must write field_config, got:\n" + query
+        )
+        assert (
+            field_config in args
+        ), f"field_config value not passed to the layer INSERT: {args}"
+
     def test_import_duplicate_layer_links(self, runner: ProjectImportRunner) -> None:
         """A 1.1 archive with 2 links to the same layer creates 2 layer_project rows.
 

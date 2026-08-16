@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import duckdb
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from goatlib.analysis.accessibility import TravelCostMatrixTool
 from goatlib.analysis.schemas.catchment_area import WEEKDAY_LABELS
@@ -35,15 +35,23 @@ from goatlib.analysis.schemas.ui import (
     ui_sections,
 )
 from goatlib.models.io import DatasetMetadata
+from goatlib.tools._routing_limits import (
+    DEFAULT_MAX_TIME_ACTIVE_MIN,
+    DEFAULT_MAX_TIME_PT_MIN,
+    budget_widget_options,
+    leg_budget_widget_options,
+    resolve_budget_input,
+    resolve_leg_budget_input,
+    validate_budget,
+    validate_cost_type,
+    validate_leg_budget,
+)
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.catchment_area_v2 import (
+    ACCESS_EGRESS_MODE_ICONS,
     ACCESS_EGRESS_MODE_LABELS,
     COST_TYPE_ICONS,
     COST_TYPE_LABELS,
-    DEFAULT_MAX_DISTANCE_ACTIVE_M,
-    DEFAULT_MAX_DISTANCE_CAR_M,
-    DEFAULT_MAX_TIME_ACTIVE_MIN,
-    DEFAULT_MAX_TIME_CAR_MIN,
     PT_MODE_LABELS,
 )
 from goatlib.tools.catchment_area_v2 import (
@@ -233,6 +241,9 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             label_key="routing_mode",
             enum_icons=ROUTING_MODE_ICONS,
             enum_labels=ROUTING_MODE_LABELS,
+            # Changing the transport mode restarts the form: it decides which
+            # measures, budgets and legs apply, so nothing should carry over.
+            widget_options={"resets_form": True},
         ),
     )
 
@@ -324,158 +335,43 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
     )
 
     # Cost limits (advanced)
-    max_cost_time_active: int | None = Field(
+    # Single street travel budget — optional: unset means unbounded, and TCM
+    # then returns every reachable O-D pair. PT keeps its own mandatory,
+    # always-visible limit below (max_cost_time_pt), which is why this is a
+    # 5 -> 2 collapse rather than 5 -> 1.
+    max_cost: int | None = Field(
         default=None,
-        description="Maximum travel time in minutes (optional; unbounded if unset).",
+        description="Optional cutoff for the selected measure type (unbounded if unset).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=11,
-            label_key="limit_time_min",
+            label_key="limit",
+            description_key="limit",
             inline_group="cost_limit",
             inline_flex="1 0 0",
-            widget_options={
-                # Populate the form value when this field becomes visible (i.e.
-                # routing_mode is one of these). Hidden cases (car/pt, distance)
-                # leave the form state at the schema default (None), so the
-                # visibility filter at submit ends up sending None.
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {
-                        "walking": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "bicycle": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                        "pedelec": DEFAULT_MAX_TIME_ACTIVE_MIN,
-                    },
-                },
-                "max_value_from": {
-                    "fields": [],
-                    "message": "active_mobility_time_limit_message",
-                    "max": 45,
-                    "min": 1,
-                },
-            },
+            widget_options=budget_widget_options(),
             visible_when={
                 "$and": [
                     {"show_advanced": True},
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                    {"cost_type": "time"},
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
                 ]
             },
         ),
     )
 
-    max_cost_time_car: int | None = Field(
-        default=None,
-        description="Maximum travel time in minutes (optional; unbounded if unset).",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=11,
-            label_key="limit_time_min",
-            inline_group="cost_limit",
-            inline_flex="1 0 0",
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {"car": DEFAULT_MAX_TIME_CAR_MIN},
-                },
-                "max_value_from": {
-                    "fields": [],
-                    "message": "car_time_limit_message",
-                    "max": 90,
-                    "min": 1,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "car"},
-                    {"cost_type": "time"},
-                ]
-            },
-        ),
-    )
-
+    # PT keeps its own mandatory, always-visible limit (the street budget above
+    # is optional and lives under Advanced). Same label/unit treatment as every
+    # other tool's PT budget: "Limit" + the unit from the shared rules.
     max_cost_time_pt: int = Field(
-        default=30,
-        description="Maximum travel time in minutes.",
+        default=DEFAULT_MAX_TIME_PT_MIN,
+        description="Upper limit for the selected measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=5,
-            label_key="travel_time_limit_min",
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "pt_time_limit_message",
-                    "max": 90,
-                    "min": 1,
-                },
-            },
+            label_key="limit",
+            description_key="limit",
+            widget_options=budget_widget_options(),
             visible_when={"routing_mode": "pt"},
-        ),
-    )
-
-    max_cost_distance: int | None = Field(
-        default=None,
-        description="Maximum distance in meters (optional; unbounded if unset).",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=11,
-            label_key="limit_distance_m",
-            inline_group="cost_limit",
-            inline_flex="1 0 0",
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {
-                        "walking": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "bicycle": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                        "pedelec": DEFAULT_MAX_DISTANCE_ACTIVE_M,
-                    },
-                },
-                "max_value_from": {
-                    "fields": [],
-                    "message": "active_mobility_distance_limit_message",
-                    "max": 20000,
-                    "min": 50,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                    {"cost_type": "distance"},
-                ]
-            },
-        ),
-    )
-
-    max_cost_distance_car: int | None = Field(
-        default=None,
-        description="Maximum distance in meters (optional; unbounded if unset).",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=11,
-            label_key="limit_distance_m",
-            inline_group="cost_limit",
-            inline_flex="1 0 0",
-            widget_options={
-                "default_by_field": {
-                    "field": "routing_mode",
-                    "values": {"car": DEFAULT_MAX_DISTANCE_CAR_M},
-                },
-                "max_value_from": {
-                    "fields": [],
-                    "message": "car_distance_limit_message",
-                    "max": 100000,
-                    "min": 50,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "car"},
-                    {"cost_type": "distance"},
-                ]
-            },
         ),
     )
 
@@ -538,7 +434,7 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
         ),
     )
 
-    pt_access_mode: AccessEgressMode = Field(
+    access_mode: AccessEgressMode = Field(
         default=AccessEgressMode.walk,
         description="Mode to reach transit stops.",
         json_schema_extra=ui_field(
@@ -546,17 +442,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             field_order=20,
             label_key="access_mode",
             group_label="groups.access_leg",
+            enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                ]
-            },
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
         ),
     )
 
-    pt_access_cost_type: CostType = Field(
+    access_cost_type: CostType = Field(
         default=CostType.time,
         description="Access leg cost type.",
         json_schema_extra=ui_field(
@@ -565,72 +457,31 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
-            inline_group="pt_access_cost",
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                ]
-            },
+            inline_group="access_cost",
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
         ),
     )
 
-    pt_access_max_cost_time: int = Field(
-        default=15,
-        description="Access leg budget in minutes.",
+    # Single leg budget, same shape as every other tool. The time cap is the PT
+    # journey budget (max_cost_time_pt here, not the optional street max_cost).
+    access_max_cost: int = Field(
+        default=DEFAULT_MAX_TIME_ACTIVE_MIN,
+        description="Upper limit for this leg's measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=22,
             label_key="limit",
-            inline_group="pt_access_cost",
+            description_key="limit",
+            inline_group="access_cost",
             inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                    {"pt_access_cost_type": "time"},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [
-                        {"field": "max_cost_time_pt"},
-                    ],
-                    "message": "access_budget_exceeds_limit",
-                    "min": 1,
-                },
-            },
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            widget_options=leg_budget_widget_options(
+                "access_cost_type", "access_budget_exceeds_limit", budget_field="max_cost_time_pt",
+            ),
         ),
     )
 
-    pt_access_max_cost_distance: int = Field(
-        default=500,
-        description="Access leg budget in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=22,
-            label_key="limit",
-            inline_group="pt_access_cost",
-            inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                    {"pt_access_cost_type": "distance"},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "access_budget_exceeds_limit",
-                    "min": 50,
-                    "max": 20000,
-                },
-            },
-        ),
-    )
-
-    pt_access_speed: float | None = Field(
+    access_speed: float | None = Field(
         default=None,
         description="Access leg speed in km/h. None for car access.",
         json_schema_extra=ui_field(
@@ -639,16 +490,16 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             label_key="speed_kmh",
             widget_options={
                 "default_by_field": {
-                    "field": "pt_access_mode",
+                    "field": "access_mode",
                     "values": {"walk": 5, "bicycle": 15, "pedelec": 23},
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"pt_access_mode": "walk"},
+                        {"value": 30, "when": {"access_mode": "walk"},
                          "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"pt_access_mode": "bicycle"},
+                        {"value": 60, "when": {"access_mode": "bicycle"},
                          "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"pt_access_mode": "pedelec"},
+                        {"value": 60, "when": {"access_mode": "pedelec"},
                          "message": "pedelec_speed_limit_message"},
                     ],
                     "min": 1,
@@ -659,14 +510,14 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
                 "$and": [
                     {"show_advanced": True},
                     {"routing_mode": "pt"},
-                    {"pt_access_cost_type": "time"},
-                    {"pt_access_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
+                    {"access_cost_type": "time"},
+                    {"access_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
                 ]
             },
         ),
     )
 
-    pt_egress_mode: AccessEgressMode = Field(
+    egress_mode: AccessEgressMode = Field(
         default=AccessEgressMode.walk,
         description="Mode from transit stops to destination.",
         json_schema_extra=ui_field(
@@ -674,17 +525,13 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             field_order=24,
             label_key="pt_egress_mode",
             group_label="groups.egress_leg",
+            enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                ]
-            },
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
         ),
     )
 
-    pt_egress_cost_type: CostType = Field(
+    egress_cost_type: CostType = Field(
         default=CostType.time,
         description="Egress leg cost type.",
         json_schema_extra=ui_field(
@@ -693,72 +540,31 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
-            inline_group="pt_egress_cost",
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                ]
-            },
+            inline_group="egress_cost",
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
         ),
     )
 
-    pt_egress_max_cost_time: int = Field(
-        default=15,
-        description="Egress leg budget in minutes.",
+    # Single leg budget, same shape as every other tool. The time cap is the PT
+    # journey budget (max_cost_time_pt here, not the optional street max_cost).
+    egress_max_cost: int = Field(
+        default=DEFAULT_MAX_TIME_ACTIVE_MIN,
+        description="Upper limit for this leg's measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=26,
             label_key="limit",
-            inline_group="pt_egress_cost",
+            description_key="limit",
+            inline_group="egress_cost",
             inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                    {"pt_egress_cost_type": "time"},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [
-                        {"field": "max_cost_time_pt"},
-                    ],
-                    "message": "egress_budget_exceeds_limit",
-                    "min": 1,
-                },
-            },
+            visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+            widget_options=leg_budget_widget_options(
+                "egress_cost_type", "egress_budget_exceeds_limit", budget_field="max_cost_time_pt",
+            ),
         ),
     )
 
-    pt_egress_max_cost_distance: int = Field(
-        default=500,
-        description="Egress leg budget in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=26,
-            label_key="limit",
-            inline_group="pt_egress_cost",
-            inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"show_advanced": True},
-                    {"routing_mode": "pt"},
-                    {"pt_egress_cost_type": "distance"},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "egress_budget_exceeds_limit",
-                    "min": 50,
-                    "max": 20000,
-                },
-            },
-        ),
-    )
-
-    pt_egress_speed: float | None = Field(
+    egress_speed: float | None = Field(
         default=None,
         description="Egress leg speed in km/h. None for car egress.",
         json_schema_extra=ui_field(
@@ -767,16 +573,16 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             label_key="speed_kmh",
             widget_options={
                 "default_by_field": {
-                    "field": "pt_egress_mode",
+                    "field": "egress_mode",
                     "values": {"walk": 5, "bicycle": 15, "pedelec": 23},
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"pt_egress_mode": "walk"},
+                        {"value": 30, "when": {"egress_mode": "walk"},
                          "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"pt_egress_mode": "bicycle"},
+                        {"value": 60, "when": {"egress_mode": "bicycle"},
                          "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"pt_egress_mode": "pedelec"},
+                        {"value": 60, "when": {"egress_mode": "pedelec"},
                          "message": "pedelec_speed_limit_message"},
                     ],
                     "min": 1,
@@ -787,32 +593,44 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
                 "$and": [
                     {"show_advanced": True},
                     {"routing_mode": "pt"},
-                    {"pt_egress_cost_type": "time"},
-                    {"pt_egress_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
+                    {"egress_cost_type": "time"},
+                    {"egress_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
                 ]
             },
         ),
     )
 
-    def resolve_max_cost(self: Self) -> float | None:
-        """Resolve the user-set Dijkstra cutoff for this matrix run.
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_budget(cls, data: Any) -> Any:
+        # fill_default=False: an absent street budget legitimately means
+        # unbounded here. The PT legs use the shared collapse/rename mapping.
+        return resolve_leg_budget_input(
+            resolve_budget_input(data, fill_default=False)
+        )
 
-        Returns the value the user picked under advanced (or the always-visible
-        max_cost_time_pt for PT). Returns None when no limit was set — TCM
-        runs unbounded; every reachable O-D pair gets a cost. The per-mode
-        bbox-extent sanity check at process() prevents nonsense inputs from
-        triggering huge searches.
-        """
-        if self.cost_type == CostType.distance:
-            value = (self.max_cost_distance_car
-                     if self.routing_mode == RoutingMode.car
-                     else self.max_cost_distance)
-        elif self.routing_mode == RoutingMode.pt:
-            value = self.max_cost_time_pt
-        elif self.routing_mode == RoutingMode.car:
-            value = self.max_cost_time_car
-        else:
-            value = self.max_cost_time_active
+    @model_validator(mode="after")
+    def _check_budget(self: Self) -> Self:
+        validate_budget(self.routing_mode, self.cost_type, self.max_cost)
+        validate_leg_budget(self.access_cost_type, self.access_max_cost, "access")
+        validate_leg_budget(self.egress_cost_type, self.egress_max_cost, "egress")
+        return self
+
+    @model_validator(mode="after")
+    def _check_cost_type(self: Self) -> Self:
+        validate_cost_type(self.routing_mode, self.cost_type)
+        return self
+
+    def resolve_max_cost(self: Self) -> float | None:
+        """Effective Dijkstra cutoff: PT uses its own mandatory limit, street
+        modes the optional `max_cost`. None means unbounded — TCM then returns
+        every reachable O-D pair; the per-mode bbox-extent check in process()
+        keeps nonsense inputs from triggering huge searches."""
+        value = (
+            self.max_cost_time_pt
+            if self.routing_mode == RoutingMode.pt
+            else self.max_cost
+        )
         return float(value) if value is not None else None
 
 # =========================================================================
@@ -1036,7 +854,7 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         # Compute max possible O-D distance using bbox corners.
         # The farthest O-D pair is bounded by the distance between the
         # farthest corners of the origin and destination bounding boxes.
-        R = 6371000.0
+        earth_radius_m = 6371000.0
         o_min_lat, o_max_lat = min(origin_lats), max(origin_lats)
         o_min_lon, o_max_lon = min(origin_lons), max(origin_lons)
         d_min_lat, d_max_lat = min(dest_lats), max(dest_lats)
@@ -1047,8 +865,8 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
         lon_span = max(abs(o_max_lon - d_min_lon), abs(d_max_lon - o_min_lon))
         avg_lat = math.radians(
             (o_min_lat + o_max_lat + d_min_lat + d_max_lat) / 4.0)
-        dy = math.radians(lat_span) * R
-        dx = math.radians(lon_span) * R * math.cos(avg_lat)
+        dy = math.radians(lat_span) * earth_radius_m
+        dx = math.radians(lon_span) * earth_radius_m * math.cos(avg_lat)
         extent_m = math.sqrt(dx * dx + dy * dy)
 
         # Validate max extent for routed modes.
@@ -1103,22 +921,14 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                 transit_modes=params.pt_modes,
                 time_window=time_window,
                 max_transfers=params.pt_max_transfers,
-                access_mode=params.pt_access_mode,
-                egress_mode=params.pt_egress_mode,
-                access_cost_type=params.pt_access_cost_type,
-                egress_cost_type=params.pt_egress_cost_type,
-                access_max_cost=(
-                    params.pt_access_max_cost_distance
-                    if params.pt_access_cost_type == CostType.distance
-                    else params.pt_access_max_cost_time
-                ),
-                egress_max_cost=(
-                    params.pt_egress_max_cost_distance
-                    if params.pt_egress_cost_type == CostType.distance
-                    else params.pt_egress_max_cost_time
-                ),
-                access_speed=params.pt_access_speed,
-                egress_speed=params.pt_egress_speed,
+                access_mode=params.access_mode,
+                egress_mode=params.egress_mode,
+                access_cost_type=params.access_cost_type,
+                egress_cost_type=params.egress_cost_type,
+                access_max_cost=params.access_max_cost,
+                egress_max_cost=params.egress_max_cost,
+                access_speed=params.access_speed,
+                egress_speed=params.egress_speed,
                 output_path=str(matrix_output_path),
             )
 

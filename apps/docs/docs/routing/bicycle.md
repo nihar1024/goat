@@ -12,7 +12,7 @@ The **Bicycle/Pedelec Routing** is used for all analyses in GOAT that contain cy
  
 ## 1. Objectives
 
-Bicycle/Pedelec routing is used for many indicators in GOAT, such as [Catchment Areas](../toolbox/accessibility_indicators/catchments "Visit Docs on Catchment Areas"), [Heatmaps](../toolbox/accessibility_indicators/connectivity "Visit Docs on Heatmaps") and [PT Nearby Stations](../toolbox/accessibility_indicators/nearby_stations "Visit Docs on PT Nearby Stations"). As GOAT also allows the creation of [Scenarios on the Street Network](../scenarios#4-street-network---edges), a **custom routing algorithm** is needed that also reflects the changes of the scenario in the accessibility analyses. For the mode of bicycle/pedelec, we thereby **only consider paths that are suitable for cycling**. Furthermore, the `surface` and `slope` have an impact on the cycling speed and are therefore considered in the routing. The average cycling `speed` can be adjusted by the user whenever an accessibility analysis is performed. Depending on the slope and surface of a path segment, the speed is adjusted accordingly. 
+Bicycle/Pedelec routing is used for many indicators in GOAT, such as [Catchment Areas](../toolbox/accessibility_indicators/catchments "Visit Docs on Catchment Areas"), [Heatmaps](../toolbox/accessibility_indicators/connectivity "Visit Docs on Heatmaps"), the [Huff Model](../toolbox/accessibility_indicators/huff_model "Visit Docs on the Huff Model"), and the [Travel Cost Matrix](../toolbox/accessibility_indicators/travel_cost_matrix "Visit Docs on the Travel Cost Matrix"). A **custom routing algorithm** is used for the mode of bicycle/pedelec, which **only considers paths that are suitable for cycling**. Furthermore, the `surface` and `slope` have an impact on the cycling speed and are therefore considered in the routing. The average cycling `speed` can be adjusted by the user whenever an accessibility analysis is performed. Depending on the slope and surface of a path segment, the speed is adjusted accordingly. 
 
 
 ## 2. Data
@@ -67,6 +67,14 @@ Cost function for **pedelec**:
 `cost = (length * (1 + surface impedance)) / speed`
 
 If an edge is of class `pedestrian` or `crosswalk`, we assume the rider would dismount and walk their bicycle/pedelec. The cost for this type of segment is: `cost = length / speed`
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '0.75rem' }}>
+  <img src={require('/img/routing/bicycle_edge_cost.png').default} alt="Cycling network edge cost by topology — surface and slope multipliers" style={{ maxWidth: "100%", objectFit: "contain"}}/>
+</div>
+
+:::note
+Cost multiplier values are illustrative examples. Actual impedance values vary depending on the specific surface type and slope gradient of each path segment.
+:::
 
 #### Network Propagation
 

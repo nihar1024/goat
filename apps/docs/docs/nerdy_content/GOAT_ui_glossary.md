@@ -31,7 +31,6 @@ This comprehensive glossary provides English to German translations for all the 
 | **Filter** | **Filter** | Data filtering tools |
 | **Toolbox** | **Werkzeuge** | Spatial analysis tools |
 | **Workflows** | **Workflows** | Visual analysis workflow editor |
-| **Scenarios** | **Szenarien** | Scenario planning tools |
 
 ## Spatial Analysis Tools
 
@@ -384,6 +383,22 @@ This comprehensive glossary provides English to German translations for all the 
 | Value Labels | Wertbeschriftungen | Show data values on chart elements |
 | Selection Response | Auswahlverhalten | How a widget reacts to map selection |
 | Cross-filter Options | Optionen querfiltern | Settings for cross-widget filtering interaction |
+| **Interactions** | **Interaktionen** | Rules linking dashboard elements so one action triggers a change in another |
+| Manage Interactions | Interaktionen verwalten | Open the interactions editor |
+| Add Interaction | Interaktion hinzufügen | Create a new interaction rule |
+| Enabled | Aktiviert | Toggle an individual interaction on or off |
+| When | Wenn | The trigger condition of an interaction |
+| Layer group activated | Layer-Gruppe aktiviert | Trigger: a layer group is activated |
+| Layer visibility changed | Layer-Sichtbarkeit geändert | Trigger: a layer is shown or hidden |
+| Switch tab | Tab wechseln | Action: switch the active tab of a Tabs widget |
+| Sync visibility | Sichtbarkeit synchronisieren | Action: mirror a layer's visibility onto other layers |
+| Target widget | Ziel-Widget | The Tabs widget whose active tab is changed |
+| Layer group | Layer-Gruppe | The layer group used as an interaction source |
+| Tab | Tab | The tab a widget switches to |
+| Add mapping | Zuordnung hinzufügen | Add a layer group → tab pair |
+| Source layer | Quell-Layer | The layer whose visibility is watched |
+| Target layers | Ziel-Layer | Layers that mirror the source layer's visibility |
+| Add target layer | Ziel-Layer hinzufügen | Add a target layer to sync |
 
 ## Expression & Formula Builder
 
@@ -446,24 +461,16 @@ This comprehensive glossary provides English to German translations for all the 
 | Measure Line | Linie messen | Measure length along a drawn line |
 | Measure Flight Distance | Luftlinie | Straight-line (as-the-crow-flies) distance |
 
-## Scenarios
+## Feature Editing
 
 | English | German | Description |
 |---------|--------|-------------|
-| **Scenarios** | **Szenarien** | Scenario planning tools |
-| Create Scenario | Szenario erstellen | Create a new planning scenario |
-| Edit Scenario | Szenario bearbeiten | Modify an existing scenario |
-| Delete Scenario | Szenario löschen | Remove a scenario |
-| Select Scenario | Szenario auswählen | Switch to a different scenario |
-| Scenario Features | Szenariofunktionen | Features modified within a scenario |
-| Show Scenario Features | Szenariofunktionen anzeigen | Display scenario-modified features |
-| Hide Scenario Features | Szenariofunktionen ausblenden | Hide scenario-modified features |
 | **Draw** | **Zeichnen** | Draw new features on the map |
-| Draw Feature | Neue Funktion hinzufügen | Add a new spatial feature to the scenario |
+| Draw Feature | Neue Funktion hinzufügen | Add a new spatial feature to a layer |
 | Modify Attributes | Attribute ändern | Edit feature attribute values |
 | Modify Geometry | Geometrie ändern | Edit the spatial shape of a feature |
-| Delete Feature | Funktion löschen | Remove a feature from the scenario |
-| Feature Editor Tools | Editierfunktionen Objekte | Toolbar for editing scenario features |
+| Delete Feature | Funktion löschen | Remove a feature from a layer |
+| Feature Editor Tools | Editierfunktionen Objekte | Toolbar for editing features |
 
 ## Data Analysis & Statistics
 

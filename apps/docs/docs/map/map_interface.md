@@ -46,7 +46,6 @@ The tools are located on the right side of the Layers Panel:
 
 - <img src={require('/img/icons/toolbox.png').default} alt="Toolbox" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Toolbox</code>: <strong>Access to the Toolbox</strong>. Read more in <a href="/category/toolbox">Toolbox</a>.
 
-- <img src={require('/img/icons/compass.png').default} alt="Scenarios" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Scenarios</code>: <strong>Access to Scenarios</strong>. Read more in <a href="/category/scenarios">Scenarios</a>.
 
 -  <img src={require('/img/icons/ruler-horizontal.png').default} alt="Measurements" style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover"}}/> <code>Measurements</code>: Users can <strong>measure distances and areas</strong>, such as routes, lines and polygons.
   

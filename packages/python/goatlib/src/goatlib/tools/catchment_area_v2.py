@@ -60,6 +60,13 @@ from goatlib.tools._routing_limits import (  # noqa: E402
     DEFAULT_MAX_TIME_ACTIVE_MIN,
     DEFAULT_MAX_TIME_CAR_MIN,
     DEFAULT_MAX_TIME_PT_MIN,
+    budget_widget_options,
+    leg_budget_widget_options,
+    resolve_budget_input,
+    resolve_leg_budget_input,
+    validate_budget,
+    validate_cost_type,
+    validate_leg_budget,
 )
 
 __all__ = [
@@ -252,6 +259,9 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             label_key="routing_mode",
             enum_icons=ROUTING_MODE_ICONS,
             enum_labels=ROUTING_MODE_LABELS,
+            # Changing the transport mode restarts the form: it decides which
+            # measures, budgets and legs apply, so nothing should carry over.
+            widget_options={"resets_form": True},
         ),
     )
 
@@ -352,131 +362,19 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    # Time budget — active mobility
-    max_cost_time_active: int = Field(
+    # Single travel budget — same name/meaning as the analysis schema and the
+    # C++ engine. Default, floor and cap come from the mode x cost_type rules.
+    max_cost: int = Field(
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
-        description="Maximum travel time in minutes.",
+        description="Upper limit for the selected measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=2,
             label_key="limit",
+            description_key="limit",
             inline_group="cost_config",
             inline_flex="1 0 0",
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "active_mobility_time_limit_message",
-                    "max": 45,
-                    "min": 1,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                    {"cost_type": "time"},
-                ]
-            },
-        ),
-    )
-
-    # Time budget — car
-    max_cost_time_car: int = Field(
-        default=DEFAULT_MAX_TIME_CAR_MIN,
-        description="Maximum travel time in minutes.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
-            inline_flex="1 0 0",
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "car_time_limit_message",
-                    "max": 90,
-                    "min": 1,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"routing_mode": "car"},
-                    {"cost_type": "time"},
-                ]
-            },
-        ),
-    )
-
-    # Time budget — PT (always time-based, no cost_type selector)
-    max_cost_time_pt: int = Field(
-        default=DEFAULT_MAX_TIME_PT_MIN,
-        description="Maximum travel time in minutes.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=2,
-            label_key="travel_time_limit_min",
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "pt_time_limit_message",
-                    "max": 90,
-                    "min": 1,
-                },
-            },
-            visible_when={"routing_mode": "pt"},
-        ),
-    )
-
-    # Distance budget — active mobility
-    max_cost_distance: int = Field(
-        default=DEFAULT_MAX_DISTANCE_ACTIVE_M,
-        description="Maximum distance in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
-            inline_flex="1 0 0",
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "active_mobility_distance_limit_message",
-                    "max": 20000,
-                    "min": 50,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
-                    {"cost_type": "distance"},
-                ]
-            },
-        ),
-    )
-
-    # Distance budget — car
-    max_cost_distance_car: int = Field(
-        default=DEFAULT_MAX_DISTANCE_CAR_M,
-        description="Maximum distance in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=2,
-            label_key="limit",
-            inline_group="cost_config",
-            inline_flex="1 0 0",
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "car_distance_limit_message",
-                    "max": 100000,
-                    "min": 50,
-                },
-            },
-            visible_when={
-                "$and": [
-                    {"routing_mode": "car"},
-                    {"cost_type": "distance"},
-                ]
-            },
+            widget_options=budget_widget_options(),
         ),
     )
 
@@ -529,14 +427,11 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "max_value_from": {
                     "fields": [
-                        {"field": "max_cost_time_pt", "when": {"routing_mode": "pt"}},
-                        {"field": "max_cost_time_car", "when": {"routing_mode": "car", "cost_type": "time"}},
-                        {"field": "max_cost_distance_car", "when": {"routing_mode": "car", "cost_type": "distance"}},
-                        {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
-                        {"field": "max_cost_time_active"},
+                        {"field": "max_cost"},
                     ],
                     "message": "steps_exceeds_limit",
                     "max": 9,
+                    "min": 1,
                 },
             },
         ),
@@ -557,11 +452,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "compute_from": {
                     "steps_field": "steps",
                     "limit_fields": [
-                        {"field": "max_cost_time_pt", "when": {"routing_mode": "pt"}},
-                        {"field": "max_cost_time_car", "when": {"routing_mode": "car", "cost_type": "time"}},
-                        {"field": "max_cost_distance_car", "when": {"routing_mode": "car", "cost_type": "distance"}},
-                        {"field": "max_cost_distance", "when": {"cost_type": "distance"}},
-                        {"field": "max_cost_time_active"},
+                        {"field": "max_cost"},
                     ],
                 },
             },
@@ -611,7 +502,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
     # PT Access & Egress (under Advanced in Configuration)
     # =========================================================================
 
-    pt_access_mode: AccessEgressMode = Field(
+    access_mode: AccessEgressMode = Field(
         default=AccessEgressMode.walk,
         description="Mode to reach transit stops.",
         json_schema_extra=ui_field(
@@ -630,7 +521,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_access_cost_type: CostType = Field(
+    access_cost_type: CostType = Field(
         default=CostType.time,
         description="Access leg cost type.",
         json_schema_extra=ui_field(
@@ -639,7 +530,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
-            inline_group="pt_access_cost",
+            inline_group="access_cost",
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -649,62 +540,29 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_access_max_cost_time: int = Field(
-        default=15,
-        description="Access leg budget in minutes.",
+    # Single leg budget — same name/meaning as the analysis schema and the C++
+    # engine. Default, unit, floor and cap follow this leg's own cost type.
+    access_max_cost: int = Field(
+        default=DEFAULT_MAX_TIME_ACTIVE_MIN,
+        description="Upper limit for this leg's measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=22,
             label_key="limit",
-            inline_group="pt_access_cost",
+            description_key="limit",
+            inline_group="access_cost",
             inline_flex="1 0 0",
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
-                    {"pt_access_cost_type": "time"},
                 ]
             },
-            widget_options={
-                "max_value_from": {
-                    "fields": [
-                        {"field": "max_cost_time_pt"},
-                    ],
-                    "message": "access_budget_exceeds_limit",
-                    "min": 1,
-                },
-            },
+            widget_options=leg_budget_widget_options("access_cost_type", "access_budget_exceeds_limit"),
         ),
     )
 
-    pt_access_max_cost_distance: int = Field(
-        default=500,
-        description="Access leg budget in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=22,
-            label_key="limit",
-            inline_group="pt_access_cost",
-            inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"routing_mode": "pt"},
-                    {"show_advanced": True},
-                    {"pt_access_cost_type": "distance"},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "access_budget_exceeds_limit",
-                    "min": 50,
-                    "max": 20000,
-                },
-            },
-        ),
-    )
-
-    pt_access_speed: float | None = Field(
+    access_speed: float | None = Field(
         default=None,
         description="Access leg speed in km/h. None for car access (per-edge "
                     "OSM maxspeed governs cost).",
@@ -714,16 +572,16 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             label_key="speed_kmh",
             widget_options={
                 "default_by_field": {
-                    "field": "pt_access_mode",
+                    "field": "access_mode",
                     "values": {"walk": 5, "bicycle": 15, "pedelec": 23},
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"pt_access_mode": "walk"},
+                        {"value": 30, "when": {"access_mode": "walk"},
                          "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"pt_access_mode": "bicycle"},
+                        {"value": 60, "when": {"access_mode": "bicycle"},
                          "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"pt_access_mode": "pedelec"},
+                        {"value": 60, "when": {"access_mode": "pedelec"},
                          "message": "pedelec_speed_limit_message"},
                     ],
                     "min": 1,
@@ -735,20 +593,20 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
-                    {"pt_access_cost_type": "time"},
-                    {"pt_access_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
+                    {"access_cost_type": "time"},
+                    {"access_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
                 ]
             },
         ),
     )
 
-    pt_egress_mode: AccessEgressMode = Field(
+    egress_mode: AccessEgressMode = Field(
         default=AccessEgressMode.walk,
         description="Mode from transit stops to destination.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=24,
-            label_key="pt_egress_mode",
+            label_key="egress_mode",
             group_label="groups.egress_leg",
             enum_icons=ACCESS_EGRESS_MODE_ICONS,
             enum_labels=ACCESS_EGRESS_MODE_LABELS,
@@ -761,7 +619,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_egress_cost_type: CostType = Field(
+    egress_cost_type: CostType = Field(
         default=CostType.time,
         description="Egress leg cost type.",
         json_schema_extra=ui_field(
@@ -770,7 +628,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             label_key="measure_type",
             enum_labels=COST_TYPE_LABELS,
             enum_icons=COST_TYPE_ICONS,
-            inline_group="pt_egress_cost",
+            inline_group="egress_cost",
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
@@ -780,62 +638,29 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-    pt_egress_max_cost_time: int = Field(
-        default=15,
-        description="Egress leg budget in minutes.",
+    # Single leg budget — same name/meaning as the analysis schema and the C++
+    # engine. Default, unit, floor and cap follow this leg's own cost type.
+    egress_max_cost: int = Field(
+        default=DEFAULT_MAX_TIME_ACTIVE_MIN,
+        description="Upper limit for this leg's measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=26,
             label_key="limit",
-            inline_group="pt_egress_cost",
+            description_key="limit",
+            inline_group="egress_cost",
             inline_flex="1 0 0",
             visible_when={
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
-                    {"pt_egress_cost_type": "time"},
                 ]
             },
-            widget_options={
-                "max_value_from": {
-                    "fields": [
-                        {"field": "max_cost_time_pt"},
-                    ],
-                    "message": "egress_budget_exceeds_limit",
-                    "min": 1,
-                },
-            },
+            widget_options=leg_budget_widget_options("egress_cost_type", "egress_budget_exceeds_limit"),
         ),
     )
 
-    pt_egress_max_cost_distance: int = Field(
-        default=500,
-        description="Egress leg budget in meters.",
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=26,
-            label_key="limit",
-            inline_group="pt_egress_cost",
-            inline_flex="1 0 0",
-            visible_when={
-                "$and": [
-                    {"routing_mode": "pt"},
-                    {"show_advanced": True},
-                    {"pt_egress_cost_type": "distance"},
-                ]
-            },
-            widget_options={
-                "max_value_from": {
-                    "fields": [],
-                    "message": "egress_budget_exceeds_limit",
-                    "min": 50,
-                    "max": 20000,
-                },
-            },
-        ),
-    )
-
-    pt_egress_speed: float | None = Field(
+    egress_speed: float | None = Field(
         default=None,
         description="Egress leg speed in km/h. None for car egress (per-edge "
                     "OSM maxspeed governs cost).",
@@ -845,16 +670,16 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             label_key="speed_kmh",
             widget_options={
                 "default_by_field": {
-                    "field": "pt_egress_mode",
+                    "field": "egress_mode",
                     "values": {"walk": 5, "bicycle": 15, "pedelec": 23},
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"pt_egress_mode": "walk"},
+                        {"value": 30, "when": {"egress_mode": "walk"},
                          "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"pt_egress_mode": "bicycle"},
+                        {"value": 60, "when": {"egress_mode": "bicycle"},
                          "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"pt_egress_mode": "pedelec"},
+                        {"value": 60, "when": {"egress_mode": "pedelec"},
                          "message": "pedelec_speed_limit_message"},
                     ],
                     "min": 1,
@@ -865,8 +690,8 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "$and": [
                     {"routing_mode": "pt"},
                     {"show_advanced": True},
-                    {"pt_egress_cost_type": "time"},
-                    {"pt_egress_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
+                    {"egress_cost_type": "time"},
+                    {"egress_mode": {"$in": ["walk", "bicycle", "pedelec"]}},
                 ]
             },
         ),
@@ -971,15 +796,17 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
     # Validators
     # =========================================================================
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_budget(cls, data: Any) -> Any:
+        return resolve_leg_budget_input(resolve_budget_input(data))
+
     @model_validator(mode="after")
-    def validate_distance_limit_by_mode(self: Self) -> Self:
-        if self.cost_type != CostType.distance:
-            return self
-        if self.routing_mode == CatchmentAreaRoutingMode.car:
-            if self.max_cost_distance_car > 100000:
-                raise ValueError("Car distance must be ≤ 100000 meters.")
-        elif self.max_cost_distance > 20000:
-            raise ValueError("Active mobility distance must be ≤ 20000 meters.")
+    def _check_budget(self: Self) -> Self:
+        validate_cost_type(self.routing_mode, self.cost_type)
+        validate_budget(self.routing_mode, self.cost_type, self.max_cost)
+        validate_leg_budget(self.access_cost_type, self.access_max_cost, "access")
+        validate_leg_budget(self.egress_cost_type, self.egress_max_cost, "egress")
         return self
 
     @model_validator(mode="after")
@@ -998,18 +825,6 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 "shape_style=separated is only supported for active mobility modes."
             )
         return self
-
-    def resolve_max_cost(self: Self) -> float:
-        """Resolve the effective max_cost from mode-specific UI fields."""
-        if self.cost_type == CostType.distance:
-            if self.routing_mode == CatchmentAreaRoutingMode.car:
-                return float(self.max_cost_distance_car)
-            return float(self.max_cost_distance)
-        if self.routing_mode == CatchmentAreaRoutingMode.pt:
-            return float(self.max_cost_time_pt)
-        if self.routing_mode == CatchmentAreaRoutingMode.car:
-            return float(self.max_cost_time_car)
-        return float(self.max_cost_time_active)
 
 
 
@@ -1062,7 +877,7 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                 to_time=params.pt_end_time,
             )
 
-        max_cost = params.resolve_max_cost()
+        max_cost = float(params.max_cost)
 
         # Export point grid layer to parquet if needed
         grid_points_path = None
@@ -1091,13 +906,13 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                 "geometry",
             )
             # Convert WGS84 lon/lat to Web Mercator (EPSG:3857)
-            R = 6378137.0
+            earth_radius_m = 6378137.0
             con.execute(f"""
                 COPY (
                     SELECT
                         ROW_NUMBER() OVER () AS id,
-                        ST_X("{geom_col}") * PI() / 180.0 * {R} AS x_3857,
-                        LN(TAN(PI() / 4.0 + ST_Y("{geom_col}") * PI() / 360.0)) * {R} AS y_3857
+                        ST_X("{geom_col}") * PI() / 180.0 * {earth_radius_m} AS x_3857,
+                        LN(TAN(PI() / 4.0 + ST_Y("{geom_col}") * PI() / 360.0)) * {earth_radius_m} AS y_3857
                     FROM read_parquet('{raw_layer_path}')
                     WHERE "{geom_col}" IS NOT NULL
                 ) TO '{grid_parquet}' (FORMAT PARQUET)
@@ -1134,22 +949,14 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             time_window=time_window,
             max_transfers=params.pt_max_transfers,
             # PT access/egress
-            access_mode=params.pt_access_mode,
-            egress_mode=params.pt_egress_mode,
-            access_cost_type=params.pt_access_cost_type,
-            egress_cost_type=params.pt_egress_cost_type,
-            access_max_cost=(
-                params.pt_access_max_cost_distance
-                if params.pt_access_cost_type == CostType.distance
-                else params.pt_access_max_cost_time
-            ),
-            egress_max_cost=(
-                params.pt_egress_max_cost_distance
-                if params.pt_egress_cost_type == CostType.distance
-                else params.pt_egress_max_cost_time
-            ),
-            access_speed=params.pt_access_speed,
-            egress_speed=params.pt_egress_speed,
+            access_mode=params.access_mode,
+            egress_mode=params.egress_mode,
+            access_cost_type=params.access_cost_type,
+            egress_cost_type=params.egress_cost_type,
+            access_max_cost=params.access_max_cost,
+            egress_max_cost=params.egress_max_cost,
+            access_speed=params.access_speed,
+            egress_speed=params.egress_speed,
             # Output
             catchment_type=params.catchment_area_type,
             polygon_difference=params.steps_style == StepsStyle.separate,

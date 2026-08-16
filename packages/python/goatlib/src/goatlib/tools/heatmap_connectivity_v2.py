@@ -7,6 +7,8 @@ Connectivity is computed by the on-the-fly C++ Dijkstra pipeline
 
 from goatlib.tools.heatmap_v2 import (
     HeatmapConnectivityV2ToolRunner as HeatmapConnectivityV2ToolRunner,
+)
+from goatlib.tools.heatmap_v2 import (
     HeatmapConnectivityV2WindmillParams as HeatmapConnectivityV2WindmillParams,
 )
 

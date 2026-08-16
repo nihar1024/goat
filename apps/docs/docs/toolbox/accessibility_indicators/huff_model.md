@@ -2,8 +2,6 @@
 sidebar_position: 6
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 import MathJax from 'react-mathjax';
 
 # Huff Model
@@ -35,29 +33,9 @@ You can configure the routing type, opportunity layers (with capacity fields), d
 
 **Key difference:** Unlike the Heatmaps, which visualize accessibility per grid cell, the *Huff Model* produces a **probability per supply location** — showing what share of total demand each facility captures.
 
-import MapViewer from '@site/src/components/MapViewer';
+:::info
 
-:::info 
-
-The Huff Model is available in certain regions. Upon selecting a `Routing type`, a **geofence** will be displayed on the map to highlight supported regions.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Coverage for Huff Model", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-If you would like to perform analyses beyond this geofence, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us"). We would be happy to discuss further options.
+Huff Model computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us").
 
 :::
 
@@ -87,36 +65,16 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Pick the <code>Routing Type</code> you would like to use for the analysis.</div>
+  <div class="content">Pick the <code>Transport mode</code> you would like to use for the analysis.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-**Considers all paths accessible by foot**. A walking speed of 5 km/h is assumed.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-**Considers all paths accessible by bicycle**. This routing mode takes into account the surface, smoothness and slope of streets while computing accessibility. A cycling speed of 15 km/h is assumed.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Considers all paths accessible by pedelec**. This routing mode takes into account the surface and smoothness of streets while computing accessibility. A pedelec speed of 23 km/h is assumed.
-
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-**Considers all paths accessible by car**. This routing mode takes into account speed limits and one-way access restrictions while computing accessibility.
-
-</TabItem>
-
-</Tabs>
+| Mode | Considers |
+|------|-----------|
+| Walk | All paths accessible by foot |
+| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) |
+| Pedelec | All paths accessible by pedelec (surface, smoothness) |
+| Car | All paths accessible by car (speed limits, one-way restrictions) |
+| Public Transport | Public transport network (GTFS schedules) with walking access and egress (up to 30 minutes) to and from stations |
 
 ### Configuration
 
@@ -181,8 +139,15 @@ Ideally, collect data on actual customer visits or market shares to estimate opt
 
 :::
 
+### Result Layer
+
 <div class="step">
   <div class="step-number">12</div>
+  <div class="content">Set the <code>Result layer name</code> for the output Huff Model layer.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">13</div>
   <div class="content">Click <code>Run</code> to start the calculation.</div>
 </div>
 

@@ -2,6 +2,13 @@
 
 #include "../types.h"
 
+#include <functional>
+
+namespace duckdb
+{
+    class Connection;
+}
+
 namespace routing::heatmap
 {
 
@@ -19,6 +26,26 @@ namespace routing::heatmap
     // boarding stops, which an access lookup table maps to origin cells; this
     // is MIN'd with a direct same-mode walk leg. Access/egress legs come from
     // precomputed per-mode lookup tables; transit from nigiri.
-    void compute_heatmap(HeatmapConfig const &cfg);
+    void compute(HeatmapConfig const &cfg);
+
+    // Run the reachability pipeline (street reverse-Dijkstra or PT arrive-by
+    // reverse-RAPTOR + access/egress lookups) for `cfg`, then invoke `emit`
+    // with a DuckDB connection holding the per-(cell, opportunity) cost
+    // relation as two temp tables:
+    //   _hm_per_opp (cell BIGINT, opp_idx INTEGER, min_cost DOUBLE)
+    //   _hm_opp_meta(opp_idx INTEGER, opp_cell BIGINT, weight DOUBLE, ...)
+    // compute reduces this relation to scores; the travel-cost-matrix OD
+    // emitter exports it raw. This is the shared engine both entry points
+    // build on, so neither reimplements the routing machinery.
+    void build_reachability_relation(
+        HeatmapConfig const &cfg,
+        std::function<void(duckdb::Connection &)> const &emit);
+
+    // OD cost matrix: run the shared reachability engine, then export the raw
+    // per-(cell, opportunity) relation as (orig_cell, dest_cell, cost) parquet
+    // to cfg.output_path — no reduction. An extension of the travel-cost matrix
+    // that also supports reverse PT (via the arrive-by pipeline); used by Huff
+    // v2 for its PT OD matrix.
+    void compute_od_costs(HeatmapConfig const &cfg);
 
 } // namespace routing::heatmap

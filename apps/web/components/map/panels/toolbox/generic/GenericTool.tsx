@@ -20,8 +20,10 @@ import { OEV_STATION_CONFIG_DEFAULT } from "@/lib/constants/oev-gueteklassen";
 import { setRunningJobIds } from "@/lib/store/jobs/slice";
 import { setToolboxStartingPoints } from "@/lib/store/map/slice";
 import {
+  applyDynamicDefaults,
   getDefaultValues,
   getVisibleInputs,
+  isFormResetField,
   isSectionEnabled,
   processInputsWithSections,
   validateInputs,
@@ -41,8 +43,8 @@ import ToolboxActionButtons from "@/components/map/panels/common/ToolboxActionBu
 import ToolsHeader from "@/components/map/panels/common/ToolsHeader";
 import LearnMore from "@/components/map/panels/toolbox/common/LearnMore";
 import { GenericInput } from "@/components/map/panels/toolbox/generic/inputs";
-import { processObjectProperties } from "@/components/map/panels/toolbox/generic/inputs/RepeatableObjectInput";
 import OevStationConfigInput from "@/components/map/panels/toolbox/generic/inputs/OevStationConfigInput";
+import { processObjectProperties } from "@/components/map/panels/toolbox/generic/inputs/RepeatableObjectInput";
 
 // Map section icons from backend to ICON_NAME
 const SECTION_ICON_MAP: Record<string, ICON_NAME> = {
@@ -138,7 +140,9 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
 
   // Nested layer filters for repeatable objects
   // Structure: { "opportunities": [{ "input_layer_id": {...filter...} }, {...}] }
-  const [nestedLayerFilters, setNestedLayerFilters] = useState<Record<string, Record<string, Record<string, unknown> | undefined>[]>>({});
+  const [nestedLayerFilters, setNestedLayerFilters] = useState<
+    Record<string, Record<string, Record<string, unknown> | undefined>[]>
+  >({});
 
   // Section collapse state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -232,49 +236,36 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
     return computed;
   }, [projectLayers, allInputs, values, defaultValues]);
 
+  // Reset form to defaults. `overrides` keep the field the user just changed
+  // and rebuild every default keyed on it (see getDefaultValues).
+  const handleReset = useCallback(
+    (overrides?: Record<string, unknown>) => {
+      if (process) {
+        setValues(getDefaultValues(process, overrides));
+        setLayerFilters({});
+        setNestedLayerFilters({});
+        setFieldErrors({});
+        // Clear starting points from Redux
+        dispatch(setToolboxStartingPoints(undefined));
+      }
+    },
+    [process, dispatch]
+  );
+
   // Update a single input value, applying dynamic defaults to dependent fields
   const handleInputChange = useCallback(
     (name: string, value: unknown) => {
-      setValues((prev) => {
-        const newValues = { ...prev, [name]: value };
+      // A field marked `resets_form` starts the form over when it changes: the
+      // transport mode decides which measures, budgets and legs are meaningful,
+      // so carrying anything across would leave values that no longer apply.
+      if (isFormResetField(allInputs, name) && values[name] !== undefined && values[name] !== value) {
+        handleReset({ [name]: value });
+        return;
+      }
 
-        // Check if any other input has default_by_field referencing this field
-        for (const input of allInputs) {
-          const defaultByField = input.uiMeta?.widget_options?.default_by_field as
-            | { field: string; values: Record<string, unknown> }
-            | undefined;
-
-          if (defaultByField && defaultByField.field === name) {
-            // Apply dynamic default if the value matches
-            const dynamicDefault = defaultByField.values[String(value)];
-            if (dynamicDefault !== undefined) {
-              newValues[input.name] = dynamicDefault;
-            }
-          }
-
-          // Auto-clamp fields whose max_value_from references the changed field
-          const maxValueFrom = input.uiMeta?.widget_options?.max_value_from as
-            | { fields: string[]; max?: number }
-            | undefined;
-
-          if (maxValueFrom) {
-            const fieldNames = maxValueFrom.fields.map((f: string | { field: string }) =>
-              typeof f === "string" ? f : f.field
-            );
-            if (fieldNames.includes(name)) {
-              const currentVal = newValues[input.name] as number | undefined;
-              const newLimit = Math.min(Number(value) || Infinity, maxValueFrom.max ?? Infinity);
-              if (currentVal !== undefined && currentVal > newLimit) {
-                newValues[input.name] = newLimit;
-              }
-            }
-          }
-        }
-
-        return newValues;
-      });
+      setValues((prev) => applyDynamicDefaults(allInputs, prev, name, value));
     },
-    [allInputs]
+    [allInputs, values, handleReset]
   );
 
   // Update filter for a layer input
@@ -286,12 +277,15 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
   }, []);
 
   // Update nested filters for a repeatable object input
-  const handleNestedFiltersChange = useCallback((inputName: string, filters: Record<string, Record<string, unknown> | undefined>[]) => {
-    setNestedLayerFilters((prev) => ({
-      ...prev,
-      [inputName]: filters,
-    }));
-  }, []);
+  const handleNestedFiltersChange = useCallback(
+    (inputName: string, filters: Record<string, Record<string, unknown> | undefined>[]) => {
+      setNestedLayerFilters((prev) => ({
+        ...prev,
+        [inputName]: filters,
+      }));
+    },
+    []
+  );
 
   // Toggle section collapse
   const toggleSection = useCallback((sectionId: string) => {
@@ -316,18 +310,6 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
       [sectionId]: !prev[sectionId],
     }));
   }, []);
-
-  // Reset form to defaults
-  const handleReset = useCallback(() => {
-    if (process) {
-      const defaults = getDefaultValues(process);
-      setValues(defaults);
-      setLayerFilters({});
-      setNestedLayerFilters({});
-      // Clear starting points from Redux
-      dispatch(setToolboxStartingPoints(undefined));
-    }
-  }, [process, dispatch]);
 
   // Validate and check if form is ready
   const isValid = useMemo(() => {
@@ -397,8 +379,7 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
                 return visibleItemInputs.every((ii) => {
                   const isExplicitlyOptional = ii.uiMeta?.optional === true;
                   const hasConditionalVisibility = !!ii.uiMeta?.visible_when;
-                  const hasNoDefault =
-                    ii.defaultValue === undefined || ii.defaultValue === null;
+                  const hasNoDefault = ii.defaultValue === undefined || ii.defaultValue === null;
                   const isConditionallyRequired =
                     hasConditionalVisibility && hasNoDefault && !isExplicitlyOptional;
                   const isItemRequired = ii.required || isConditionallyRequired;
@@ -503,16 +484,18 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
             // Find layer field names and their corresponding filter field names
             const layerFieldNames: string[] = [];
             const layerToFilterMap: Record<string, string> = {};
-            
+
             for (const [fieldName, fieldSchema] of Object.entries(resolvedItemSchema.properties)) {
               const schema = fieldSchema as Record<string, unknown>;
               const uiMeta = schema["x-ui"] as { widget?: string } | undefined;
               if (uiMeta?.widget === "layer-selector") {
                 layerFieldNames.push(fieldName);
-                
+
                 // Find corresponding filter field by looking for fields that contain 'filter' in their name
                 // Common patterns: input_layer_filter, input_path_filter, etc.
-                for (const [filterFieldName, filterFieldSchema] of Object.entries(resolvedItemSchema.properties)) {
+                for (const [filterFieldName, filterFieldSchema] of Object.entries(
+                  resolvedItemSchema.properties
+                )) {
                   const filterSchema = filterFieldSchema as Record<string, unknown>;
                   const filterUiMeta = filterSchema["x-ui"] as { hidden?: boolean } | undefined;
                   // Filter fields are typically hidden and contain 'filter' in the name
@@ -652,7 +635,12 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
           {/* Description */}
           <Typography variant="body2" sx={{ fontStyle: "italic", mb: theme.spacing(4) }}>
             {process.description}
-            <LearnMore docsPath={process.links?.find((l) => l.rel === "describedby")?.href ?? `/toolbox/geoprocessing/${processId}`} />
+            <LearnMore
+              docsPath={
+                process.links?.find((l) => l.rel === "describedby")?.href ??
+                `/toolbox/geoprocessing/${processId}`
+              }
+            />
           </Typography>
 
           {/* Render sections dynamically */}
@@ -665,13 +653,9 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
             // Auto-hide "advanced-toggle" widgets that have no dependent fields
             // currently visible. A toggle field controls others via visible_when
             // referencing its name; if toggling on reveals nothing extra, hide it.
-            const toggleField = visibleInputs.find(
-              (i) => i.uiMeta?.widget === "advanced-toggle"
-            );
+            const toggleField = visibleInputs.find((i) => i.uiMeta?.widget === "advanced-toggle");
             if (toggleField) {
-              const otherInputs = section.inputs.filter(
-                (i) => i.name !== toggleField.name
-              );
+              const otherInputs = section.inputs.filter((i) => i.name !== toggleField.name);
               const visibleWhenOn = getVisibleInputs(otherInputs, {
                 ...effectiveValues,
                 [toggleField.name]: true,
@@ -681,9 +665,7 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
                 [toggleField.name]: false,
               });
               if (visibleWhenOn.length <= visibleWhenOff.length) {
-                visibleInputs = visibleInputs.filter(
-                  (i) => i.name !== toggleField.name
-                );
+                visibleInputs = visibleInputs.filter((i) => i.name !== toggleField.name);
               }
             }
 
@@ -759,7 +741,9 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
                               formValues={effectiveValues}
                               schemaDefs={process.$defs}
                               processId={processId}
-                              onValidationChange={(hasError) => handleFieldValidation(group[0].name, hasError)}
+                              onValidationChange={(hasError) =>
+                                handleFieldValidation(group[0].name, hasError)
+                              }
                             />
                           ) : (
                             <Stack
@@ -789,7 +773,9 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
                                     formValues={effectiveValues}
                                     schemaDefs={process.$defs}
                                     processId={processId}
-                                    onValidationChange={(hasError) => handleFieldValidation(input.name, hasError)}
+                                    onValidationChange={(hasError) =>
+                                      handleFieldValidation(input.name, hasError)
+                                    }
                                   />
                                 </Box>
                               ))}
@@ -830,7 +816,9 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
                                 formValues={effectiveValues}
                                 schemaDefs={process.$defs}
                                 processId={processId}
-                                onValidationChange={(hasError) => handleFieldValidation(group[0].name, hasError)}
+                                onValidationChange={(hasError) =>
+                                  handleFieldValidation(group[0].name, hasError)
+                                }
                               />
                             ) : (
                               <Stack
@@ -860,7 +848,9 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
                                       formValues={effectiveValues}
                                       schemaDefs={process.$defs}
                                       processId={processId}
-                                      onValidationChange={(hasError) => handleFieldValidation(input.name, hasError)}
+                                      onValidationChange={(hasError) =>
+                                        handleFieldValidation(input.name, hasError)
+                                      }
                                     />
                                   </Box>
                                 ))}
@@ -880,7 +870,7 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
       action={
         <ToolboxActionButtons
           runDisabled={!isValid || isExecuting}
-          resetFunction={handleReset}
+          resetFunction={() => handleReset()}
           runFunction={handleRun}
           isBusy={isExecuting}
         />

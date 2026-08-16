@@ -30,11 +30,12 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 // Redux
 import { useUserProfile } from "@/lib/api/users";
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
-import { startEditing } from "@/lib/store/featureEditor/slice";
+import useStartEditingGuard from "@/hooks/map/useStartEditingGuard";
 import { emitInteractionEvent } from "@/lib/store/interaction/slice";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setDataPanelLayerId, setIsDataPanelOpen } from "@/lib/store/map/slice";
 import { rgbToHex } from "@/lib/utils/helpers";
+import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
 import { zoomToLayer, zoomToProjectLayer } from "@/lib/utils/map/navigate";
 // API & Store
 import type {
@@ -55,6 +56,7 @@ import MoreMenu from "@/components/common/PopperMenu";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 // Modals
 import CatalogExplorerModal from "@/components/modals/CatalogExplorer";
+import ConfirmModal from "@/components/modals/Confirm";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
 import DatasetExternalModal from "@/components/modals/DatasetExternal";
@@ -71,7 +73,7 @@ import { DraggableTreeView } from "./DraggableTreeView";
 import { LayerIcon } from "./legend/LayerIcon";
 import { MaskedImageIcon } from "@/components/map/panels/style/other/MaskedImageIcon";
 import { LayerLegendPanel } from "./legend/LayerLegend";
-import { getLegendColorMap, getLegendMarkerMap } from "@/lib/utils/map/legend";
+import { getLegendColorMap, getLegendMarkerMap, resolveFeatureMarker } from "@/lib/utils/map/legend";
 import PopupContentRenderer from "@/components/builder/widgets/common/PopupContentRenderer";
 
 // Extended tree item interface to include project layer data
@@ -188,6 +190,69 @@ const EmptyLayerState = ({ projectId, isEditMode }: { projectId: string; isEditM
         </Stack>
       )}
     </Box>
+  );
+};
+
+// --- Visibility Toggle ---
+// Single source for the three toggle styles. Used as the row prefix
+// (togglePosition "left"), inside the row actions ("right"), and by the
+// dashboard widget's "show all" row.
+//
+// On coarse pointers the hit area is grown to 44px. The desktop target is
+// ~24px, which is fine for a mouse but easy to miss with a finger — that is
+// what made layers feel unresponsive in the mobile dashboard. Only the
+// padding grows; the glyph itself stays the same size.
+const COARSE_POINTER = "@media (pointer: coarse)";
+const COARSE_TARGET = { p: 1.5, minWidth: 44, minHeight: 44 };
+
+export const VisibilityToggle = ({
+  toggleStyle,
+  visible,
+  compact,
+  onToggle,
+}: {
+  toggleStyle: "eye" | "checkbox" | "switch";
+  visible: boolean;
+  /** Tighter desktop padding, used where the toggle sits inline before the label */
+  compact?: boolean;
+  onToggle: (e: React.MouseEvent) => void;
+}) => {
+  const { t } = useTranslation("common");
+  const padding = compact ? 0.25 : 0.5;
+
+  if (toggleStyle === "checkbox") {
+    return (
+      <Checkbox
+        size="small"
+        checked={visible}
+        onChange={(e) => onToggle(e as unknown as React.MouseEvent)}
+        sx={{ p: padding, [COARSE_POINTER]: COARSE_TARGET }}
+      />
+    );
+  }
+
+  if (toggleStyle === "switch") {
+    return (
+      <Switch
+        size="small"
+        checked={visible}
+        onChange={(e) => onToggle(e as unknown as React.MouseEvent)}
+        sx={{
+          transform: "scale(0.75)",
+          mx: -0.5,
+          // Undo the shrink on touch — the scaled switch is only ~28px tall
+          [COARSE_POINTER]: { transform: "none", mx: 0 },
+        }}
+      />
+    );
+  }
+
+  return (
+    <Tooltip title={visible ? t("hide") : t("show")} placement="top">
+      <IconButton size="small" onClick={onToggle} sx={{ p: padding, [COARSE_POINTER]: COARSE_TARGET }}>
+        <Icon iconName={visible ? ICON_NAME.EYE : ICON_NAME.EYE_SLASH} style={{ fontSize: "15px" }} />
+      </IconButton>
+    </Tooltip>
   );
 };
 
@@ -384,6 +449,9 @@ interface ProjectLayerTreeProps {
   };
   /** Layer IDs that should show download action (view mode only) */
   downloadableLayers?: number[];
+  /** Layer IDs whose legend renders as a single row (base marker, else fill
+   * color) instead of the full attribute breakdown */
+  simpleLegendLayerIds?: number[];
   /** Hide attribute/field name headings in legend */
   hideLegendHeading?: boolean;
   /** Custom group icons keyed by group ID */
@@ -394,6 +462,10 @@ interface ProjectLayerTreeProps {
   headerContent?: React.ReactNode;
   /** Per-group info text (keyed by group ID string) shown as an ⓘ button on the group row */
   groupInfo?: Record<string, string>;
+  /** Project owner's user id, used to decide whether feature editing is offered.
+   * Passed in rather than fetched so the public dashboard, which renders this
+   * tree read-only, makes no authenticated request. */
+  projectOwnerId?: string | null;
 }
 
 export const ProjectLayerTree = ({
@@ -414,11 +486,13 @@ export const ProjectLayerTree = ({
   moreOptionsStyle = "compact",
   allowedActions,
   downloadableLayers,
+  simpleLegendLayerIds,
   hideLegendHeading,
   groupIcons,
   dimOutOfZoom = true,
   headerContent,
   groupInfo,
+  projectOwnerId,
 }: ProjectLayerTreeProps) => {
   const { t } = useTranslation("common");
   const theme = useTheme();
@@ -429,6 +503,8 @@ export const ProjectLayerTree = ({
   const { userProfile } = useUserProfile();
   // Only subscribe to currentZoom when dimming is enabled and in view mode
   const currentZoom = useAppSelector((state) => (dimOutOfZoom && viewMode === "view" ? state.map.currentZoom : undefined));
+  const editingLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
+  const startEditingGuard = useStartEditingGuard();
 
   const [items, setItems] = useState<ProjectTreeItem[]>([]);
   const itemsRef = useRef<ProjectTreeItem[]>([]);
@@ -623,8 +699,11 @@ export const ProjectLayerTree = ({
 
     dispatch(setSelectedLayers(realIds));
 
-    // Always sync data panel layer — if the panel is closed, this is a no-op
-    if (realIds.length === 1) {
+    // Sync data panel layer — if the panel is closed, this is a no-op.
+    // While a feature-edit session is active the panel stays pinned to the
+    // editing layer: plain tree selection must not hijack (or end) the
+    // session — only explicitly opening another layer's table does.
+    if (realIds.length === 1 && !editingLayerId) {
       dispatch(setDataPanelLayerId(realIds[0]));
     }
 
@@ -714,7 +793,13 @@ export const ProjectLayerTree = ({
         !!node.query,
         !!node.in_catalog,
         false,
-        node.user_id === userProfile?.id,
+        // Catalog and size are handled by the filters below.
+        canEditLayerFeatures({
+          currentUserId: userProfile?.id,
+          layerOwnerId: node.user_id,
+          projectOwnerId,
+          isProjectEditor: isEditMode,
+        }),
         isEditMode,
       );
     }
@@ -882,10 +967,11 @@ export const ProjectLayerTree = ({
                   } else if (menuItem.id === MapLayerActions.DUPLICATE) {
                     handleDuplicate(target);
                   } else if (menuItem.id === MapLayerActions.EDIT_FEATURES) {
-                    dispatch(startEditing({
+                    startEditingGuard.requestStartEditing({
                       layerId: target.layer_id,
                       geometryType: target.feature_layer_geometry_type ?? null,
-                    }));
+                      projectLayerId: target.id,
+                    });
                   } else if (menuItem.id === ContentActions.TABLE) {
                     if (mapMode === "data") {
                       dispatch(setDataPanelLayerId(target.id));
@@ -925,32 +1011,11 @@ export const ProjectLayerTree = ({
 
         {/* Visibility toggle - very right when position is "right" */}
         {togglePosition !== "left" && !hideActions && node.layer_type !== "table" && (
-          <>
-            {toggleStyle === "checkbox" ? (
-              <Checkbox
-                size="small"
-                checked={nodeVisibility}
-                onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-                sx={{ p: 0.5 }}
-              />
-            ) : toggleStyle === "switch" ? (
-              <Switch
-                size="small"
-                checked={nodeVisibility}
-                onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-                sx={{ transform: "scale(0.75)", mx: -0.5 }}
-              />
-            ) : (
-              <Tooltip title={nodeVisibility ? t("hide") : t("show")} placement="top">
-                <IconButton size="small" onClick={(e) => handleVisibilityToggle(node, e)} sx={{ px: 0.5 }}>
-                  <Icon
-                    iconName={!nodeVisibility ? ICON_NAME.EYE_SLASH : ICON_NAME.EYE}
-                    style={{ fontSize: "15px" }}
-                  />
-                </IconButton>
-              </Tooltip>
-            )}
-          </>
+          <VisibilityToggle
+            toggleStyle={toggleStyle}
+            visible={nodeVisibility}
+            onToggle={(e) => handleVisibilityToggle(node, e)}
+          />
         )}
       </Stack>
     );
@@ -963,7 +1028,7 @@ export const ProjectLayerTree = ({
     viewMode, hideActions, toggleStyle, togglePosition, moreOptionsStyle,
     allowedActions, downloadableLayers, projectLayers,
     isEditMode, groupInfo,
-    mapMode, userProfile,
+    mapMode, userProfile, projectOwnerId,
     dispatch,
     activeLayerId, activeRightPanel,
   ]);
@@ -1060,8 +1125,10 @@ export const ProjectLayerTree = ({
           legendNode = <LayerLegendPanel properties={props} geometryType="raster" hideHeading={hideLegendHeading} />;
         }
       }
-      // 4. Complex Legend - Only show legend if layer is visible
-      else if (hasComplexLegend) {
+      // 4. Complex Legend - Only show legend if layer is visible. Layers
+      // opted into the simple legend fall through to the geometry preview
+      // below (base marker, else fill color) with no attribute breakdown.
+      else if (hasComplexLegend && !simpleLegendLayerIds?.includes(node.id)) {
         // Check if legend panel will actually have content to show
         const colorMap = getLegendColorMap(props, "color");
         const strokeMap = getLegendColorMap(props, "stroke_color");
@@ -1123,7 +1190,8 @@ export const ProjectLayerTree = ({
           }
         }
       }
-      // 5. Simple Feature (Geometry Preview) - for layers without complex legends
+      // 5. Simple Feature (Geometry Preview) - for layers without complex
+      // legends and for simple-legend layers
       else {
         const baseColor = props.color
           ? Array.isArray(props.color) && props.color.length >= 3
@@ -1141,20 +1209,17 @@ export const ProjectLayerTree = ({
           : undefined;
         // When fill is disabled and custom marker is active, use black to match map behavior
         const iconColor = props.filled === false && props.custom_marker ? "#000000" : baseColor;
+        // Base marker with mapped-marker layers falling back to their base
+        // marker — the same precedence as the map's icon-image expression.
+        const simpleMarker = resolveFeatureMarker(props);
         iconNode = (
           <LayerIcon
             type={geomType} // Use geometry type for vector preview
             color={iconColor}
             strokeColor={props.stroked !== false ? strokeColor : undefined}
             filled={props.filled !== false}
-            iconUrl={
-              !props.marker_field && props.custom_marker && props.marker?.url ? props.marker.url : undefined
-            }
-            iconSource={
-              !props.marker_field && props.custom_marker && props.marker?.source
-                ? props.marker.source
-                : "library"
-            }
+            iconUrl={simpleMarker?.url}
+            iconSource={simpleMarker?.source ?? "library"}
           />
         );
       }
@@ -1171,7 +1236,7 @@ export const ProjectLayerTree = ({
         labelInfo: legendCaption,
       };
     });
-  }, [items, theme, currentZoom, viewMode, hideLegendHeading, groupIcons]);
+  }, [items, theme, currentZoom, viewMode, hideLegendHeading, groupIcons, simpleLegendLayerIds]);
 
   const renderPrefix = useCallback(togglePosition === "left" ? (item: ProjectTreeItem) => {
     const node = item.data as ProjectLayerTreeNode;
@@ -1179,28 +1244,12 @@ export const ProjectLayerTree = ({
     const nodeVisibility = node.properties?.visibility ?? true;
     return (
       <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center" }}>
-        {toggleStyle === "checkbox" ? (
-          <Checkbox
-            size="small"
-            checked={nodeVisibility}
-            onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-            sx={{ p: 0.25 }}
-          />
-        ) : toggleStyle === "switch" ? (
-          <Switch
-            size="small"
-            checked={nodeVisibility}
-            onChange={(e) => handleVisibilityToggle(node, e as unknown as React.MouseEvent)}
-            sx={{ transform: "scale(0.75)", mx: -0.5 }}
-          />
-        ) : (
-          <IconButton size="small" onClick={(e) => handleVisibilityToggle(node, e)} sx={{ p: 0.25 }}>
-            <Icon
-              iconName={!nodeVisibility ? ICON_NAME.EYE_SLASH : ICON_NAME.EYE}
-              style={{ fontSize: "15px" }}
-            />
-          </IconButton>
-        )}
+        <VisibilityToggle
+          toggleStyle={toggleStyle}
+          visible={nodeVisibility}
+          compact
+          onToggle={(e) => handleVisibilityToggle(node, e)}
+        />
       </Box>
     );
   } : () => null, [togglePosition, hideActions, toggleStyle, handleVisibilityToggle]);
@@ -1346,6 +1395,15 @@ export const ProjectLayerTree = ({
           content={groupInfo[String(groupInfoDialog.id)]}
         />
       )}
+      <ConfirmModal
+        open={startEditingGuard.confirmOpen}
+        title={t("stop_editing")}
+        body={t("discard_edits_confirmation")}
+        closeText={t("cancel")}
+        confirmText={t("stop_editing")}
+        onClose={startEditingGuard.cancel}
+        onConfirm={startEditingGuard.confirm}
+      />
     </Box>
   );
 };

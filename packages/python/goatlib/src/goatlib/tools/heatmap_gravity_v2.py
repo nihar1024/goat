@@ -7,6 +7,8 @@ tile alongside the legacy matrix-based tool.
 
 from goatlib.tools.heatmap_v2 import (
     HeatmapGravityV2ToolRunner as HeatmapGravityV2ToolRunner,
+)
+from goatlib.tools.heatmap_v2 import (
     HeatmapGravityV2WindmillParams as HeatmapGravityV2WindmillParams,
 )
 

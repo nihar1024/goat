@@ -37,29 +37,10 @@ You can configure the **routing type**, **opportunity layers** (with capacity fi
 
 **Key difference:** Unlike the *Gravity-based Heatmap*, which measures general accessibility of destinations, the *2SFCA Heatmap* explicitly models **supply-demand balance** — showing where capacity is sufficient or insufficient relative to the population that needs it.
 
-import MapViewer from '@site/src/components/MapViewer';
 
-:::info 
+:::info
 
-Heatmaps are available in certain regions. Upon selecting a `Routing type`, a **geofence** will be displayed on the map to highlight supported regions.
-
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <MapViewer
-      geojsonUrls={[
-        "https://assets.plan4better.de/other/geofence/geofence_heatmap.geojson"
-      ]}
-      styleOptions={{
-        fillColor: "#808080",
-        outlineColor: "#808080",
-        fillOpacity: 0.8
-      }}
-      legendItems={[
-        { label: "Coverage for 2SFCA Heatmaps", color: "#ffffff" }
-      ]}
-  />
-</div> 
-
-If you would like to perform analyses beyond this geofence, feel free to [contact us](https://plan4better.de/en/contact/ "Contact us"). We would be happy to discuss further options.
+Heatmap computation is available across **over 30 European countries** for `Walk`, `Bicycle`, `Pedelec`, and `Car`. For `Public Transport`, Germany, Switzerland, and the Haut-Rhin region of France are supported. If you need analyses beyond these regions, feel free to [contact us](https://plan4better.de/en/contact/).
 
 :::
 
@@ -87,36 +68,16 @@ If you would like to perform analyses beyond this geofence, feel free to [contac
 
 <div class="step">
   <div class="step-number">3</div>
-  <div class="content">Pick the <code>Routing Type</code> you would like to use for the heatmap.</div>
+  <div class="content">Pick the <code>Transport mode</code> you would like to use for the heatmap.</div>
 </div>
 
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-**Considers all paths accessible by foot**. For heatmaps, a walking speed of 5 km/h is assumed.
-
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-**Considers all paths accessible by bicycle**. This routing mode takes into account the surface, smoothness and slope of streets while computing accessibility. For heatmaps, a cycling speed of 15 km/h is assumed.
-
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-**Considers all paths accessible by pedelec**. This routing mode takes into account the surface and smoothness of streets while computing accessibility. For heatmaps, a pedelec speed of 23 km/h is assumed.
-
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-**Considers all paths accessible by car**. This routing mode takes into account speed limits and one-way access restrictions while computing accessibility.
-
-</TabItem>
-
-</Tabs>
+| Mode | Considers |
+|------|-----------|
+| Walk | All paths accessible by foot |
+| Bicycle | All paths accessible by bicycle (surface, smoothness, slope) |
+| Pedelec | All paths accessible by pedelec (surface, smoothness) |
+| Car | All paths accessible by car (speed limits, one-way restrictions) |
+| Public Transport | Public transport network (GTFS schedules) with walking access and egress (up to 30 minutes) to and from stations |
 
 ### Configuration
 
@@ -184,6 +145,12 @@ Calculates weights using a power function. The sensitivity parameter controls th
 
 </TabItem>
 
+<TabItem value="cumulative" label="Cumulative" className="tabItemBox">
+
+Applies a full weight of 1 to every facility within the travel time limit and 0 beyond it, with no distance decay. Unlike the other functions, it does not use the sensitivity parameter — all reachable facilities count equally. For details, see [Technical details](#calculation).
+
+</TabItem>
+
 </Tabs>
 
 ### Demand
@@ -202,17 +169,22 @@ Calculates weights using a power function. The sensitivity parameter controls th
 
 <div class="step">
   <div class="step-number">8</div>
-  <div class="content">Select your <code>Opportunity Layer</code> from the drop-down menu. This layer should contain facility locations (e.g., hospitals, schools, shops).</div>
+  <div class="content">Select your <code>Input Layer</code> from the drop-down menu. This layer should contain facility locations (e.g., hospitals, schools, shops).</div>
 </div>
 
 <div class="step">
   <div class="step-number">9</div>
-  <div class="content">Choose the <code>Capacity Field</code> — a numeric field representing the supply capacity of each facility (e.g., number of beds, seats, or square meters).</div>
+  <div class="content">Set the <code>Travel Time Limit</code> defining the maximum catchment area in minutes.</div>
 </div>
 
 <div class="step">
   <div class="step-number">10</div>
-  <div class="content">Set the <code>Travel Time Limit</code> defining the maximum catchment area in minutes.</div>
+  <div class="content">Choose a <code>Potential Type</code> to define how each facility's capacity is determined:
+    <ul>
+      <li><b>Constant</b> — all facilities have the same capacity. Enter a numeric value (default: 1.0).</li>
+      <li><b>Field</b> — use a numeric field from the <i>Input Layer</i> as the capacity (e.g., number of beds, seats, or square meters).</li>
+    </ul>
+  </div>
 </div>
 
 :::tip Hint
@@ -228,11 +200,23 @@ Need help choosing a suitable travel time limit for various common amenities? Th
 
 <div class="step">
   <div class="step-number">12</div>
-  <div class="content">Optionally, add more opportunity layers by clicking <code>+ Add Opportunity</code>. Multiple facility types can be combined into a single analysis.</div>
+  <div class="content">Optionally, add more opportunity layers by clicking <code>+ Add Opportunities</code>. Multiple facility types can be combined into a single analysis.</div>
 </div>
 
 <div class="step">
   <div class="step-number">13</div>
+  <div class="content">Optionally, expand <code>Advanced Options</code> and select a <code>Reference Area</code> — a polygon layer that defines the full study area. When set, the heatmap extends to cover all H3 cells within that polygon, with cells outside the computed reach shown as <code>NULL</code> to expose coverage gaps and underserved areas.</div>
+</div>
+
+### Result Layer
+
+<div class="step">
+  <div class="step-number">14</div>
+  <div class="content">Set the <code>Result layer name</code> for the output heatmap layer.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">15</div>
   <div class="content">Click <code>Run</code> to start the calculation.</div>
 </div>
 
@@ -327,7 +311,7 @@ The three variants differ in how the impedance function *f(d)* is applied:
 | **E2SFCA** | *f(d) = w(d)* | *f(d) = w(d)* |
 | **M2SFCA** | *f(d) = w(d)* | *f(d) = w(d)<sup>2</sup>* |
 
-Where *w(d)* is the selected impedance function (Gaussian, Linear, Exponential, or Power). 
+Where *w(d)* is the selected impedance function (Gaussian, Linear, Exponential, Power, or Cumulative). 
 
 ### Comparison of variants
 
@@ -405,6 +389,21 @@ Leveraging the *sensitivity* you define, the Gaussian function allows you to mod
 </MathJax.Provider>
 </div>  
 
+*Cumulative Opportunities (`cumulative` in GOAT):*
+
+<div>
+<MathJax.Provider>
+  <div style={{ marginTop: '20px', fontSize: '24px' }}>
+    <MathJax.Node formula={`f(t_{ij}) = \\begin{cases}
+      1 & \\text{for } t_{ij} \\leq \\bar{t} \\\\
+      0 & \\text{otherwise}
+    \\end{cases}`} />
+  </div>
+</MathJax.Provider>
+</div>
+
+The cumulative function applies **no distance decay** and does not use the *sensitivity* parameter: every facility within the travel time limit **t̄** contributes with full weight. Note that with cumulative weights, E2SFCA and M2SFCA reduce to counting reachable facilities equally rather than distance-differentiating them.
+
 
 ### Classification
 
@@ -413,45 +412,17 @@ However, various other classification methods may be used instead. Read more in 
 
 ### Visualization 
 
-Heatmaps in GOAT utilize **[Uber's H3 grid-based](../../further_reading/glossary#h3-grid)** solution for efficient computation and easy-to-understand visualization. Behind the scenes, a pre-computed travel time matrix for each *routing type* utilizes this solution and is queried and further processed in real-time to compute accessibility and produce a final heatmap.
+Heatmaps in GOAT utilize **[Uber's H3 grid-based](../../further_reading/glossary#h3-grid)** solution for efficient computation and easy-to-understand visualization. Behind the scenes, accessibility is computed on-the-fly by GOAT's own routing engine. For each *routing type*, the engine routes outward from the opportunities to discover the reachable H3 cells and their travel costs, then aggregates these into a per-cell accessibility score. Public transport uses the RAPTOR-based engine, while the active mobility and car modes use GOAT's Dijkstra implementation.
 
 The resolution and dimensions of the hexagonal grid used depend on the selected *routing type*:
 
-<div style={{ marginLeft: '20px' }}>
-
-<Tabs>
-
-<TabItem value="walk" label="Walk" default className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 10`}</li>
-<li parentName="ul">{`Average hexagon area: 11285.6 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 65.9 m`}</li>
-</TabItem>
-  
-<TabItem value="cycling" label="Bicycle" className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 9`}</li>
-<li parentName="ul">{`Average hexagon area: 78999.4 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 174.4 m`}</li>
-</TabItem>
-
-<TabItem value="pedelec" label="Pedelec" className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 9`}</li>
-<li parentName="ul">{`Average hexagon area: 78999.4 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 174.4 m`}</li> 
-</TabItem>
-
-<TabItem value="car" label="Car" className="tabItemBox">
-
-<li parentName="ul">{`Resolution: 8`}</li>
-<li parentName="ul">{`Average hexagon area: 552995.7 m²`}</li>
-<li parentName="ul">{`Average hexagon edge length: 461.4 m`}</li>
-
-</TabItem>
-
-</Tabs>
-</div>
+| Mode | Resolution | Average hexagon area | Average hexagon edge length |
+|------|-----------|----------------------|-----------------------------|
+| Walk | 10 | 11,285.6 m² | 65.9 m |
+| Bicycle | 9 | 78,999.4 m² | 174.4 m |
+| Pedelec | 9 | 78,999.4 m² | 174.4 m |
+| Car | 8 | 552,995.7 m² | 461.4 m |
+| Public Transport | 9 | 78,999.4 m² | 174.4 m |
 
 
 :::tip Hint

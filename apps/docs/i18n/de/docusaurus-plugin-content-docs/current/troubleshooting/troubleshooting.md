@@ -66,7 +66,7 @@ Wenn Sie eine Analyse in einem Projekt ausführen, wird die Aufgabe in der Softw
     style={{ maxHeight: "20px", maxWidth: "20px", objectFit: "cover", marginRight: "8px" }} 
   />
   <span>
-    <strong>Um Ihre Startpunkte auf der Karte genau festzulegen, können Sie das Netzwerk entweder direkt mit der Basiskarte oder mit der Straßennetzschicht im Szenario visualisieren.</strong>
+    <strong>Um Ihre Startpunkte auf der Karte genau festzulegen, können Sie das Netzwerk entweder direkt mit der Basiskarte oder mit der Straßennetzschicht visualisieren.</strong>
   </span>
 </div>
   

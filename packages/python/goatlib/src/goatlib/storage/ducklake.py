@@ -21,6 +21,36 @@ from goatlib.storage.snapshot_pin import SnapshotPin
 
 logger = logging.getLogger(__name__)
 
+# Single source of truth for the DuckDB extensions the services need. Both
+# managers below AND the image bake step (service Dockerfiles import this list)
+# derive from it, so adding one here automatically gets it baked into the
+# images — there is no second list to keep in sync.
+REQUIRED_DUCKDB_EXTENSIONS = ["spatial", "httpfs", "postgres", "ducklake"]
+
+
+def _baked_extension_dir() -> str | None:
+    """Directory of extensions pre-baked into the image, if configured.
+
+    When ``DUCKDB_EXTENSION_DIRECTORY`` is set (the service images bake the
+    REPOSITORY extensions in at build time), DuckDB loads them from local disk
+    and must never reach out to extensions.duckdb.org — so callers point DuckDB
+    at this directory, disable autoinstall/autoload, and skip INSTALL entirely.
+    Unset in local dev, where the normal download-on-INSTALL path is used.
+    """
+    return os.environ.get("DUCKDB_EXTENSION_DIRECTORY") or None
+
+
+def configure_baked_extensions(con: "duckdb.DuckDBPyConnection") -> bool:
+    """Point a connection at the baked extension dir. Returns True if baked."""
+    ext_dir = _baked_extension_dir()
+    if not ext_dir:
+        return False
+    con.execute(f"SET extension_directory='{ext_dir}'")
+    con.execute("SET autoinstall_known_extensions=false")
+    con.execute("SET autoload_known_extensions=false")
+    return True
+
+
 # Connection error patterns that should trigger a retry/reconnect
 CONNECTION_ERROR_PATTERNS = [
     "ssl syscall error",
@@ -154,7 +184,7 @@ class BaseDuckLakeManager:
     and SSL contexts in long-running services.
     """
 
-    REQUIRED_EXTENSIONS = ["spatial", "httpfs", "postgres", "ducklake"]
+    REQUIRED_EXTENSIONS = REQUIRED_DUCKDB_EXTENSIONS
 
     # Max age before connection is recycled. Prevents unbounded growth of
     # DuckLake metadata cache and libpq/SSL state in long-running processes.
@@ -273,6 +303,10 @@ class BaseDuckLakeManager:
         con.execute("SET allocator_flush_threshold='64MB'")
         # Enable background threads for memory cleanup
         con.execute("SET allocator_background_threads=true")
+        # Temporal semantics must not depend on the host OS timezone: naive
+        # datetime literals in filters and epoch() on TIMESTAMPTZ are resolved
+        # against the session tz. GLOBAL so cursors of this instance inherit.
+        con.execute("SET GLOBAL TimeZone='UTC'")
         self._install_extensions(con)
         self._load_extensions(con)
         self._setup_s3(con)
@@ -317,6 +351,7 @@ class BaseDuckLakeManager:
         so the connection can query DuckLake tables directly without
         copying data into memory.
         """
+        con.execute("SET GLOBAL TimeZone='UTC'")
         self._install_extensions(con)
         self._load_extensions(con)
         self._setup_s3(con)
@@ -403,6 +438,16 @@ class BaseDuckLakeManager:
                     continue
                 raise
 
+    @property
+    def postgres_uri(self: "BaseDuckLakeManager") -> str | None:
+        """libpq connection string of the catalog Postgres."""
+        return self._postgres_uri
+
+    @property
+    def catalog_schema(self: "BaseDuckLakeManager") -> str | None:
+        """Schema inside the catalog Postgres holding the ducklake_* tables."""
+        return self._catalog_schema
+
     def reconnect(self: "BaseDuckLakeManager") -> None:
         """Reconnect to DuckLake."""
         with self._lock:
@@ -481,6 +526,11 @@ class BaseDuckLakeManager:
     ) -> None:
         if self._extensions_installed:
             return
+        if _baked_extension_dir():
+            # Baked into the image: loaded from disk, never downloaded. The
+            # per-connection SET happens in _load_extensions.
+            self._extensions_installed = True
+            return
         for ext in self.REQUIRED_EXTENSIONS:
             try:
                 con.execute(f"INSTALL {ext}")
@@ -498,6 +548,7 @@ class BaseDuckLakeManager:
     def _load_extensions(
         self: "BaseDuckLakeManager", con: duckdb.DuckDBPyConnection
     ) -> None:
+        configure_baked_extensions(con)
         for ext in self.REQUIRED_EXTENSIONS:
             con.execute(f"LOAD {ext}")
 
@@ -608,15 +659,18 @@ class BaseDuckLakeManager:
     def _warm_connection(
         self: "BaseDuckLakeManager", con: duckdb.DuckDBPyConnection
     ) -> None:
-        """Force the DuckLake catalog metadata load off the request path.
+        """Force the schema-level catalog metadata load off the request path.
 
-        DuckDB does not support catalog-qualified information_schema access
-        (e.g. `lake.information_schema.tables`), so duckdb_tables() is used
-        to enumerate the attached catalog's tables and force the metadata
-        load instead.
+        Since DuckLake 1.5.x table metadata loads lazily per table (one
+        catalog query each), so enumerating tables here (duckdb_tables())
+        would issue one query per table — ~45 s on a 12k-table catalog
+        (duckdb/ducklake#1269) on every pool build/rebuild. Warming the
+        schema list keeps the expensive part of name resolution off the
+        request path while individual tables stay lazy (~tens of ms on
+        first touch).
         """
         con.execute(
-            "SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lake'"
+            "SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'lake'"
         ).fetchone()
 
     def _build_warm_and_swap(
@@ -732,7 +786,7 @@ class DuckLakePool:
         pool.close()
     """
 
-    REQUIRED_EXTENSIONS = ["spatial", "httpfs", "postgres", "ducklake"]
+    REQUIRED_EXTENSIONS = REQUIRED_DUCKDB_EXTENSIONS
 
     # Max age for connections in seconds - older connections are recreated
     # This helps prevent stale PostgreSQL connections inside DuckLake
@@ -983,12 +1037,30 @@ class DuckLakePool:
         con.execute("SET allocator_flush_threshold='64MB'")
         con.execute("SET allocator_background_threads=true")
 
-        # Install and load extensions
+        # Temporal semantics must not depend on the host OS timezone; GLOBAL
+        # so cursors drawn from this base inherit it.
+        con.execute("SET GLOBAL TimeZone='UTC'")
+
+        # Point at baked extensions (prod images) so nothing is downloaded; in
+        # local dev this is a no-op and we fall back to INSTALL. Install ALL
+        # before loading ANY: once httpfs is loaded, later INSTALL downloads
+        # route through its TLS stack (system CA store) which slim images may
+        # lack; installing first keeps downloads on DuckDB's own bundled cert.
+        baked = configure_baked_extensions(con)
+        if not self._extensions_installed:
+            if not baked:
+                for ext in self.REQUIRED_EXTENSIONS:
+                    try:
+                        con.execute(f"INSTALL {ext}")
+                    except duckdb.IOException as e:
+                        logger.warning(
+                            "Could not install extension %s (may already be installed): %s",
+                            ext,
+                            e,
+                        )
+            self._extensions_installed = True
         for ext in self.REQUIRED_EXTENSIONS:
-            if not self._extensions_installed:
-                con.execute(f"INSTALL {ext}")
             con.execute(f"LOAD {ext}")
-        self._extensions_installed = True
 
         # Configure S3 if needed
         if self._s3_endpoint:
@@ -1020,15 +1092,18 @@ class DuckLakePool:
         return con
 
     def _warm_connection(self, con: duckdb.DuckDBPyConnection) -> None:
-        """Force the DuckLake catalog metadata load off the request path.
+        """Force the schema-level catalog metadata load off the request path.
 
-        DuckDB does not support catalog-qualified information_schema access
-        (e.g. `lake.information_schema.tables`), so duckdb_tables() is used
-        to enumerate the attached catalog's tables and force the metadata
-        load instead.
+        Since DuckLake 1.5.x table metadata loads lazily per table (one
+        catalog query each), so enumerating tables here (duckdb_tables())
+        would issue one query per table — ~45 s on a 12k-table catalog
+        (duckdb/ducklake#1269) on every pool build/rebuild. Warming the
+        schema list keeps the expensive part of name resolution off the
+        request path while individual tables stay lazy (~tens of ms on
+        first touch).
         """
         con.execute(
-            "SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lake'"
+            "SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'lake'"
         ).fetchone()
 
     def _scaled_memory_limit(self) -> str | None:
@@ -1504,6 +1579,16 @@ class DuckLakePool:
             raise error_container["error"]
 
         return result_container.get("result")
+
+    @property
+    def postgres_uri(self) -> str | None:
+        """libpq connection string of the catalog Postgres."""
+        return self._postgres_uri
+
+    @property
+    def catalog_schema(self) -> str | None:
+        """Schema inside the catalog Postgres holding the ducklake_* tables."""
+        return self._catalog_schema
 
     def reconnect(self) -> None:
         """Reconnect all connections in the pool.

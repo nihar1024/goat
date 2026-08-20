@@ -416,6 +416,7 @@ class ToolDatabaseService:
         properties: dict[str, Any] | None = None,
         other_properties: dict[str, Any] | None = None,
         group_id: int | None = None,
+        order: int | None = None,
     ) -> int:
         """Link a layer to a project.
 
@@ -430,6 +431,10 @@ class ToolDatabaseService:
             other_properties: Additional properties
             group_id: Layer group to place the link in (e.g. a bundle-backed
                 group); None leaves the layer at the project root
+            order: Position in the project's single tree-wide order sequence.
+                None keeps the default of 0 and puts the layer at the top of
+                layer_order, which is what a tool's output layer wants; giving one
+                places the layer at that position and at the bottom instead.
 
         Returns:
             layer_project_id: The ID of the created link record
@@ -446,15 +451,14 @@ class ToolDatabaseService:
         properties_json = json.dumps(properties) if properties else None
         other_props_json = json.dumps(other_properties) if other_properties else None
 
-        # Create the layer_project link
-        # order=0 is required (non-nullable column)
+        # Create the layer_project link ("order" is non-nullable)
         row = await self.pool.fetchrow(
             f"""
             INSERT INTO {self.schema}.layer_project (
                 layer_id, project_id, name, "order", properties, other_properties,
                 layer_project_group_id, created_at, updated_at
             )
-            VALUES ($1, $2, $3, 0, $4::jsonb, $5::jsonb, $6, NOW(), NOW())
+            VALUES ($1, $2, $3, $7, $4::jsonb, $5::jsonb, $6, NOW(), NOW())
             RETURNING id
             """,
             record.layer_id,
@@ -463,14 +467,21 @@ class ToolDatabaseService:
             properties_json,
             other_props_json,
             group_id,
+            order if order is not None else 0,
         )
         layer_project_id = row["id"]
 
-        # Update project.layer_order - prepend the new layer to the list
+        # An explicitly ordered layer belongs at the bottom (it is placing itself
+        # below what is already there); otherwise the newest layer goes on top.
+        placement = (
+            "array_append(COALESCE(layer_order, ARRAY[]::int[]), $1)"
+            if order is not None
+            else "array_prepend($1, COALESCE(layer_order, ARRAY[]::int[]))"
+        )
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.project
-            SET layer_order = array_prepend($1, COALESCE(layer_order, ARRAY[]::int[])),
+            SET layer_order = {placement},
                 updated_at = NOW()
             WHERE id = $2
             """,
@@ -486,9 +497,14 @@ class ToolDatabaseService:
 
     async def create_bundle_project_group(
         self: Self, project_id: str, bundle_id: str, name: str
-    ) -> int:
+    ) -> tuple[int, int]:
         """Create a bundle-backed layer group in a project (locked membership),
-        placed after existing groups. Returns the new group's id."""
+        placed below everything already there. Returns ``(id, order)`` — the
+        caller needs the order to place the members directly beneath it.
+
+        Groups and layers share one tree-wide "order" sequence — the layer panel
+        writes it by flattening the whole tree — so the maximum is taken over both.
+        Reading only the groups drops the bundle in among the existing layers."""
         row = await self.pool.fetchrow(
             f"""
             INSERT INTO {self.schema}.layer_project_group (
@@ -496,14 +512,15 @@ class ToolDatabaseService:
             )
             VALUES (
                 $1, $2, $3,
-                COALESCE(
-                    (SELECT MAX("order") + 1 FROM {self.schema}.layer_project_group
-                     WHERE project_id = $1),
-                    0
-                ),
+                GREATEST(
+                    COALESCE((SELECT MAX("order") FROM {self.schema}.layer_project_group
+                              WHERE project_id = $1), -1),
+                    COALESCE((SELECT MAX("order") FROM {self.schema}.layer_project
+                              WHERE project_id = $1), -1)
+                ) + 1,
                 NOW(), NOW()
             )
-            RETURNING id
+            RETURNING id, "order"
             """,
             uuid_module.UUID(project_id),
             uuid_module.UUID(bundle_id),
@@ -511,9 +528,9 @@ class ToolDatabaseService:
         )
         logger.info(
             f"Created bundle group {row['id']} for bundle {bundle_id} "
-            f"in project {project_id}"
+            f"in project {project_id} at order {row['order']}"
         )
-        return row["id"]
+        return row["id"], row["order"]
 
     async def delete_layer_project_group(self: Self, group_id: int) -> None:
         """Delete a project layer group (cascades its layer_project links). Used

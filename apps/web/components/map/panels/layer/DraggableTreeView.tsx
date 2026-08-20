@@ -294,8 +294,8 @@ const RecursiveTreeItemInner = <T extends BaseTreeItem>({
   const children = allData.filter((i) => i.parentId === item.id);
   const isSelected = selectedIds.includes(item.id);
   const isDragDisabled = !enableSelection || disableDrag || isOverlay || !!item.dragDisabled;
-  // Locked bundle groups (and their members) reject drops so layers can't be
-  // moved into a bundle group.
+  // A bundle group's members reject drops so nothing can be moved into the
+  // group; the group's own row stays droppable so it can be reordered.
   const isDropDisabled = isDragDisabled || !!item.dropDisabled;
 
   const hasLegend = !!item.legendContent;

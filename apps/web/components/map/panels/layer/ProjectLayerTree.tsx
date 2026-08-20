@@ -312,11 +312,15 @@ function formatApiDataForDnd(nodes: ProjectLayerTreeNode[]): ProjectTreeItem[] {
         data: node,
         // Hide expand/collapse functionality for invisible groups
         canExpand: node.type === "group" ? (node.properties?.visibility ?? true) : undefined,
-        // Bundle-group lock: the group can still be reordered as a unit, but it
-        // rejects drops; its member layers can't be dragged at all.
+        // Bundle-group lock: member layers can't be dragged at all, and nothing
+        // can be dropped into the group. The group itself stays a drop target so
+        // it can be reordered — marking it undroppable leaves a project holding
+        // only bundles with no valid drop target anywhere, and nothing moves.
+        // Membership is enforced in handleDragEnd, which rejects any drop that
+        // would adopt a bundle group as parent.
         isBundleGroup,
         dragDisabled: isBundleMember,
-        dropDisabled: isBundleGroup || isBundleMember,
+        dropDisabled: isBundleMember,
       };
     });
 }

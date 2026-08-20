@@ -6,7 +6,11 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, select
 
 from core.crud.base import CRUDBase
-from core.db.models._link_model import BundleLayerLink, LayerProjectGroup
+from core.db.models._link_model import (
+    BundleLayerLink,
+    LayerProjectGroup,
+    LayerProjectLink,
+)
 from core.db.models.bundle import Bundle
 from core.db.session import AsyncSession
 from core.schemas.project import ILayerProjectGroupCreate, ILayerProjectGroupUpdate
@@ -132,27 +136,45 @@ class CRUDLayerProjectGroup(CRUDBase):
         if bundle is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Bundle not found")
 
+        # Ordered by link id, so members land in the order the import created
+        # them (the bundle spec's role order) rather than however the rows come back.
         member_ids = (
             (
                 await async_session.execute(
-                    select(BundleLayerLink.layer_id).where(
-                        BundleLayerLink.bundle_id == bundle_id
-                    )
+                    select(BundleLayerLink.layer_id)
+                    .where(BundleLayerLink.bundle_id == bundle_id)
+                    .order_by(BundleLayerLink.id)
                 )
             )
             .scalars()
             .all()
         )
 
-        # Place the group after existing groups in the tree.
-        max_order = (
+        # Place the group below everything already in the project. Groups and
+        # layers share one tree-wide order sequence, so the maximum has to be
+        # taken over both — reading only the groups puts the bundle in among the
+        # existing layers.
+        max_group_order = (
             await async_session.execute(
                 select(func.max(LayerProjectGroup.order)).where(
                     LayerProjectGroup.project_id == project_id
                 )
             )
         ).scalar()
-        next_order = (max_order + 1) if max_order is not None else 0
+        max_layer_order = (
+            await async_session.execute(
+                select(func.max(LayerProjectLink.order)).where(
+                    LayerProjectLink.project_id == project_id
+                )
+            )
+        ).scalar()
+        next_order = (
+            max(
+                (max_group_order if max_group_order is not None else -1),
+                (max_layer_order if max_layer_order is not None else -1),
+            )
+            + 1
+        )
 
         group = LayerProjectGroup(
             project_id=project_id,
@@ -172,6 +194,9 @@ class CRUDLayerProjectGroup(CRUDBase):
                     project_id=project_id,
                     layer_ids=list(member_ids),
                     group_id=group.id,
+                    # Directly below the group header, in role order.
+                    start_order=group.order + 1,
+                    append_to_layer_order=True,
                 )
             except Exception:
                 # The group was already committed; if adding members fails, drop

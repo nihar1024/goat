@@ -231,14 +231,18 @@ class BundleImportRunner(BaseToolRunner):
         """Place the freshly-imported member layers into a locked bundle-backed
         group in the given project (the upload-from-within-a-project flow).
 
+        The group goes below what the project already holds and its members
+        directly beneath it, so the bundle arrives as one block instead of
+        scattering through the panel.
+
         Each project layer gets the same default style the member layer was
         created with, so it matches adding the bundle to a project manually."""
         bundle_name = await db.get_bundle_name(bundle_id) or "Bundle"
-        group_id = await db.create_bundle_project_group(
+        group_id, group_order = await db.create_bundle_project_group(
             project_id=project_id, bundle_id=bundle_id, name=bundle_name
         )
         try:
-            for layer in imported:
+            for position, layer in enumerate(imported):
                 geom = normalize_geometry_type(layer.geometry_type)
                 properties = get_default_style(geom) if geom else None
                 await db.add_to_project(
@@ -247,6 +251,9 @@ class BundleImportRunner(BaseToolRunner):
                     name=layer.name,
                     properties=properties,
                     group_id=group_id,
+                    # Directly below the group header, in import order. Without an
+                    # explicit position every member lands on 0 and they tie.
+                    order=group_order + 1 + position,
                 )
         except Exception:
             # Roll back the partially-populated group (cascades its links) so a

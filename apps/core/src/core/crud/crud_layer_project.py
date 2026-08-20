@@ -155,15 +155,26 @@ class CRUDLayerProject(CRUDBase):
         project_id: UUID,
         layer_ids: List[UUID],
         group_id: int | None = None,
+        start_order: int | None = None,
+        append_to_layer_order: bool = False,
     ) -> List[BaseModel]:
         """Create a link between a project and a layer.
 
         When ``group_id`` is given, the new links are placed into that layer
         group (used when adding a bundle's member layers into its group).
+
+        ``order`` is a position in the project's single tree-wide sequence — the
+        layer panel writes it by flattening the whole tree — so links added
+        outside the panel have to be given one, or they all land on 0 and tie.
+        ``start_order`` numbers the new links from there in ``layer_ids`` order;
+        left unset they keep the column default, which is what the ordinary
+        add-layers-to-a-project flow wants. ``append_to_layer_order`` puts them at
+        the bottom of the project instead of the top.
         """
 
-        # Remove duplicate layer_ids
-        layer_ids = list(set(layer_ids))
+        # Drop duplicates but keep the caller's order: it fixes the order the
+        # links are created in, and so their order in the project.
+        layer_ids = list(dict.fromkeys(layer_ids))
 
         # Get number of layers in project
         layer_projects = await self.get_multi(
@@ -195,9 +206,13 @@ class CRUDLayerProject(CRUDBase):
         # Define array for layer project ids
         layer_project_ids = []
 
+        # Iterate layer_ids rather than the query result: the SELECT ... IN
+        # returns rows in whatever order the database chose.
+        layers_by_id = {row[0].id: row[0] for row in layers}
+
         # Create link between project and layer
-        for layer in layers:
-            layer = layer[0]
+        for position, layer_id in enumerate(layer_ids):
+            layer = layers_by_id[layer_id]
 
             # Check if layer with same name and ID already exists in project. Then the layer should be duplicated with a new name.
             layer_name = layer.name
@@ -226,6 +241,7 @@ class CRUDLayerProject(CRUDBase):
                 properties=properties,
                 other_properties=other_properties,
                 layer_project_group_id=group_id,
+                order=(start_order + position) if start_order is not None else 0,
             )
 
             # Add to database
@@ -238,9 +254,11 @@ class CRUDLayerProject(CRUDBase):
         # Get project to update layer order
         project = await CRUDBase(Project).get(async_session, id=project_id)
         layer_order = project.layer_order
-        # Add layer ids to the beginning of the list
+        # Newly added layers go to the top, unless the caller asked for the bottom.
         if layer_order is None:
             layer_order = layer_project_ids
+        elif append_to_layer_order:
+            layer_order = layer_order + layer_project_ids
         else:
             layer_order = layer_project_ids + layer_order
 

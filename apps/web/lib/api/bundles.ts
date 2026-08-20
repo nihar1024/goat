@@ -64,6 +64,19 @@ export const BUNDLE_TYPES: BundleTypeDef[] = [
       return name.endsWith(".zip") && name.includes("gtfs");
     },
   },
+  {
+    type: "street_network",
+    labelKey: "street_network",
+    uploadHint: "Overture (overture.zip)",
+    // Name-based only. The backend additionally sniffs the archive for
+    // segments/connectors GeoParquet, so a differently-named zip is still
+    // accepted through the API — but the UI can't see inside the file, so from
+    // here the name has to say "overture".
+    matches: (file) => {
+      const name = file.name.toLowerCase();
+      return name.endsWith(".zip") && name.includes("overture");
+    },
+  },
 ];
 
 /**

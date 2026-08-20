@@ -4,10 +4,9 @@ from typing import List, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
-from goatlib.bundles.importers import get_importer
+from goatlib.bundles.importers import get_importer, infer_bundle_type
 from goatlib.models.bundle import (
     BundleStatus,
-    BundleTypeName,
     get_spec,
 )
 from pydantic import UUID4
@@ -56,15 +55,6 @@ from core.services.s3 import s3_service
 RESOURCE_TYPE = "bundle"
 
 router = APIRouter()
-
-
-def infer_bundle_type(filename: str) -> "BundleTypeName | None":
-    """Map an uploaded file name to a bundle type. For now: any file
-    named ``*gtfs*.zip`` (case-insensitive) is a GTFS PT network."""
-    lower = filename.lower()
-    if lower.endswith(".zip") and "gtfs" in lower:
-        return BundleTypeName.pt_network_gtfs
-    return None
 
 
 ### Access helpers
@@ -236,20 +226,12 @@ async def import_bundle(
     access_token: str = Depends(auth),
     payload: BundleImportRequest = Body(...),
 ) -> BundleImportResponse:
-    """Route an uploaded file to the right bundle importer by filename
-    (``*gtfs*.zip`` → GTFS PT network), validate it synchronously against the
-    type's spec, create the bundle (status=processing) and optional street
-    dependency, then ingest the member layers in the background."""
+    """Route an uploaded file to the right bundle importer (``*gtfs*.zip`` → GTFS
+    PT network, ``*overture*.zip`` or a zip holding segments/connectors
+    GeoParquet → street network), validate it synchronously against the type's
+    spec, create the bundle (status=processing) and optional street dependency,
+    then ingest the member layers in the background."""
     filename = payload.s3_key.rsplit("/", 1)[-1]
-    bundle_type = infer_bundle_type(filename)
-    if bundle_type is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"'{filename}' is not a recognised bundle upload "
-                "(expected e.g. a *gtfs*.zip)"
-            ),
-        )
 
     folder = await async_session.get(Folder, payload.folder_id)
     if folder is None or folder.user_id != user_id:
@@ -266,10 +248,22 @@ async def import_bundle(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
             )
 
-    # Synchronous validation: download and check the source against the spec.
+    # Download once, then infer and validate against the same local copy. The
+    # name alone can't always decide the type — GTFS feeds and Overture extracts
+    # are both zips — so importers get to sniff the contents as a fallback.
     tmp_path = tempfile.NamedTemporaryFile(suffix=".zip", delete=False).name
     try:
         s3_service.download_file(settings.S3_BUCKET_NAME, payload.s3_key, tmp_path)
+        bundle_type = infer_bundle_type(filename, tmp_path)
+        if bundle_type is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"'{filename}' is not a recognised bundle upload "
+                    "(expected a *gtfs*.zip, or a zip containing Overture "
+                    "segments and connectors GeoParquet)"
+                ),
+            )
         validation = get_importer(bundle_type).validate(tmp_path)
     finally:
         if os.path.exists(tmp_path):

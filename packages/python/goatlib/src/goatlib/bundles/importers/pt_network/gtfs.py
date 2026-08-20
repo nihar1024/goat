@@ -49,6 +49,13 @@ _REQUIRED_COLUMNS: Dict[str, Set[str]] = {
 
 class GtfsImporter(BundleImporter):
     bundle_type = BundleTypeName.pt_network_gtfs
+    accepted_extensions = (".zip",)
+
+    def matches_filename(self, filename: str) -> bool:
+        # A .zip alone is ambiguous — Overture street networks are zips too — so
+        # the name has to say GTFS as well.
+        lower = filename.lower()
+        return lower.endswith(".zip") and "gtfs" in lower
 
     # -- validation --------------------------------------------------------
 
@@ -175,9 +182,7 @@ class GtfsImporter(BundleImporter):
             reader = csv.DictReader(io.TextIOWrapper(fh, encoding="utf-8-sig"))
             return [row for row in reader]
 
-    def _extract_member(
-        self, zf: zipfile.ZipFile, basename: str, workdir: str
-    ) -> str:
+    def _extract_member(self, zf: zipfile.ZipFile, basename: str, workdir: str) -> str:
         """Extract a member file to workdir and return its path."""
         name = self._resolve(zf, basename)
         if name is None:

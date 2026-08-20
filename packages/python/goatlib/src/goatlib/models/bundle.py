@@ -146,14 +146,31 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 label="Edges",
                 required=True,
                 geometry="line",
-                description="Street segments (edges) of the network.",
+                # Overture field names, flattened: the import splits segments at
+                # every connector and attribute boundary, so one row is one
+                # routable edge. Anything not expressible as a column is carried
+                # in the `overture` JSON residual.
+                required_columns=(
+                    "id",
+                    "class",
+                    "source_node",
+                    "target_node",
+                ),
+                description=(
+                    "Routable street segments, split so each has exactly two "
+                    "connectors and no linear references."
+                ),
             ),
             RoleSpec(
                 key="nodes",
                 label="Nodes",
-                required=False,
+                required=True,
                 geometry="point",
-                description="Network nodes connecting the edges.",
+                required_columns=("id",),
+                description=(
+                    "Connectors joining the edges, including synthetic ones "
+                    "minted at attribute boundaries."
+                ),
             ),
         ),
         artifacts=(BundleArtifactKind.street_network_graph,),

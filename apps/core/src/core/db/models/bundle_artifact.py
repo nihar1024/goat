@@ -10,8 +10,7 @@ from goatlib.models.bundle import (
     BundleArtifactStatus,
 )
 from pydantic import field_serializer
-from sqlalchemy import ForeignKey, Text
-from sqlalchemy import Integer as SAInteger
+from sqlalchemy import BigInteger, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import Column, Field, Relationship, UniqueConstraint, text
 
@@ -76,7 +75,7 @@ class BundleArtifact(DateTimeBase, table=True):
     )
     size: int | None = Field(
         default=None,
-        sa_column=Column(SAInteger, nullable=True),
+        sa_column=Column(BigInteger, nullable=True),
         description="Size of the artifact in bytes",
     )
     job_id: UUID | None = Field(

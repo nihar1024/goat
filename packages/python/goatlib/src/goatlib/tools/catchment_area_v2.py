@@ -40,6 +40,7 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
+from goatlib.bundles.artifacts.street_network import fetch_routing_network
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.catchment_area import CatchmentAreaToolRunner
 from goatlib.tools.schemas import ToolInputBase, get_default_layer_name
@@ -323,6 +324,32 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             widget_options={
                 "bundle_type": "pt_network_gtfs",
                 "artifact_kind": "pt_network_graph",
+            },
+        ),
+    )
+
+    street_network_bundle_id: str | None = Field(
+        default=None,
+        description=(
+            "Choose a custom Street Network bundle to use for routing. "
+            "If unset, the default network will be used."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=19,
+            label_key="street_network_bundle_id",
+            widget="bundle-selector",
+            # PT legs route on the global network, so this is for street modes.
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"show_advanced": True},
+                ]
+            },
+            # Only street networks whose routing graph is built and ready.
+            widget_options={
+                "bundle_type": "street_network",
+                "artifact_kind": "street_network_graph",
             },
         ),
     )
@@ -979,6 +1006,14 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                     "graph yet."
                 )
             analysis_params.timetable_path = timetable
+
+        # Likewise for a street network bundle.
+        if params.street_network_bundle_id:
+            edge_path, node_path = fetch_routing_network(
+                self, params.street_network_bundle_id, temp_dir
+            )
+            analysis_params.edge_path = edge_path
+            analysis_params.node_path = node_path
 
         tool = self.tool_class()
         try:

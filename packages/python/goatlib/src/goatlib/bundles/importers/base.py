@@ -9,7 +9,7 @@ the per-type importer's job. Register one importer per
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel
 
@@ -49,10 +49,29 @@ class BundleImporter(ABC):
 
     #: The bundle type this importer handles.
     bundle_type: BundleTypeName
+    #: Lower-case file suffixes this importer accepts, e.g. (".zip",).
+    accepted_extensions: Tuple[str, ...] = ()
 
     @property
     def spec(self) -> BundleTypeSpec:
         return get_spec(self.bundle_type)
+
+    def matches_filename(self, filename: str) -> bool:
+        """Whether a file *name* looks like a source for this type.
+
+        Extension-based by default; override where the extension alone is
+        ambiguous. Only routes the upload — ``validate`` decides usability.
+        """
+        lower = filename.lower()
+        return any(lower.endswith(ext) for ext in self.accepted_extensions)
+
+    def matches_source(self, source_path: str) -> bool:
+        """Whether a file's *contents* identify it as a source for this type.
+
+        The fallback for when the name says nothing. Default is no, so a type
+        opts in only if it can sniff cheaply.
+        """
+        return False
 
     @abstractmethod
     def validate(self, source_path: str) -> ValidationResult:
@@ -79,7 +98,26 @@ def get_importer(
     """Return the importer for a bundle type (raises if none registered)."""
     key = BundleTypeName(bundle_type)
     if key not in _REGISTRY:
-        raise ValueError(
-            f"No importer registered for bundle type '{key.value}'"
-        )
+        raise ValueError(f"No importer registered for bundle type '{key.value}'")
     return _REGISTRY[key]
+
+
+def infer_bundle_type(
+    filename: str, source_path: Optional[str] = None
+) -> Optional[BundleTypeName]:
+    """Which bundle type an upload is, or None for a plain single-layer dataset.
+
+    The name is checked first; when it says nothing — and a local copy is
+    available — importers get to sniff the contents. Two bundle types now share
+    the ``.zip`` extension, so the name alone cannot always decide.
+
+    Registry-driven, so registering an importer is all a new type needs.
+    """
+    for importer in _REGISTRY.values():
+        if importer.matches_filename(filename):
+            return importer.bundle_type
+    if source_path is not None:
+        for importer in _REGISTRY.values():
+            if importer.matches_source(source_path):
+                return importer.bundle_type
+    return None

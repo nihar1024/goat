@@ -189,6 +189,37 @@ class BundleImportRunner(BaseToolRunner):
                 raise
         return imported
 
+    def _export_member_layers(
+        self, *, user_id: str, imported: List[ImportedLayer], workdir: str
+    ) -> Dict[str, str]:
+        """Role -> local parquet path for each member layer.
+
+        Reads back out of DuckLake rather than reusing the files the importer
+        wrote, so the import path exercises the same code a rebuild-after-edit
+        will, and an edited layer is what gets built.
+
+        Copies the table directly rather than going through
+        ``export_layer_to_parquet``: that resolves the layer's owner with a nested
+        ``run_until_complete``, which cannot work inside this already-running
+        event loop, and none of its filtering or scenario merging applies here.
+        The owner is known anyway — ``_ingest_layers`` just created these layers
+        for ``user_id``.
+        """
+        if not imported:
+            raise ValueError(
+                "Cannot build a layer-based artifact without the member layers"
+            )
+        paths: Dict[str, str] = {}
+        for layer in imported:
+            table = self.get_layer_table_path(user_id, layer.layer_id)
+            out = Path(workdir) / f"{layer.role}.parquet"
+            self.duckdb_con.execute(
+                f"COPY (SELECT * FROM {table}) TO '{out}' (FORMAT PARQUET)"
+            )
+            paths[layer.role] = str(out)
+        logger.info("Exported %d member layer(s) for artifact build", len(paths))
+        return paths
+
     async def _add_bundle_to_project(
         self,
         db: ToolDatabaseService,
@@ -237,6 +268,7 @@ class BundleImportRunner(BaseToolRunner):
         bundle_type: "BundleTypeName | str",
         source_path: str,
         user_id: str,
+        imported: Optional[List[ImportedLayer]] = None,
     ) -> None:
         """Build and store the bundle type's derived artifacts (per spec).
 
@@ -252,7 +284,18 @@ class BundleImportRunner(BaseToolRunner):
 
         with tempfile.TemporaryDirectory() as workdir:
             try:
-                built = builder.build(source_path=source_path, workdir=workdir)
+                # A builder reads either the uploaded source (GTFS: the feed is
+                # the truth) or the member layers (street networks: the layers
+                # are, so an edited layer is what a rebuild must pick up).
+                if builder.builds_from_layers:
+                    layer_paths = self._export_member_layers(
+                        user_id=user_id, imported=imported or [], workdir=workdir
+                    )
+                    built = builder.build_from_layers(
+                        layer_paths=layer_paths, workdir=workdir
+                    )
+                else:
+                    built = builder.build(source_path=source_path, workdir=workdir)
             except ArtifactBuilderUnavailableError as e:
                 logger.warning(
                     "Skipping artifact build for bundle %s: %s", bundle_id, e
@@ -265,9 +308,13 @@ class BundleImportRunner(BaseToolRunner):
                     bundle_id=bundle_id, kind=kind_value, status="building"
                 )
                 try:
+                    # Keep the built file's extension: a PT timetable is a
+                    # .bin, a street network graph is a .tar of two parquet
+                    # files, and the consumer dispatches on it.
+                    suffix = Path(art.local_path).suffix or ".bin"
                     s3_key = (
                         f"users/{user_id}/bundles/{bundle_id}"
-                        f"/artifacts/{kind_value}.bin"
+                        f"/artifacts/{kind_value}{suffix}"
                     )
                     self.settings.get_s3_client().upload_file(
                         art.local_path, self.settings.s3_bucket_name, s3_key
@@ -345,6 +392,7 @@ class BundleImportRunner(BaseToolRunner):
                 bundle_type=bundle_type,
                 source_path=source_path,
                 user_id=user_id,
+                imported=imported,
             )
             if project_id:
                 await self._add_bundle_to_project(
@@ -400,6 +448,7 @@ class BundleImportRunner(BaseToolRunner):
                     bundle_type=bundle_type,
                     source_path=source_path,
                     user_id=user_id,
+                    imported=imported,
                 )
             except Exception:
                 await db.update_package_status(

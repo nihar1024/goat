@@ -24,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import { useDocuments, deleteAsset } from "@/lib/api/assets";
+import { isBundleTile } from "@/lib/api/bundles";
 import { useFolders } from "@/lib/api/folders";
 import { useDatasets } from "@/lib/api/datasets";
 import { useTeams } from "@/lib/api/teams";
@@ -431,9 +432,10 @@ const Datasets = () => {
             isLoading={isDatasetLoading}
             type="layer"
             enableActions={!!userProfile?.id}
+            selectableBundles
             onClick={(item) => {
               if (item && item.id) {
-                router.push(`/datasets/${item.id}`);
+                router.push(isBundleTile(item) ? `/bundles/${item.id}` : `/datasets/${item.id}`);
               }
             }}
             folders={!isMyContent ? folders : undefined}

@@ -29,6 +29,31 @@ export interface BundleRead {
   created_at?: string;
   updated_at?: string;
   owned_by?: { id: string; firstname: string; lastname: string; avatar?: string | null } | null;
+  /** Dataset-level provenance. Importers fill what the source states; licence,
+   *  attribution and lineage are authored by the owner. */
+  lineage?: string | null;
+  geographical_code?: string | null;
+  distributor_name?: string | null;
+  distributor_email?: string | null;
+  distribution_url?: string | null;
+  license?: string | null;
+  attribution?: string | null;
+  data_reference_year?: number | null;
+}
+
+export interface BundleMember {
+  layer_id: string;
+  role: string | null;
+  name?: string | null;
+  type?: string | null;
+  feature_layer_geometry_type?: string | null;
+}
+
+export interface BundleDependency {
+  dependency_kind: string;
+  depends_on_bundle_id: string;
+  depends_on_name: string;
+  depends_on_type: string;
 }
 
 export interface BundleImportResponse {
@@ -128,7 +153,7 @@ export const deleteBundle = async (bundleId: string): Promise<void> => {
 /** Update a bundle (e.g. move to another folder). Owner only. */
 export const updateBundle = async (
   bundleId: string,
-  payload: { name?: string; description?: string; folder_id?: string }
+  payload: Partial<Omit<BundleRead, "id" | "bundle_type" | "status" | "owned_by">>
 ): Promise<BundleRead> => {
   const response = await apiRequestAuth(`${BUNDLES_API_BASE_URL}/${bundleId}`, {
     method: "PUT",
@@ -167,6 +192,33 @@ export const useBundles = (opts?: { bundleType?: string; artifactKind?: string }
   if (opts?.artifactKind) params.set("artifact_kind", opts.artifactKind);
   const qs = params.toString();
   return useSWR<BundleRead[]>(`${BUNDLES_API_BASE_URL}${qs ? `?${qs}` : ""}`, fetcher);
+};
+
+/** Fetch a single bundle for its detail page. */
+export const useBundle = (bundleId: string | null) => {
+  const { data, isLoading, error, mutate } = useSWR<BundleRead>(
+    bundleId ? `${BUNDLES_API_BASE_URL}/${bundleId}` : null,
+    fetcher
+  );
+  return { bundle: data, isLoading, isError: !!error, mutate };
+};
+
+/** Member layers of a bundle, each with its spec role. */
+export const useBundleLayers = (bundleId: string | null) => {
+  const { data, isLoading, error } = useSWR<BundleMember[]>(
+    bundleId ? `${BUNDLES_API_BASE_URL}/${bundleId}/layers` : null,
+    fetcher
+  );
+  return { members: data, isLoading, isError: !!error };
+};
+
+/** Other bundles this bundle depends on (e.g. a GTFS feed's street network). */
+export const useBundleDependencies = (bundleId: string | null) => {
+  const { data, isLoading, error } = useSWR<BundleDependency[]>(
+    bundleId ? `${BUNDLES_API_BASE_URL}/${bundleId}/dependencies` : null,
+    fetcher
+  );
+  return { dependencies: data, isLoading, isError: !!error };
 };
 
 /** Fetch the grants (team/org access) on a bundle. Owner only. */

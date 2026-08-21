@@ -39,6 +39,11 @@ export const useContentMoreMenu = () => {
       return isOwner
         ? [
             {
+              id: ContentActions.EDIT_METADATA,
+              label: t("edit_metadata"),
+              icon: ICON_NAME.EDIT,
+            },
+            {
               id: ContentActions.MOVE_TO_FOLDER,
               label: t("move_to_folder"),
               icon: ICON_NAME.FOLDER,

@@ -447,6 +447,12 @@ class BundleImportRunner(BaseToolRunner):
                     folder_id=folder_id,
                     bundle_id=bundle_id,
                 )
+                await db.update_package_metadata(
+                    bundle_id=bundle_id,
+                    metadata=get_importer(bundle_type)
+                    .extract_metadata(source_path)
+                    .stated(),
+                )
                 # Artifacts gate readiness: the bundle stays "processing" until
                 # its derived artifacts (e.g. the routing .bin) are built.
                 await self._build_artifacts(

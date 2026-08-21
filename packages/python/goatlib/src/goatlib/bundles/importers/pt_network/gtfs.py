@@ -10,6 +10,7 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import zipfile
 from typing import Dict, List, Optional, Set
@@ -18,11 +19,32 @@ import duckdb
 
 from goatlib.bundles.importers.base import (
     BundleImporter,
+    BundleMetadata,
     ExtractedLayer,
     ValidationResult,
     register_importer,
 )
 from goatlib.models.bundle import BundleTypeName
+
+
+def _clean(value: Optional[str]) -> Optional[str]:
+    stripped = (value or "").strip()
+    return stripped or None
+
+
+def _valid_email(value: Optional[str]) -> Optional[str]:
+    """Agencies write free text here, and the API models the column as an
+    email, so anything unparseable is dropped rather than stored."""
+    if value and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+        return value
+    return None
+
+
+def _year(date: Optional[str]) -> Optional[int]:
+    """Year from a GTFS ``YYYYMMDD`` date."""
+    if date and len(date) == 8 and date.isdigit():
+        return int(date[:4])
+    return None
 
 # role -> GTFS file
 _GTFS_FILE: Dict[str, str] = {
@@ -93,6 +115,58 @@ class GtfsImporter(BundleImporter):
             missing_required_roles=missing,
             errors=errors,
         )
+
+    # -- metadata ----------------------------------------------------------
+
+    def extract_metadata(self, source_path: str) -> BundleMetadata:
+        """Provenance GTFS states about itself.
+
+        ``feed_info.txt`` is the feed's own declaration of who published it and
+        for which period, so it is preferred; ``agency.txt`` is the fallback for
+        the publisher. Both are optional here — GTFS requires agency.txt but our
+        spec does not, so a feed may state neither. Only one agency is read: a
+        multi-agency feed has no single distributor, so nothing is claimed
+        rather than picking one arbitrarily.
+
+        License and attribution are not derived. GTFS has no license field, and
+        ``feed_publisher_name`` is a publisher, not an attribution string.
+        """
+        if not zipfile.is_zipfile(source_path):
+            return BundleMetadata()
+
+        with zipfile.ZipFile(source_path) as zf:
+            feed = self._read_rows(zf, "feed_info.txt")
+            info = feed[0] if len(feed) == 1 else {}
+            agencies = self._read_rows(zf, _GTFS_FILE["agency"])
+            agency = agencies[0] if len(agencies) == 1 else {}
+
+            name = _clean(info.get("feed_publisher_name")) or _clean(
+                agency.get("agency_name")
+            )
+            url = _clean(info.get("feed_publisher_url")) or _clean(
+                agency.get("agency_url")
+            )
+            email = _valid_email(
+                _clean(info.get("feed_contact_email"))
+                or _clean(agency.get("agency_email"))
+            )
+            year = _year(_clean(info.get("feed_start_date"))) or self._calendar_year(zf)
+
+        return BundleMetadata(
+            distributor_name=name,
+            distributor_email=email,
+            distribution_url=url,
+            data_reference_year=year,
+        )
+
+    def _calendar_year(self, zf: zipfile.ZipFile) -> Optional[int]:
+        """Earliest service year, for feeds that omit ``feed_start_date``."""
+        years = [
+            year
+            for row in self._read_rows(zf, _GTFS_FILE["calendar"])
+            if (year := _year(_clean(row.get("start_date")))) is not None
+        ]
+        return min(years) if years else None
 
     # -- extraction --------------------------------------------------------
 

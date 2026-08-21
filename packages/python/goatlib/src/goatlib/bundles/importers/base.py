@@ -44,6 +44,25 @@ class ValidationResult(BaseModel):
     errors: List[str] = []
 
 
+class BundleMetadata(BaseModel):
+    """Dataset-level provenance a source states about itself.
+
+    Only what the source asserts: a field left None is written as nothing
+    rather than guessed. License, attribution and lineage are deliberately
+    absent — no source states them in a form that can be trusted without a
+    human, so they stay for the owner to author.
+    """
+
+    distributor_name: Optional[str] = None
+    distributor_email: Optional[str] = None
+    distribution_url: Optional[str] = None
+    data_reference_year: Optional[int] = None
+
+    def stated(self) -> dict:
+        """The fields the source actually stated, ready to persist."""
+        return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
 class BundleImporter(ABC):
     """Base class for per-type importers."""
 
@@ -82,6 +101,12 @@ class BundleImporter(ABC):
     def extract_layers(self, source_path: str, workdir: str) -> List[ExtractedLayer]:
         """Produce the member layers' local files under ``workdir``. Assumes the
         source already validated."""
+
+    def extract_metadata(self, source_path: str) -> BundleMetadata:
+        """Provenance the source states about itself. Empty by default: a format
+        that carries no such declaration contributes nothing rather than a
+        plausible-looking guess."""
+        return BundleMetadata()
 
 
 _REGISTRY: Dict[BundleTypeName, BundleImporter] = {}

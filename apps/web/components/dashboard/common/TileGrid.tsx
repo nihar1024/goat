@@ -27,6 +27,8 @@ interface TileGridProps {
   selected?: Project | Layer;
   /** Allow selecting bundle tiles (e.g. the project dataset picker). Off elsewhere
    *  since bundles have no detail page. */
+  /** Let bundle tiles fire onClick (navigation, or a picker that accepts a
+   *  bundle). Off by default so layer pickers can't return one. */
   selectableBundles?: boolean;
   /** Pass folders + currentUserId to show ownership/access role chips on cards */
   folders?: Folder[];
@@ -157,8 +159,9 @@ const TileGrid = (props: TileGridProps) => {
               <Grid
                 item
                 onClick={() => {
-                  // Bundles are shown as tiles but have no detail page — only
-                  // selectable where the consumer opts in (project picker).
+                  // Bundle tiles only fire onClick where the consumer opts in:
+                  // a picker that resolves a click to a project layer must not
+                  // hand back a bundle.
                   if (props.onClick && (props.selectableBundles || !isBundleTile(item))) {
                     props.onClick(item);
                   }

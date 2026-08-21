@@ -318,6 +318,49 @@ class ToolDatabaseService:
         )
         logger.info(f"Bundle {bundle_id} status -> {status_value}")
 
+    async def update_package_metadata(
+        self: Self,
+        bundle_id: str,
+        metadata: dict,
+    ) -> None:
+        """Write the provenance fields a source stated about itself.
+
+        Only the keys present are written, so a field the source is silent about
+        keeps whatever the owner authored.
+        """
+        allowed = (
+            "lineage",
+            "geographical_code",
+            "distributor_name",
+            "distributor_email",
+            "distribution_url",
+            "license",
+            "attribution",
+            "data_reference_year",
+        )
+        unknown = set(metadata) - set(allowed)
+        if unknown:
+            raise ValueError(
+                f"Not bundle metadata fields: {', '.join(sorted(unknown))}"
+            )
+        if not metadata:
+            return
+
+        columns = list(metadata)
+        assignments = ", ".join(
+            f'"{column}" = ${index + 2}' for index, column in enumerate(columns)
+        )
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle
+            SET {assignments}, updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(bundle_id),
+            *(metadata[column] for column in columns),
+        )
+        logger.info(f"Bundle {bundle_id} metadata <- {', '.join(columns)}")
+
     async def create_artifact(
         self: Self,
         bundle_id: str,

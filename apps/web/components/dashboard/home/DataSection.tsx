@@ -82,10 +82,8 @@ const DataSection = (props: DataSectionProps) => {
               lg: index > 3 ? "none" : "block",
             }}
             onClick={() => {
-              // Bundle tiles have no detail page yet — view-only.
-              if (isBundleTile(item)) return;
               if (item && item.id) {
-                router.push(`/datasets/${item.id}`);
+                router.push(isBundleTile(item) ? `/bundles/${item.id}` : `/datasets/${item.id}`);
               }
             }}>
             {!item ? (

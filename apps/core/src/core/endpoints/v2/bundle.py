@@ -558,16 +558,29 @@ async def list_bundle_layers(
 ) -> List[BundleMemberResponse]:
     """List member layers and their roles (owner or shared)."""
     await authorize_bundle(async_session, bundle_id, user_id, "read")
-    links = (
+    rows = (
         await async_session.execute(
-            select(BundleLayerLink).where(
-                BundleLayerLink.bundle_id == bundle_id
-            )
+            select(BundleLayerLink, Layer)
+            .join(Layer, Layer.id == BundleLayerLink.layer_id)
+            .where(BundleLayerLink.bundle_id == bundle_id)
+            .order_by(BundleLayerLink.id)
         )
-    ).scalars()
+    ).all()
     return [
-        BundleMemberResponse(layer_id=link.layer_id, role=link.role)
-        for link in links
+        BundleMemberResponse(
+            layer_id=link.layer_id,
+            role=link.role,
+            name=layer.name,
+            # Loaded values may be the enum or the raw string, depending on
+            # whether SQLModel coerced the column.
+            type=getattr(layer.type, "value", layer.type),
+            feature_layer_geometry_type=getattr(
+                layer.feature_layer_geometry_type,
+                "value",
+                layer.feature_layer_geometry_type,
+            ),
+        )
+        for link, layer in rows
     ]
 
 

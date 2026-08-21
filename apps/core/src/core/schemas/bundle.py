@@ -2,13 +2,52 @@ from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from core.db.models.bundle_type import BundleTypeName
+from core.db.models.layer import DataLicense, validate_geographical_code
 from core.schemas.layer import ThumbnailUrlMixin
 
 
-class BundleBase(BaseModel):
+class BundleProvenance(BaseModel):
+    """Dataset-level provenance shared by the read/create/update schemas.
+
+    The same vocabulary as a layer's metadata, restricted to the fields that
+    describe a whole acquisition rather than one member layer.
+    """
+
+    lineage: str | None = Field(
+        None, description="Source of the data and its derivation", max_length=500
+    )
+    geographical_code: str | None = Field(
+        None,
+        description="ISO 3166-1 alpha-2 country code, or a continent name",
+        max_length=13,
+    )
+    distributor_name: str | None = Field(
+        None, description="Entity distributing the data", max_length=500
+    )
+    distributor_email: EmailStr | None = Field(
+        None, description="Contact for the distributor"
+    )
+    distribution_url: str | None = Field(None, description="URL to the distribution")
+    license: DataLicense | None = Field(None, description="License of the data")
+    attribution: str | None = Field(
+        None, description="Attribution required by the source", max_length=500
+    )
+    data_reference_year: int | None = Field(
+        None, description="Data reference year of the bundle"
+    )
+
+    @field_validator("geographical_code", mode="after")
+    @classmethod
+    def geographical_code_valid(
+        cls: type["BundleProvenance"], value: str | None
+    ) -> str | None:
+        return validate_geographical_code(value)
+
+
+class BundleBase(BundleProvenance):
     name: str = Field(..., description="Bundle name", max_length=255)
     description: str | None = Field(
         None, description="Bundle description", max_length=2000
@@ -26,7 +65,7 @@ class BundleCreate(BundleBase):
     user_id: UUID | None = Field(None, description="Bundle owner ID")
 
 
-class BundleUpdate(BaseModel):
+class BundleUpdate(BundleProvenance):
     name: str | None = Field(None, description="Bundle name", max_length=255)
     description: str | None = Field(
         None, description="Bundle description", max_length=2000
@@ -171,6 +210,11 @@ class BundleMemberCreate(BaseModel):
 class BundleMemberResponse(BaseModel):
     layer_id: UUID
     role: str | None
+    # Denormalised from the layer so a member listing renders without one
+    # follow-up request per member.
+    name: Optional[str] = None
+    type: Optional[str] = None
+    feature_layer_geometry_type: Optional[str] = None
 
 
 request_examples = {

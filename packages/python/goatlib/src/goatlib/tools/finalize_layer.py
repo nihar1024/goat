@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.layer_replace import LayerReplaceMixin
 from goatlib.tools.schemas import ToolInputBase
+from goatlib.utils.layer import layer_schema_name
 
 logger = logging.getLogger(__name__)
 
@@ -208,10 +209,8 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
 
         self._delete_old_pmtiles(user_id=user_id, layer_id=existing_id)
 
-        snapshot_id = self._get_ducklake_snapshot_id(
-            f"user_{user_id.replace('-', '')}",
-            f"t_{existing_id.replace('-', '')}",
-        )
+        existing_table = self.resolve_layer_table_path(existing_id)
+        snapshot_id = self._get_ducklake_snapshot_id(*existing_table.split(".", 2)[1:])
 
         self._regenerate_pmtiles(
             user_id=user_id,
@@ -470,8 +469,8 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
         new_layer_id = str(uuid.uuid4())
 
         con = self.duckdb_con
-        table_name = self.get_layer_table_path(user_id, new_layer_id)
-        user_schema = f"user_{user_id.replace('-', '')}"
+        table_name = self.get_layer_table_path(new_layer_id)
+        user_schema = layer_schema_name()
 
         con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{user_schema}")
 
@@ -533,7 +532,6 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
                 generator.generate_from_table(
                     duckdb_con=con,
                     table_name=table_name,
-                    user_id=user_id,
                     layer_id=new_layer_id,
                     geometry_column=geom_col or "geometry",
                     snapshot_id=snapshot_id,

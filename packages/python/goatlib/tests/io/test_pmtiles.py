@@ -1,5 +1,6 @@
 """Tests for PMTiles generation module."""
 
+import pathlib
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -44,9 +45,10 @@ def test_get_pmtiles_path() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         generator = PMTilesGenerator(tiles_data_dir=tmpdir)
 
-        path = generator.get_pmtiles_path("abc-def-123", "xyz-789-456")
+        path = generator.get_pmtiles_path("xyz-789-456")
 
-        assert path.parent.name == "user_abcdef123"
+        # Flat: keyed only by layer id, no owner directory.
+        assert path.parent == pathlib.Path(tmpdir)
         assert path.name == "t_xyz789456.pmtiles"
 
 
@@ -55,7 +57,7 @@ def test_pmtiles_exists_false() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         generator = PMTilesGenerator(tiles_data_dir=tmpdir)
 
-        assert generator.pmtiles_exists("user1", "layer1") is False
+        assert generator.pmtiles_exists("layer1") is False
 
 
 def test_pmtiles_exists_true() -> None:
@@ -64,11 +66,11 @@ def test_pmtiles_exists_true() -> None:
         generator = PMTilesGenerator(tiles_data_dir=tmpdir)
 
         # Create the file
-        pmtiles_path = generator.get_pmtiles_path("user1", "layer1")
+        pmtiles_path = generator.get_pmtiles_path("layer1")
         pmtiles_path.parent.mkdir(parents=True)
         pmtiles_path.touch()
 
-        assert generator.pmtiles_exists("user1", "layer1") is True
+        assert generator.pmtiles_exists("layer1") is True
 
 
 def test_delete_pmtiles_file_exists() -> None:
@@ -77,11 +79,11 @@ def test_delete_pmtiles_file_exists() -> None:
         generator = PMTilesGenerator(tiles_data_dir=tmpdir)
 
         # Create the file
-        pmtiles_path = generator.get_pmtiles_path("user1", "layer1")
+        pmtiles_path = generator.get_pmtiles_path("layer1")
         pmtiles_path.parent.mkdir(parents=True)
         pmtiles_path.touch()
 
-        result = generator.delete_pmtiles("user1", "layer1")
+        result = generator.delete_pmtiles("layer1")
 
         assert result is True
         assert not pmtiles_path.exists()
@@ -92,7 +94,7 @@ def test_delete_pmtiles_file_not_exists() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         generator = PMTilesGenerator(tiles_data_dir=tmpdir)
 
-        result = generator.delete_pmtiles("user1", "layer1")
+        result = generator.delete_pmtiles("layer1")
 
         assert result is False
 

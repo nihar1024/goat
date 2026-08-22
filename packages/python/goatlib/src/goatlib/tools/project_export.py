@@ -408,13 +408,12 @@ class ProjectExportRunner(SimpleToolRunner):
         """
         from goatlib.io.parquet import write_optimized_parquet
 
-        table_path = self.get_layer_table_path(owner_id, layer_id)
+        table_path = self.resolve_layer_table_path(layer_id)
 
         # Check table exists. DESCRIBE probes only this table;
         # information_schema.tables would lazily load every table in the
         # catalog to answer.
-        user_schema = f"user_{owner_id.replace('-', '')}"
-        table_name = f"t_{layer_id.replace('-', '')}"
+        _lake, user_schema, table_name = table_path.split(".", 2)
         try:
             self.duckdb_con.execute(f'DESCRIBE lake."{user_schema}"."{table_name}"')
         except duckdb.CatalogException:

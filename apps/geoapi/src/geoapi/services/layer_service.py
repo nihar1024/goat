@@ -83,20 +83,6 @@ class LayerMetadata:
         """Check if layer has geometry."""
         return self.geometry_type is not None
 
-    @property
-    def table_name(self) -> str:
-        """Get the DuckLake table name (user_<user_id>.t_<layer_id>)."""
-        if self.user_id:
-            return f"user_{self.user_id}.t_{self.layer_id}"
-        return f"t_{self.layer_id}"
-
-    @property
-    def schema_name(self) -> str:
-        """Get the DuckLake schema name."""
-        if self.user_id:
-            return f"user_{self.user_id}"
-        return "public"
-
 
 class LayerMetadataCache:
     """Redis-backed `LayerMetadata` cache with in-process fallback.

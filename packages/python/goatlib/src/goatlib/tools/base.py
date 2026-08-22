@@ -54,6 +54,12 @@ from goatlib.io.config import (
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.db import ToolDatabaseService
 from goatlib.tools.schemas import ToolInputBase, ToolOutputBase
+from goatlib.utils.layer import (
+    layer_id_to_table_name,
+    layer_schema_name,
+    layer_table_path,
+    resolve_layer_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -565,11 +571,43 @@ class SimpleToolRunner:
             raise RuntimeError("Settings not initialized")
         return self.settings.get_s3_public_client()
 
-    def get_layer_table_path(self: Self, user_id: str, layer_id: str) -> str:
-        """Build DuckLake table path from user and layer IDs."""
-        user_schema = f"user_{user_id.replace('-', '')}"
-        table_name = f"t_{layer_id.replace('-', '')}"
-        return f"lake.{user_schema}.{table_name}"
+    def get_layer_table_path(self: Self, layer_id: str) -> str:
+        """Build the DuckLake table path for a **new** layer table.
+
+        For a table that already exists, use `resolve_layer_table_path`.
+        """
+        return layer_table_path(layer_id)
+
+    def resolve_layer_table_path(self: Self, layer_id: str) -> str:
+        """Find the DuckLake table path of an **existing** layer.
+
+        Asks the catalog where the table is rather than deriving it from the
+        owner, so a layer keeps working after the naming in
+        `layer_schema_name` changes. Falls back to the computed path when the
+        catalog has no such table — the caller then fails on its own terms
+        (a missing table) instead of on a lookup that returned nothing.
+        """
+        if self.settings is None:
+            raise RuntimeError("Settings not initialized")
+
+        try:
+            schema = resolve_layer_schema(
+                self.duckdb_con,
+                layer_id,
+                self.settings.ducklake_catalog_schema,
+                self.settings.ducklake_postgres_uri,
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not resolve schema for layer %s, using computed path: %s",
+                layer_id,
+                e,
+            )
+            return layer_table_path(layer_id)
+
+        if schema is None:
+            return layer_table_path(layer_id)
+        return f"lake.{schema}.{layer_id_to_table_name(layer_id)}"
 
     async def get_postgres_pool(self: Self) -> asyncpg.Pool:
         """Create PostgreSQL connection pool."""
@@ -1010,7 +1048,7 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
                 f"Layer {layer_id} owned by {layer_owner_id}, accessed by {user_id}"
             )
 
-        table_name = self.get_layer_table_path(layer_owner_id, layer_id)
+        table_name = self.resolve_layer_table_path(layer_id)
         logger.debug(f"Resolved table name for layer {layer_id}: {table_name}")
 
         # Verify the table exists before attempting to export.
@@ -1331,7 +1369,8 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "Could not resolve project layer name by id %s: %s",
-                layer_project_id, e,
+                layer_project_id,
+                e,
             )
             return None
 
@@ -1592,8 +1631,8 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         Returns:
             Table info dict with table_name, feature_count, extent, geometry_type, columns, size
         """
-        table_name = self.get_layer_table_path(user_id, layer_id)
-        user_schema = f"user_{user_id.replace('-', '')}"
+        table_name = self.get_layer_table_path(layer_id)
+        user_schema = layer_schema_name()
 
         # Get file size before ingestion
         file_size = parquet_path.stat().st_size if parquet_path.exists() else 0
@@ -1838,7 +1877,6 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
             pmtiles_path = generator.generate_from_table(
                 duckdb_con=self.duckdb_con,
                 table_name=table_name,
-                user_id=user_id,
                 layer_id=layer_id,
                 geometry_column=geometry_column,
                 snapshot_id=snapshot_id,

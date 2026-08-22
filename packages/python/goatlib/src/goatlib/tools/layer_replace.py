@@ -37,6 +37,8 @@ class _HasReplaceDeps(Protocol):
 
     def _get_table_info(self, con: Any, table_name: str) -> dict[str, Any]: ...
 
+    def resolve_layer_table_path(self, layer_id: str) -> str: ...
+
 
 class LayerReplaceMixin:
     """Mixin providing in-place table/PMTiles/metadata replacement.
@@ -102,9 +104,8 @@ class LayerReplaceMixin:
 
         Preserves the layer_id (and therefore the table path).
         """
-        user_schema = f"user_{owner_id.replace('-', '')}"
-        table_name = f"t_{layer_id.replace('-', '')}"
-        full_table = f"lake.{user_schema}.{table_name}"
+        full_table = self.resolve_layer_table_path(layer_id)
+        user_schema = full_table.split(".")[1]
 
         file_size = parquet_path.stat().st_size if parquet_path.exists() else 0
 
@@ -206,9 +207,7 @@ class LayerReplaceMixin:
             "geometry_type": geometry_type,
         }
 
-    def _delete_old_pmtiles(
-        self: _HasReplaceDeps, user_id: str, layer_id: str
-    ) -> bool:
+    def _delete_old_pmtiles(self: _HasReplaceDeps, user_id: str, layer_id: str) -> bool:
         """Delete existing PMTiles file for a layer before regenerating."""
         if self.settings is None:
             return False
@@ -217,7 +216,7 @@ class LayerReplaceMixin:
             from goatlib.io.pmtiles import PMTilesGenerator
 
             generator = PMTilesGenerator(tiles_data_dir=self.settings.tiles_data_dir)
-            deleted = generator.delete_pmtiles(user_id, layer_id)
+            deleted = generator.delete_pmtiles(layer_id)
             if deleted:
                 logger.info("Deleted old PMTiles for layer: %s", layer_id)
             return deleted
@@ -233,7 +232,9 @@ class LayerReplaceMixin:
         snapshot_id: int | None = None,
     ) -> None:
         """Generate fresh PMTiles from an updated DuckLake table."""
-        if self.settings is None or not getattr(self.settings, "pmtiles_enabled", False):
+        if self.settings is None or not getattr(
+            self.settings, "pmtiles_enabled", False
+        ):
             return
 
         geom_col = table_info.get("geometry_column") or "geometry"
@@ -259,12 +260,13 @@ class LayerReplaceMixin:
                 duckdb_con=self.duckdb_con,
                 table_name=table_info["table_name"],
                 geometry_column=geom_col,
-                user_id=user_id,
                 layer_id=layer_id,
                 snapshot_id=snapshot_id,
             )
             if pmtiles_path:
-                logger.info("Generated PMTiles for layer %s: %s", layer_id, pmtiles_path)
+                logger.info(
+                    "Generated PMTiles for layer %s: %s", layer_id, pmtiles_path
+                )
         except Exception as e:
             logger.warning("PMTiles generation failed for layer %s: %s", layer_id, e)
 

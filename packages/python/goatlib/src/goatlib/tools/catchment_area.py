@@ -240,14 +240,20 @@ class CatchmentAreaWindmillParams(ToolInputBase):
 
         if self.routing_mode == CatchmentAreaRoutingMode.car:
             if self.max_distance > 100000:
-                raise ValueError("Car catchment distance must be less than or equal to 100000 meters.")
+                raise ValueError(
+                    "Car catchment distance must be less than or equal to 100000 meters."
+                )
             return self
 
-        if self.routing_mode in {
-            CatchmentAreaRoutingMode.walking,
-            CatchmentAreaRoutingMode.bicycle,
-            CatchmentAreaRoutingMode.pedelec,
-        } and self.max_distance > 20000:
+        if (
+            self.routing_mode
+            in {
+                CatchmentAreaRoutingMode.walking,
+                CatchmentAreaRoutingMode.bicycle,
+                CatchmentAreaRoutingMode.pedelec,
+            }
+            and self.max_distance > 20000
+        ):
             raise ValueError(
                 "Active mobility catchment distance must be less than or equal to 20000 meters."
             )
@@ -272,8 +278,10 @@ class CatchmentAreaWindmillParams(ToolInputBase):
             field_order=4,
             label_key="speed",
             enum_labels=SPEED_LABELS,
-            visible_when={"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]},
-                         "measure_type": CatchmentAreaMeasureType.time},
+            visible_when={
+                "routing_mode": {"$in": ["walking", "bicycle", "pedelec"]},
+                "measure_type": CatchmentAreaMeasureType.time,
+            },
             widget_options={
                 "default_by_field": {
                     "field": "routing_mode",
@@ -606,7 +614,7 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
                     f"Layer {layer_id} owned by {layer_owner_id}, accessed by {user_id}"
                 )
 
-            table_name = self.get_layer_table_path(layer_owner_id, layer_id)
+            table_name = self.resolve_layer_table_path(layer_id)
 
             # Detect geometry column name from table schema
             cols_result = self._execute_with_retry(
@@ -645,8 +653,12 @@ class CatchmentAreaToolRunner(BaseToolRunner[CatchmentAreaWindmillParams]):
         if not result:
             raise ValueError(f"No valid geometries found in layer {layer_id}")
 
-        latitudes = [row[0] for row in result if row[0] is not None and row[1] is not None]
-        longitudes = [row[1] for row in result if row[0] is not None and row[1] is not None]
+        latitudes = [
+            row[0] for row in result if row[0] is not None and row[1] is not None
+        ]
+        longitudes = [
+            row[1] for row in result if row[0] is not None and row[1] is not None
+        ]
 
         logger.info(
             "Extracted %d starting points from layer %s",

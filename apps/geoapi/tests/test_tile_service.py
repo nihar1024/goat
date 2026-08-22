@@ -153,17 +153,28 @@ def test_pmtiles_exists_caching() -> None:
 
 
 def test_get_pmtiles_path() -> None:
-    """Test PMTiles path construction."""
-    service = TileService()
-    layer_info = MagicMock()
-    layer_info.schema_name = "user_abc123"
-    layer_info.table_name = "t_layer456"
+    """Tiles are flat; the schema-nested layout is still read."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        service = TileService()
+        service.tiles_data_dir = root
+        layer_info = MagicMock()
+        layer_info.schema_name = "user_abc123"
+        layer_info.table_name = "t_layer456"
 
-    path = service._get_pmtiles_path(layer_info)
+        # Nothing on disk: the flat path is what a writer would produce.
+        assert service._get_pmtiles_path(layer_info) == root / "t_layer456.pmtiles"
 
-    assert path.name == "t_layer456.pmtiles"
-    assert "tiles" in str(path)
-    assert "user_abc123" in str(path)
+        # Only legacy tiles exist (layer not regenerated since the move).
+        legacy = root / "user_abc123" / "t_layer456.pmtiles"
+        legacy.parent.mkdir()
+        legacy.write_bytes(b"OLD")
+        assert service._get_pmtiles_path(layer_info) == legacy
+
+        # Once regenerated, the flat file wins over the stale one.
+        flat = root / "t_layer456.pmtiles"
+        flat.write_bytes(b"NEW")
+        assert service._get_pmtiles_path(layer_info) == flat
 
 
 @pytest.mark.asyncio

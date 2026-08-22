@@ -105,6 +105,70 @@ def layer_id_to_table_name(layer_id: str) -> str:
     return f"t_{layer_id.replace('-', '')}"
 
 
+# The schema every new layer table is created in. Its `path` in the DuckLake
+# catalog is the DATA_PATH root, so a table's files land at
+# DATA_PATH/t_<layer_id>/ with no directory in between. Named `main` because
+# that is DuckDB's default schema and it never appears on disk.
+LAYER_SCHEMA = "main"
+
+
+def layer_schema_name() -> str:
+    """The DuckLake schema a **newly created** layer table goes in.
+
+    Answers only "where should a new table go". Where an *existing* table
+    lives is a question for the catalog — `resolve_layer_schema` — because
+    layers created before this naming changed are still in their old schema
+    and are never moved by application code.
+
+    Ownership is deliberately not an input: it lives on `customer.layer`, and
+    encoding it in the storage path is what this replaced.
+    """
+    return LAYER_SCHEMA
+
+
+def layer_table_path(layer_id: str) -> str:
+    """Build the fully qualified DuckLake table path for a **new** layer table.
+
+    For a table that already exists, use `resolve_layer_table_path` instead.
+
+    Args:
+        layer_id: Layer UUID, with or without hyphens
+
+    Returns:
+        Table path in format lake.<schema>.<table>
+    """
+    return f"lake.{layer_schema_name()}.{layer_id_to_table_name(layer_id)}"
+
+
+def resolve_layer_schema(
+    con: "DuckDBConnection",
+    layer_id: str,
+    catalog_schema: str,
+    postgres_uri: str,
+) -> str | None:
+    """Look up which schema actually holds a layer's table.
+
+    Same indexed lookup as `get_schema_for_layer`, for callers that hold a
+    DuckDB connection rather than a DuckLake manager (the goatlib tools).
+    Queries the catalog's own Postgres tables rather than the attached lake's
+    metadata, which on DuckLake 1.5.x would lazily load every table.
+
+    Returns:
+        The schema name, or None when the catalog has no such table — which
+        is the normal answer for a layer whose table has not been created yet.
+    """
+    con.execute(f"ATTACH IF NOT EXISTS 'postgres:{postgres_uri}' AS pgmeta (READ_ONLY)")
+    row = con.execute(
+        f"SELECT s.schema_name "
+        f"FROM pgmeta.{catalog_schema}.ducklake_table t "
+        f"JOIN pgmeta.{catalog_schema}.ducklake_schema s "
+        f"ON s.schema_id = t.schema_id AND s.end_snapshot IS NULL "
+        f"WHERE t.table_name = ? AND t.end_snapshot IS NULL",
+        [layer_id_to_table_name(layer_id)],
+    ).fetchone()
+    return row[0] if row else None
+
+
 # Global schema cache - shared across service instances
 # 1 hour TTL, max 10K entries
 _schema_cache: TTLCache[str, str] = TTLCache(maxsize=10000, ttl=3600)
@@ -201,6 +265,9 @@ __all__ = [
     "normalize_layer_id",
     "format_uuid",
     "layer_id_to_table_name",
+    "LAYER_SCHEMA",
+    "layer_schema_name",
+    "layer_table_path",
     "get_schema_for_layer",
     "clear_schema_cache",
 ]

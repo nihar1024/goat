@@ -41,6 +41,7 @@ from goatlib.tools.project_schemas import (
     ExportWorkflow,
 )
 from goatlib.tools.schemas import ToolInputBase
+from goatlib.utils.layer import layer_schema_name, layer_table_path
 
 logger = logging.getLogger(__name__)
 
@@ -391,9 +392,8 @@ class ProjectImportRunner(SimpleToolRunner):
         if self.settings is None:
             raise RuntimeError("Settings not initialized")
 
-        user_schema = f"user_{new_user_id.replace('-', '')}"
-        table_name = f"t_{new_layer_id.replace('-', '')}"
-        table_path = f"lake.{user_schema}.{table_name}"
+        user_schema = layer_schema_name()
+        table_path = layer_table_path(new_layer_id)
 
         # Ensure schema exists
         self.duckdb_con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{user_schema}")

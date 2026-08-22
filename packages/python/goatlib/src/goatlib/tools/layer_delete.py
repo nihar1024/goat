@@ -75,9 +75,8 @@ class LayerDeleteRunner(SimpleToolRunner):
         Returns:
             True if table was deleted, False if it didn't exist
         """
-        user_schema = f"user_{owner_id.replace('-', '')}"
-        table_name = f"t_{layer_id.replace('-', '')}"
-        full_table = f"lake.{user_schema}.{table_name}"
+        full_table = self.resolve_layer_table_path(layer_id)
+        _lake, user_schema, table_name = full_table.split(".", 2)
 
         try:
             # Check if table exists. DESCRIBE probes only this table;
@@ -114,7 +113,7 @@ class LayerDeleteRunner(SimpleToolRunner):
             from goatlib.io.pmtiles import PMTilesGenerator
 
             generator = PMTilesGenerator(tiles_data_dir=self.settings.tiles_data_dir)
-            deleted = generator.delete_pmtiles(owner_id, layer_id)
+            deleted = generator.delete_pmtiles(layer_id)
             if deleted:
                 logger.info("Deleted PMTiles for layer: %s", layer_id)
             return deleted

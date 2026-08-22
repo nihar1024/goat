@@ -172,19 +172,20 @@ class TestLayerDeleteRunner:
 
     def test_table_path_construction(self, runner):
         """Test correct table path is constructed."""
-        runner._duckdb_con.execute.return_value.fetchone.return_value = (1,)
+        runner._duckdb_con.execute.return_value.fetchone.return_value = (
+            "user_00000000000000000000000000000001",
+        )
 
         runner._delete_ducklake_table(
             layer_id="00000000-0000-0000-0000-000000000002",
             owner_id="00000000-0000-0000-0000-000000000001",
         )
 
-        # Check the SQL contains correct schema/table names
-        calls = runner._duckdb_con.execute.call_args_list
-        # First call is table existence check
-        first_call_sql = str(calls[0])
-        assert "user_00000000000000000000000000000001" in first_call_sql
-        assert "t_00000000000000000000000000000002" in first_call_sql
+        # The schema is resolved from the catalog, so the lookup runs first;
+        # assert against every statement rather than a fixed position.
+        sql = " ".join(str(c) for c in runner._duckdb_con.execute.call_args_list)
+        assert "user_00000000000000000000000000000001" in sql
+        assert "t_00000000000000000000000000000002" in sql
 
 
 class TestLayerDeleteOwnership:

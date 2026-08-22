@@ -173,9 +173,7 @@ class LayerExportRunner(SimpleToolRunner):
             )
             layer_owner_id = user_id
 
-        user_schema = f"user_{layer_owner_id.replace('-', '')}"
-        table_name = f"t_{layer_id.replace('-', '')}"
-        return f"lake.{user_schema}.{table_name}"
+        return self.resolve_layer_table_path(layer_id)
 
     def _get_column_names(self: Self, table_name: str) -> list[str]:
         """Get column names for a table.

@@ -361,7 +361,14 @@ class TileService:
         if cached is not None:
             return cached
 
-        # Search for PMTiles file: */t_{layer_id}.pmtiles
+        # Tiles are written flat; the glob below only reaches the legacy
+        # schema-nested layout, one directory down.
+        flat = self.tiles_data_dir / f"t_{layer_id_normalized}.pmtiles"
+        if flat.exists():
+            self._pmtiles_path_cache[layer_id_normalized] = flat
+            return flat
+
+        # Legacy layout: <schema>/t_{layer_id}.pmtiles
         pattern = f"*/t_{layer_id_normalized}.pmtiles"
         matches = list(self.tiles_data_dir.glob(pattern))
 
@@ -394,17 +401,28 @@ class TileService:
     def _get_pmtiles_path(self, layer_info: LayerInfo) -> Path:
         """Get the PMTiles file path for a layer.
 
+        Tiles are written flat, keyed only by layer id. Tiles written before
+        that are nested under the schema holding the layer's table, so a
+        layer whose tiles have not been regenerated since is still found.
+
         Args:
             layer_info: Layer information
 
         Returns:
-            Path to PMTiles file
+            Path to PMTiles file — the flat one when it exists, else the
+            legacy location (returned even when absent, so callers keep
+            treating a missing file as "no tiles").
         """
-        return (
+        flat = self.tiles_data_dir / f"{layer_info.table_name}.pmtiles"
+        if flat.exists():
+            return flat
+
+        legacy = (
             self.tiles_data_dir
             / layer_info.schema_name
             / f"{layer_info.table_name}.pmtiles"
         )
+        return legacy if legacy.exists() else flat
 
     def _pmtiles_exists(self, layer_info: LayerInfo) -> bool:
         """Check if PMTiles file exists for a layer.

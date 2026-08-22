@@ -392,11 +392,11 @@ class ProjectImportRunner(SimpleToolRunner):
         if self.settings is None:
             raise RuntimeError("Settings not initialized")
 
-        user_schema = layer_schema_name()
+        schema = layer_schema_name()
         table_path = layer_table_path(new_layer_id)
 
         # Ensure schema exists
-        self.duckdb_con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{user_schema}")
+        self.duckdb_con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{schema}")
 
         # Read parquet columns, exclude bbox, sanitize names
         columns_result = self.duckdb_con.execute(

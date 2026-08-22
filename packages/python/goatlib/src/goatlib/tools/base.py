@@ -1632,7 +1632,7 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
             Table info dict with table_name, feature_count, extent, geometry_type, columns, size
         """
         table_name = self.get_layer_table_path(layer_id)
-        user_schema = layer_schema_name()
+        schema = layer_schema_name()
 
         # Get file size before ingestion
         file_size = parquet_path.stat().st_size if parquet_path.exists() else 0
@@ -1644,7 +1644,7 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
                 con = self.duckdb_con
 
                 # Ensure user schema exists
-                con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{user_schema}")
+                con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{schema}")
 
                 # Detect geometry column for Hilbert ordering
                 cols = con.execute(

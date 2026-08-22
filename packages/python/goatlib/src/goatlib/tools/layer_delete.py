@@ -76,14 +76,14 @@ class LayerDeleteRunner(SimpleToolRunner):
             True if table was deleted, False if it didn't exist
         """
         full_table = self.resolve_layer_table_path(layer_id)
-        _lake, user_schema, table_name = full_table.split(".", 2)
+        _lake, schema, table_name = full_table.split(".", 2)
 
         try:
             # Check if table exists. DESCRIBE probes only this table;
             # information_schema.tables would lazily load every table in
             # the catalog to answer.
             try:
-                self.duckdb_con.execute(f'DESCRIBE lake."{user_schema}"."{table_name}"')
+                self.duckdb_con.execute(f'DESCRIBE lake."{schema}"."{table_name}"')
                 table_exists = True
             except duckdb.CatalogException:
                 table_exists = False

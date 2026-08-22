@@ -470,9 +470,9 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
 
         con = self.duckdb_con
         table_name = self.get_layer_table_path(new_layer_id)
-        user_schema = layer_schema_name()
+        schema = layer_schema_name()
 
-        con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{user_schema}")
+        con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{schema}")
 
         cols = con.execute(
             f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')"
@@ -511,7 +511,7 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
             )
 
         snapshot_id = self._get_ducklake_snapshot_id(
-            user_schema, f"t_{new_layer_id.replace('-', '')}"
+            schema, f"t_{new_layer_id.replace('-', '')}"
         )
 
         if (

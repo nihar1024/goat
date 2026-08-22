@@ -272,8 +272,8 @@ class TestLayerDeletePMTiles:
 
     def test_delete_pmtiles_success(self, runner):
         """Test PMTiles deletion success."""
-        with patch("goatlib.io.pmtiles.PMTilesGenerator") as MockGen:
-            mock_generator = MockGen.return_value
+        with patch("goatlib.io.pmtiles.PMTilesGenerator") as mock_gen:
+            mock_generator = mock_gen.return_value
             mock_generator.delete_pmtiles.return_value = True
 
             result = runner._delete_pmtiles(
@@ -285,8 +285,8 @@ class TestLayerDeletePMTiles:
 
     def test_delete_pmtiles_not_exists(self, runner):
         """Test PMTiles deletion when file doesn't exist."""
-        with patch("goatlib.io.pmtiles.PMTilesGenerator") as MockGen:
-            mock_generator = MockGen.return_value
+        with patch("goatlib.io.pmtiles.PMTilesGenerator") as mock_gen:
+            mock_generator = mock_gen.return_value
             mock_generator.delete_pmtiles.return_value = False
 
             result = runner._delete_pmtiles(
@@ -298,8 +298,8 @@ class TestLayerDeletePMTiles:
 
     def test_delete_pmtiles_error(self, runner):
         """Test PMTiles deletion with error."""
-        with patch("goatlib.io.pmtiles.PMTilesGenerator") as MockGen:
-            MockGen.side_effect = Exception("PMTiles error")
+        with patch("goatlib.io.pmtiles.PMTilesGenerator") as mock_gen:
+            mock_gen.side_effect = Exception("PMTiles error")
 
             result = runner._delete_pmtiles(
                 layer_id="00000000-0000-0000-0000-000000000002",

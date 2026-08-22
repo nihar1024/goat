@@ -413,9 +413,9 @@ class ProjectExportRunner(SimpleToolRunner):
         # Check table exists. DESCRIBE probes only this table;
         # information_schema.tables would lazily load every table in the
         # catalog to answer.
-        _lake, user_schema, table_name = table_path.split(".", 2)
+        _lake, schema, table_name = table_path.split(".", 2)
         try:
-            self.duckdb_con.execute(f'DESCRIBE lake."{user_schema}"."{table_name}"')
+            self.duckdb_con.execute(f'DESCRIBE lake."{schema}"."{table_name}"')
         except duckdb.CatalogException:
             logger.warning("DuckLake table not found: %s", table_path)
             return 0

@@ -202,6 +202,56 @@ def build_plan(
     return plan
 
 
+def tree_size(path: Path) -> int:
+    """Bytes occupied by a directory tree, following no symlinks."""
+    total = 0
+    for entry in path.rglob("*"):
+        if entry.is_file() and not entry.is_symlink():
+            try:
+                total += entry.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def check_archive_space(
+    archive: Path, data_dir: Path, tiles_dir: Path, mode: str, margin_bytes: int
+) -> None:
+    """Refuse to start unless the archive can actually fit.
+
+    Running out of disk halfway through leaves a partial archive standing in
+    for a complete one, which is worse than not starting: the recovery path
+    would look present and be incomplete.
+
+    A hard-linked archive stores no file data, so it needs only room for the
+    catalog dump and the directory entries. A copy needs the whole tree.
+    """
+    probe = archive if archive.exists() else archive.parent
+    free = shutil.disk_usage(probe).free
+
+    if mode == "copy":
+        needed = tree_size(data_dir) + tree_size(tiles_dir) + margin_bytes
+        what = "a full copy of the lake and tiles"
+    else:
+        needed = margin_bytes
+        what = "the catalog dump and directory entries"
+
+    logger.info(
+        "Archive space on %s: %.1f GB free, need ~%.1f GB for %s",
+        probe,
+        free / 1e9,
+        needed / 1e9,
+        what,
+    )
+    if free < needed:
+        raise RuntimeError(
+            f"Not enough space for the archive on {probe}: {free / 1e9:.1f} GB "
+            f"free, need ~{needed / 1e9:.1f} GB for {what}. Point --archive at "
+            f"a bigger filesystem, or use --archive-mode=link (which stores no "
+            f"file data but must be on the same filesystem as the lake)."
+        )
+
+
 def dump_catalog(
     archive: Path, settings: Any, catalog: str, pg_dump_cmd: list[str]
 ) -> Path:
@@ -279,13 +329,28 @@ def preflight(plan: Plan, data_dir: Path, apply: bool, force: bool) -> bool:
 
     ratio = present / total
     logger.info(
-        "Preflight: %d/%d catalog tables (%.1f%%) have files under %s",
+        "Preflight: %d/%d catalog tables (%.1f%%) have files under %s "
+        "(%d already flat)",
         present,
         total,
         ratio * 100,
         data_dir,
+        plan.already_flat,
     )
     if ratio >= 0.5 or not apply:
+        return True
+
+    # Tables already in the flat schema prove this is the right tree, so a low
+    # ratio here is a finished migration whose remaining rows have no files —
+    # not a --data-dir pointing somewhere else.
+    if plan.already_flat > total:
+        logger.info(
+            "Preflight: %d tables are already flat, so this lake is the one the "
+            "catalog describes; the %d remaining have no files and will be "
+            "reported individually",
+            plan.already_flat,
+            total - present,
+        )
         return True
 
     if force:
@@ -467,6 +532,12 @@ def main() -> int:
         "--force", action="store_true", help="proceed even if preflight fails"
     )
     parser.add_argument(
+        "--archive-margin",
+        type=float,
+        default=2.0,
+        help="GB to require free beyond the archive's own size (default 2)",
+    )
+    parser.add_argument(
         "--pg-dump",
         default="pg_dump",
         help="pg_dump command; may include arguments, e.g. "
@@ -502,6 +573,13 @@ def main() -> int:
 
     if args.apply:
         # Before the plan, before row counts, before anything reads the lake.
+        check_archive_space(
+            args.archive,
+            data_dir,
+            tiles_dir,
+            args.archive_mode,
+            int(args.archive_margin * 1e9),
+        )
         dump_catalog(args.archive, settings, catalog, shlex.split(args.pg_dump))
         snapshot = con.execute(
             f"SELECT max(snapshot_id) FROM pgmeta.{catalog}.ducklake_snapshot"

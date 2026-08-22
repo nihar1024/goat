@@ -105,7 +105,7 @@ class LayerReplaceMixin:
         Preserves the layer_id (and therefore the table path).
         """
         full_table = self.resolve_layer_table_path(layer_id)
-        user_schema = full_table.split(".")[1]
+        schema = full_table.split(".")[1]
 
         file_size = parquet_path.stat().st_size if parquet_path.exists() else 0
 
@@ -115,7 +115,7 @@ class LayerReplaceMixin:
         con.execute(f"DROP TABLE IF EXISTS {full_table}")
 
         # Ensure user schema exists (first export into this schema otherwise fails)
-        con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{user_schema}")
+        con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{schema}")
 
         cols = con.execute(
             f"DESCRIBE SELECT * FROM read_parquet('{parquet_path}')"

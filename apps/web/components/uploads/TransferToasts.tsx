@@ -1,13 +1,13 @@
 "use client";
 
-import { IconButton, Stack, Typography } from "@mui/material";
+import { Stack, Typography } from "@mui/material";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { type Id, toast } from "react-toastify";
 
-import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
-
 import { transferCleared } from "@/lib/store/uploads/slice";
+
+import ToastCloseButton from "@/components/common/ToastCloseButton";
 
 import { cancelTransfer } from "@/hooks/addLayer/useDatasetImport";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
@@ -139,17 +139,13 @@ const TransferToasts = () => {
              * transfer, drop the row, then let the toast close.
              */
             closeButton: ({ closeToast }: { closeToast: (event: React.MouseEvent) => void }) => (
-              <IconButton
-                size="small"
-                aria-label={t("cancel")}
-                sx={{ alignSelf: "flex-start" }}
-                onClick={(event) => {
+              <ToastCloseButton
+                closeToast={closeToast}
+                onClose={() => {
                   cancelTransfer(transfer.id);
                   dispatch(transferCleared(transfer.id));
-                  closeToast(event);
-                }}>
-                <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 12 }} />
-              </IconButton>
+                }}
+              />
             ),
             /**
              * Dismissing the toast cancels the upload.

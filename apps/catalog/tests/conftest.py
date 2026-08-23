@@ -9,6 +9,7 @@ from catalog.app import create_app
 from catalog.config import CatalogSettings
 from catalog.services.registry import QueryableRegistry
 from catalog.store import CatalogStore
+
 from .fixtures.gen_catalog import write_catalog, write_nuts
 
 

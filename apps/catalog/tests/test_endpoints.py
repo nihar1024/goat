@@ -19,6 +19,7 @@ from catalog.config import CatalogSettings
 from catalog.deps import get_store
 from catalog.services.aggregations import aggregation_names
 from catalog.store import CatalogStore
+
 from .fixtures.gen_catalog import write_catalog
 
 

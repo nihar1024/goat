@@ -33,6 +33,7 @@ from catalog.config import CatalogSettings
 from catalog.services.search import SearchParams, search_collections, search_items
 from catalog.services.stac_build import collection_from_row
 from catalog.store import CatalogStore
+
 from .test_mirror_roundtrip import _publish
 
 _GEOMETRY = {

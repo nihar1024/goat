@@ -21,6 +21,7 @@ from goatlib.tasks.sync_catalog import (
 from catalog.config import CatalogSettings
 from catalog.services.stac_build import collection_from_row, item_from_row
 from catalog.store import _ITEM_COLUMNS_SQL, CatalogStore
+
 from .fixtures.gen_catalog import write_catalog, write_nuts
 
 

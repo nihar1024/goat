@@ -26,6 +26,7 @@ from catalog.services.search import (
     search_items,
 )
 from catalog.store import CatalogStore
+
 from .fixtures.gen_catalog import Row, write_catalog, write_nuts
 
 

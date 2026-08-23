@@ -283,7 +283,14 @@ class BaseDuckLakeManager:
         self._s3_access_key = s3_access_key
         self._s3_secret_key = s3_secret_key
 
-        if not storage_path.startswith("s3://") and not os.path.exists(storage_path):
+        # Only in write mode: a read-only manager has no business creating the
+        # lake directory, and doing so races other readers starting at the same
+        # time. Mirrors the guard in init_from_env.
+        if (
+            not self._read_only
+            and not storage_path.startswith("s3://")
+            and not os.path.exists(storage_path)
+        ):
             os.makedirs(storage_path, exist_ok=True)
 
         self._create_connection()

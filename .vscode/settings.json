@@ -63,9 +63,10 @@
     "apps/catalog/tests",
   ],
   "python.testing.cwd": "${workspaceFolder}",
-  // Vitest testing for web app
-  "vitest.enable": true,
-  "vitest.commandLine": "pnpm --filter @p4b/web test",
+  // Vitest testing for web app. The extension (vitest.explorer) discovers
+  // suites from the config below; "vitest.enable" and "vitest.commandLine"
+  // were keys of the older extension and are ignored by it.
+  "vitest.rootConfig": "apps/web/vitest.config.ts",
   "testExplorer.useNativeTesting": true,
   "mypy-type-checker.ignorePatterns": [
     ".direnv/*",

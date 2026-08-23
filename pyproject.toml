@@ -77,7 +77,22 @@ per-file-ignores = { "*/__init__.py" = [
 asyncio_mode = "auto"
 addopts = ["--import-mode=importlib", "--log-cli-level=INFO"]
 pythonpath = ["apps/core", "apps/geoapi"]
+# Collection roots. Without these pytest walks the whole repo, including
+# DATA_DIR — where it hits unreadable Postgres data directories and tens of
+# gigabytes of lake files that hold no tests.
+testpaths = [
+    "apps/catalog/tests",
+    "apps/core/tests",
+    "apps/geoapi/tests",
+    "apps/processes/tests",
+    "packages/python/goatlib/tests",
+    "packages/python/goatobs/tests",
+]
 python_files = ["test_*.py", "*_test.py"]
+# tests/benchmarks holds manually-run scripts (benchmark_* functions and a
+# __main__ block, against large local fixtures), not tests — pytest collects
+# them only because of the file names.
+norecursedirs = ["benchmarks"]
 python_classes = ["Test*", "*Tests"]
 python_functions = ["test_*"]
 markers = [

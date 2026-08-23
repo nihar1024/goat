@@ -17,7 +17,7 @@ from catalog.services.stac_build import (
     item_from_row,
     record_to_item,
 )
-from tests.fixtures.gen_catalog import (
+from .fixtures.gen_catalog import (
     BUNDLE_COLLECTION_ID,
     _build_rows,
     build_document,

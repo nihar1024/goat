@@ -39,6 +39,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Module names derived from the full path, so this suite's conftest does not
+# claim the bare name `tests` — which another app's tests also resolve to when
+# both are collected in one session (an editor's test explorer does that).
+addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 # lark 0.12 (pinned <1.0 by pygeofilter, which parses our CQL2 filters) imports

@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -8,7 +9,36 @@ from catalog.app import create_app
 from catalog.config import CatalogSettings
 from catalog.services.registry import QueryableRegistry
 from catalog.store import CatalogStore
-from tests.fixtures.gen_catalog import write_catalog, write_nuts
+from .fixtures.gen_catalog import write_catalog, write_nuts
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _settings_from_kwargs_only() -> Iterator[None]:
+    """Let each test construct settings explicitly, whatever the dev's env says.
+
+    Many `CatalogSettings` fields read a bare env var through a
+    `validation_alias` (`AUTH`, `S3_ENDPOINT_URL`, ...). When such a var is
+    set, pydantic-settings supplies the field under its alias, and a
+    `CatalogSettings(field=...)` kwarg arrives under the field name as well —
+    a second key for an already-populated field, which the model rejects as an
+    extra input. Tests construct settings that way throughout, so a developer
+    whose environment defines those vars would see the suite fail on
+    configuration rather than on behaviour.
+
+    The names come from the model, so a field added later is covered without
+    touching this.
+    """
+    aliased: set[str] = set()
+    for field in CatalogSettings.model_fields.values():
+        alias = field.validation_alias
+        if alias is None:
+            continue
+        choices = getattr(alias, "choices", [alias])
+        aliased.update(c for c in choices if isinstance(c, str))
+
+    saved = {k: os.environ.pop(k) for k in aliased if k in os.environ}
+    yield
+    os.environ.update(saved)
 
 
 @pytest.fixture()

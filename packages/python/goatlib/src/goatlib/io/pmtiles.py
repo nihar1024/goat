@@ -616,7 +616,7 @@ class PMTilesGenerator:
         """Run tippecanoe to generate PMTiles.
 
         Uses different settings based on geometry type:
-        - Points: Use drop-fraction for even distribution at low zooms
+        - Points: Cluster on a Hilbert curve for even distribution at low zooms
         - Polygons/Lines: Use drop-densest to preserve shapes
 
         Args:

@@ -19,7 +19,7 @@ from catalog.config import CatalogSettings
 from catalog.deps import get_store
 from catalog.services.aggregations import aggregation_names
 from catalog.store import CatalogStore
-from tests.fixtures.gen_catalog import write_catalog
+from .fixtures.gen_catalog import write_catalog
 
 
 def test_health_absent(tmp_path: Path) -> None:

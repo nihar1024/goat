@@ -17,7 +17,7 @@ import catalog.routers.mcp as mcp_module
 from catalog.app import create_app
 from catalog.config import CatalogSettings
 from catalog.store import CatalogStore
-from tests.fixtures.gen_catalog import write_catalog, write_nuts
+from .fixtures.gen_catalog import write_catalog, write_nuts
 
 _MCP_HEADERS = {
     "Accept": "application/json, text/event-stream",

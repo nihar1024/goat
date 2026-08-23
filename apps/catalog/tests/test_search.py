@@ -26,7 +26,7 @@ from catalog.services.search import (
     search_items,
 )
 from catalog.store import CatalogStore
-from tests.fixtures.gen_catalog import Row, write_catalog, write_nuts
+from .fixtures.gen_catalog import Row, write_catalog, write_nuts
 
 
 def test_ids_filter(store: CatalogStore) -> None:

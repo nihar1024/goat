@@ -2574,7 +2574,6 @@
   "catalog_add_n_layers": "{{count}} Layer hinzufügen",
   "catalog_add_needs_project": "Öffne ein Projekt, um Katalog-Layer hinzuzufügen",
   "catalog_select_datasets_first": "Wähle mindestens einen Datensatz aus",
-  "catalog_dataset_has_no_layers": "Dieser Datensatz enthält keine Layer",
   "catalog_layers_added": "{{count}} Layer zum Projekt hinzugefügt",
   "catalog_layers_added_other": "{{count}} Layer zum Projekt hinzugefügt",
   "catalog_layer_pending": "Daten werden vorbereitet …",

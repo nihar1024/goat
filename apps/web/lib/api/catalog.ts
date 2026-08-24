@@ -256,24 +256,6 @@ export const useCatalogCollectionItems = (
 };
 
 /**
- * The member item ids of a dataset, for promote-on-use.
- *
- * The add flow selects datasets (Collections); core promotes items. Most
- * datasets are single-item, and the largest in the bucket has 74 members —
- * one page covers them all.
- */
-export const fetchCollectionItemIds = async (collectionId: string): Promise<string[]> => {
-  const response = await fetch(
-    catalogUrl(`/collections/${encodeURIComponent(collectionId)}/items`, { limit: 100 })
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to list items of dataset ${collectionId}`);
-  }
-  const body = (await response.json()) as CatalogItemCollection;
-  return body.features.map((feature) => feature.id);
-};
-
-/**
  * A dataset's own rendering style, from the asset href the item carries.
  *
  * Takes the href rather than an id: the served item states where its style is

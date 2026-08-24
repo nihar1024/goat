@@ -3,11 +3,7 @@ import { toast } from "react-toastify";
 import { mutate } from "swr";
 import { useTranslation } from "react-i18next";
 
-import {
-  fetchCollectionItemIds,
-  useCatalogAggregations,
-  useCatalogDatasetPages,
-} from "@/lib/api/catalog";
+import { useCatalogAggregations, useCatalogDatasetPages } from "@/lib/api/catalog";
 import {
   CATALOG_PAGE_SIZE,
   buildFacetParams,
@@ -214,24 +210,19 @@ export const useCatalogFlow = ({
   }, [resetPages]);
 
   /**
-   * Promote-on-use: the selection holds datasets (Collections), core promotes
-   * items — so each dataset expands to its member item ids first. The
-   * response's layers may be `pending`; the layer tree polls them to ready.
+   * Promote-on-use: the selection already holds STAC *item* ids — the picker
+   * card resolves a dataset to its item, and a bundle to its member items,
+   * before anything reaches the selection — so the ids go to core verbatim.
+   * The response's layers may be `pending`; the layer tree polls them to ready.
    */
   const [isAdding, setIsAdding] = useState(false);
   const addSelection = useCallback(async () => {
     if (!projectId || ids.length === 0) return;
     setIsAdding(true);
     try {
-      const itemIdLists = await Promise.all(ids.map((id) => fetchCollectionItemIds(id)));
-      const itemIds = Array.from(new Set(itemIdLists.flat()));
-      if (itemIds.length === 0) {
-        toast.error(t("catalog_dataset_has_no_layers"));
-        return;
-      }
-      const added = await addCatalogLayersToProject(projectId, itemIds);
+      const added = await addCatalogLayersToProject(projectId, ids);
       await mutate(projectLayersKey(projectId));
-      toast.success(t("catalog_layers_added", { count: added?.length ?? itemIds.length }));
+      toast.success(t("catalog_layers_added", { count: added?.length ?? ids.length }));
       setIds([]);
       onDone?.();
     } catch (error) {

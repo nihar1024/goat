@@ -16,12 +16,13 @@ import {
   useTheme,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import { useCatalogAggregations, useCatalogDatasets } from "@/lib/api/catalog";
+import { useFavoriteStars } from "@/lib/api/favorites";
 import { datasetCard } from "@/lib/catalog/card";
 import type { CatalogCollection } from "@/lib/validations/catalog";
 
@@ -147,19 +148,9 @@ const CatalogPage = () => {
    * Selected NUTS regions. Held in the URL as one comma-separated value so a
    * filtered catalog is shareable, and split here for the chips.
    */
-  /**
-   * Saved datasets. Local until core has somewhere to keep them: favourites are
-   * user-scoped, and the design shows the control on every card, so it is wired
-   * up now and persisted later rather than left out of the layout.
-   */
-  const [starred, setStarred] = useState<Record<string, boolean>>({});
-  // Favourites live in memory until core can persist them, so filtering by
-  // them is a client-side narrowing of the current page rather than a query.
+  // Persistent, user-scoped, shared with the add-layer picker's stars.
+  const { starred, toggleStar } = useFavoriteStars("catalog_item");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
-  const toggleStar = useCallback(
-    (id: string) => setStarred((prev) => ({ ...prev, [id]: !prev[id] })),
-    []
-  );
 
   const {
     datasets: fetchedDatasets,
@@ -169,15 +160,10 @@ const CatalogPage = () => {
   } = useCatalogDatasets(searchParams);
 
   /**
-   * Favourites narrow the current page client-side, because they are held in
-   * memory: the API cannot filter by them until core stores them, and sending a
-   * list of ids as a query parameter would break down well before the 3,834
-   * datasets a user could plausibly star.
-   *
-   * The consequence is honest but worth knowing: with the filter on, the result
-   * count and pagination still describe the unfiltered search, so this narrows
-   * *this page* rather than the catalog. That resolves itself the moment
-   * favourites move server-side.
+   * Favourites narrow the current page client-side. The stars themselves are
+   * persistent now; what is still local is the FILTER — feeding the id list
+   * into the search (`ids` param) is the follow-up that makes the result
+   * count and pagination describe the favourites instead of this page.
    */
   const items = useMemo(
     () =>

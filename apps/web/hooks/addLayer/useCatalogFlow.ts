@@ -4,6 +4,7 @@ import { mutate } from "swr";
 import { useTranslation } from "react-i18next";
 
 import { useCatalogAggregations, useCatalogDatasetPages } from "@/lib/api/catalog";
+import { useFavoriteStars } from "@/lib/api/favorites";
 import {
   CATALOG_PAGE_SIZE,
   buildFacetParams,
@@ -105,7 +106,7 @@ export const useCatalogFlow = ({
   });
   const [facetSelections, setFacetSelections] = useState<Record<string, string[]>>({});
   const [ids, setIds] = useState<string[]>([]);
-  const [starred, setStarred] = useState<Record<string, boolean>>({});
+  const { starred, toggleStar } = useFavoriteStars("catalog_item");
 
   const { aggregations: served } = useCatalogAggregations();
   const aggregations = useMemo(
@@ -192,11 +193,6 @@ export const useCatalogFlow = ({
       clear: () => setIds([]),
     }),
     [ids]
-  );
-
-  const toggleStar = useCallback(
-    (id: string) => setStarred((current) => ({ ...current, [id]: !current[id] })),
-    []
   );
 
   const reset = useCallback(() => {

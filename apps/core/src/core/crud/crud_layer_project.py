@@ -56,6 +56,16 @@ class CRUDLayerProject(CRUDBase):
             del layer_dict["id"]
             # Update layer with layer project
             layer_dict.update(layer_project_model.model_dump())
+            # The link froze a copy of other_properties at add time (that is
+            # what makes style per-project), but a catalog layer's materialize
+            # lifecycle is layer-global and moves on afterwards — serve those
+            # keys live from the layer or pending would never clear.
+            if layer.catalog_external_uid is not None and layer.other_properties:
+                merged = dict(layer_dict.get("other_properties") or {})
+                for key in ("catalog_item", "catalog_materialize"):
+                    if key in layer.other_properties:
+                        merged[key] = layer.other_properties[key]
+                layer_dict["other_properties"] = merged
             layer_project: Union[
                 IFeatureStandardProjectRead
                 | IFeatureToolProjectRead

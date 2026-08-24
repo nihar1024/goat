@@ -161,9 +161,19 @@ badge trails, as planned.
 - Favourites — **DONE 2026-08-24**: `customer.favorite` (generic
   user/kind/id), PUT/DELETE/GET under /api/v2/favorite, one shared
   `useFavoriteStars` hook behind the catalog page and the picker; verified in
-  a browser across a reload. Still trailing: feeding the id list into the
-  search (`ids` param) so the favourites filter describes the catalog, not
-  the loaded page — and the "update available" badge.
+  a browser across a reload. The filter is server-side too: the saved ids go
+  into Collection Search's `ids` param (added on the catalog service), so
+  count and pagination describe the favourites.
+- "Update available" badge — **DONE 2026-08-24**: one Item Search per
+  project fetches the live versions of all promoted items; a layer whose
+  snapshot version trails the mirror gets the caption (priority:
+  pending > failed > update). Informational only — pulling the new version
+  stays the later opt-in upgrade.
+- Failed-materialize recovery — **re-adding heals** (decided against a retry
+  button, 2026-08-24): the add endpoint re-enqueues the job when the
+  existing layer is `failed` (flipping it back to pending first) or stuck
+  `pending` from a failed enqueue. `running` is never re-enqueued — the job
+  sets it as its first act.
 
 ### P5 — locked bundles (3–5 d) — UNBLOCKED 2026-08-24: bundles merged (PR #3774, `b07cb6fa6`)
 - His model is now on this branch: `bundle`, `bundle_type` (spec registry in
@@ -198,6 +208,14 @@ badge trails, as planned.
 - Point clouds / 3D tiles: new profiles, same pattern.
 
 ## 5. Contract items to raise with the harvester team
+
+Verified against the live mirror 2026-08-24: bundle datasets carry
+`goat:layerType: "bundle"` and `goat:member_count` — nothing more. All 1,207
+current bundles are OPEN (multi-layer open-data datasets); no locked bundle
+(GTFS etc.) exists in the mirror yet. P5's code can be built and tested with
+a hand-crafted locked item locally, but dev/prod show none until the
+harvester emits these two fields:
+
 - `goat:bundle = open | locked` on collections/items (C4b, already drafted).
 - **NEW: `goat:bundleType`** (e.g. `pt_network_gtfs`) on locked items, matching
   goatlib's `BundleTypeName` vocabulary.

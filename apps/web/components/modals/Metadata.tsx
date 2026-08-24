@@ -18,8 +18,9 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
-import { BUNDLES_API_BASE_URL, isBundleTile, updateBundle, useBundle } from "@/lib/api/bundles";
-import { LAYERS_API_BASE_URL, updateDataset } from "@/lib/api/layers";
+import { isBundleTile, updateBundle, useBundle } from "@/lib/api/bundles";
+import { matchesContentListKey } from "@/lib/api/datasets";
+import { updateDataset } from "@/lib/api/layers";
 import { PROJECTS_API_BASE_URL, updateProject } from "@/lib/api/projects";
 import { bundleMetadataSchema } from "@/lib/validations/bundle";
 import { type LayerMetadata, layerMetadataSchema } from "@/lib/validations/layer";
@@ -83,15 +84,19 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
       if (isBundle) {
         await updateBundle(content.id, cleanedData);
         // The detail page reads a single bundle; the grids read the listing.
-        mutate((key) => typeof key === "string" && key.startsWith(BUNDLES_API_BASE_URL));
-      } else {
-        const postMethod = type === "layer" ? updateDataset : updateProject;
-        await postMethod(content.id, {
+        mutate(matchesContentListKey);
+      } else if (type === "layer") {
+        await updateDataset(content.id, {
           folder_id: content.folder_id,
           ...cleanedData,
         });
-        const mutateUrl = type === "layer" ? LAYERS_API_BASE_URL : PROJECTS_API_BASE_URL;
-        mutate((key) => Array.isArray(key) && key[0] === mutateUrl);
+        mutate(matchesContentListKey);
+      } else {
+        await updateProject(content.id, {
+          folder_id: content.folder_id,
+          ...cleanedData,
+        });
+        mutate((key) => Array.isArray(key) && key[0] === PROJECTS_API_BASE_URL);
       }
       toast.success(t("metadata_updated_success"));
     } catch (error) {

@@ -12,12 +12,9 @@ import { Trans } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
-import {
-  BUNDLES_API_BASE_URL,
-  deleteBundle,
-  isBundleTile,
-} from "@/lib/api/bundles";
-import { LAYERS_API_BASE_URL, deleteLayer } from "@/lib/api/layers";
+import { deleteBundle, isBundleTile } from "@/lib/api/bundles";
+import { matchesContentListKey } from "@/lib/api/datasets";
+import { deleteLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { PROJECTS_API_BASE_URL, deleteProject } from "@/lib/api/projects";
 import { setRunningJobIds } from "@/lib/store/jobs/slice";
@@ -54,12 +51,12 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
         // Bundle: one call removes the bundle + all its member layers
         // (backend cascades DuckLake cleanup). Refresh the bundles list.
         await deleteBundle(content.id);
-        mutate((key) => key === BUNDLES_API_BASE_URL);
+        mutate(matchesContentListKey);
         toast.success(t("delete_bundle_success"));
       } else if (type === "layer") {
         // Optimistic update: immediately remove layer from cache
         mutate(
-          (key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL,
+          matchesContentListKey,
           (currentData: { items: Layer[]; total: number; pages: number } | undefined) => {
             if (!currentData?.items) return currentData;
             return {
@@ -85,10 +82,8 @@ const ContentDeleteModal: React.FC<ContentDeleteDialogProps> = ({
       }
     } catch {
       // Revert optimistic update on error by revalidating
-      if (isBundle) {
-        mutate((key) => key === BUNDLES_API_BASE_URL);
-      } else if (type === "layer") {
-        mutate((key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL);
+      if (isBundle || type === "layer") {
+        mutate(matchesContentListKey);
       }
       toast.error(
         isBundle

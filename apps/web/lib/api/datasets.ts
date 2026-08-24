@@ -1,6 +1,8 @@
 import useSWR from "swr";
 
+import { BUNDLES_API_BASE_URL } from "@/lib/api/bundles";
 import { apiRequestAuth, fetcher } from "@/lib/api/fetcher";
+import { LAYERS_API_BASE_URL } from "@/lib/api/layers";
 import type { PaginatedQueryParams } from "@/lib/validations/common";
 import type { DatasetImportRequest, PresignedPostResponse } from "@/lib/validations/datasets";
 import { datasetImportRequestSchema, presignedPostResponseSchema } from "@/lib/validations/datasets";
@@ -26,6 +28,24 @@ export const useDatasets = (
     fetcher
   );
   return { datasets: data, isLoading, isError: error, mutate, isValidating };
+};
+
+/**
+ * SWR filter matching every key that renders content listings: the unified
+ * datasets grid (`[DATASETS_API_BASE_URL, queryParams, payload]`), layer
+ * listings and bundle listings, whether the key is a bare URL, a
+ * querystringed URL or an array key. Content mutations (create, rename, move,
+ * delete — layer or bundle) revalidate with this so no mounted listing is
+ * left showing a ghost.
+ */
+export const matchesContentListKey = (key: unknown): boolean => {
+  const first = Array.isArray(key) ? key[0] : key;
+  return (
+    typeof first === "string" &&
+    (first.startsWith(DATASETS_API_BASE_URL) ||
+      first.startsWith(LAYERS_API_BASE_URL) ||
+      first.startsWith(BUNDLES_API_BASE_URL))
+  );
 };
 
 export const requestDatasetUpload = async (

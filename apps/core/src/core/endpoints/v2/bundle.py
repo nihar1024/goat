@@ -469,10 +469,13 @@ async def update_bundle(
     stays self-contained."""
     bundle = await authorize_bundle(async_session, bundle_id, user_id, "write")
 
-    # A move must target a folder the caller owns.
+    # A move must target a folder of the BUNDLE OWNER: listings scope bundles
+    # to the owner's folders, so a shared editor moving it into one of their
+    # own folders would hide it from its owner — and deleting that folder
+    # would cascade the owner's bundle away.
     if package_in.folder_id is not None:
         folder = await async_session.get(Folder, package_in.folder_id)
-        if folder is None or folder.user_id != user_id:
+        if folder is None or folder.user_id != bundle.user_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
             )

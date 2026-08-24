@@ -161,17 +161,21 @@ in-memory and the update-available badge trails, as planned.
 - Favourites (`customer.favorite`, generic) + "update available" badge can
   trail in a follow-up; promote resolves idempotently server-side without them.
 
-### P5 — locked bundles (3–5 d, gated on Nihar's branch merging)
-- Adopt `feat/dataset-groups`' model wholesale: `bundle`, `bundle_type`
-  (spec registry in goatlib), `bundle_layer` roles, `bundle_artifact`.
-  It replaces design §8's `layer_bundle` placeholder.
+### P5 — locked bundles (3–5 d) — UNBLOCKED 2026-08-24: bundles merged (PR #3774, `b07cb6fa6`)
+- His model is now on this branch: `bundle`, `bundle_type` (spec registry in
+  goatlib), `bundle_layer` roles, `bundle_artifact`. It replaces design §8's
+  `layer_bundle` placeholder.
 - Promote of a `goat:bundle=locked` item = `BundleGtfsHandler`: create
   Bundle(type from `goat:bundleType`) owned by the catalog user, member layers
   by role through the SAME vector handler, artifacts built by his existing
   builders (PT graph → catchment analysis works on catalog GTFS).
-- Deltas to agree with Nihar BEFORE merge: (a) locked-only — open bundles stay
-  pure STAC, no Bundle row; (b) shared promoted bundles GC by refcount, not
-  cascade-on-delete; (c) catalog system user owns promoted bundles.
+- Deltas to agree with Nihar (now as follow-up changes on the merged model):
+  (a) locked-only — open bundles stay pure STAC, no Bundle row; (b) shared
+  promoted bundles GC by refcount, not cascade-on-delete (his DELETE /bundle
+  is owner-can-always-delete with no lock/refcount hook); (c) catalog system
+  user owns promoted bundles; (d) a global-read path for catalog-owned
+  bundles — bundle sharing today is team/org-grant only, no `in_catalog`-style
+  flag on `bundle`.
 - Open bundles: nothing to build — collection membership comes from the mirror.
 
 ### Later (designed-for, not built)

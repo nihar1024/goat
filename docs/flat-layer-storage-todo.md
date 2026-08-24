@@ -5,28 +5,20 @@ tests/CI pass). The migration runbook is `flat-layer-storage-migration.md`.
 
 ## Blocking the catalog backend
 
-- [ ] **Decide A or B for catalog layer data.** A = materialize into DuckLake
-      (reuses `_ingest_to_ducklake`, all ~57 `rowid` sites keep working, PMTiles
-      free). B = plain parquet read via a view that names `file_row_number` as
-      `rowid` (verified working on DuckDB 1.5.4). The flat layout removed B's
-      "no fake-user directory" argument, so A now costs less for the same
-      result. Everything else in the catalog backend is independent of this —
-      only the materialize job's target differs. Keep core ignorant of where
-      data lives so the choice stays cheap.
-- [ ] Core: migration for `catalog_external_uid` / `catalog_version` + the
-      partial unique index that makes promote idempotent.
-- [ ] Core: seeded `CATALOG_USER_ID` / `_ORG_ID` / `_FOLDER_ID` following the
-      `DEFAULT_USER_ID` precedent, **plus** a quota exemption for that org
-      (quota is per-org and shared catalog data would otherwise bill to it) and
-      a guard on `layer.user_id`'s `ondelete=CASCADE` — deleting that user
-      would cascade-delete every promoted layer.
-- [ ] goatlib `catalog_promote`, reading the item from the mirror.
-- [ ] The materialize job (the only piece A vs B changes).
-- [ ] Authz branch for promoted layers (`catalog_external_uid IS NOT NULL` ⇒
-      readable by any authenticated layer-viewer).
-- [ ] Frontend pending state, reusing the existing job/toast machinery.
-- [ ] `LayerSource` value object in geoapi — only needed if B, or when a second
-      source kind arrives.
+All shipped 2026-08-23/24 (option B: plain GeoParquet + `rowid` view; commits
+`b669fb1ed..e8dc2919e` on `catalog`, plan doc P1–P4). Nihar's bundles PR #3774
+merged on top (`b07cb6fa6` + six fix commits). Remaining catalog work is P5
+(locked bundles) and the sections below.
+
+## Manual testing owed (before dev rollout)
+
+- [ ] Browser click-through, catalog: project → Add layer → Catalog tab →
+      select datasets → Add → pending caption clears → layer draws. Everything
+      below the UI is verified; the UI itself has only compile+tests.
+- [ ] Browser click-through, bundles: Add layer → Upload tab → `*gtfs*.zip` →
+      "detected" note → upload → job tray → bundle on /datasets → locked group
+      in the project. Local env is fully wired for both (DB migrated+seeded,
+      Windmill scripts synced, `BUNDLES_DATA_DIR` on workers + `.env`).
 
 ## Rollout
 
@@ -34,10 +26,67 @@ tests/CI pass). The migration runbook is `flat-layer-storage-migration.md`.
       goatlib rollout and the data migration must land in the same window, or
       workers compute `lake.user_<uid>.t_<layer>` for tables that have moved
       and every tool run fails.
+- [ ] **Chart updates (infra repo, helm values) — new env this branch needs:**
+  - tools worker: the five `CATALOG_S3_*` vars (bucket, endpoint, key, secret,
+    region — secret via a Secret, not values) and `BUNDLES_DATA_DIR`
+    (default `/app/data/bundles` is right when the data volume mounts at
+    `/app/data`); append **both** to `WHITELIST_ENVS` or jobs never see them.
+  - core: `WINDMILL_URL` / `WINDMILL_TOKEN` / `WINDMILL_WORKSPACE` (enqueues
+    materialize directly), plus a **read-only mount of only the catalog
+    subtree**: `subPath: catalog`, `readOnly: true`, mounted at
+    `/app/data/catalog` (compose equivalent already on the branch;
+    `CATALOG_DATA_DIR` then needs no explicit value).
+  - geoapi: nothing new if `DATA_DIR` is right (`CATALOG_LAYERS_DIR` derives);
+    set explicitly only if the volume layout differs.
+  - processes: `BUNDLES_DATA_DIR` consistent with the workers (it resolves
+    bundle artifacts for tool runs).
+- [ ] Per-env DB steps, in order: `alembic upgrade head` (bundle tables +
+      catalog backrefs + merge revision `7732fb7ef953`) → `initial_data.py`
+      (re-installs `check_layer` with the catalog + bundle branches, seeds the
+      `datasets` authz resource row, bundle types, catalog identity).
+- [ ] Windmill sync per env: `catalog_materialize`, `bundle_import`,
+      `bundle_artifact_delete`, and the `catalog_gc` scheduled task.
+- [ ] Catalog service prerequisite: `$DATA_DIR/catalog` mirror files
+      (`catalog.parquet` / `mirror_items.parquet` + `nuts.parquet`) must exist
+      on the env — the promote endpoint 503s without them (harvester/sync task
+      owns producing these).
 - [ ] Repoint `/home/p4b/goat/compose.override.yaml` when leaving the `catalog`
       branch — it currently mounts goatlib from the `goat-catalog` worktree, so
       switching branches silently runs stale code in the workers. Backup at
       `compose.override.yaml.bak-preflatten`.
+
+## Bundle follow-ups (from the PR #3774 review; owner: Nihar unless noted)
+
+Fixed at merge time: `POST /datasets` authz seed row, s3_key restricted to the
+caller's upload prefix + validation off the event loop, `bundle_id` read-only
+on group create, UUID guard before artifact `rmtree`, retryable failed imports
+(cleanup + artifact upsert), datasets-grid revalidation after bundle/layer
+mutations. Still open:
+
+- [ ] `edge_path` / `node_path` accepted in the huff-model job payload (only
+      UI-hidden) — arbitrary parquet read by the worker; move to the internal
+      analysis schema like catchment/heatmap.
+- [ ] No ownership check when a tool run resolves a `bundle_id` artifact
+      (goatlib looks up by id only) — needs a core/processes-side authz gate
+      on job submission.
+- [ ] `DELETE /layer/{id}` can remove a bundle member layer directly, leaving
+      the bundle `ready` with a missing role (share + project paths already
+      guard this).
+- [ ] Bundle folder-move: a shared editor can move a bundle into a folder the
+      *editor* owns, hiding it from its owner; deleting that folder cascades
+      the bundle away. Require ownership or an owner-owned target folder.
+- [ ] GTFS importer materializes whole files in memory (`shapes.txt` is
+      GB-scale in national feeds) → worker OOM; stream via DuckDB instead.
+- [ ] Any `.zip` named `*gtfs*`/`*overture*` is forced into the bundle path
+      with no way to import as a plain layer — needs an override affordance.
+- [ ] `list_bundles` is unpaginated.
+- [ ] Decision (user): the `enUS`→`enGB` date-locale change rode along
+      app-wide — keep or revert.
+- [ ] Decision (user): DE locale uses both "Datenpaket" and "Bundle" — pick
+      one term.
+- [ ] Decision: bundle artifacts live on the shared RWX data volume
+      (`BUNDLES_DATA_DIR`) — defensible per the matrices/gtfs mirror
+      precedent, but the direct-S3 end-state has to absorb it.
 
 ## CI
 

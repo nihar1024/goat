@@ -132,6 +132,7 @@ async def add_catalog_items_to_project(
         f"@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
     )
     layer_ids: List[UUID4] = []
+    reused_link_ids: List[int] = []
     conn = await asyncpg.connect(dsn)
     try:
         for catalog_id in catalog_ids:
@@ -148,11 +149,61 @@ async def add_catalog_items_to_project(
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
                 )
-            layer_ids.append(uuid_module.UUID(result["layer_id"]))
-            if result["created"]:
+            layer_id = uuid_module.UUID(result["layer_id"])
+            # Enqueue for a fresh layer — and re-enqueue for an existing one
+            # whose data never arrived (`failed`, or `pending` with no job
+            # behind it because the original enqueue failed). That makes
+            # re-adding the dataset the recovery path: no retry affordance,
+            # selecting it again heals it. The job flips to `running` as its
+            # first act, so an actively working layer is never re-enqueued.
+            should_enqueue = result["created"]
+            add_link = True
+            if not should_enqueue:
+                materialize_status = await conn.fetchval(
+                    f"""
+                    SELECT other_properties->'catalog_materialize'->>'status'
+                    FROM "{settings.SCHEMA}".layer WHERE id = $1
+                    """,
+                    layer_id,
+                )
+                should_enqueue = materialize_status in ("pending", "failed")
+                if materialize_status == "failed":
+                    # Back to pending so the tree shows "preparing" again.
+                    await conn.execute(
+                        f"""
+                        UPDATE "{settings.SCHEMA}".layer
+                        SET other_properties = jsonb_set(
+                            other_properties,
+                            '{{catalog_materialize}}',
+                            '{{"status": "pending"}}'
+                        )
+                        WHERE id = $1
+                        """,
+                        layer_id,
+                    )
+                if should_enqueue:
+                    # A heal reuses the broken entry already in the project
+                    # rather than adding a "Copy from …" twin next to it.
+                    # (Re-adding a HEALTHY dataset still duplicates on
+                    # purpose — two entries of one dataset, two stylings.)
+                    existing_link_id = await conn.fetchval(
+                        f"""
+                        SELECT id FROM "{settings.SCHEMA}".layer_project
+                        WHERE project_id = $1 AND layer_id = $2
+                        ORDER BY id LIMIT 1
+                        """,
+                        project_id,
+                        layer_id,
+                    )
+                    if existing_link_id is not None:
+                        reused_link_ids.append(existing_link_id)
+                        add_link = False
+            if add_link:
+                layer_ids.append(layer_id)
+            if should_enqueue:
                 # Enqueued server-side: materialization must finish whether or
                 # not the browser stays open. Enqueue failure keeps the layer
-                # at status=pending, which a retry resolves.
+                # at status=pending, which the next add resolves.
                 await run_windmill_script(
                     "f/goat/tools/catalog_materialize",
                     {
@@ -163,12 +214,20 @@ async def add_catalog_items_to_project(
     finally:
         await conn.close()
 
-    layers_project = await crud_layer_project.create(
-        async_session=async_session,
-        project_id=project_id,
-        layer_ids=layer_ids,
+    layers_project = (
+        await crud_layer_project.create(
+            async_session=async_session,
+            project_id=project_id,
+            layer_ids=layer_ids,
+        )
+        if layer_ids
+        else []
     )
     assert isinstance(layers_project, List)
+    if reused_link_ids:
+        layers_project = layers_project + await crud_layer_project.get_by_ids(
+            async_session=async_session, ids=reused_link_ids
+        )
     return layers_project
 
 

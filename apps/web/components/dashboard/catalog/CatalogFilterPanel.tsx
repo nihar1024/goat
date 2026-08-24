@@ -367,7 +367,10 @@ const CatalogFilterPanel = ({
         direction="row"
         alignItems="center"
         spacing={2.5}
-        onClick={onToggleFavourites}
+        // A label, like the facet rows: the row click forwards to the checkbox
+        // natively, so there is exactly one toggle — a row onClick PLUS the
+        // checkbox's own onChange fired twice and cancelled out.
+        component="label"
         sx={{
           px: inset,
           py: 3,

@@ -152,29 +152,29 @@ const CatalogPage = () => {
   const { starred, toggleStar } = useFavoriteStars("catalog_item");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
 
+  /**
+   * Favourites filter server-side: the saved ids go into the search as `ids`,
+   * so the result count and pagination describe the favourites, not whichever
+   * page happened to be loaded. With nothing starred there is nothing to ask
+   * for — the request is skipped and the list is simply empty.
+   */
+  const starredIds = useMemo(() => Object.keys(starred), [starred]);
+  const effectiveParams = useMemo(
+    () => (favouritesOnly ? { ...searchParams, ids: starredIds } : searchParams),
+    [favouritesOnly, searchParams, starredIds]
+  );
   const {
     datasets: fetchedDatasets,
     total,
     isLoading,
     isValidating,
-  } = useCatalogDatasets(searchParams);
+  } = useCatalogDatasets(effectiveParams, !(favouritesOnly && starredIds.length === 0));
 
-  /**
-   * Favourites narrow the current page client-side. The stars themselves are
-   * persistent now; what is still local is the FILTER — feeding the id list
-   * into the search (`ids` param) is the follow-up that makes the result
-   * count and pagination describe the favourites instead of this page.
-   */
-  const items = useMemo(
-    () =>
-      favouritesOnly
-        ? fetchedDatasets.filter((dataset) => starred[dataset.id])
-        : fetchedDatasets,
-    [fetchedDatasets, favouritesOnly, starred]
-  );
+  const items = favouritesOnly && starredIds.length === 0 ? [] : fetchedDatasets;
   const debouncedSetQ = useMemo(() => debounce((value: string) => setQ(value), 500), [setQ]);
 
-  const pageCount = total ? Math.ceil(total / CATALOG_PAGE_SIZE) : 0;
+  const effectiveTotal = favouritesOnly && starredIds.length === 0 ? 0 : total;
+  const pageCount = effectiveTotal ? Math.ceil(effectiveTotal / CATALOG_PAGE_SIZE) : 0;
   const showSkeletons = isLoading && !items.length;
   const totalActiveFilters = activeFilterCount + (favouritesOnly ? 1 : 0);
 
@@ -256,7 +256,7 @@ const CatalogPage = () => {
               sx={{ minHeight: 32 }}>
               <Typography variant="body2" fontWeight="bold">
                 {favouritesOnly
-                  ? t("catalog_n_favourites", { count: items.length })
+                  ? t("catalog_n_favourites", { count: effectiveTotal ?? 0 })
                   : total === undefined
                     ? " "
                     : total === 0
@@ -292,10 +292,8 @@ const CatalogPage = () => {
               </Stack>
             )}
 
-            {/* Favourites filter in memory, so "nothing starred" is a different
-                emptiness from "nothing matched" — and without its own branch the
-                page rendered BLANK: `total` was still 3,834 while `items` was
-                empty, so neither the results nor the empty state drew. */}
+            {/* "Nothing starred" is a different emptiness from "nothing
+                matched" — it gets its own message and skips the request. */}
             {!showSkeletons && favouritesOnly && items.length === 0 && (
               <Stack sx={{ mt: 10 }} alignItems="center" spacing={4}>
                 <EmptySection label={t("catalog_no_favourites")} icon={ICON_NAME.STAR} />

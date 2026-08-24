@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Skeleton, Stack, TextField, Typography, useTheme } from "@mui/material";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -64,13 +64,9 @@ const CatalogBody = ({ controller }: { controller: CatalogFlow }) => {
     scrollerRef.current?.scrollTo({ top: 0 });
   }, [queryKey]);
 
-  const shown = useMemo(
-    () =>
-      catalog.favouritesOnly
-        ? catalog.datasets.filter((dataset) => catalog.starred[dataset.id])
-        : catalog.datasets,
-    [catalog.favouritesOnly, catalog.datasets, catalog.starred]
-  );
+  // Favourites are filtered by the API (`ids` on the search), so what arrives
+  // is already the right list.
+  const shown = catalog.datasets;
 
   return (
     <Stack
@@ -145,11 +141,8 @@ const CatalogBody = ({ controller }: { controller: CatalogFlow }) => {
 
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Typography variant="caption" color="text.secondary">
-              {/* Favourites are filtered here, not by the API, so the server's total
-                  would describe a list nobody is looking at — and it is counted the way
-                  the catalog page counts it. */}
               {catalog.favouritesOnly
-                ? t("catalog_n_favourites", { count: shown.length })
+                ? t("catalog_n_favourites", { count: catalog.total })
                 : t("n_datasets", { count: catalog.total })}
               {catalog.selection.ids.length > 0 &&
                 ` · ${t("catalog_n_selected", { count: catalog.selection.ids.length })}`}

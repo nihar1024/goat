@@ -129,8 +129,19 @@ export const useCatalogFlow = ({
   );
   const searchParams = useMemo(() => buildSearchParams(queryState), [queryState]);
   const facetQueryParams = useMemo(() => buildFacetParams(searchParams), [searchParams]);
+  // Favourites filter server-side, like the catalog page: the saved ids join
+  // the search, so counts and paging describe the favourites — and nothing
+  // starred means nothing to ask for.
+  const starredIds = useMemo(() => Object.keys(starred), [starred]);
+  const effectiveParams = useMemo(
+    () => (favouritesOnly ? { ...searchParams, ids: starredIds } : searchParams),
+    [favouritesOnly, searchParams, starredIds]
+  );
   const { datasets, total, isLoading, isLoadingMore, hasMore, loadMore, resetPages } =
-    useCatalogDatasetPages(searchParams, { pageSize: CATALOG_PAGE_SIZE });
+    useCatalogDatasetPages(effectiveParams, {
+      pageSize: CATALOG_PAGE_SIZE,
+      enabled: !(favouritesOnly && starredIds.length === 0),
+    });
 
   // Narrowing a filter drops back to the first page: results already accumulated
   // belong to the old query.
@@ -157,7 +168,9 @@ export const useCatalogFlow = ({
   );
   const toggleFavourites = useCallback(() => {
     setFavouritesOnly((on) => !on);
-  }, []);
+    // The filter changes the query, so accumulated pages belong to the old one.
+    resetPages();
+  }, [resetPages]);
   const toggleFacet = useCallback((param: string, value: string) => {
     setFacetSelections((current) => {
       const values = current[param] ?? [];
@@ -264,15 +277,14 @@ export const useCatalogFlow = ({
       clearFilters,
       activeFilterCount: countActiveFilters(queryState) + (favouritesOnly ? 1 : 0),
       facetQueryParams,
-      datasets,
-      total: total ?? 0,
+      datasets: favouritesOnly && starredIds.length === 0 ? [] : datasets,
+      total: favouritesOnly && starredIds.length === 0 ? 0 : (total ?? 0),
       isLoading,
-      // Favourites are a slice of what is loaded, so loading more of the *server's*
-      // results while that filter is on would fetch pages nobody is looking at.
-      hasMore: hasMore && !favouritesOnly,
+      // Server-side favourites filtering: paging works normally under it.
+      hasMore,
       isLoadingMore,
       loadMore,
-      queryKey: JSON.stringify(searchParams),
+      queryKey: JSON.stringify(effectiveParams),
       selection,
       starred,
       toggleStar,

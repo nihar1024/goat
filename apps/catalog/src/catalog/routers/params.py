@@ -399,6 +399,9 @@ class CollectionSearchQuery(_FilterMixin):
         validation_alias=AliasChoices("source", "collections"),
         description="Filter to one or more source ids",
     )
+    # On the collections relation `id` IS the collection id — this is what the
+    # favourites filter feeds ("show my favourites" = the caller's saved ids).
+    ids: CsvList = Field(default=None, description="Collection ids")
     sortby: SortBy = Field(default=None, description="e.g. -properties.updated")
     bbox_boost: BboxCsv = Field(default=None, description=BboxBoostDescription)
     limit: int = Field(default=DEFAULT_LIMIT, description=LIMIT_DESCRIPTION)
@@ -411,6 +414,7 @@ class CollectionSearchQuery(_FilterMixin):
             registry,
             default_filter_lang="cql2-text",
             collections=self.source,
+            ids=self.ids,
             sortby=self.sortby,
             bbox_boost=self.bbox_boost,
             limit=limit,

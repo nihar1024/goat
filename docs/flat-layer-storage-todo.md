@@ -53,6 +53,23 @@ tests/CI pass). The migration runbook is `flat-layer-storage-migration.md`.
       worktree** — confirm where these workflows are versioned before relying
       on the `goatobs` job and the goatlib `unit+utils+io` change.
 
+## With the legacy-catalog retirement (design §11.4)
+
+- [ ] **Collapse the flat metadata columns on `customer.layer` into JSONB.**
+      Measured on the dev copy (12,257 layers): outside the 66 old
+      `in_catalog` rows, license is set on 25, category on 37,
+      positional_accuracy on 1 — these columns were only ever the old
+      catalog's schema, hardcoded onto every row. Keep `name`,
+      `description` (15% use) and probably `tags`; the rest move to a
+      JSONB `metadata` column. Do it TOGETHER with removing the old catalog
+      UI/endpoints, because those are the main consumers and the sweep
+      (Metadata modal, DatasetSummary, core schemas, project export/import)
+      is the same. The new catalog needs no typed columns in PG — faceting
+      happens in the STAC service — and promoted layers already carry the
+      full item snapshot in `other_properties.catalog_item`, stored at
+      promote time because the mirror is rebuilt wholesale and an old
+      version's metadata exists nowhere else afterwards.
+
 ## Test-suite hygiene
 
 - [ ] Three heatmap tests fail on stale local fixture data:

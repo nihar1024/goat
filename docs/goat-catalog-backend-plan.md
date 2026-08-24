@@ -89,7 +89,7 @@ layer, new file, no collision. GC = `rm` + delete row; no snapshots.
 
 ## 4. Phases
 
-### P1 — core: schema, identity, promote (3–4 d)
+### P1 — core: schema, identity, promote — **DONE 2026-08-23** (verified over HTTP)
 - Migration: `layer.catalog_external_uid text NULL`, `layer.catalog_version
   text NULL`, partial UNIQUE index on the pair (promote idempotency/races).
   Hand-written, `down_revision=init` (dev-DB drift rule).
@@ -97,17 +97,22 @@ layer, new file, no collision. GC = `rm` + delete row; no snapshots.
   the `DEFAULT_USER_ID` precedent; quota exemption for that org; guard against
   deleting the catalog user (its `ondelete=CASCADE` would take every promoted
   layer with it).
-- `goatlib catalog_promote`: read item row from `mirror_items.parquet`,
-  STAC → layer field mapping (SPDX→DataLicense, themes→category, style from
-  the style asset), INSERT with `status=pending` in `other_properties`
-  (JSONB — no extra DDL), unique-index race handling (loser selects winner),
-  insert `layer_project` link, enqueue materialize.
+- `goatlib catalog_promote`: read item row from `mirror_items.parquet`;
+  INSERT carrying only what rendering needs (name, description, type,
+  geometry type, extent, default style) plus `status=pending` and the FULL
+  item snapshotted verbatim into `other_properties.catalog_item` — the
+  mirror is rebuilt wholesale on every sync, so a superseded version's
+  metadata exists nowhere else afterwards. The legacy flat metadata columns
+  stay NULL (they are the old catalog's schema, <1% used outside it, and
+  collapse into JSONB with the legacy-catalog retirement); no vocabulary
+  mapping exists in promote. Unique-index race handling (loser selects
+  winner), then the `layer_project` link, then enqueue materialize.
 - Authz: `check_layer.sql` branch — `catalog_external_uid IS NOT NULL` ⇒
   readable by any authenticated layer-viewer; write routes refuse.
 - Core endpoint: add-catalog-item-to-project (hit → instant link; miss →
   promote). Old `/layer/catalog` endpoints untouched until migration.
 
-### P2 — materialize seam + vector handler (2–3 d)
+### P2 — materialize seam + vector handler — **DONE 2026-08-23** (end-to-end: endpoint → Windmill → ready)
 - Dispatch skeleton + `VectorHandler` as above, as a Windmill job
   (processes precedent, fire-and-forget, idempotent — re-run overwrites via
   temp+rename).
@@ -115,7 +120,15 @@ layer, new file, no collision. GC = `rm` + delete row; no snapshots.
 - GC job: promoted layers with zero `layer_project` links → rm parquet +
   pmtiles + row (and the catalog org's storage accounting stays exempt).
 
-### P3 — geoapi read path (2–3 d)
+### P3 — geoapi read path — **DONE 2026-08-23** (live: items/feature/bbox/tiles 200, write 403, buffer on a catalog layer)
+
+The flagged risk was real and is solved structurally: geoapi's two connection
+owners (BaseDuckLakeManager and DuckLakePool) both REPLACE their DuckDB
+instances over time (stale-recycle, pin-refresh generations), killing any
+in-memory views. Both now expose `add_connection_hook`, geoapi registers a
+replay of every known catalog view, and a new registration is also applied to
+the pool's LIVE bases immediately (`apply_to_bases`) — without that, views
+created at first request never reach bases built at startup.
 - `LayerInfo` → the value object: `kind` (`lake` | `catalog`), `relation`,
   `writable`. Resolver order: DuckLake catalog hit → `lake.…`; else
   `catalog/layers/t_<id>.parquet` exists → ensure view, return `catalog.t_<id>`.
@@ -131,7 +144,15 @@ layer, new file, no collision. GC = `rm` + delete row; no snapshots.
 - `export_layer_to_parquet`: catalog layer ⇒ return the file path (or one
   filtered COPY when a CQL filter is set) — analytics gets faster, not slower.
 
-### P4 — frontend (2–3 d)
+### P4 — frontend — **DONE 2026-08-23** (compile/tests green; browser click-through still owed)
+
+Add action is real (datasets expand to member items via the STAC service,
+then one POST to /layer-catalog); the layer tree marks catalog layers via the
+old catalog's existing menu filter (no rename/duplicate/edit-features), shows
+a "Preparing data" caption while materialize runs, and polls the project
+layers every 4 s until nothing is pending — the job is backend-enqueued and
+not in the user's job tray, so polling is the signal. Favourites stay
+in-memory and the update-available badge trails, as planned.
 - Wire CatalogBody's add-to-project to the new endpoint.
 - Pending state: layer row in the tree, not drawn, driven by the existing
   job/toast machinery; status read from the layer row so it survives reload.

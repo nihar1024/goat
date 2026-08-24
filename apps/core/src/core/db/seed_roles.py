@@ -183,6 +183,11 @@ RESOURCES_PERMISSIONS = [
         "permissions": ["create-layer"],
     },
     {
+        "url_pattern": "datasets",
+        "method": ["POST"],
+        "permissions": ["read-layer"],
+    },
+    {
         "url_pattern": "folder",
         "method": ["GET", "POST", "PUT", "DELETE"],
         "permissions": [

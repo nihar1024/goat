@@ -151,15 +151,19 @@ then one POST to /layer-catalog); the layer tree marks catalog layers via the
 old catalog's existing menu filter (no rename/duplicate/edit-features), shows
 a "Preparing data" caption while materialize runs, and polls the project
 layers every 4 s until nothing is pending — the job is backend-enqueued and
-not in the user's job tray, so polling is the signal. Favourites stay
-in-memory and the update-available badge trails, as planned.
+not in the user's job tray, so polling is the signal. The update-available
+badge trails, as planned.
 - Wire CatalogBody's add-to-project to the new endpoint.
 - Pending state: layer row in the tree, not drawn, driven by the existing
   job/toast machinery; status read from the layer row so it survives reload.
 - Read-only affordances key off `catalog_external_uid` on the project-layer
   schema (no style-less editing traps).
-- Favourites (`customer.favorite`, generic) + "update available" badge can
-  trail in a follow-up; promote resolves idempotently server-side without them.
+- Favourites — **DONE 2026-08-24**: `customer.favorite` (generic
+  user/kind/id), PUT/DELETE/GET under /api/v2/favorite, one shared
+  `useFavoriteStars` hook behind the catalog page and the picker; verified in
+  a browser across a reload. Still trailing: feeding the id list into the
+  search (`ids` param) so the favourites filter describes the catalog, not
+  the loaded page — and the "update available" badge.
 
 ### P5 — locked bundles (3–5 d) — UNBLOCKED 2026-08-24: bundles merged (PR #3774, `b07cb6fa6`)
 - His model is now on this branch: `bundle`, `bundle_type` (spec registry in

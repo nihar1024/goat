@@ -1242,7 +1242,9 @@ export const ProjectLayerTree = ({
         legendContent: shouldShowLegend ? legendNode : undefined,
         isSelectable,
         isVisible,
-        labelInfo: legendCaption,
+        // The legend caption shares the row's one caption slot with the
+        // catalog materialize status the item already carries — don't clobber.
+        labelInfo: legendCaption ?? item.labelInfo,
       };
     });
   }, [items, theme, currentZoom, viewMode, hideLegendHeading, groupIcons, simpleLegendLayerIds]);

@@ -161,6 +161,21 @@ class LayerDeleteRunner(SimpleToolRunner):
                     f"User {user_id} cannot delete layer {layer_id} owned by {layer_owner_id}"
                 )
 
+            # Bundle members are deleted with their bundle, never one by one —
+            # removing one directly would leave the bundle "ready" with a
+            # missing role and stale artifacts. (Bundle deletion is unaffected:
+            # it removes the link rows before this tool runs.)
+            in_bundle = await pool.fetchval(
+                f"SELECT 1 FROM {self.settings.customer_schema}.bundle_layer "
+                "WHERE layer_id = $1 LIMIT 1",
+                uuid_module.UUID(layer_id),
+            )
+            if in_bundle is not None:
+                raise PermissionError(
+                    f"Layer {layer_id} belongs to a bundle and cannot be "
+                    "deleted individually. Delete the bundle instead."
+                )
+
             # Delete layer (cascade deletes layer_project links)
             await pool.execute(
                 f"DELETE FROM {self.settings.customer_schema}.layer WHERE id = $1",

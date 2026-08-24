@@ -6,6 +6,7 @@ from . import (
     bundle,
     custom_domain_lookup,
     datasets,
+    favorite,
     folder,
     layer,
     organization_analytics,
@@ -35,6 +36,7 @@ router.include_router(share.router, prefix="/share", tags=["Share"])
 router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 
+router.include_router(favorite.router, prefix="/favorite", tags=["Favorite"])
 router.include_router(folder.router, prefix="/folder", tags=["Folder"])
 router.include_router(
     bundle.router, prefix="/bundle", tags=["Bundle"]

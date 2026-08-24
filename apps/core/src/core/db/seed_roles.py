@@ -188,6 +188,11 @@ RESOURCES_PERMISSIONS = [
         "permissions": ["read-layer"],
     },
     {
+        "url_pattern": "favorite",
+        "method": ["GET", "PUT", "DELETE"],
+        "permissions": ["read-layer"],
+    },
+    {
         "url_pattern": "folder",
         "method": ["GET", "POST", "PUT", "DELETE"],
         "permissions": [

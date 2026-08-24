@@ -16,6 +16,7 @@ bundle can be shared and rebuilt by someone other than its importer.
 import logging
 import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -70,6 +71,9 @@ def resolve_artifact(bundles_data_dir: str, storage_path: str) -> Optional[Path]
 
 def delete_bundle_artifacts(bundles_data_dir: str, bundle_id: str) -> int:
     """Remove every artifact of a bundle. Returns the number of files removed."""
+    # The id names a directory to rmtree on a volume shared with other data —
+    # anything that isn't a UUID (e.g. "../ducklake") must not reach the join.
+    uuid.UUID(bundle_id)
     directory = Path(bundles_data_dir) / bundle_id
     if not directory.is_dir():
         return 0

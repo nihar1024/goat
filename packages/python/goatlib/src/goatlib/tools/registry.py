@@ -586,6 +586,17 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
         toolbox_hidden=True,
     ),
     ToolDefinition(
+        name="catalog_materialize",
+        display_name="Catalog Materialize",
+        description="Copy a promoted catalog layer's data onto the shared volume",
+        module_path="goatlib.tools.catalog_materialize",
+        params_class_name="CatalogMaterializeParams",
+        windmill_path="f/goat/tools/catalog_materialize",
+        category="data",
+        keywords=("catalog", "materialize", "promote"),
+        toolbox_hidden=True,
+    ),
+    ToolDefinition(
         name="layer_delete",
         display_name="Layer Delete",
         description="Delete a layer from DuckLake storage and PostgreSQL metadata",

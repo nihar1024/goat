@@ -105,6 +105,20 @@ TASK_REGISTRY: tuple[TaskDefinition, ...] = (
         worker_tag="tools",
     ),
     TaskDefinition(
+        name="catalog_gc",
+        display_name="Catalog GC",
+        description=(
+            "Delete promoted catalog layers with zero layer_project links "
+            "(their parquet, PMTiles and layer row); a grace period covers "
+            "the promote window and remove-then-readd."
+        ),
+        module_path="goatlib.tasks.catalog_gc",
+        params_class_name="CatalogGCParams",
+        windmill_path="f/goat/tasks/catalog_gc",
+        schedule="0 0 3 * * *",  # Daily, 03:00
+        worker_tag="tools",
+    ),
+    TaskDefinition(
         name="sync_catalog",
         display_name="Sync Catalog",
         description=(

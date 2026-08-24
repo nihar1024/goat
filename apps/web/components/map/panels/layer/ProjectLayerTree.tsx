@@ -16,8 +16,10 @@ import {
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mutate } from "swr";
 
+import { useCatalogItemVersions } from "@/lib/api/catalog";
 import { projectLayersKey } from "@/lib/api/projects";
 import {
+  catalogItemSnapshot,
   isCatalogLayer,
   isCatalogLayerFailed,
   isCatalogLayerPending,
@@ -550,16 +552,40 @@ export const ProjectLayerTree = ({
   }, [projectLayers, projectLayerGroups]);
 
   /**
+   * The live catalog version of every promoted layer's item, one request per
+   * distinct id set. A layer promoted at version N whose item now carries a
+   * newer version gets the "update available" caption below.
+   */
+  const catalogItemIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (projectLayers ?? [])
+            .map((layer) => catalogItemSnapshot(layer).id)
+            .filter((id): id is string => !!id)
+        )
+      ),
+    [projectLayers]
+  );
+  const { versions: liveCatalogVersions } = useCatalogItemVersions(catalogItemIds);
+
+  /**
    * The one caption a layer row can carry: a catalog layer whose data is
-   * still materializing (or failed to). Everything else stays caption-less.
+   * still materializing (or failed to), or whose catalog item has moved on to
+   * a newer version. Everything else stays caption-less.
    */
   const catalogStatusLabel = useCallback(
     (node: ProjectLayerTreeNode): string | undefined => {
       if (isCatalogLayerPending(node)) return t("catalog_layer_pending");
       if (isCatalogLayerFailed(node)) return t("catalog_layer_failed");
+      const snapshot = catalogItemSnapshot(node);
+      if (snapshot.id && snapshot.version) {
+        const live = liveCatalogVersions[snapshot.id];
+        if (live && live !== snapshot.version) return t("catalog_layer_update_available");
+      }
       return undefined;
     },
-    [t]
+    [t, liveCatalogVersions]
   );
 
   /**
@@ -684,6 +710,7 @@ export const ProjectLayerTree = ({
       toast.error(t("error_duplicating_layer"));
     }
   }, [onLayerDuplicate, t]);
+
 
   const handleNodeClick = (compositeIds: string[]) => {
     const realIds = compositeIds

@@ -30,3 +30,18 @@ export const isCatalogLayerPending = (layer?: WithOtherProperties | null): boole
 
 export const isCatalogLayerFailed = (layer?: WithOtherProperties | null): boolean =>
   catalogMaterializeStatus(layer) === "failed";
+
+/**
+ * The identity a catalog layer was promoted at, from its snapshot: the STAC
+ * item id and the version. Compared against the live mirror to detect that
+ * the provider has published newer data.
+ */
+export const catalogItemSnapshot = (
+  layer?: WithOtherProperties | null
+): { id?: string; version?: string } => {
+  const item = layer?.other_properties?.["catalog_item"];
+  return {
+    id: item?.["id"],
+    version: item?.["version"] != null ? String(item["version"]) : undefined,
+  };
+};

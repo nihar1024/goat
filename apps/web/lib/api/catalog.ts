@@ -256,6 +256,34 @@ export const useCatalogCollectionItems = (
 };
 
 /**
+ * The live catalog version of each given item, as {item id: version}.
+ *
+ * Feeds the "update available" badge: a promoted layer carries the version it
+ * was promoted at in its snapshot, and a difference against the mirror's
+ * current version means the provider has published newer data. Ids that no
+ * longer exist in the mirror simply don't appear — absence is not an update.
+ */
+export const useCatalogItemVersions = (itemIds: string[]) => {
+  const { data } = useSWR<CatalogItemCollection>(
+    itemIds.length > 0 && CATALOG_API_BASE_URL
+      ? catalogUrl("/search", { ids: itemIds, limit: itemIds.length })
+      : null,
+    fetcher
+  );
+  const versions = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        (data?.features ?? []).map((feature) => [
+          feature.id,
+          String(feature.properties?.version ?? ""),
+        ])
+      ),
+    [data]
+  );
+  return { versions, isLoading: itemIds.length > 0 && data === undefined };
+};
+
+/**
  * A dataset's own rendering style, from the asset href the item carries.
  *
  * Takes the href rather than an id: the served item states where its style is

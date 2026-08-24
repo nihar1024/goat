@@ -444,10 +444,6 @@ class ILayerProjectGroupCreate(BaseModel):
     name: str
     properties: dict[str, Any] | None = None
     parent_id: Optional[int] = None
-    bundle_id: Optional[UUID4] = Field(
-        None,
-        description="Set when the group holds a bundle's layers (locked membership)",
-    )
 
 
 class ILayerProjectGroupUpdate(BaseModel):
@@ -460,6 +456,13 @@ class ILayerProjectGroupRead(ILayerProjectGroupCreate):
     id: int
     project_id: UUID4
     order: int
+    # Read-only: a bundle-backed group is created through the dedicated
+    # add-bundle endpoint (which authorizes the bundle), never through the
+    # generic group create.
+    bundle_id: Optional[UUID4] = Field(
+        None,
+        description="Set when the group holds a bundle's layers (locked membership)",
+    )
 
 
 # TODO: Refactor

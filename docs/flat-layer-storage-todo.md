@@ -63,18 +63,20 @@ on group create, UUID guard before artifact `rmtree`, retryable failed imports
 (cleanup + artifact upsert), datasets-grid revalidation after bundle/layer
 mutations. Still open:
 
-- [ ] `edge_path` / `node_path` accepted in the huff-model job payload (only
-      UI-hidden) — arbitrary parquet read by the worker; move to the internal
-      analysis schema like catchment/heatmap.
-- [ ] No ownership check when a tool run resolves a `bundle_id` artifact
-      (goatlib looks up by id only) — needs a core/processes-side authz gate
-      on job submission.
-- [ ] `DELETE /layer/{id}` can remove a bundle member layer directly, leaving
-      the bundle `ready` with a missing role (share + project paths already
-      guard this).
-- [ ] Bundle folder-move: a shared editor can move a bundle into a folder the
-      *editor* owns, hiding it from its owner; deleting that folder cascades
-      the bundle away. Require ownership or an owner-owned target folder.
+- [x] ~~`edge_path` / `node_path` in the huff-model job payload~~ — verified
+      not exploitable: the runner excludes both fields when building the
+      analysis params, so payload values are dropped; only the
+      bundle-resolved paths are ever set.
+- [ ] No ownership check when a tool run resolves a `bundle_id` artifact —
+      but this is PARITY: tool runs don't authorize their input *layer* ids
+      either (goatlib logs non-owner access and proceeds). The real fix is
+      upstream — authorize resource ids in tool params at job submission
+      (processes/core) — one design item covering layers and bundles alike.
+- [x] Layer-delete tool now refuses bundle member layers (delete the bundle
+      instead); bundle deletion unaffected — it removes the link rows first.
+- [x] Bundle folder-moves now require a folder of the *bundle owner*, so a
+      shared editor can no longer strand (or cascade-delete) the owner's
+      bundle via their own folders.
 - [ ] GTFS importer materializes whole files in memory (`shapes.txt` is
       GB-scale in national feeds) → worker OOM; stream via DuckDB instead.
 - [ ] Any `.zip` named `*gtfs*`/`*overture*` is forced into the bundle path

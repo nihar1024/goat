@@ -14,6 +14,14 @@ import {
   useTheme,
 } from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { mutate } from "swr";
+
+import { projectLayersKey } from "@/lib/api/projects";
+import {
+  isCatalogLayer,
+  isCatalogLayerFailed,
+  isCatalogLayerPending,
+} from "@/lib/utils/catalog-layer";
 import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
@@ -221,7 +229,10 @@ export const VisibilityToggle = ({
 // ----------------------------------------------------------------------
 // 2. UTILS
 // ----------------------------------------------------------------------
-function formatApiDataForDnd(nodes: ProjectLayerTreeNode[]): ProjectTreeItem[] {
+function formatApiDataForDnd(
+  nodes: ProjectLayerTreeNode[],
+  statusLabel?: (node: ProjectLayerTreeNode) => string | undefined
+): ProjectTreeItem[] {
   // First, identify which groups are invisible
   const invisibleGroupIds = new Set(
     nodes
@@ -262,6 +273,7 @@ function formatApiDataForDnd(nodes: ProjectLayerTreeNode[]): ProjectTreeItem[] {
           ? !(node.properties?.expanded ?? true) // For groups, use expanded property
           : (node.properties?.legend?.collapsed ?? false), // For layers, use legend.collapsed property
       isGroup: node.type === "group",
+      labelInfo: node.type === "layer" ? statusLabel?.(node) : undefined,
       data: node,
       // Hide expand/collapse functionality for invisible groups
       canExpand: node.type === "group" ? (node.properties?.visibility ?? true) : undefined,
@@ -510,16 +522,47 @@ export const ProjectLayerTree = ({
         query: layer.query,
         other_properties: layer.other_properties,
         user_id: layer.user_id,
+        in_catalog: layer.in_catalog || isCatalogLayer(layer),
       });
     });
 
     return nodes.sort((a, b) => a.order - b.order);
   }, [projectLayers, projectLayerGroups]);
 
+  /**
+   * The one caption a layer row can carry: a catalog layer whose data is
+   * still materializing (or failed to). Everything else stays caption-less.
+   */
+  const catalogStatusLabel = useCallback(
+    (node: ProjectLayerTreeNode): string | undefined => {
+      if (isCatalogLayerPending(node)) return t("catalog_layer_pending");
+      if (isCatalogLayerFailed(node)) return t("catalog_layer_failed");
+      return undefined;
+    },
+    [t]
+  );
+
+  /**
+   * While any catalog layer is materializing, poll the project layers so the
+   * pending caption clears (and the map draws) without a reload. The job is
+   * backend-enqueued and not in the user's job tray, so this is the signal.
+   */
+  const anyCatalogPending = useMemo(
+    () => (projectLayers ?? []).some((layer) => isCatalogLayerPending(layer)),
+    [projectLayers]
+  );
+  useEffect(() => {
+    if (!anyCatalogPending || !projectId) return;
+    const timer = setInterval(() => {
+      void mutate(projectLayersKey(projectId));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [anyCatalogPending, projectId]);
+
   useEffect(() => {
     if (treeData) {
       setItems((prevItems) => {
-        const newItems = formatApiDataForDnd(treeData);
+        const newItems = formatApiDataForDnd(treeData, catalogStatusLabel);
         if (prevItems.length === 0) return newItems;
         // For items that already existed, preserve their collapsed state.
         // Newly appearing layer items (e.g. inside a group that was just toggled visible)
@@ -538,7 +581,7 @@ export const ProjectLayerTree = ({
         });
       });
     }
-  }, [treeData]);
+  }, [treeData, catalogStatusLabel]);
 
   const treeSelectedIds = useMemo(() => {
     if (selectedLayerIds.length === 0) return [];

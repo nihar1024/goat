@@ -1,13 +1,21 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "react-toastify";
+import { mutate } from "swr";
 import { useTranslation } from "react-i18next";
 
-import { useCatalogAggregations, useCatalogDatasetPages } from "@/lib/api/catalog";
+import {
+  fetchCollectionItemIds,
+  useCatalogAggregations,
+  useCatalogDatasetPages,
+} from "@/lib/api/catalog";
 import {
   CATALOG_PAGE_SIZE,
   buildFacetParams,
   buildSearchParams,
   countActiveFilters,
 } from "@/lib/catalog/searchQuery";
+
+import { addCatalogLayersToProject, projectLayersKey } from "@/lib/api/projects";
 import type { CatalogSpatialFilter } from "@/lib/catalog/spatial";
 import type { CatalogAggregation, CatalogCollection } from "@/lib/validations/catalog";
 
@@ -83,6 +91,7 @@ export type CatalogFlowState = {
 export type CatalogFlow = FlowController & { catalog: CatalogFlowState };
 
 export const useCatalogFlow = ({
+  projectId,
   onDone,
 }: {
   projectId?: string;
@@ -205,25 +214,52 @@ export const useCatalogFlow = ({
   }, [resetPages]);
 
   /**
-   * Adding is not possible yet: a catalog dataset has no layer until promote-on-use
-   * materializes one, and that is backend work still to come. The action states the
-   * count it *would* add, and says why it cannot — better than a tab that hides the
-   * button and leaves the reader guessing.
+   * Promote-on-use: the selection holds datasets (Collections), core promotes
+   * items — so each dataset expands to its member item ids first. The
+   * response's layers may be `pending`; the layer tree polls them to ready.
    */
+  const [isAdding, setIsAdding] = useState(false);
+  const addSelection = useCallback(async () => {
+    if (!projectId || ids.length === 0) return;
+    setIsAdding(true);
+    try {
+      const itemIdLists = await Promise.all(ids.map((id) => fetchCollectionItemIds(id)));
+      const itemIds = Array.from(new Set(itemIdLists.flat()));
+      if (itemIds.length === 0) {
+        toast.error(t("catalog_dataset_has_no_layers"));
+        return;
+      }
+      const added = await addCatalogLayersToProject(projectId, itemIds);
+      await mutate(projectLayersKey(projectId));
+      toast.success(t("catalog_layers_added", { count: added?.length ?? itemIds.length }));
+      setIds([]);
+      onDone?.();
+    } catch (error) {
+      console.error(error);
+      toast.error(t("error_adding_layer"));
+    } finally {
+      setIsAdding(false);
+    }
+  }, [projectId, ids, t, onDone]);
+
   const action = useMemo(
     () => ({
       label:
         ids.length > 1 ? t("catalog_add_n_layers", { count: ids.length }) : t("add_layer"),
-      disabled: true,
-      reason: t("catalog_tab_coming_soon"),
-      run: () => onDone?.(),
+      disabled: !projectId || ids.length === 0 || isAdding,
+      reason: !projectId
+        ? t("catalog_add_needs_project")
+        : ids.length === 0
+          ? t("catalog_select_datasets_first")
+          : undefined,
+      run: addSelection,
     }),
-    [ids.length, t, onDone]
+    [ids.length, t, projectId, isAdding, addSelection]
   );
 
   return {
     action,
-    isBusy: false,
+    isBusy: isAdding,
     reset,
     catalog: {
       favouritesOnly,

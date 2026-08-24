@@ -272,6 +272,29 @@ export const deleteProjectLayer = async (projectId: string, layerId: number) => 
   return response;
 };
 
+/** SWR key of a project's layer list — for targeted revalidation. */
+export const projectLayersKey = (projectId: string) => [`${PROJECTS_API_BASE_URL}/${projectId}/layer`];
+
+/**
+ * Add catalog items to a project (promote-on-use).
+ *
+ * Each id is a STAC item id; core resolves it to the shared promoted layer —
+ * creating it on first use, with data materialized in the background — and
+ * links it to the project. Returned layers may be `pending` until the
+ * materialize job finishes.
+ */
+export const addCatalogLayersToProject = async (projectId: string, catalogIds: string[]) => {
+  const params = catalogIds.map((id) => `catalog_ids=${encodeURIComponent(id)}`).join("&");
+  const response = await apiRequestAuth(
+    `${PROJECTS_API_BASE_URL}/${projectId}/layer-catalog?${params}`,
+    { method: "POST", headers: { "Content-Type": "application/json" } }
+  );
+  if (!response.ok) {
+    throw new Error("Failed to add catalog layers to project");
+  }
+  return await response.json();
+};
+
 export const addProjectLayers = async (projectId: string, layerIds: string[]) => {
   //todo: fix the api for this. This structure doesn't make sense.
   //layer_ids=1&layer_ids=2&layer_ids=3

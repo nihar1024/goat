@@ -10,15 +10,18 @@ All shipped 2026-08-23/24 (option B: plain GeoParquet + `rowid` view; commits
 merged on top (`b07cb6fa6` + six fix commits). Remaining catalog work is P5
 (locked bundles) and the sections below.
 
-## Manual testing owed (before dev rollout)
+## Manual testing (browser click-throughs) — DONE 2026-08-24
 
-- [ ] Browser click-through, catalog: project → Add layer → Catalog tab →
-      select datasets → Add → pending caption clears → layer draws. Everything
-      below the UI is verified; the UI itself has only compile+tests.
-- [ ] Browser click-through, bundles: Add layer → Upload tab → `*gtfs*.zip` →
-      "detected" note → upload → job tray → bundle on /datasets → locked group
-      in the project. Local env is fully wired for both (DB migrated+seeded,
-      Windmill scripts synced, `BUNDLES_DATA_DIR` on workers + `.env`).
+Both flows verified in a real browser session against the local stack. The
+catalog flow surfaced and fixed three real bugs (selection double-expansion
+404, legend caption clobbering the pending caption, link-frozen
+other_properties never clearing pending); the bundle flow surfaced the
+missing `GOAT_GEOAPI_HOST` wiring. Verified along the way: pending caption
+appears and clears via the 4s poll, ready-before-tiles serves dynamic MVT
+(287MB NRW flood layer usable while tippecanoe ran), bundle upload detects
+GTFS, imports 7 member layers, and renders the locked drag-disabled group.
+Not covered: actual map rendering (headless browser has no WebGL) — worth one
+human glance at the map canvas.
 
 ## Rollout
 
@@ -46,6 +49,14 @@ merged on top (`b07cb6fa6` + six fix commits). Remaining catalog work is P5
       `datasets` authz resource row, bundle types, catalog identity).
 - [ ] Windmill sync per env: `catalog_materialize`, `bundle_import`,
       `bundle_artifact_delete`, and the `catalog_gc` scheduled task.
+- [ ] Verify `GOAT_GEOAPI_HOST` is set on core in the charts (it predates this
+      branch — folder-delete layer cleanup posts through it — but was missing
+      from compose/.env.example until now; unset, bundle imports 503 and
+      cleanup is silently skipped).
+- [ ] Worker image: the routing extension must be rebuilt WITH the
+      `build_timetable` binding or every GTFS bundle imports without its
+      timetable artifact (graceful skip, logged as a warning — layers still
+      ingest, but PT analysis on the bundle stays unavailable).
 - [ ] Catalog service prerequisite: `$DATA_DIR/catalog` mirror files
       (`catalog.parquet` / `mirror_items.parquet` + `nuts.parquet`) must exist
       on the env — the promote endpoint 503s without them (harvester/sync task

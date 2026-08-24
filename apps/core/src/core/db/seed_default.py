@@ -87,6 +87,84 @@ async def seed_default_user_org(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def seed_catalog_identity(session: AsyncSession) -> None:
+    """Provision the system identity that owns promoted catalog layers.
+
+    Runs in every environment (the default identity above is AUTH=False-only):
+    promote-on-use needs an owner for the shared, read-only layer rows, and
+    `customer.layer.user_id` is NOT NULL. The organization gets effectively
+    unlimited quotas — its storage is the shared catalog cache, billed to
+    nobody. Idempotent, like the seeds above.
+    """
+    user_id = UUID(settings.CATALOG_USER_ID)
+
+    user = (
+        await session.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if user is None:
+        user = User(
+            id=user_id,
+            email=settings.CATALOG_USER_EMAIL,
+            firstname="GOAT",
+            lastname="Catalog",
+            avatar=settings.USER_DEFAULT_AVATAR,
+        )
+        session.add(user)
+        await session.flush()
+
+    if user.organization_id is None:
+        organization = Organization(
+            name=settings.CATALOG_ORGANIZATION_NAME,
+            avatar=settings.ORGANIZATION_DEFAULT_AVATAR,
+            on_trial=False,
+            # Not a plan: the quota ceiling for a shared cache is "none", and
+            # the enforcement compares against these numbers.
+            total_credits=2**31 - 1,
+            total_storage=2**31 - 1,
+            total_projects=2**31 - 1,
+            total_editors=2**31 - 1,
+            total_viewers=2**31 - 1,
+            plan_name=settings.DEFAULT_PLAN_NAME,
+            type="other",
+            size="1-10",
+            industry="other",
+            department="general",
+            use_case="other",
+            phone_number="+0000000000",
+            location="system",
+            region="EU",
+            contact_user_id=user_id,
+            stripe_id="",
+            suspended=False,
+        )
+        session.add(organization)
+        await session.flush()
+        user.organization_id = organization.id
+
+    owner_role_id = (
+        await session.execute(select(Role.id).where(Role.name == "organization-owner"))
+    ).scalar_one()
+    has_owner_role = (
+        await session.execute(
+            select(UserRoleLink.id).where(
+                UserRoleLink.user_id == user_id,
+                UserRoleLink.role_id == owner_role_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if has_owner_role is None:
+        session.add(UserRoleLink(user_id=user_id, role_id=owner_role_id))
+
+    folder_id = UUID(settings.CATALOG_FOLDER_ID)
+    has_folder = (
+        await session.execute(select(Folder.id).where(Folder.id == folder_id))
+    ).scalar_one_or_none()
+    if has_folder is None:
+        session.add(Folder(id=folder_id, user_id=user_id, name="catalog"))
+
+    await session.commit()
+
+
 async def main() -> None:
     session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
     try:

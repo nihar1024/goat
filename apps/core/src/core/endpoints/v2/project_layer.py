@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Union
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import UUID4
 
+from core.core.config import settings
 from core.crud.crud_layer_project import layer_project as crud_layer_project
 from core.crud.crud_project import project as crud_project
 from core.db.models._link_model import LayerProjectLink
@@ -20,6 +21,7 @@ from core.schemas.project import (
 from core.schemas.project import (
     request_examples as project_request_examples,
 )
+from core.services.windmill import run_script as run_windmill_script
 
 router = APIRouter()
 
@@ -64,6 +66,103 @@ async def add_layers_to_project(
     )
     assert isinstance(layers_project, List)
 
+    return layers_project
+
+
+@router.post(
+    "/{project_id}/layer-catalog",
+    response_model=List[
+        IFeatureStandardProjectRead
+        | IFeatureToolProjectRead
+        | ITableProjectRead
+        | IRasterProjectRead
+    ],
+    response_model_exclude_none=True,
+    status_code=200,
+    dependencies=[Depends(auth_z)],
+)
+async def add_catalog_items_to_project(
+    async_session: AsyncSession = Depends(get_db),
+    project_id: UUID4 = Path(
+        ...,
+        description="The ID of the project to add the catalog items to",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+    ),
+    catalog_ids: List[str] = Query(
+        ...,
+        description="Catalog item IDs (STAC item ids) to add to the project",
+    ),
+) -> List[
+    IFeatureStandardProjectRead
+    | IFeatureToolProjectRead
+    | ITableProjectRead
+    | IRasterProjectRead
+]:
+    """Add catalog items to a project, promoting each on first use.
+
+    Promote-on-use: an item already promoted at its current version resolves
+    to the existing shared layer and only a project link is created; a first
+    use creates the layer row (owned by the catalog system user, data
+    materialized asynchronously) and then links it.
+    """
+    import uuid as uuid_module
+    from pathlib import Path as FSPath
+
+    import asyncpg
+    from goatlib.tools.catalog_promote import CatalogItemNotFoundError, promote
+
+    mirror = FSPath(settings.CATALOG_DATA_DIR) / "mirror_items.parquet"
+    if not mirror.exists():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Catalog mirror is not available on this deployment",
+        )
+
+    # Promote writes with goatlib (shared implementation with the workers), so
+    # it speaks plain asyncpg rather than this request's SQLAlchemy session.
+    # A promote is rare (miss-path only) — one short-lived connection is fine.
+    dsn = (
+        f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    )
+    layer_ids: List[UUID4] = []
+    conn = await asyncpg.connect(dsn)
+    try:
+        for catalog_id in catalog_ids:
+            try:
+                result = await promote(
+                    conn,
+                    catalog_id,
+                    mirror_items_path=mirror,
+                    owner_id=uuid_module.UUID(settings.CATALOG_USER_ID),
+                    folder_id=uuid_module.UUID(settings.CATALOG_FOLDER_ID),
+                    schema=settings.SCHEMA,
+                )
+            except CatalogItemNotFoundError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+                )
+            layer_ids.append(uuid_module.UUID(result["layer_id"]))
+            if result["created"]:
+                # Enqueued server-side: materialization must finish whether or
+                # not the browser stays open. Enqueue failure keeps the layer
+                # at status=pending, which a retry resolves.
+                await run_windmill_script(
+                    "f/goat/tools/catalog_materialize",
+                    {
+                        "layer_id": result["layer_id"],
+                        "user_id": settings.CATALOG_USER_ID,
+                    },
+                )
+    finally:
+        await conn.close()
+
+    layers_project = await crud_layer_project.create(
+        async_session=async_session,
+        project_id=project_id,
+        layer_ids=layer_ids,
+    )
+    assert isinstance(layers_project, List)
     return layers_project
 
 

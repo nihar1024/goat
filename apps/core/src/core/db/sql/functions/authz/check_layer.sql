@@ -37,10 +37,13 @@ BEGIN
     FOR i IN 1..array_length(layer_ids, 1) LOOP
         layer_id_loop := layer_ids[i];
 
-        /* 1. Catalog read */
+        /* 1. Catalog read — the legacy in_catalog flag, or a promoted
+           catalog layer (shared read-only snapshot owned by the catalog
+           system user; identified by its catalog back-reference). */
         IF EXISTS (
             SELECT 1 FROM customer.layer l
-            WHERE l.id = layer_id_loop AND l.in_catalog = TRUE
+            WHERE l.id = layer_id_loop
+              AND (l.in_catalog = TRUE OR l.catalog_external_uid IS NOT NULL)
         ) AND 'layer-viewer' = ANY(needed_role_names)
         THEN
             status_check := TRUE;

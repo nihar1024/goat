@@ -337,6 +337,25 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
         ),
         description="Layer owner ID",
     )
+    catalog_external_uid: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description=(
+            "Identity of the catalog item this layer was promoted from. A "
+            "promoted layer is a shared, read-only snapshot: together with "
+            "catalog_version it is unique (partial index), which is what makes "
+            "promote-on-use idempotent across users and orgs."
+        ),
+    )
+    catalog_version: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description=(
+            "The catalog item's version at promotion time. Projects keep the "
+            "version they added; a newer upstream version promotes into a new "
+            "layer rather than touching this one."
+        ),
+    )
     folder_id: UUID = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),

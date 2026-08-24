@@ -93,13 +93,14 @@ mutations. Still open:
 - [ ] Any `.zip` named `*gtfs*`/`*overture*` is forced into the bundle path
       with no way to import as a plain layer — needs an override affordance.
 - [ ] `list_bundles` is unpaginated.
-- [ ] Decision (user): the `enUS`→`enGB` date-locale change rode along
-      app-wide — keep or revert.
-- [ ] Decision (user): DE locale uses both "Datenpaket" and "Bundle" — pick
-      one term.
-- [ ] Decision: bundle artifacts live on the shared RWX data volume
-      (`BUNDLES_DATA_DIR`) — defensible per the matrices/gtfs mirror
-      precedent, but the direct-S3 end-state has to absorb it.
+- [x] DECIDED 2026-08-24: `enGB` stays — European users expect day-first
+      dates even in the English UI.
+- [x] DECIDED 2026-08-24: "Datenpaket" is THE German term — all DE strings
+      swept (was a three-way split with "Bundle" and "Paket").
+- [x] DECIDED 2026-08-24: artifacts stay on the shared data volume
+      (`BUNDLES_DATA_DIR`) per the matrices/gtfs mirror precedent — the
+      routing engine opens them as local files. The direct-S3 migration must
+      absorb them (add to that plan when it starts).
 
 ## CI
 

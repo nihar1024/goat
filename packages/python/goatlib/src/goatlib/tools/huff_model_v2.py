@@ -27,6 +27,7 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
+from goatlib.bundles.artifacts.street_network import fetch_routing_network
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools._routing_limits import (
     DEFAULT_MAX_TIME_ACTIVE_MIN,
@@ -132,6 +133,40 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     )
     max_transfers: int = Field(
         default=5, json_schema_extra=ui_field(section="configuration", hidden=True)
+    )
+    # Resolved from street_network_bundle_id in process(); hidden so the
+    # inherited analysis-layer fields don't render as raw paths.
+    edge_path: str | None = Field(
+        None, json_schema_extra=ui_field(section="configuration", hidden=True)
+    )
+    node_path: str | None = Field(
+        None, json_schema_extra=ui_field(section="configuration", hidden=True)
+    )
+
+    street_network_bundle_id: str | None = Field(
+        default=None,
+        description=(
+            "Choose a custom Street Network bundle to use for routing. "
+            "If unset, the default network will be used."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=26,
+            label_key="street_network_bundle_id",
+            widget="bundle-selector",
+            # PT legs route on the global network, so this is for street modes.
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"show_advanced": True},
+                ]
+            },
+            # Only street networks whose routing graph is built and ready.
+            widget_options={
+                "bundle_type": "street_network",
+                "artifact_kind": "street_network_graph",
+            },
+        ),
     )
 
     # ---- Routing section --------------------------------------------------
@@ -529,6 +564,7 @@ class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
                     "opportunity_layer_id", "opportunity_layer_filter",
                     "reference_area_layer_id", "reference_area_layer_filter",
                     "result_layer_name", "show_advanced",
+                    "street_network_bundle_id", "edge_path", "node_path",
                     "transit_modes", "max_transfers", "pt_modes", "pt_max_transfers",
                     "pt_day", "pt_arrival_time",
                     # access/egress mode + cost_type are walk-only / time-only
@@ -553,6 +589,14 @@ class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
             transit_modes=transit_modes,
             output_path=str(output_path),
         )
+
+        # An uploaded street network bundle's graph replaces the global network.
+        if params.street_network_bundle_id:
+            edge_path, node_path = fetch_routing_network(
+                self, params.street_network_bundle_id, temp_dir
+            )
+            analysis_params.edge_path = edge_path
+            analysis_params.node_path = node_path
 
         tool = self.tool_class()
         try:

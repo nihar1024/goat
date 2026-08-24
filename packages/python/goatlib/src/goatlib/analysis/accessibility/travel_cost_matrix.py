@@ -150,8 +150,9 @@ class TravelCostMatrixTool(AnalysisTool):
         # C++ uses 0.0 as the "not set" sentinel; for routing modes that don't
         # take a user-supplied speed (PT/Car/flight_distance), params.speed is None.
         cfg.speed_km_h = params.speed if params.speed is not None else 0.0
-        cfg.edge_dir = self._edge_dir
-        cfg.node_dir = self._node_dir
+        # An uploaded street network bundle's graph overrides the global network.
+        cfg.edge_dir = str(params.edge_path or self._edge_dir)
+        cfg.node_dir = str(params.node_path or self._node_dir)
         cfg.output_path = params.output_path
 
         if params.routing_mode == RoutingMode.pt:

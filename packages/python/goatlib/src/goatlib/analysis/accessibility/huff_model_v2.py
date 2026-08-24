@@ -271,8 +271,9 @@ class HuffmodelV2Tool(HeatmapToolBase):
             if params.speed is not None
             else _MODE_SPEED_DEFAULTS.get(params.routing_mode, 0.0)
         )
-        cfg.edge_dir = self._edge_dir
-        cfg.node_dir = self._node_dir
+        # An uploaded street network bundle's graph overrides the global network.
+        cfg.edge_dir = str(params.edge_path or self._edge_dir)
+        cfg.node_dir = str(params.node_path or self._node_dir)
         cfg.reverse = True
         cfg.sparse = True
         cfg.output_path = od_path
@@ -300,8 +301,9 @@ class HuffmodelV2Tool(HeatmapToolBase):
         cfg.mode = routing.RoutingMode.PublicTransport
         cfg.cost_type = routing.CostType.Time
         cfg.max_cost = float(params.max_cost)
-        cfg.edge_dir = self._edge_dir
-        cfg.node_dir = self._node_dir
+        # An uploaded street network bundle's graph overrides the global network.
+        cfg.edge_dir = str(params.edge_path or self._edge_dir)
+        cfg.node_dir = str(params.node_path or self._node_dir)
         cfg.timetable_path = self._timetable_path
         cfg.arrival_time = int(params.arrival_time)
         cfg.max_transfers = params.max_transfers

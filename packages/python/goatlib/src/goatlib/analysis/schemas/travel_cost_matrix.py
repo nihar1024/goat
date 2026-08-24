@@ -108,6 +108,30 @@ class TravelCostMatrixParams(BaseModel):
         ..., description="Path for the matrix parquet output."
     )
 
+    # ---- Street network override --------------------------------------------
+    # Point the engine at an uploaded street network bundle's graph instead of
+    # the default global network. None uses the default.
+    edge_path: str | None = Field(
+        default=None,
+        description="Path to an edges parquet to use for street routing",
+    )
+    node_path: str | None = Field(
+        default=None,
+        description="Path to a nodes parquet to use for street routing",
+    )
+
+    @model_validator(mode="after")
+    def validate_network_override(self: Self) -> Self:
+        # Half an override is worse than none: the engine would route over one
+        # network's edges joined to the other's nodes, which silently yields a
+        # near-empty result rather than failing.
+        if bool(self.edge_path) != bool(self.node_path):
+            raise ValueError(
+                "edge_path and node_path must be set together — a routing graph "
+                "is only coherent as a pair"
+            )
+        return self
+
     @model_validator(mode="after")
     def validate_coordinates(self: Self) -> Self:
         if len(self.origin_latitude) != len(self.origin_longitude):

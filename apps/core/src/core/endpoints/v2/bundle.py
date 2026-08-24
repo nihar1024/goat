@@ -4,6 +4,7 @@ from typing import List, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi.concurrency import run_in_threadpool
 from goatlib.bundles.importers import get_importer, infer_bundle_type
 from goatlib.models.bundle import (
     BundleStatus,
@@ -231,6 +232,20 @@ async def import_bundle(
     GeoParquet → street network), validate it synchronously against the type's
     spec, create the bundle (status=processing) and optional street dependency,
     then ingest the member layers in the background."""
+    # Uploads are presigned into the caller's own prefix (datasets
+    # request-upload); an import may only consume keys from there — the key is
+    # otherwise an arbitrary read of the shared bucket.
+    upload_prefix = (
+        s3_service.build_s3_key(
+            settings.S3_BUCKET_PATH, "users", str(user_id), "imports", "uploads"
+        )
+        + "/"
+    )
+    if not payload.s3_key.startswith(upload_prefix):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="s3_key must reference a file you uploaded",
+        )
     filename = payload.s3_key.rsplit("/", 1)[-1]
 
     folder = await async_session.get(Folder, payload.folder_id)
@@ -253,8 +268,12 @@ async def import_bundle(
     # are both zips — so importers get to sniff the contents as a fallback.
     tmp_path = tempfile.NamedTemporaryFile(suffix=".zip", delete=False).name
     try:
-        s3_service.download_file(settings.S3_BUCKET_NAME, payload.s3_key, tmp_path)
-        bundle_type = infer_bundle_type(filename, tmp_path)
+        # boto3 and the zip sniffing are synchronous; off the event loop so a
+        # large upload doesn't stall every other request on this worker.
+        await run_in_threadpool(
+            s3_service.download_file, settings.S3_BUCKET_NAME, payload.s3_key, tmp_path
+        )
+        bundle_type = await run_in_threadpool(infer_bundle_type, filename, tmp_path)
         if bundle_type is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -264,7 +283,9 @@ async def import_bundle(
                     "segments and connectors GeoParquet)"
                 ),
             )
-        validation = get_importer(bundle_type).validate(tmp_path)
+        validation = await run_in_threadpool(
+            get_importer(bundle_type).validate, tmp_path
+        )
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -344,9 +365,7 @@ async def import_bundle(
         await async_session.commit()
         raise
 
-    return BundleImportResponse(
-        bundle=BundleRead(**bundle.model_dump()), job_id=job_id
-    )
+    return BundleImportResponse(bundle=BundleRead(**bundle.model_dump()), job_id=job_id)
 
 
 @router.get(
@@ -384,9 +403,7 @@ async def list_bundles(
         shared_ids = select(ResourceGrant.resource_id).where(
             ResourceGrant.resource_type == RESOURCE_TYPE, or_(*conds)
         )
-        stmt = stmt.where(
-            or_(Bundle.user_id == user_id, Bundle.id.in_(shared_ids))
-        )
+        stmt = stmt.where(or_(Bundle.user_id == user_id, Bundle.id.in_(shared_ids)))
     else:
         stmt = stmt.where(Bundle.user_id == user_id)
     if bundle_type:
@@ -429,9 +446,7 @@ async def read_bundle(
     bundle_id: UUID4 = Path(..., description="The bundle ID"),
 ) -> BundleRead:
     """Retrieve a bundle the caller owns or has been shared."""
-    bundle = await authorize_bundle(
-        async_session, bundle_id, user_id, "read"
-    )
+    bundle = await authorize_bundle(async_session, bundle_id, user_id, "read")
     return BundleRead(**bundle.model_dump())
 
 
@@ -452,9 +467,7 @@ async def update_bundle(
     """Update a bundle (owner or editor). Moving the bundle to a new
     folder (``folder_id``) moves its member layers along with it, so the bundle
     stays self-contained."""
-    bundle = await authorize_bundle(
-        async_session, bundle_id, user_id, "write"
-    )
+    bundle = await authorize_bundle(async_session, bundle_id, user_id, "write")
 
     # A move must target a folder the caller owns.
     if package_in.folder_id is not None:
@@ -464,9 +477,7 @@ async def update_bundle(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
             )
 
-    updated = await crud_bundle.update(
-        async_session, db_obj=bundle, obj_in=package_in
-    )
+    updated = await crud_bundle.update(async_session, db_obj=bundle, obj_in=package_in)
 
     # Keep member layers in the bundle's folder (they are hidden, but folder
     # location still drives folder-scoped access checks).
@@ -510,10 +521,7 @@ async def delete_bundle(
     dependent = (
         await async_session.execute(
             select(BundleDependencyLink.bundle_id)
-            .where(
-                BundleDependencyLink.depends_on_bundle_id
-                == bundle_id
-            )
+            .where(BundleDependencyLink.depends_on_bundle_id == bundle_id)
             .limit(1)
         )
     ).first()
@@ -624,9 +632,7 @@ async def add_bundle_layer(
 
     existing = (
         await async_session.execute(
-            select(BundleLayerLink).where(
-                BundleLayerLink.layer_id == payload.layer_id
-            )
+            select(BundleLayerLink).where(BundleLayerLink.layer_id == payload.layer_id)
         )
     ).scalar_one_or_none()
     if existing is not None and existing.bundle_id != bundle_id:
@@ -727,9 +733,7 @@ async def list_bundle_dependencies(
                 Bundle,
                 Bundle.id == BundleDependencyLink.depends_on_bundle_id,
             )
-            .where(
-                BundleDependencyLink.bundle_id == bundle_id
-            )
+            .where(BundleDependencyLink.bundle_id == bundle_id)
         )
     ).all()
     return [
@@ -762,9 +766,7 @@ async def add_bundle_dependency(
     type. Owner only; upserts the link for the given kind."""
     bundle = await authorize_bundle(async_session, bundle_id, user_id, "write")
 
-    dep_spec = get_spec(bundle.bundle_type).dependency(
-        payload.dependency_kind
-    )
+    dep_spec = get_spec(bundle.bundle_type).dependency(payload.dependency_kind)
     if dep_spec is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

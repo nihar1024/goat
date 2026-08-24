@@ -368,7 +368,11 @@ class ToolDatabaseService:
         status: str = "building",
         job_id: str | None = None,
     ) -> str:
-        """Create a bundle_artifact row (one per (bundle_id, kind)). Returns id."""
+        """Create or reclaim the bundle_artifact row for (bundle_id, kind).
+
+        Upserts against the (bundle_id, kind) unique constraint: a rebuild or a
+        retried import takes over the existing row instead of dying on it.
+        Returns the row id."""
         kind_value = getattr(kind, "value", kind)
         status_value = getattr(status, "value", status)
         row = await self.pool.fetchrow(
@@ -377,6 +381,10 @@ class ToolDatabaseService:
                 bundle_id, kind, status, job_id, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, NOW(), NOW())
+            ON CONFLICT (bundle_id, kind) DO UPDATE SET
+                status = EXCLUDED.status,
+                job_id = EXCLUDED.job_id,
+                updated_at = NOW()
             RETURNING id
             """,
             uuid_module.UUID(bundle_id),

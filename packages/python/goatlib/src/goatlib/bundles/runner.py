@@ -93,11 +93,15 @@ class BundleImportRunner(BaseToolRunner):
                     f"DROP TABLE IF EXISTS {self.get_layer_table_path(layer_id)}"
                 )
             except Exception as e:  # pragma: no cover - best-effort cleanup
-                logger.warning("Cleanup: could not drop DuckLake table %s: %s", layer_id, e)
+                logger.warning(
+                    "Cleanup: could not drop DuckLake table %s: %s", layer_id, e
+                )
             try:
                 await db.delete_layer(layer_id)
             except Exception as e:  # pragma: no cover - best-effort cleanup
-                logger.warning("Cleanup: could not delete layer row %s: %s", layer_id, e)
+                logger.warning(
+                    "Cleanup: could not delete layer row %s: %s", layer_id, e
+                )
         logger.info("Rolled back %d partially-imported layer(s)", len(layer_ids))
 
     async def _ingest_layers(
@@ -438,6 +442,7 @@ class BundleImportRunner(BaseToolRunner):
         type_value = BundleTypeName(bundle_type).value
         pool = await self.get_postgres_pool()
         db = ToolDatabaseService(pool, schema=self.settings.customer_schema)
+        imported: List[ImportedLayer] = []
         try:
             try:
                 imported = await self._ingest_layers(
@@ -465,6 +470,13 @@ class BundleImportRunner(BaseToolRunner):
                     imported=imported,
                 )
             except Exception:
+                # Remove member layers that landed before the failure (a
+                # metadata or artifact stage can fail after ingest succeeded) —
+                # a failed bundle holds no layers, so re-running the import
+                # starts clean instead of colliding with its own leftovers.
+                await self._cleanup_layers(
+                    db, user_id, [layer.layer_id for layer in imported]
+                )
                 await db.update_package_status(
                     bundle_id=bundle_id, status=BundleStatus.failed
                 )

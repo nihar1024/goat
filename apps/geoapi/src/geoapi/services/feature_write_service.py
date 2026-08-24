@@ -442,9 +442,7 @@ class FeatureWriteService:
         would lazily load every table in the catalog to answer.
         """
         with ducklake_write_manager.connection() as con:
-            result = con.execute(
-                f'DESCRIBE lake."{layer_info.schema_name}"."{layer_info.table_name}"'
-            ).fetchall()
+            result = con.execute(f"DESCRIBE {layer_info.sql_relation}").fetchall()
             return [row[0] for row in result]
 
     def get_column_types(self, layer_info: LayerInfo) -> dict[str, str]:
@@ -454,9 +452,7 @@ class FeatureWriteService:
         would lazily load every table in the catalog to answer.
         """
         with ducklake_write_manager.connection() as con:
-            result = con.execute(
-                f'DESCRIBE lake."{layer_info.schema_name}"."{layer_info.table_name}"'
-            ).fetchall()
+            result = con.execute(f"DESCRIBE {layer_info.sql_relation}").fetchall()
             return {row[0]: row[1] for row in result}
 
     def add_column(

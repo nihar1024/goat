@@ -60,8 +60,7 @@ def _get_exportable_columns(
     DESCRIBE loads only this table's metadata; information_schema.columns
     would lazily load every table in the catalog to answer.
     """
-    schema, table = table_name.split(".", 1)
-    result = con.execute(f'DESCRIBE lake."{schema}"."{table}"').fetchall()
+    result = con.execute(f"DESCRIBE {table_name}").fetchall()
 
     unsupported_prefixes = ("STRUCT", "MAP", "UNION")
     exportable = []
@@ -74,8 +73,7 @@ def _get_exportable_columns(
 
 def _has_geometry_column(con: duckdb.DuckDBPyConnection, table_name: str) -> bool:
     """Check if table has a geometry column."""
-    schema, table = table_name.split(".", 1)
-    result = con.execute(f'DESCRIBE lake."{schema}"."{table}"').fetchall()
+    result = con.execute(f"DESCRIBE {table_name}").fetchall()
     return any(row[0] == "geometry" for row in result)
 
 
@@ -109,13 +107,13 @@ def _export_layer_to_file(
     Runs synchronously using the ducklake_manager connection (with lock).
 
     Args:
-        table_name: Fully qualified table name (schema.table, without lake. prefix for queries)
+        table_name: Fully qualified, quoted relation (LayerInfo.sql_relation)
         output_path: Path for the output file
         output_format: GDAL driver name
         crs: Target CRS (e.g. "EPSG:4326")
     """
     with ducklake_manager.connection() as con:
-        full_table = f"lake.{table_name}"
+        full_table = table_name
         exportable_columns = _get_exportable_columns(con, table_name)
 
         if not exportable_columns:
@@ -337,7 +335,7 @@ async def download_layer(
         c if c.isalnum() or c in (" ", "-", "_") else "_" for c in file_name
     ).strip()
 
-    table_name = f"{layer_info.schema_name}.{layer_info.table_name}"
+    table_name = layer_info.sql_relation
 
     # Run export in thread pool (DuckDB is blocking)
     import asyncio

@@ -30,7 +30,7 @@ from io import BufferedReader
 from pathlib import Path
 from typing import Any, Optional
 
-from cachetools import LRUCache
+from cachetools import LRUCache, TTLCache
 from goatlib.storage import build_filters
 from pmtiles.reader import MmapSource
 from pmtiles.tile import (
@@ -332,8 +332,13 @@ class TileService:
         self.ducklake_data_dir = Path(settings.DUCKLAKE_DATA_DIR)
         self.tiles_data_dir = Path(settings.TILES_DATA_DIR)
         # Track which PMTiles files exist (LRU cache for 10k+ layers)
-        self._pmtiles_exists_cache: LRUCache[str, bool] = LRUCache(
-            maxsize=_EXISTS_CACHE_MAX_SIZE
+        # TTL, not plain LRU: a False verdict must expire, because PMTiles can
+        # arrive AFTER a layer starts serving — catalog layers flip ready as
+        # soon as their data lands and tiles follow — and a sticky False would
+        # pin every pod to the dynamic path until restart. (True expiring too
+        # means a deleted file self-heals within the same minute.)
+        self._pmtiles_exists_cache: TTLCache[str, bool] = TTLCache(
+            maxsize=_EXISTS_CACHE_MAX_SIZE, ttl=60
         )
         # Cache PMTiles paths by layer_id (LRU cache for 10k+ layers)
         self._pmtiles_path_cache: LRUCache[str, Path | None] = LRUCache(

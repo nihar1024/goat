@@ -70,6 +70,14 @@ async def _get_authorized_metadata(
     Raises:
         HTTPException: If layer not found or user not authorized
     """
+    if not layer_info.writable:
+        # A catalog layer is a shared read-only snapshot; no grant can make
+        # it writable, so refuse before consulting any.
+        raise HTTPException(
+            status_code=403,
+            detail="Catalog layers are read-only",
+        )
+
     metadata = await layer_service.get_layer_metadata(layer_info)
     if not metadata:
         raise HTTPException(status_code=404, detail="Collection not found")

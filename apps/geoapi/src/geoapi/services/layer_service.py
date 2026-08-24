@@ -400,13 +400,14 @@ class LayerService:
                 # DESCRIBE loads only this table's metadata;
                 # information_schema.columns would lazily load every table
                 # in the catalog to answer.
-                result = con.execute(
-                    f'DESCRIBE lake."{layer_info.schema_name}"'
-                    f'."{layer_info.table_name}"'
-                ).fetchall()
+                result = con.execute(f"DESCRIBE {layer_info.sql_relation}").fetchall()
 
                 for row in result:
                     col_name, col_type = row[0], row[1]
+                    # A catalog view's first column IS rowid (it names
+                    # file_row_number); it is the feature id, not a field.
+                    if layer_info.kind == "catalog" and col_name == "rowid":
+                        continue
                     # Map DuckDB types to JSON schema types
                     json_type = self._duckdb_to_json_type(col_type)
                     col_meta: dict[str, Any] = {

@@ -38,6 +38,13 @@ class Settings(BaseSettings):
 
     # Tiles storage (separate from source data for cache semantics)
     TILES_DATA_DIR: str = os.getenv("TILES_DATA_DIR", "/app/data/tiles")
+    # Materialized catalog layers: one immutable GeoParquet per promoted layer,
+    # written by the catalog_materialize job. Read through a view that names
+    # file_row_number `rowid`, so every rowid-based query works unchanged.
+    CATALOG_LAYERS_DIR: str = os.getenv(
+        "CATALOG_LAYERS_DIR",
+        os.path.join(os.getenv("DATA_DIR", "/app/data"), "catalog", "layers"),
+    )
 
     # S3/MinIO settings (shared for DuckLake and uploads)
     S3_PROVIDER: str = os.getenv("S3_PROVIDER", "hetzner").lower()

@@ -66,6 +66,29 @@ logger = logging.getLogger(__name__)
 TParams = TypeVar("TParams", bound=ToolInputBase)
 
 
+def _catalog_layer_parquet(layer_id: str) -> "Path | None":
+    """The materialized file of a promoted catalog layer, or None.
+
+    Existence of the file IS the signal — the same check geoapi's resolver
+    makes — so tools and serving agree about what counts as a catalog layer.
+    """
+    import os
+
+    if ":" in layer_id:
+        return None
+    try:
+        table = layer_id_to_table_name(layer_id)
+    except Exception:
+        return None
+    path = (
+        Path(os.environ.get("DATA_DIR", "/app/data"))
+        / "catalog"
+        / "layers"
+        / f"{table}.parquet"
+    )
+    return path if path.exists() else None
+
+
 def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
     """Get the current event loop or create a new one if none exists.
 
@@ -578,6 +601,37 @@ class SimpleToolRunner:
         """
         return layer_table_path(layer_id)
 
+    def _export_catalog_filtered(
+        self: Self,
+        layer_id: str,
+        catalog_path: "Path",
+        cql_filter: dict[str, Any],
+    ) -> str:
+        """One filtered COPY of a catalog layer's file to a temp parquet."""
+        import json
+        import tempfile
+
+        from goatlib.storage.query_builder import build_cql_filter
+
+        con = self.duckdb_con
+        cols = [
+            r[0]
+            for r in con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{catalog_path}')"
+            ).fetchall()
+        ]
+        filters = build_cql_filter(json.dumps(cql_filter), cols)
+        where = f"WHERE {filters.clause}" if filters.clause else ""
+        tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
+        tmp.close()
+        self._execute_with_retry(
+            "export filtered catalog layer",
+            f"COPY (SELECT * FROM read_parquet('{catalog_path}') {where}) "
+            f"TO '{tmp.name}' (FORMAT PARQUET, COMPRESSION ZSTD)",
+            filters.params,
+        )
+        return tmp.name
+
     def resolve_layer_table_path(self: Self, layer_id: str) -> str:
         """Find the DuckLake table path of an **existing** layer.
 
@@ -589,6 +643,10 @@ class SimpleToolRunner:
         """
         if self.settings is None:
             raise RuntimeError("Settings not initialized")
+
+        catalog_path = _catalog_layer_parquet(layer_id)
+        if catalog_path is not None:
+            return self._ensure_catalog_view(layer_id, catalog_path)
 
         try:
             schema = resolve_layer_schema(
@@ -608,6 +666,23 @@ class SimpleToolRunner:
         if schema is None:
             return layer_table_path(layer_id)
         return f"lake.{schema}.{layer_id_to_table_name(layer_id)}"
+
+    def _ensure_catalog_view(self: Self, layer_id: str, path: "Path") -> str:
+        """A rowid-bearing view over a catalog layer's file, on this runner's
+        own connection; returns the relation to query.
+
+        Named by layer so tools reading several catalog layers coexist; the
+        file is immutable, so a stale view cannot serve stale data.
+        """
+        table = layer_id_to_table_name(layer_id)
+        con = self.duckdb_con
+        con.execute("CREATE SCHEMA IF NOT EXISTS catalog_layers")
+        con.execute(
+            f'CREATE VIEW IF NOT EXISTS catalog_layers."{table}" AS '
+            f"SELECT file_row_number AS rowid, * EXCLUDE (file_row_number) "
+            f"FROM read_parquet('{path}', file_row_number=true)"
+        )
+        return f'catalog_layers."{table}"'
 
     async def get_postgres_pool(self: Self) -> asyncpg.Pool:
         """Create PostgreSQL connection pool."""
@@ -1035,6 +1110,15 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         # Check if this is a temp layer ID (format: workflow_id:node_id)
         if ":" in layer_id:
             return self._export_temp_layer_to_parquet(layer_id, user_id, cql_filter)
+
+        # A materialized catalog layer already IS a parquet file — immutable,
+        # so with no filter the file itself is the export. Scenarios never
+        # apply: catalog layers are read-only, nothing to merge.
+        catalog_path = _catalog_layer_parquet(layer_id)
+        if catalog_path is not None:
+            if not cql_filter:
+                return str(catalog_path)
+            return self._export_catalog_filtered(layer_id, catalog_path, cql_filter)
 
         # Look up the layer's actual owner to correctly access shared/catalog layers
         layer_owner_id = self.get_layer_owner_id_sync(layer_id)

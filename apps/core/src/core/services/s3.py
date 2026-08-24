@@ -207,6 +207,17 @@ class S3Service:
                 detail=f"Failed to delete file: {e}",
             )
 
+    def download_file(self, bucket_name: str, s3_key: str, dest_path: str) -> None:
+        """Download an object from S3 to a local path."""
+        try:
+            self.s3_client.download_file(bucket_name, s3_key, dest_path)
+        except ClientError as e:
+            logger.error(f"Download failed for {bucket_name}/{s3_key}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Failed to download file: {e}",
+            )
+
     def get_thumbnail_url(
         self,
         thumbnail_key: str | None,

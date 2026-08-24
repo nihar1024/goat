@@ -2,9 +2,11 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.crud.crud_share import share as crud_share
+from core.db.models._link_model import BundleLayerLink
 from core.deps.auth import auth_z, user_token
 from core.endpoints.deps import get_db
 from core.schemas.share import ShareLayerSchema, ShareProjectSchema
@@ -39,6 +41,25 @@ async def share_orgs_teams_for_layer(
     """
     Share layer with organizations and teams
     """
+    # Layers that belong to a bundle are never shared individually —
+    # they inherit the bundle's sharing. Reject the attempt and point the
+    # caller at the bundle share endpoint.
+    in_package = (
+        await db.execute(
+            select(BundleLayerLink.id)
+            .where(BundleLayerLink.layer_id == layer_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if in_package is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This layer belongs to a bundle and cannot be shared "
+                "individually. Share the bundle instead."
+            ),
+        )
+
     # check if there is any team_ids or organization_ids in the request body and if they match the query parameters
     if shared_with.teams:
         payload_team_ids = {str(team.id) for team in shared_with.teams}

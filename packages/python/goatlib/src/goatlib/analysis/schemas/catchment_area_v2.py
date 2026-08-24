@@ -134,6 +134,15 @@ class CatchmentAreaV2Params(BaseModel):
     grid_points_path: str | None = Field(default=None, description="Parquet with grid points (id, x_3857, y_3857)")
     grid_snap_distance: float = Field(default=0.0, ge=0.0, description="PointGrid snap distance in meters (0 = default 500m)")
 
+    # PT routing: override the timetable .bin (e.g. a bundle's routing graph).
+    # None uses the engine's default global PT network.
+    timetable_path: str | None = Field(default=None, description="Path to a nigiri .bin timetable to use for PT routing")
+
+    # Street routing: override the edge/node datasets (e.g. an uploaded street
+    # network bundle's graph). None uses the engine's default global network.
+    edge_path: str | None = Field(default=None, description="Path to an edges parquet to use for street routing")
+    node_path: str | None = Field(default=None, description="Path to a nodes parquet to use for street routing")
+
     @model_validator(mode="after")
     def validate_pt_settings(self: Self) -> Self:
         if self.routing_mode == RoutingMode.pt:
@@ -141,6 +150,18 @@ class CatchmentAreaV2Params(BaseModel):
                 raise ValueError("transit_modes is required for PT mode")
             if not self.time_window:
                 raise ValueError("time_window is required for PT mode")
+        return self
+
+    @model_validator(mode="after")
+    def validate_network_override(self: Self) -> Self:
+        # Half an override is worse than none: the engine would route over one
+        # network's edges joined to the other's nodes, which silently yields a
+        # near-empty result rather than failing.
+        if bool(self.edge_path) != bool(self.node_path):
+            raise ValueError(
+                "edge_path and node_path must be set together — a routing graph "
+                "is only coherent as a pair"
+            )
         return self
 
     @model_validator(mode="after")

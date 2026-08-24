@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { isBundleTile } from "@/lib/api/bundles";
 import type { Layer } from "@/lib/validations/layer";
 
 import type { ContentActions } from "@/types/common";
@@ -82,7 +83,7 @@ const DataSection = (props: DataSectionProps) => {
             }}
             onClick={() => {
               if (item && item.id) {
-                router.push(`/datasets/${item.id}`);
+                router.push(isBundleTile(item) ? `/bundles/${item.id}` : `/datasets/${item.id}`);
               }
             }}>
             {!item ? (

@@ -1,0 +1,182 @@
+"""
+Bundle Model
+"""
+
+from typing import TYPE_CHECKING, Any, Dict, List
+from uuid import UUID
+
+from goatlib.models.bundle import BundleStatus
+from pydantic import field_serializer
+from sqlalchemy import ForeignKey, Integer, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as UUID_PG
+from sqlmodel import Column, Field, Relationship, text
+
+from core.core.config import settings
+from core.db.models._base_class import (
+    ContentBaseAttributes,
+    DateTimeBase,
+    serialize_str_enum,
+)
+from core.db.models.bundle_type import BundleTypeName
+
+if TYPE_CHECKING:
+    from ._link_model import BundleDependencyLink, BundleLayerLink
+    from .bundle_artifact import BundleArtifact
+    from .bundle_type import BundleType
+    from .folder import Folder
+    from .user import User
+
+
+class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
+    """A group of layers that form a single dataset and must be managed together.
+
+    Datasets such as a street network (nodes + edges) or a GTFS public-transport
+    feed (stops, routes, trips, …) are made up of several layers that only make
+    sense as a unit. A bundle bundles those member layers under one
+    owner and folder, tagged with a ``bundle_type`` whose ``structure``
+    describes the expected roles/artifacts. Deleting a bundle cascades to its
+    layers.
+
+    Inherits ``folder_id``, ``name`` and ``description`` from
+    ``ContentBaseAttributes`` and ``created_at``/``updated_at`` from
+    ``DateTimeBase``.
+    """
+
+    __tablename__ = "bundle"
+    __table_args__ = {"schema": settings.SCHEMA}
+
+    id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=text("uuid_generate_v4()"),
+        ),
+        description="Bundle ID",
+    )
+    user_id: UUID = Field(
+        sa_column=Column(
+            UUID_PG(as_uuid=True),
+            ForeignKey(f"{settings.SCHEMA}.user.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        description="Bundle owner ID",
+    )
+    bundle_type: BundleTypeName = Field(
+        sa_column=Column(
+            Text,
+            ForeignKey(
+                f"{settings.SCHEMA}.bundle_type.type", ondelete="RESTRICT"
+            ),
+            nullable=False,
+            index=True,
+        ),
+        description="Bundle type (FK to bundle_type.type)",
+    )
+    properties: Dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+        description="Dataset-level metadata conforming to the type's structure",
+    )
+    thumbnail_url: str | None = Field(
+        default=settings.DEFAULT_LAYER_THUMBNAIL,
+        sa_column=Column(Text, nullable=True),
+        description="Bundle thumbnail URL",
+    )
+    records: Dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+        description="Structured records associated with the bundle",
+    )
+    # Dataset-level provenance, mirroring the equivalent layer fields. A bundle
+    # is the unit a user acquires (a GTFS feed, an Overture extract), so licence
+    # and distribution describe it rather than any one member layer. Importers
+    # fill what the source states; the rest is authored.
+    lineage: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        max_length=500,
+        description="Descriptive information about the source of the data and its derivation",
+    )
+    geographical_code: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        max_length=13,
+        description="Primary geographical area, ISO 3166-1 alpha-2 or a continent name",
+    )
+    distributor_name: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        max_length=500,
+        description="Name of the entity distributing the data",
+    )
+    distributor_email: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description="Contact information for the distributor",
+    )
+    distribution_url: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description="URL to the data distribution",
+    )
+    license: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        description="License of the data",
+    )
+    attribution: str | None = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+        max_length=500,
+        description="Data source of the bundle",
+    )
+    data_reference_year: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+        description="Data reference year of the bundle",
+    )
+    status: BundleStatus = Field(
+        default=BundleStatus.ready,
+        sa_column=Column(
+            Text, nullable=False, server_default=BundleStatus.ready
+        ),
+        description="Processing lifecycle status (import sets processing → ready/failed)",
+    )
+
+    # Relationships
+    user: "User" = Relationship(back_populates="bundles")
+    folder: "Folder" = Relationship(back_populates="bundles")
+    type_definition: "BundleType" = Relationship(back_populates="bundles")
+    layer_links: List["BundleLayerLink"] = Relationship(
+        back_populates="bundle",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    artifacts: List["BundleArtifact"] = Relationship(
+        back_populates="bundle",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    # Dependencies this bundle declares on other bundles (e.g. GTFS -> street).
+    dependency_links: List["BundleDependencyLink"] = Relationship(
+        back_populates="bundle",
+        sa_relationship_kwargs={
+            "foreign_keys": "[BundleDependencyLink.bundle_id]",
+            "cascade": "all, delete-orphan",
+        },
+    )
+    # Dependencies other bundles declare on this one (e.g. GTFS bundles that
+    # use this street network). passive_deletes lets the DB ON DELETE CASCADE
+    # drop these rows instead of the ORM nullifying their (NOT NULL) FK.
+    dependent_links: List["BundleDependencyLink"] = Relationship(
+        back_populates="depends_on_bundle",
+        sa_relationship_kwargs={
+            "foreign_keys": "[BundleDependencyLink.depends_on_bundle_id]",
+            "passive_deletes": True,
+        },
+    )
+
+    @field_serializer("bundle_type", "status")
+    def serialize_enums(self, value: object) -> "str | None":
+        return serialize_str_enum(value)

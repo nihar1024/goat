@@ -18,6 +18,10 @@ from typing import Any, Literal, Self
 import asyncpg
 from pydantic import BaseModel, Field, model_validator
 
+from goatlib.models.bundle import (
+    BundleStatus,
+    BundleTypeName,
+)
 from goatlib.tools.style import get_default_style
 
 logger = logging.getLogger(__name__)
@@ -256,6 +260,198 @@ class ToolDatabaseService:
         )
         return properties
 
+    async def create_bundle(
+        self: Self,
+        bundle_id: str,
+        user_id: str,
+        folder_id: str,
+        name: str,
+        bundle_type: "BundleTypeName | str",
+        description: str | None = None,
+        properties: dict[str, Any] | None = None,
+    ) -> None:
+        """Create a bundle record in customer.bundle."""
+        type_value = getattr(bundle_type, "value", bundle_type)
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.bundle (
+                id, user_id, folder_id, name, description,
+                bundle_type, properties, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+            """,
+            uuid_module.UUID(bundle_id),
+            uuid_module.UUID(user_id),
+            uuid_module.UUID(folder_id),
+            name,
+            description,
+            type_value,
+            json.dumps(properties) if properties else None,
+        )
+        logger.info(
+            f"Created bundle: {bundle_id} ({name}) "
+            f"type={type_value} in folder {folder_id}"
+        )
+
+    async def get_bundle_name(self: Self, bundle_id: str) -> str | None:
+        """Return the bundle's display name (customer.bundle.name)."""
+        row = await self.pool.fetchrow(
+            f"SELECT name FROM {self.schema}.bundle WHERE id = $1",
+            uuid_module.UUID(bundle_id),
+        )
+        return row["name"] if row else None
+
+    async def update_package_status(
+        self: Self,
+        bundle_id: str,
+        status: "BundleStatus | str",
+    ) -> None:
+        """Update a bundle's processing status."""
+        status_value = getattr(status, "value", status)
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle
+            SET status = $2, updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(bundle_id),
+            status_value,
+        )
+        logger.info(f"Bundle {bundle_id} status -> {status_value}")
+
+    async def update_package_metadata(
+        self: Self,
+        bundle_id: str,
+        metadata: dict,
+    ) -> None:
+        """Write the provenance fields a source stated about itself.
+
+        Only the keys present are written, so a field the source is silent about
+        keeps whatever the owner authored.
+        """
+        allowed = (
+            "lineage",
+            "geographical_code",
+            "distributor_name",
+            "distributor_email",
+            "distribution_url",
+            "license",
+            "attribution",
+            "data_reference_year",
+        )
+        unknown = set(metadata) - set(allowed)
+        if unknown:
+            raise ValueError(
+                f"Not bundle metadata fields: {', '.join(sorted(unknown))}"
+            )
+        if not metadata:
+            return
+
+        columns = list(metadata)
+        assignments = ", ".join(
+            f'"{column}" = ${index + 2}' for index, column in enumerate(columns)
+        )
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle
+            SET {assignments}, updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(bundle_id),
+            *(metadata[column] for column in columns),
+        )
+        logger.info(f"Bundle {bundle_id} metadata <- {', '.join(columns)}")
+
+    async def create_artifact(
+        self: Self,
+        bundle_id: str,
+        kind: str,
+        status: str = "building",
+        job_id: str | None = None,
+    ) -> str:
+        """Create a bundle_artifact row (one per (bundle_id, kind)). Returns id."""
+        kind_value = getattr(kind, "value", kind)
+        status_value = getattr(status, "value", status)
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO {self.schema}.bundle_artifact (
+                bundle_id, kind, status, job_id, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            RETURNING id
+            """,
+            uuid_module.UUID(bundle_id),
+            kind_value,
+            status_value,
+            uuid_module.UUID(job_id) if job_id else None,
+        )
+        logger.info(
+            f"Created artifact {row['id']} ({kind_value}) for bundle {bundle_id}"
+        )
+        return str(row["id"])
+
+    async def update_artifact_status(
+        self: Self,
+        artifact_id: str,
+        status: str,
+        storage_path: str | None = None,
+        size: int | None = None,
+    ) -> None:
+        """Update an artifact's build status and (on success) where it landed."""
+        status_value = getattr(status, "value", status)
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle_artifact
+            SET status = $2,
+                storage_path = COALESCE($3, storage_path),
+                size = COALESCE($4, size),
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            uuid_module.UUID(artifact_id),
+            status_value,
+            storage_path,
+            size,
+        )
+        logger.info(f"Artifact {artifact_id} status -> {status_value}")
+
+    async def get_bundle_artifact_path(
+        self: Self, bundle_id: str, kind: str
+    ) -> str | None:
+        """Stored path of a bundle's ready artifact of the given kind, relative
+        to the bundles data dir (or None)."""
+        kind_value = getattr(kind, "value", kind)
+        row = await self.pool.fetchrow(
+            f"""
+            SELECT storage_path FROM {self.schema}.bundle_artifact
+            WHERE bundle_id = $1 AND kind = $2 AND status = 'ready'
+              AND storage_path IS NOT NULL
+            LIMIT 1
+            """,
+            uuid_module.UUID(bundle_id),
+            kind_value,
+        )
+        return row["storage_path"] if row else None
+
+    async def add_layer_to_package(
+        self: Self,
+        bundle_id: str,
+        layer_id: str,
+        role: str | None = None,
+    ) -> None:
+        """Link a layer to a bundle with its role
+        (customer.bundle_layer)."""
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.bundle_layer (
+                bundle_id, layer_id, role
+            ) VALUES ($1, $2, $3)
+            """,
+            uuid_module.UUID(bundle_id),
+            uuid_module.UUID(layer_id),
+            role,
+        )
+        logger.info(f"Linked layer {layer_id} to bundle {bundle_id} as role={role}")
+
     async def add_to_project(
         self: Self,
         layer_id: str,
@@ -263,6 +459,8 @@ class ToolDatabaseService:
         name: str,
         properties: dict[str, Any] | None = None,
         other_properties: dict[str, Any] | None = None,
+        group_id: int | None = None,
+        order: int | None = None,
     ) -> int:
         """Link a layer to a project.
 
@@ -275,6 +473,12 @@ class ToolDatabaseService:
             name: Display name for the layer in this project
             properties: Layer properties for this project context
             other_properties: Additional properties
+            group_id: Layer group to place the link in (e.g. a bundle-backed
+                group); None leaves the layer at the project root
+            order: Position in the project's single tree-wide order sequence.
+                None keeps the default of 0 and puts the layer at the top of
+                layer_order, which is what a tool's output layer wants; giving one
+                places the layer at that position and at the bottom instead.
 
         Returns:
             layer_project_id: The ID of the created link record
@@ -291,15 +495,14 @@ class ToolDatabaseService:
         properties_json = json.dumps(properties) if properties else None
         other_props_json = json.dumps(other_properties) if other_properties else None
 
-        # Create the layer_project link
-        # order=0 is required (non-nullable column)
+        # Create the layer_project link ("order" is non-nullable)
         row = await self.pool.fetchrow(
             f"""
             INSERT INTO {self.schema}.layer_project (
                 layer_id, project_id, name, "order", properties, other_properties,
-                created_at, updated_at
+                layer_project_group_id, created_at, updated_at
             )
-            VALUES ($1, $2, $3, 0, $4::jsonb, $5::jsonb, NOW(), NOW())
+            VALUES ($1, $2, $3, $7, $4::jsonb, $5::jsonb, $6, NOW(), NOW())
             RETURNING id
             """,
             record.layer_id,
@@ -307,14 +510,22 @@ class ToolDatabaseService:
             record.name,
             properties_json,
             other_props_json,
+            group_id,
+            order if order is not None else 0,
         )
         layer_project_id = row["id"]
 
-        # Update project.layer_order - prepend the new layer to the list
+        # An explicitly ordered layer belongs at the bottom (it is placing itself
+        # below what is already there); otherwise the newest layer goes on top.
+        placement = (
+            "array_append(COALESCE(layer_order, ARRAY[]::int[]), $1)"
+            if order is not None
+            else "array_prepend($1, COALESCE(layer_order, ARRAY[]::int[]))"
+        )
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.project
-            SET layer_order = array_prepend($1, COALESCE(layer_order, ARRAY[]::int[])),
+            SET layer_order = {placement},
                 updated_at = NOW()
             WHERE id = $2
             """,
@@ -327,6 +538,51 @@ class ToolDatabaseService:
             f"(layer_project_id={layer_project_id})"
         )
         return layer_project_id
+
+    async def create_bundle_project_group(
+        self: Self, project_id: str, bundle_id: str, name: str
+    ) -> tuple[int, int]:
+        """Create a bundle-backed layer group in a project (locked membership),
+        placed below everything already there. Returns ``(id, order)`` — the
+        caller needs the order to place the members directly beneath it.
+
+        Groups and layers share one tree-wide "order" sequence — the layer panel
+        writes it by flattening the whole tree — so the maximum is taken over both.
+        Reading only the groups drops the bundle in among the existing layers."""
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO {self.schema}.layer_project_group (
+                project_id, bundle_id, name, "order", created_at, updated_at
+            )
+            VALUES (
+                $1, $2, $3,
+                GREATEST(
+                    COALESCE((SELECT MAX("order") FROM {self.schema}.layer_project_group
+                              WHERE project_id = $1), -1),
+                    COALESCE((SELECT MAX("order") FROM {self.schema}.layer_project
+                              WHERE project_id = $1), -1)
+                ) + 1,
+                NOW(), NOW()
+            )
+            RETURNING id, "order"
+            """,
+            uuid_module.UUID(project_id),
+            uuid_module.UUID(bundle_id),
+            name,
+        )
+        logger.info(
+            f"Created bundle group {row['id']} for bundle {bundle_id} "
+            f"in project {project_id} at order {row['order']}"
+        )
+        return row["id"], row["order"]
+
+    async def delete_layer_project_group(self: Self, group_id: int) -> None:
+        """Delete a project layer group (cascades its layer_project links). Used
+        to roll back a partially-created bundle group on failure."""
+        await self.pool.execute(
+            f"DELETE FROM {self.schema}.layer_project_group WHERE id = $1",
+            int(group_id),
+        )
 
     async def delete_layer(self: Self, layer_id: str) -> None:
         """Delete a layer record from customer.layer.

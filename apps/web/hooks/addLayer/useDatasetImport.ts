@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { detectBundleType, requestBundleImport } from "@/lib/api/bundles";
 import { requestDatasetUpload } from "@/lib/api/datasets";
 import { createLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
@@ -76,16 +77,32 @@ export const useDatasetImport = () => {
           signal: controller.signal,
         });
 
-        const payload = createLayerFromDatasetSchema.parse({
-          name: request.name,
-          description: request.description,
-          folder_id: request.folderId,
-          s3_key: presigned.fields.key,
-          ...(request.hasHeader !== undefined && { has_header: request.hasHeader }),
-          ...(request.sheetName && { sheet_name: request.sheetName }),
-        });
-        const response = await createLayer(payload, request.projectId);
-        const jobId = response?.jobID;
+        // A recognised bundle (e.g. a GTFS feed) imports as a bundle — one
+        // upload becoming several linked layers — instead of a single layer.
+        // The backend re-infers the type from the file, so this only routes.
+        const bundleType = detectBundleType(file);
+        let jobId: string | undefined;
+        if (bundleType) {
+          const response = await requestBundleImport({
+            s3_key: presigned.fields.key,
+            folder_id: request.folderId as string,
+            name: request.name,
+            description: request.description,
+            ...(request.projectId && { project_id: request.projectId }),
+          });
+          jobId = response.job_id ?? undefined;
+        } else {
+          const payload = createLayerFromDatasetSchema.parse({
+            name: request.name,
+            description: request.description,
+            folder_id: request.folderId,
+            s3_key: presigned.fields.key,
+            ...(request.hasHeader !== undefined && { has_header: request.hasHeader }),
+            ...(request.sheetName && { sheet_name: request.sheetName }),
+          });
+          const response = await createLayer(payload, request.projectId);
+          jobId = response?.jobID;
+        }
 
         dispatch(transferHandedOff({ id, jobId }));
         if (jobId) {

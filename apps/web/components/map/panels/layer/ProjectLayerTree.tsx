@@ -262,22 +262,41 @@ function formatApiDataForDnd(
     return false;
   };
 
+  // Groups backed by a bundle have locked membership: layers can't be dragged
+  // into/out of them, and members can't be removed individually.
+  const bundleGroupIds = new Set(
+    nodes.filter((node) => node.type === "group" && node.bundle_id).map((node) => node.id)
+  );
+
   return nodes
     .filter((node) => !shouldHideNode(node))
-    .map((node) => ({
-      id: `${node.type}-${node.id}`,
-      parentId: node.parent_id ? `group-${node.parent_id}` : null,
-      label: node.name,
-      collapsed:
-        node.type === "group"
-          ? !(node.properties?.expanded ?? true) // For groups, use expanded property
-          : (node.properties?.legend?.collapsed ?? false), // For layers, use legend.collapsed property
-      isGroup: node.type === "group",
-      labelInfo: node.type === "layer" ? statusLabel?.(node) : undefined,
-      data: node,
-      // Hide expand/collapse functionality for invisible groups
-      canExpand: node.type === "group" ? (node.properties?.visibility ?? true) : undefined,
-    }));
+    .map((node) => {
+      const isBundleGroup = node.type === "group" && !!node.bundle_id;
+      const isBundleMember = node.type === "layer" && !!node.parent_id && bundleGroupIds.has(node.parent_id);
+      return {
+        id: `${node.type}-${node.id}`,
+        parentId: node.parent_id ? `group-${node.parent_id}` : null,
+        label: node.name,
+        collapsed:
+          node.type === "group"
+            ? !(node.properties?.expanded ?? true) // For groups, use expanded property
+            : (node.properties?.legend?.collapsed ?? false), // For layers, use legend.collapsed property
+        isGroup: node.type === "group",
+        labelInfo: node.type === "layer" ? statusLabel?.(node) : undefined,
+        data: node,
+        // Hide expand/collapse functionality for invisible groups
+        canExpand: node.type === "group" ? (node.properties?.visibility ?? true) : undefined,
+        // Bundle-group lock: member layers can't be dragged at all, and nothing
+        // can be dropped into the group. The group itself stays a drop target so
+        // it can be reordered — marking it undroppable leaves a project holding
+        // only bundles with no valid drop target anywhere, and nothing moves.
+        // Membership is enforced in handleDragEnd, which rejects any drop that
+        // would adopt a bundle group as parent.
+        isBundleGroup,
+        dragDisabled: isBundleMember,
+        dropDisabled: isBundleMember,
+      };
+    });
 }
 
 function formatDndDataForApi(flatItems: ProjectTreeItem[]): ProjectLayerTreeUpdate {
@@ -503,6 +522,7 @@ export const ProjectLayerTree = ({
         order: group.order ?? 0, // Provide default value for order
         extent: "", // Groups don't have extent, use empty string as default
         properties: group.properties, // Include properties for groups
+        bundle_id: group.bundle_id, // Bundle-backed groups have locked membership
       });
     });
 
@@ -768,7 +788,10 @@ export const ProjectLayerTree = ({
         { id: MapLayerActions.RENAME, label: t("rename") || "Rename", icon: ICON_NAME.EDIT },
         {
           id: ContentActions.DELETE,
-          label: t("delete") || "Delete",
+          // For a bundle group, delete removes the bundle from the project.
+          label: item.isBundleGroup
+            ? t("remove_bundle") || "Remove bundle"
+            : t("delete") || "Delete",
           icon: ICON_NAME.TRASH,
           color: "error.main",
         },
@@ -788,6 +811,11 @@ export const ProjectLayerTree = ({
         }),
         isEditMode,
       );
+    }
+
+    // Bundle member layers can't be removed individually (remove the bundle).
+    if (node.type === "layer" && item.dragDisabled) {
+      menuOptions = menuOptions.filter((opt) => opt.id !== ContentActions.DELETE);
     }
 
     // Filter menu options based on view mode
@@ -1048,7 +1076,9 @@ export const ProjectLayerTree = ({
             />
           ) : (
             <Icon
-              iconName={ICON_NAME.LAYERS}
+              // Bundle-backed groups get a distinct icon (a cube = a self-contained
+              // package of layers) to signal locked membership.
+              iconName={item.isBundleGroup ? ICON_NAME.CUBE : ICON_NAME.LAYERS}
               style={{ fontSize: "1rem", color: theme.palette.action.active }}
             />
           ),

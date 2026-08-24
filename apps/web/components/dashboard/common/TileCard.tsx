@@ -78,6 +78,7 @@ const CardTags = ({ tags, maxTags = 5 }: CardTagsProps) => {
 
 const TileCard = (props: TileCard) => {
   const { cardType, item, enableActions = true } = props;
+  const showMenu = enableActions && !!props.moreMenuOptions?.length;
   const theme = useTheme();
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const { t } = useTranslation("common");
@@ -179,7 +180,7 @@ const TileCard = (props: TileCard) => {
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pb: theme.spacing(2) }}>
         {cardTitle}
-        {enableActions && !!props.moreMenuOptions?.length && moreMenu}
+        {showMenu && moreMenu}
       </Stack>
       {/* Created by info  */}
       <Stack direction="row" alignItems="center" spacing={2} sx={{ pb: 0 }}>
@@ -344,7 +345,7 @@ const TileCard = (props: TileCard) => {
                     {sharedChipEl}
                   </Box>
                 </Grid>
-                {enableActions && !!props.moreMenuOptions?.length && (
+                {showMenu && (
                   <Grid item sm={1}>
                     <Box display="flex" justifyContent="flex-end">
                       {moreMenu}

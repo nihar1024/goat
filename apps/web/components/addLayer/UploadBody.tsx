@@ -11,6 +11,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { BUNDLE_TYPES } from "@/lib/api/bundles";
+
 import type { UploadFlow } from "@/hooks/addLayer/useUploadFlow";
 
 import LayerSetupDialog from "@/components/addLayer/LayerSetupDialog";
@@ -111,7 +113,14 @@ const UploadBody = ({
     <Stack spacing={4}>
       <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
         {t("supported")} <b>GeoPackage</b>, <b>GeoJSON</b>, <b>Shapefile (.zip)</b>, <b>KML</b>,{" "}
-        <b>CSV</b>, <b>XLSX</b>, <b>Parquet</b>. {t("upload_multi_dataset_hint")}
+        <b>CSV</b>, <b>XLSX</b>, <b>Parquet</b>,{" "}
+        {BUNDLE_TYPES.map((type, index) => (
+          <span key={type.type}>
+            <b>{type.uploadHint}</b>
+            {index < BUNDLE_TYPES.length - 1 ? ", " : ""}
+          </span>
+        ))}
+        . {t("upload_multi_dataset_hint")}
       </Typography>
 
       {/* One file at a time, so the zone is the empty state and nothing more: once a file
@@ -136,6 +145,11 @@ const UploadBody = ({
             onSetUp={upload.isTabular ? () => setSetUpOpen(true) : undefined}
             onRemove={() => upload.setFile(null)}
           />
+          {upload.bundleType && (
+            <Typography variant="caption" color="text.secondary">
+              {t("bundle_detected_note", { type: t(upload.bundleType.labelKey) })}
+            </Typography>
+          )}
         </Stack>
       ) : (
         <UploadDropzone

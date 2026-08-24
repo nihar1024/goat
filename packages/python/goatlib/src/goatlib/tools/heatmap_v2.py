@@ -50,6 +50,7 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
+from goatlib.bundles.artifacts.street_network import fetch_routing_network
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools._opportunity_handles import (
     NUMBERED_OPPORTUNITY_FILTER_FIELDS,
@@ -757,6 +758,32 @@ class HeatmapV2WindmillParams(ToolInputBase):
         ),
     )
 
+    street_network_bundle_id: str | None = Field(
+        default=None,
+        description=(
+            "Choose a custom Street Network bundle to use for routing. "
+            "If unset, the default network will be used."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=21,
+            label_key="street_network_bundle_id",
+            widget="bundle-selector",
+            # PT legs route on the global network, so this is for street modes.
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
+                    {"show_advanced": True},
+                ]
+            },
+            # Only street networks whose routing graph is built and ready.
+            widget_options={
+                "bundle_type": "street_network",
+                "artifact_kind": "street_network_graph",
+            },
+        ),
+    )
+
     # =========================================================================
     # Cost / budget / speed
     #
@@ -1457,6 +1484,14 @@ class HeatmapV2ToolRunner(BaseToolRunner[HeatmapV2WindmillParams]):
             # Output
             output_path=str(output_path),
         )
+
+        # An uploaded street network bundle's graph replaces the global network.
+        if params.street_network_bundle_id:
+            edge_path, node_path = fetch_routing_network(
+                self, params.street_network_bundle_id, temp_dir
+            )
+            analysis_params.edge_path = edge_path
+            analysis_params.node_path = node_path
 
         tool = self.tool_class()
         try:

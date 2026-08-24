@@ -84,7 +84,7 @@ jobs:
       POSTGRES_DB: goat
       POSTGRES_PORT: "5432"
       AUTH: "False"
-      ENVIRONMENT: test
+      ENVIRONMENT: dev
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4

@@ -314,8 +314,9 @@ class HeatmapV2Tool(HeatmapToolBase):
             if params.speed is not None
             else _MODE_SPEED_DEFAULTS.get(params.routing_mode, 0.0)
         )
-        cfg.edge_dir = self._edge_dir
-        cfg.node_dir = self._node_dir
+        # An uploaded street network bundle's graph overrides the global network.
+        cfg.edge_dir = str(params.edge_path or self._edge_dir)
+        cfg.node_dir = str(params.node_path or self._node_dir)
         cfg.opportunities = [
             routing.Opportunity(
                 [routing.Point3857(sx, sy) for (sx, sy) in seeds],

@@ -26,10 +26,15 @@ ROLES = [
     {"name": "project-owner", "resource_type": "project"},
     {"name": "project-editor", "resource_type": "project"},
     {"name": "project-viewer", "resource_type": "project"},
+    {"name": "bundle-owner", "resource_type": "bundle"},
+    {"name": "bundle-editor", "resource_type": "bundle"},
+    {"name": "bundle-viewer", "resource_type": "bundle"},
 ]
 
 PERMISSIONS = [
     "manage-folder",
+    "read-bundle",
+    "manage-bundle",
     "manage-asset",
     "create-layer",
     "read-layer",
@@ -77,6 +82,7 @@ ROLE_PERMISSIONS = {
     ],
     "organization-editor": [
         "manage-folder",
+        "manage-bundle",
         "manage-asset",
         "create-job",
         "read-job",
@@ -94,6 +100,7 @@ ROLE_PERMISSIONS = {
         "read-organization",
         "manage-user",
         "read-billing",
+        "read-bundle",
     ],
     "team-owner": ["update-team", "delete-team"],
     "team-member": [
@@ -180,6 +187,20 @@ RESOURCES_PERMISSIONS = [
         "method": ["GET", "POST", "PUT", "DELETE"],
         "permissions": [
             "manage-folder",
+        ],
+    },
+    {
+        "url_pattern": "bundle",
+        "method": ["GET"],
+        "permissions": [
+            "read-bundle",
+        ],
+    },
+    {
+        "url_pattern": "bundle",
+        "method": ["POST", "PUT", "DELETE"],
+        "permissions": [
+            "manage-bundle",
         ],
     },
     {

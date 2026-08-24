@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type FieldErrors, type UseFormRegister, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
+import { type BundleTypeDef, detectBundleType } from "@/lib/api/bundles";
 import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { useProject } from "@/lib/api/projects";
 import {
@@ -46,6 +47,8 @@ export type UploadFlowState = {
   folders?: Folder[];
   selectedFolder?: Folder | null;
   setSelectedFolder: (folder: Folder | null) => void;
+  /** Set when the file is a recognised bundle (e.g. GTFS) and will import as one. */
+  bundleType: BundleTypeDef | null;
   /** CSV/XLSX only: the parsed head of the file plus how to read it. */
   isTabular: boolean;
   preview: TabularPreview | null;
@@ -105,6 +108,8 @@ export const useUploadFlow = ({
     const ext = file?.name.split(".").pop()?.toLowerCase();
     return !!ext && TABULAR_EXTENSIONS.includes(ext);
   }, [file]);
+
+  const bundleType = useMemo(() => detectBundleType(file), [file]);
 
 
   // The project's own folder is the natural destination; otherwise whatever folder
@@ -299,6 +304,7 @@ export const useUploadFlow = ({
       folders,
       selectedFolder,
       setSelectedFolder,
+      bundleType,
       isTabular,
       preview,
       hasHeader,

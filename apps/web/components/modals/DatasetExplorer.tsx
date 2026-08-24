@@ -20,9 +20,16 @@ import { toast } from "react-toastify";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
+import { isBundleTile } from "@/lib/api/bundles";
+import { useDatasets } from "@/lib/api/datasets";
 import { useFolders } from "@/lib/api/folders";
-import { useLayers } from "@/lib/api/layers";
-import { addProjectLayers, useProject, useProjectLayers } from "@/lib/api/projects";
+import {
+  addBundleToProject,
+  addProjectLayers,
+  useProject,
+  useProjectLayerGroups,
+  useProjectLayers,
+} from "@/lib/api/projects";
 import { useTeams } from "@/lib/api/teams";
 import { useOrganization } from "@/lib/api/users";
 import type { PaginatedQueryParams } from "@/lib/validations/common";
@@ -103,14 +110,18 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
     return datasetSchema;
   }, [datasetSchema, queryParams.team_id, queryParams.organization_id, homeFolder]);
 
+  // Layers + bundles from the unified datasets API (same source as the
+  // main pages). Bundle tiles are shown but not selectable as a project layer —
+  // TileGrid skips onClick for them (isBundleTile guard).
   const {
-    layers: datasets,
+    datasets,
     isLoading: isDatasetLoading,
     isError: _isDatasetError,
-  } = useLayers(queryParams, effectiveDatasetSchema);
+  } = useDatasets(queryParams, effectiveDatasetSchema);
 
   const [isBusy, setIsBusy] = useState(false);
   const { mutate: mutateProjectLayers } = useProjectLayers(projectId);
+  const { mutate: mutateProjectGroups } = useProjectLayerGroups(projectId);
   const { mutate: mutateProject } = useProject(projectId);
 
   const [selectedDataset, setSelectedDataset] = useState<Layer>();
@@ -143,11 +154,17 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
       }
 
       setIsBusy(true);
-      await addProjectLayers(projectId, [selectedDataset.id]);
+      if (isBundleTile(selectedDataset)) {
+        // Bundle → creates a locked bundle-backed group of its member layers.
+        await addBundleToProject(projectId, selectedDataset.id);
+        mutateProjectGroups();
+      } else {
+        await addProjectLayers(projectId, [selectedDataset.id]);
+      }
       mutateProjectLayers();
       mutateProject();
     } catch (error) {
-      toast.error(t("error_adding_layer"));
+      toast.error(isBundleTile(selectedDataset) ? t("error_adding_bundle") : t("error_adding_layer"));
     } finally {
       setIsBusy(false);
       handleOnClose();
@@ -257,6 +274,7 @@ const DatasetExplorerModal: React.FC<DatasetExplorerProps> = ({
                     view="list"
                     enableActions={false}
                     selected={selectedDataset}
+                    selectableBundles={!onLayerSelect}
                     onClick={(item: Project | Layer) => {
                       if (item.id === selectedDataset?.id) {
                         setSelectedDataset(undefined);

@@ -148,8 +148,9 @@ class CatchmentAreaToolV2(AnalysisTool):
         # C++ uses 0.0 as the "not set" sentinel; for routing modes that don't
         # take a user-supplied speed (PT/Car), params.speed is None.
         cfg.speed_km_h = params.speed if params.speed is not None else 0.0
-        cfg.edge_dir = self._edge_dir
-        cfg.node_dir = self._node_dir
+        # A bundle's graph replaces the global network when supplied.
+        cfg.edge_dir = str(params.edge_path or self._edge_dir)
+        cfg.node_dir = str(params.node_path or self._node_dir)
         cfg.output_path = params.output_path
         cfg.catchment_type = catchment_map[params.catchment_type]
         cfg.output_format = (
@@ -169,7 +170,8 @@ class CatchmentAreaToolV2(AnalysisTool):
 
         # PT settings
         if params.routing_mode == RoutingMode.pt:
-            cfg.timetable_path = str(self._timetable_path)
+            # A bundle's routing graph overrides the global default network.
+            cfg.timetable_path = str(params.timetable_path or self._timetable_path)
             cfg.departure_time = self._pt_departure_unix_minutes(params)
             cfg.max_transfers = params.max_transfers
             cfg.access_mode = access_mode_map[params.access_mode]

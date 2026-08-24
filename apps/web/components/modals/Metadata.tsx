@@ -12,14 +12,16 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
+import { BUNDLES_API_BASE_URL, isBundleTile, updateBundle, useBundle } from "@/lib/api/bundles";
 import { LAYERS_API_BASE_URL, updateDataset } from "@/lib/api/layers";
 import { PROJECTS_API_BASE_URL, updateProject } from "@/lib/api/projects";
+import { bundleMetadataSchema } from "@/lib/validations/bundle";
 import { type LayerMetadata, layerMetadataSchema } from "@/lib/validations/layer";
 
 import type { ContentDialogBaseProps } from "@/types/dashboard/content";
@@ -33,16 +35,41 @@ interface MetadataDialogProps extends ContentDialogBaseProps {}
 const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type }) => {
   const { t } = useTranslation("common");
   const [isBusy, setIsBusy] = useState(false);
+  // Bundles carry the dataset-level subset of the layer vocabulary, so they
+  // reuse this form with the per-layer fields hidden and their own schema.
+  const isBundle = isBundleTile(content);
   const {
     handleSubmit,
     register,
+    reset,
     formState: { errors, isValid },
     control,
   } = useForm<LayerMetadata>({
     mode: "onChange",
-    resolver: zodResolver(layerMetadataSchema),
+    resolver: zodResolver(isBundle ? bundleMetadataSchema : layerMetadataSchema),
     defaultValues: { ...content },
   });
+
+  // Callers pass whatever they hold, and a content tile carries no provenance
+  // (the grid listing omits it), so the authoritative row is fetched and the
+  // form re-seeded. Only the fields this form owns: resetting folder_id would
+  // make every save look like a folder move.
+  const { bundle } = useBundle(isBundle ? content.id : null);
+  useEffect(() => {
+    if (!bundle) return;
+    reset({
+      name: bundle.name,
+      description: bundle.description ?? undefined,
+      geographical_code: bundle.geographical_code ?? undefined,
+      data_reference_year: bundle.data_reference_year ?? undefined,
+      lineage: bundle.lineage ?? undefined,
+      license: (bundle.license ?? undefined) as LayerMetadata["license"],
+      attribution: bundle.attribution ?? undefined,
+      distributor_name: bundle.distributor_name ?? undefined,
+      distributor_email: bundle.distributor_email ?? undefined,
+      distribution_url: bundle.distribution_url ?? undefined,
+    });
+  }, [bundle, reset]);
 
   const { dataCategoryOptions, geographicalCodeOptions, licenseOptions, languageCodeOptions } =
     useContentMetadataHooks();
@@ -50,16 +77,22 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
   const onSubmit = async (data: LayerMetadata) => {
     try {
       setIsBusy(true);
-      const postMethod = type === "layer" ? updateDataset : updateProject;
       const cleanedData = Object.fromEntries(
         Object.entries(data).filter(([_, value]) => value !== null && value !== undefined && value !== "")
       );
-      await postMethod(content.id, {
-        folder_id: content.folder_id,
-        ...cleanedData,
-      });
-      const mutateUrl = type === "layer" ? LAYERS_API_BASE_URL : PROJECTS_API_BASE_URL;
-      mutate((key) => Array.isArray(key) && key[0] === mutateUrl);
+      if (isBundle) {
+        await updateBundle(content.id, cleanedData);
+        // The detail page reads a single bundle; the grids read the listing.
+        mutate((key) => typeof key === "string" && key.startsWith(BUNDLES_API_BASE_URL));
+      } else {
+        const postMethod = type === "layer" ? updateDataset : updateProject;
+        await postMethod(content.id, {
+          folder_id: content.folder_id,
+          ...cleanedData,
+        });
+        const mutateUrl = type === "layer" ? LAYERS_API_BASE_URL : PROJECTS_API_BASE_URL;
+        mutate((key) => Array.isArray(key) && key[0] === mutateUrl);
+      }
       toast.success(t("metadata_updated_success"));
     } catch (error) {
       toast.error(t("metadata_updated_error"));
@@ -104,24 +137,28 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
             />
             {type === "layer" && (
               <>
-                <RhfAutocompleteField
-                  options={dataCategoryOptions}
-                  control={control}
-                  name="data_category"
-                  label={t("common:metadata.headings.data_category")}
-                />
+                {!isBundle && (
+                  <RhfAutocompleteField
+                    options={dataCategoryOptions}
+                    control={control}
+                    name="data_category"
+                    label={t("common:metadata.headings.data_category")}
+                  />
+                )}
                 <RhfAutocompleteField
                   options={geographicalCodeOptions}
                   control={control}
                   name="geographical_code"
                   label={t("common:metadata.headings.geographical_code")}
                 />
-                <RhfAutocompleteField
-                  options={languageCodeOptions}
-                  control={control}
-                  name="language_code"
-                  label={t("common:metadata.headings.language_code")}
-                />
+                {!isBundle && (
+                  <RhfAutocompleteField
+                    options={languageCodeOptions}
+                    control={control}
+                    name="language_code"
+                    label={t("common:metadata.headings.language_code")}
+                  />
+                )}
                 <TextField
                   fullWidth
                   label={t("common:metadata.headings.data_reference_year")}
@@ -148,27 +185,31 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
                   error={!!errors.lineage}
                   helperText={errors.lineage?.message}
                 />
-                <TextField
-                  fullWidth
-                  label={t("common:metadata.headings.positional_accuracy")}
-                  {...register("positional_accuracy")}
-                  error={!!errors.positional_accuracy}
-                  helperText={errors.positional_accuracy?.message}
-                />
-                <TextField
-                  fullWidth
-                  label={t("common:metadata.headings.attribute_accuracy")}
-                  {...register("attribute_accuracy")}
-                  error={!!errors.attribute_accuracy}
-                  helperText={errors.attribute_accuracy?.message}
-                />
-                <TextField
-                  fullWidth
-                  label={t("common:metadata.headings.completeness")}
-                  {...register("completeness")}
-                  error={!!errors.completeness}
-                  helperText={errors.completeness?.message}
-                />
+                {!isBundle && (
+                  <>
+                    <TextField
+                      fullWidth
+                      label={t("common:metadata.headings.positional_accuracy")}
+                      {...register("positional_accuracy")}
+                      error={!!errors.positional_accuracy}
+                      helperText={errors.positional_accuracy?.message}
+                    />
+                    <TextField
+                      fullWidth
+                      label={t("common:metadata.headings.attribute_accuracy")}
+                      {...register("attribute_accuracy")}
+                      error={!!errors.attribute_accuracy}
+                      helperText={errors.attribute_accuracy?.message}
+                    />
+                    <TextField
+                      fullWidth
+                      label={t("common:metadata.headings.completeness")}
+                      {...register("completeness")}
+                      error={!!errors.completeness}
+                      helperText={errors.completeness?.message}
+                    />
+                  </>
+                )}
                 <Divider />
                 <Box>
                   <Typography variant="body1" fontWeight="bold">

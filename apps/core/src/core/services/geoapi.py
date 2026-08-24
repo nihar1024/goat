@@ -53,6 +53,32 @@ async def execute_process(
             )
 
 
+async def delete_bundle_artifacts_via_geoapi(
+    bundle_ids: list[str], access_token: str
+) -> None:
+    """Remove bundles' built artifacts via the ``bundle_artifact_delete`` process.
+
+    Artifacts live on the data volume, which core does not mount — the same
+    reason a layer's DuckLake table and PMTiles are dropped by a worker rather
+    than here. Best-effort: called after the bundle rows are already gone, and
+    artifacts are regenerable, so a failure is logged and never raised.
+    """
+    if not bundle_ids:
+        return
+    try:
+        await execute_process(
+            process_id="bundle_artifact_delete",
+            inputs={"bundle_ids": bundle_ids},
+            access_token=access_token,
+        )
+    except Exception as e:
+        logger.warning(
+            "Artifact cleanup for %d bundle(s) did not start: %s",
+            len(bundle_ids),
+            e,
+        )
+
+
 async def delete_layers_via_geoapi(
     layer_ids: list[str], access_token: str
 ) -> None:

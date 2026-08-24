@@ -113,9 +113,7 @@ class _FakeSource:
         self.archive = archive
         self.asked: Tuple[str, str] | None = None
 
-    def download_bundle_artifact(
-        self, bundle_id: str, kind: str, dest_dir: Path
-    ) -> str | None:
+    def resolve_bundle_artifact(self, bundle_id: str, kind: str) -> str | None:
         self.asked = (bundle_id, kind)
         return self.archive
 

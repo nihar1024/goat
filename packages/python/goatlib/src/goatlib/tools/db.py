@@ -393,43 +393,44 @@ class ToolDatabaseService:
         self: Self,
         artifact_id: str,
         status: str,
-        s3_key: str | None = None,
+        storage_path: str | None = None,
         size: int | None = None,
     ) -> None:
-        """Update an artifact's build status and (on success) its stored blob."""
+        """Update an artifact's build status and (on success) where it landed."""
         status_value = getattr(status, "value", status)
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.bundle_artifact
             SET status = $2,
-                s3_key = COALESCE($3, s3_key),
+                storage_path = COALESCE($3, storage_path),
                 size = COALESCE($4, size),
                 updated_at = NOW()
             WHERE id = $1
             """,
             uuid_module.UUID(artifact_id),
             status_value,
-            s3_key,
+            storage_path,
             size,
         )
         logger.info(f"Artifact {artifact_id} status -> {status_value}")
 
-    async def get_bundle_artifact_s3_key(
+    async def get_bundle_artifact_path(
         self: Self, bundle_id: str, kind: str
     ) -> str | None:
-        """S3 key of a bundle's ready artifact of the given kind (or None)."""
+        """Stored path of a bundle's ready artifact of the given kind, relative
+        to the bundles data dir (or None)."""
         kind_value = getattr(kind, "value", kind)
         row = await self.pool.fetchrow(
             f"""
-            SELECT s3_key FROM {self.schema}.bundle_artifact
+            SELECT storage_path FROM {self.schema}.bundle_artifact
             WHERE bundle_id = $1 AND kind = $2 AND status = 'ready'
-              AND s3_key IS NOT NULL
+              AND storage_path IS NOT NULL
             LIMIT 1
             """,
             uuid_module.UUID(bundle_id),
             kind_value,
         )
-        return row["s3_key"] if row else None
+        return row["storage_path"] if row else None
 
     async def add_layer_to_package(
         self: Self,

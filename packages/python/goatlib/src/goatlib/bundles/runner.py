@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from goatlib.bundles.artifacts import (
     ArtifactBuilderUnavailableError,
     get_artifact_builder,
+    store_artifact,
 )
 from goatlib.bundles.importers import get_importer
 from goatlib.bundles.importers.base import ValidationResult
@@ -319,24 +320,24 @@ class BundleImportRunner(BaseToolRunner):
                     # .bin, a street network graph is a .tar of two parquet
                     # files, and the consumer dispatches on it.
                     suffix = Path(art.local_path).suffix or ".bin"
-                    s3_key = (
-                        f"users/{user_id}/bundles/{bundle_id}"
-                        f"/artifacts/{kind_value}{suffix}"
-                    )
-                    self.settings.get_s3_client().upload_file(
-                        art.local_path, self.settings.s3_bucket_name, s3_key
+                    storage_path = store_artifact(
+                        art.local_path,
+                        bundles_data_dir=self.settings.bundles_data_dir,
+                        bundle_id=bundle_id,
+                        kind=kind_value,
+                        suffix=suffix,
                     )
                     await db.update_artifact_status(
                         artifact_id=artifact_id,
                         status="ready",
-                        s3_key=s3_key,
+                        storage_path=storage_path,
                         size=art.size,
                     )
                     logger.info(
                         "Artifact %s for bundle %s stored at %s (%d bytes)",
                         kind_value,
                         bundle_id,
-                        s3_key,
+                        storage_path,
                         art.size,
                     )
                 except Exception:

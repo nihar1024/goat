@@ -146,9 +146,7 @@ class RoutingArtifactSource(Protocol):
     it back would close a cycle.
     """
 
-    def download_bundle_artifact(
-        self, bundle_id: str, kind: str, dest_dir: Path
-    ) -> str | None: ...
+    def resolve_bundle_artifact(self, bundle_id: str, kind: str) -> str | None: ...
 
 
 def unpack_routing_network(
@@ -164,7 +162,7 @@ def unpack_routing_network(
     network_dir.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive) as tar:
         # filter="data" refuses members with absolute or parent-relative paths.
-        # We wrote this tar, but it round-trips through object storage, so the
+        # We wrote this tar, but it is read back off a shared volume, so the
         # bytes are not necessarily the ones we wrote.
         tar.extractall(network_dir, filter="data")
 
@@ -186,8 +184,8 @@ def fetch_routing_network(
     Returns the ``(edges, nodes)`` paths to hand to the analysis params, so a
     consumer needs one call and no knowledge of the artifact's packaging.
     """
-    archive = source.download_bundle_artifact(
-        bundle_id, BundleArtifactKind.street_network_graph.value, Path(dest_dir)
+    archive = source.resolve_bundle_artifact(
+        bundle_id, BundleArtifactKind.street_network_graph.value
     )
     if not archive:
         raise ValueError(

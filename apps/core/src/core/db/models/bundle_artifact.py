@@ -25,9 +25,11 @@ class BundleArtifact(DateTimeBase, table=True):
     """A derived, regenerable artifact of a bundle (e.g. the routable
     graph ``.bin`` or a stop-to-street mapping).
 
-    The artifact is not a layer — it is a build product stored in object storage
-    (``s3_key``) and rebuilt on demand. At most one artifact per
-    ``(bundle_id, kind)``.
+    The artifact is not a layer — it is a build product stored on the data
+    volume (``storage_path``, relative to the bundles data dir, alongside
+    DuckLake and tiles) and rebuilt on demand. It lives there rather than in
+    object storage because the routing engine memory-maps it as a local file. At
+    most one artifact per ``(bundle_id, kind)``.
     """
 
     __tablename__ = "bundle_artifact"
@@ -68,10 +70,13 @@ class BundleArtifact(DateTimeBase, table=True):
         ),
         description="Build state of the artifact",
     )
-    s3_key: str | None = Field(
+    storage_path: str | None = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
-        description="Object-storage key of the built artifact (null until built)",
+        description=(
+            "Path of the built artifact relative to the bundles data dir "
+            "(null until built)"
+        ),
     )
     size: int | None = Field(
         default=None,

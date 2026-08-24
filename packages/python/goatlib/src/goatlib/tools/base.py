@@ -46,6 +46,7 @@ from typing import Any, Generic, Self, TypeVar
 import asyncpg
 import duckdb
 
+from goatlib.bundles.artifacts.storage import resolve_artifact
 from goatlib.io.config import (
     PARQUET_COMPRESSION,
     PARQUET_ROW_GROUP_SIZE,
@@ -96,6 +97,11 @@ class ToolSettings:
 
     # Tiles storage (separate from source data - cache/derived data)
     tiles_data_dir: str = "/app/data/tiles"
+
+    # Bundle artifacts (derived, regenerable build products). Kept on the data
+    # volume next to DuckLake and tiles rather than in object storage: they are
+    # read by the routing engine as local files on the same volume.
+    bundles_data_dir: str = "/app/data/bundles"
 
     # OD matrix / travel time matrices
     od_matrix_base_path: str = "/app/data/traveltime_matrices"
@@ -280,6 +286,9 @@ class ToolSettings:
                 "DUCKLAKE_DATA_DIR", "/app/data/ducklake"
             ),
             tiles_data_dir=cls._get_secret("TILES_DATA_DIR", "/app/data/tiles"),
+            bundles_data_dir=cls._get_secret(
+                "BUNDLES_DATA_DIR", "/app/data/bundles"
+            ),
             od_matrix_base_path=cls._get_secret(
                 "OD_MATRIX_BASE_PATH", "/app/data/traveltime_matrices"
             ),
@@ -962,26 +971,24 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         logger.info(f"Filtered temp layer written to: {temp_path}")
         return temp_path
 
-    def download_bundle_artifact(
-        self: Self, bundle_id: str, kind: str, dest_dir: Path
-    ) -> str | None:
-        """Download a bundle's ready artifact of ``kind`` into ``dest_dir`` and
-        return its local path, or ``None`` if the bundle has no ready artifact of
-        that kind. Shared by tools that route off a bundle's artifacts (e.g. a PT
-        timetable graph); the caller decides whether a missing artifact is fatal
-        or falls back to a default."""
+    def resolve_bundle_artifact(self: Self, bundle_id: str, kind: str) -> str | None:
+        """Path of a bundle's ready artifact of ``kind``, or ``None`` when the
+        bundle has no ready artifact of that kind (or its file has gone).
+
+        Artifacts live on the data volume, so this hands back the stored file
+        itself — no copy. Callers must treat it as read-only. Shared by tools
+        that route off a bundle's artifacts (e.g. a PT timetable graph); the
+        caller decides whether a missing artifact is fatal or falls back to a
+        default."""
         if self.db_service is None:
             return None
-        s3_key = _get_or_create_event_loop().run_until_complete(
-            self.db_service.get_bundle_artifact_s3_key(bundle_id, kind)
+        storage_path = _get_or_create_event_loop().run_until_complete(
+            self.db_service.get_bundle_artifact_path(bundle_id, kind)
         )
-        if not s3_key:
+        if not storage_path:
             return None
-        local_path = str(Path(dest_dir) / os.path.basename(s3_key))
-        self.settings.get_s3_client().download_file(
-            self.settings.s3_bucket_name, s3_key, local_path
-        )
-        return local_path
+        resolved = resolve_artifact(self.settings.bundles_data_dir, storage_path)
+        return str(resolved) if resolved else None
 
     def export_layer_to_parquet(
         self: Self,

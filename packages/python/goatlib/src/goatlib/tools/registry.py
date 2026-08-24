@@ -619,6 +619,17 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
         toolbox_hidden=True,
     ),
     ToolDefinition(
+        name="bundle_artifact_delete",
+        display_name="Bundle Artifact Delete",
+        description="Remove a bundle's built artifacts from the data volume",
+        module_path="goatlib.tools.bundle_artifact_delete",
+        params_class_name="BundleArtifactDeleteParams",
+        windmill_path="f/goat/tools/bundle_artifact_delete",
+        category="data",
+        keywords=("delete", "remove", "bundle", "artifact", "cleanup"),
+        toolbox_hidden=True,
+    ),
+    ToolDefinition(
         name="layer_update",
         display_name="Layer Update",
         description="Update layer data from S3 file or refresh WFS source",

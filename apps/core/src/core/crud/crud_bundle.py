@@ -5,7 +5,6 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.core.config import settings
 from core.crud.base import CRUDBase
 from core.db.models._link_model import ResourceGrant
 from core.db.models.bundle import Bundle
@@ -14,8 +13,10 @@ from core.schemas.bundle import (
     BundleCreate,
     BundleUpdate,
 )
-from core.services.geoapi import delete_layers_via_geoapi
-from core.services.s3 import s3_service
+from core.services.geoapi import (
+    delete_bundle_artifacts_via_geoapi,
+    delete_layers_via_geoapi,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class CRUDBundle(
         Membership lives in ``bundle_layer``, so removing the bundle
         only cascades the link rows — the member layers are deleted explicitly
         here (a bundle "stays together"). Their DuckLake tables are dropped via
-        GeoAPI and the derived artifacts' object-storage blobs are removed too.
+        GeoAPI and the derived artifacts are removed from the data volume.
         Returns False if no bundle with this id is owned by the user.
         """
         bundles = await self.get_by_multi_keys(
@@ -50,9 +51,7 @@ class CRUDBundle(
 
         bundle = bundles[0]
         member_layer_ids = [link.layer_id for link in bundle.layer_links]
-        # Artifact blobs live in object storage; the rows cascade with the
-        # bundle but the S3 objects must be removed explicitly.
-        artifact_s3_keys = [a.s3_key for a in bundle.artifacts if a.s3_key]
+        has_artifacts = any(a.storage_path for a in bundle.artifacts)
 
         # Only feature/table layers have DuckLake tables — resolve types by id
         # without pulling full ORM objects into the session.
@@ -96,18 +95,11 @@ class CRUDBundle(
             )
             await delete_layers_via_geoapi(ducklake_layer_ids, access_token)
 
-        # Best-effort artifact blob cleanup — a failure here must not undo the
-        # (already committed) DB deletion.
-        for key in artifact_s3_keys:
-            try:
-                s3_service.delete_file(settings.S3_BUCKET_NAME, key)
-            except Exception as e:
-                logger.warning(
-                    "Failed to delete artifact blob %s for bundle %s: %s",
-                    key,
-                    id,
-                    e,
-                )
+        # Artifact files sit on the data volume, so a worker removes them — the
+        # same split as the DuckLake/PMTiles cleanup above.
+        if has_artifacts:
+            logger.info("Dispatching artifact cleanup for bundle %s", id)
+            await delete_bundle_artifacts_via_geoapi([str(id)], access_token)
         return True
 
 

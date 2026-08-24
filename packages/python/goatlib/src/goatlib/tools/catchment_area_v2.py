@@ -997,8 +997,8 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             params.routing_mode == CatchmentAreaRoutingMode.pt
             and params.pt_network_bundle_id
         ):
-            timetable = self.download_bundle_artifact(
-                params.pt_network_bundle_id, "pt_network_graph", temp_dir
+            timetable = self.resolve_bundle_artifact(
+                params.pt_network_bundle_id, "pt_network_graph"
             )
             if not timetable:
                 raise ValueError(

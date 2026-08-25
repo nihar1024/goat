@@ -27,6 +27,7 @@ Usage:
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
@@ -327,8 +328,12 @@ class PMTilesGenerator:
         # This prevents corrupted files if the process is interrupted
         # NOTE: tippecanoe uses file extension to determine output format!
         # .pmtiles -> PMTiles, anything else -> MBTiles (SQLite)
-        # So we use a .tmp_ prefix instead of .tmp suffix
-        temp_pmtiles_path = pmtiles_path.parent / f".tmp_{pmtiles_path.name}"
+        # So we use a .tmp_ prefix instead of .tmp suffix.
+        # The pid keeps the extension intact while making the temp name unique:
+        # two jobs materializing the same layer concurrently must not write the
+        # same temp file and corrupt each other's output before the rename.
+        temp_tag = f".tmp_{os.getpid()}_"
+        temp_pmtiles_path = pmtiles_path.parent / f"{temp_tag}{pmtiles_path.name}"
 
         # Check if this is a polygon layer that needs label anchor points
         geom_upper = geometry_type.upper() if geometry_type else ""
@@ -337,7 +342,7 @@ class PMTilesGenerator:
         # Anchor PMTiles path (separate file for polygon label points)
         anchor_pmtiles_path = self.get_anchor_pmtiles_path(layer_id)
         temp_anchor_path = (
-            anchor_pmtiles_path.parent / f".tmp_{anchor_pmtiles_path.name}"
+            anchor_pmtiles_path.parent / f"{temp_tag}{anchor_pmtiles_path.name}"
         )
 
         try:
@@ -435,8 +440,10 @@ class PMTilesGenerator:
         exclude_columns = exclude_columns or ["bbox"]
         anchor_pmtiles_path = self.get_anchor_pmtiles_path(layer_id)
         anchor_pmtiles_path.parent.mkdir(parents=True, exist_ok=True)
+        # pid-tagged so concurrent runs for one layer don't share a temp file.
         temp_anchor_path = (
-            anchor_pmtiles_path.parent / f".tmp_{anchor_pmtiles_path.name}"
+            anchor_pmtiles_path.parent
+            / f".tmp_{os.getpid()}_{anchor_pmtiles_path.name}"
         )
 
         logger.info(

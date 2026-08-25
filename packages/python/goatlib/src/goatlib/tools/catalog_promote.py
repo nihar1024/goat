@@ -136,10 +136,14 @@ async def promote(
     item = read_item(mirror_items_path, item_id)
     version = str(item.get("version") or "")
 
+    # UPDATE, not SELECT: touching updated_at moves a reused layer out of the
+    # catalog-GC grace window, so re-adding a long-unreferenced layer can't be
+    # swept between here and the project-link creation.
     existing = await conn.fetchrow(
         f"""
-        SELECT id FROM {schema}.layer
+        UPDATE {schema}.layer SET updated_at = NOW()
         WHERE catalog_external_uid = $1 AND catalog_version = $2
+        RETURNING id
         """,
         item_id,
         version,
@@ -210,10 +214,14 @@ async def promote(
     )
 
     if inserted is None:
+        # Same reasoning as the fast path: bump updated_at so a concurrent
+        # promote that lost the race still leaves the winner outside the GC
+        # grace window.
         winner = await conn.fetchrow(
             f"""
-            SELECT id FROM {schema}.layer
+            UPDATE {schema}.layer SET updated_at = NOW()
             WHERE catalog_external_uid = $1 AND catalog_version = $2
+            RETURNING id
             """,
             item_id,
             version,

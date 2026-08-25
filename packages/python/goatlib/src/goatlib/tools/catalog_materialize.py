@@ -205,13 +205,17 @@ class CatalogMaterializeRunner(SimpleToolRunner):
                 geom_col = next(
                     (c[0] for c in cols if "GEOMETRY" in c[1].upper()), None
                 )
+                # The column name comes from an external catalog file's schema,
+                # so treat it as untrusted when splicing it as a SQL identifier:
+                # double any embedded quote so it stays inside its "..." quoting.
+                geom_col_sql = geom_col.replace('"', '""') if geom_col else None
 
                 staged = Path(tmp) / "staged.parquet"
-                if geom_col:
+                if geom_col_sql:
                     con.execute(f"""
                         COPY (
                             SELECT * FROM read_parquet('{src}')
-                            ORDER BY ST_Hilbert("{geom_col}")
+                            ORDER BY ST_Hilbert("{geom_col_sql}")
                         ) TO '{staged}' (FORMAT PARQUET, COMPRESSION ZSTD)
                     """)
                 else:
@@ -225,12 +229,12 @@ class CatalogMaterializeRunner(SimpleToolRunner):
                 ).fetchone()
                 feature_count = int(stats[0]) if stats else 0
                 bounds = None
-                if geom_col and feature_count:
+                if geom_col_sql and feature_count:
                     b = con.execute(f"""
-                        SELECT MIN(ST_XMin("{geom_col}")), MIN(ST_YMin("{geom_col}")),
-                               MAX(ST_XMax("{geom_col}")), MAX(ST_YMax("{geom_col}"))
+                        SELECT MIN(ST_XMin("{geom_col_sql}")), MIN(ST_YMin("{geom_col_sql}")),
+                               MAX(ST_XMax("{geom_col_sql}")), MAX(ST_YMax("{geom_col_sql}"))
                         FROM read_parquet('{staged}')
-                        WHERE "{geom_col}" IS NOT NULL
+                        WHERE "{geom_col_sql}" IS NOT NULL
                     """).fetchone()
                     if b and b[0] is not None:
                         bounds = (float(b[0]), float(b[1]), float(b[2]), float(b[3]))
@@ -257,6 +261,11 @@ class CatalogMaterializeRunner(SimpleToolRunner):
         if not (self.settings and self.settings.pmtiles_enabled):
             return
 
+        # External-file column name → untrusted identifier; escape embedded
+        # quotes so every quoted interpolation (here and in the generator's own
+        # SQL, which also quotes it) stays a single identifier.
+        geom_col_sql = geom_col.replace('"', '""')
+
         con = duckdb.connect()
         try:
             con.execute("INSTALL spatial; LOAD spatial;")
@@ -277,7 +286,7 @@ class CatalogMaterializeRunner(SimpleToolRunner):
                 duckdb_con=con,
                 table_name=f'"{view}"',
                 layer_id=layer_id,
-                geometry_column=geom_col,
+                geometry_column=geom_col_sql,
                 exclude_columns=["rowid"],
                 show_progress=False,
             )
@@ -285,15 +294,15 @@ class CatalogMaterializeRunner(SimpleToolRunner):
                 raise RuntimeError("PMTiles generation returned no file")
 
             geom_type = con.execute(
-                f'SELECT ST_GeometryType("{geom_col}") FROM "{view}" '
-                f'WHERE "{geom_col}" IS NOT NULL LIMIT 1'
+                f'SELECT ST_GeometryType("{geom_col_sql}") FROM "{view}" '
+                f'WHERE "{geom_col_sql}" IS NOT NULL LIMIT 1'
             ).fetchone()
             if geom_type and "POLYGON" in str(geom_type[0]).upper():
                 generator.generate_anchor_from_table(
                     duckdb_con=con,
                     table_name=f'"{view}"',
                     layer_id=layer_id,
-                    geometry_column=geom_col,
+                    geometry_column=geom_col_sql,
                     exclude_columns=["rowid"],
                     show_progress=False,
                 )

@@ -29,6 +29,38 @@ from pygeofilter import ast, values
 from pygeofilter.backends.evaluator import Evaluator, handle
 
 
+# Function calls in a CQL2 filter reach DuckDB by name. Only vetted, pure,
+# side-effect-free scalar functions are allowed; the name emitted into SQL is
+# the canonical entry from this set, never the caller-supplied token — so a
+# crafted "quoted identifier" name cannot smuggle SQL. Everything else
+# (crucially the file/network readers: read_text, read_csv, read_parquet, and
+# any I/O or subquery-bearing construct) is rejected. Add a function here only
+# after confirming it is a pure scalar with no filesystem/network reach.
+_ALLOWED_CQL_FUNCTIONS: frozenset[str] = frozenset(
+    {
+        "abs",
+        "ceil",
+        "ceiling",
+        "floor",
+        "round",
+        "sign",
+        "sqrt",
+        "power",
+        "mod",
+        "length",
+        "lower",
+        "upper",
+        "trim",
+        "ltrim",
+        "rtrim",
+        "substr",
+        "substring",
+        "concat",
+        "coalesce",
+    }
+)
+
+
 class DuckDBCQLEvaluator(Evaluator):
     """Convert CQL2 AST to DuckDB SQL WHERE clause."""
 
@@ -191,9 +223,18 @@ class DuckDBCQLEvaluator(Evaluator):
 
     @handle(ast.Function)
     def function(self, node, *arguments) -> str:
-        """Handle function calls."""
+        """Handle function calls, restricted to a vetted pure-scalar allowlist.
+
+        The name is matched case-insensitively and the canonical allowlisted
+        spelling is emitted — the caller's token never reaches the SQL string,
+        so it cannot inject even via a quoted-identifier name. Arguments are
+        already parameterized by their own handlers.
+        """
+        canonical = str(node.name).strip().lower()
+        if canonical not in _ALLOWED_CQL_FUNCTIONS:
+            raise ValueError(f"Unsupported function in filter: {node.name!r}")
         args_str = ", ".join(str(arg) for arg in arguments)
-        return f"{node.name}({args_str})"
+        return f"{canonical}({args_str})"
 
     # Literal handlers
     @handle(str)

@@ -271,6 +271,19 @@ RESOURCES_PERMISSIONS = [
         "method": ["POST"],
         "permissions": ["create-project", "read-layer", "update-project"],
     },
+    {
+        # Its own row: check_resource's `LIKE url_pattern || '/%'` fallback does
+        # not match here (the '-' in 'layer-catalog' breaks the '/layer/%'
+        # pattern), so without this every add-from-catalog 401s under AUTH.
+        "url_pattern": "project/{project_id}/layer-catalog",
+        "method": ["POST"],
+        "permissions": ["read-layer", "update-project"],
+    },
+    {
+        "url_pattern": "project/{project_id}/bundle/{bundle_id}",
+        "method": ["POST"],
+        "permissions": ["update-project"],
+    },
     {"url_pattern": "project", "method": ["PUT"], "permissions": ["update-project"]},
     {"url_pattern": "project", "method": ["DELETE"], "permissions": ["delete-project"]},
     {

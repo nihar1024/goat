@@ -126,9 +126,28 @@ class CatalogGCTask:
                     # files, so a crash between the two steps leaves only
                     # unreferenced files for the next sweep — never a row
                     # whose data has vanished.
-                    await conn.execute(
-                        f"DELETE FROM {schema}.layer WHERE id = $1", row["id"]
+                    #
+                    # Re-check "unreferenced" inside the DELETE: a project link
+                    # created after the candidate SELECT (a concurrent re-add of
+                    # this layer) must survive. Without the guard the layer's
+                    # ON DELETE CASCADE would take that fresh link — and the
+                    # layer's files — with it. deleted_row is None when the
+                    # guard spared a now-referenced layer.
+                    deleted_row = await conn.fetchval(
+                        f"""
+                        DELETE FROM {schema}.layer l
+                        WHERE l.id = $1
+                          AND NOT EXISTS (
+                              SELECT 1 FROM {schema}.layer_project lp
+                              WHERE lp.layer_id = l.id
+                          )
+                        RETURNING l.id
+                        """,
+                        row["id"],
                     )
+                    if deleted_row is None:
+                        logger.info("  skipped %s (relinked meanwhile)", layer_id)
+                        continue
                     for p in paths:
                         if p.exists():
                             p.unlink()

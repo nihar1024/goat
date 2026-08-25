@@ -75,10 +75,15 @@ def _catalog_layer_parquet(layer_id: str) -> "Path | None":
     """
     import os
 
+    from goatlib.utils.layer import normalize_layer_id
+
     if ":" in layer_id:
         return None
     try:
-        table = layer_id_to_table_name(layer_id)
+        # Strict UUID gate before the id becomes a filename: is_layer_id accepts
+        # any 36-char/4-hyphen string, so without this a crafted value with
+        # '/' or '.' would traverse out of the catalog layers dir.
+        table = layer_id_to_table_name(normalize_layer_id(layer_id))
     except Exception:
         return None
     path = (
@@ -315,9 +320,7 @@ class ToolSettings:
                 "DUCKLAKE_DATA_DIR", "/app/data/ducklake"
             ),
             tiles_data_dir=cls._get_secret("TILES_DATA_DIR", "/app/data/tiles"),
-            bundles_data_dir=cls._get_secret(
-                "BUNDLES_DATA_DIR", "/app/data/bundles"
-            ),
+            bundles_data_dir=cls._get_secret("BUNDLES_DATA_DIR", "/app/data/bundles"),
             od_matrix_base_path=cls._get_secret(
                 "OD_MATRIX_BASE_PATH", "/app/data/traveltime_matrices"
             ),

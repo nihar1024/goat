@@ -191,7 +191,13 @@ const CatalogPage = () => {
         clearAll();
       }}
       favouritesOnly={favouritesOnly}
-      onToggleFavourites={() => setFavouritesOnly((on) => !on)}
+      onToggleFavourites={() => {
+        // Reset to page 1: the favourites are usually far fewer than the
+        // current page's offset, which would otherwise request past the end
+        // and render a false "no favourites" empty state.
+        setPage(1);
+        setFavouritesOnly((on) => !on);
+      }}
       dateFrom={state.from}
       dateTo={state.to}
       onChangeDates={({ from, to }) => setDateRange(from ?? null, to ?? null)}

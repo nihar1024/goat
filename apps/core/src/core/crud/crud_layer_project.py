@@ -222,7 +222,11 @@ class CRUDLayerProject(CRUDBase):
 
         # Create link between project and layer
         for position, layer_id in enumerate(layer_ids):
-            layer = layers_by_id[layer_id]
+            # An id with no accessible layer row is skipped, not a 500: the
+            # SELECT ... IN above simply won't have returned it.
+            layer = layers_by_id.get(layer_id)
+            if layer is None:
+                continue
 
             # Check if layer with same name and ID already exists in project. Then the layer should be duplicated with a new name.
             layer_name = layer.name

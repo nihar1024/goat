@@ -80,11 +80,6 @@ class Settings(BaseSettings):
     # user data on that volume is not core's business. The default derives
     # from DATA_DIR so a whole-volume mount keeps working unconfigured.
     CATALOG_DATA_DIR: str = os.path.join(os.getenv("DATA_DIR", "/app/data"), "catalog")
-    # Windmill, for the few jobs core must enqueue server-side (catalog
-    # materialize). Job orchestration otherwise lives in the processes service.
-    WINDMILL_URL: str | None = None
-    WINDMILL_TOKEN: str | None = None
-    WINDMILL_WORKSPACE: str = "goat"
     # Plan and quotas applied to organizations when no billing system is
     # configured (self-hosted deployments). With billing enabled these come
     # from the billing provider instead.
@@ -156,9 +151,17 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str | None = None
 
     # ------------------------------------------------------------------
-    # GeoAPI
+    # Processes service (OGC API - Processes front for Windmill). Core posts
+    # here to run the background jobs it triggers (layer/bundle cleanup on
+    # delete, bundle import, catalog materialize). GOAT_GEOAPI_HOST is the
+    # former name — read as a fallback so existing deployments keep working.
     # ------------------------------------------------------------------
-    GOAT_GEOAPI_HOST: str | None = None
+    GOAT_PROCESSES_URL: str | None = None
+    GOAT_GEOAPI_HOST: str | None = None  # deprecated alias for GOAT_PROCESSES_URL
+
+    @property
+    def processes_url(self) -> str | None:
+        return self.GOAT_PROCESSES_URL or self.GOAT_GEOAPI_HOST
 
     # ------------------------------------------------------------------
     # Custom domains (white label)

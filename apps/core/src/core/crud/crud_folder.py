@@ -7,7 +7,7 @@ from core.db.models.folder import Folder
 from core.db.models.layer import LayerType
 from core.schemas.error import FolderNotFoundError
 from core.schemas.folder import FolderCreate, FolderUpdate
-from core.services.geoapi import delete_layers_via_geoapi
+from core.services.processes import delete_layers_via_processes
 
 from .base import CRUDBase
 
@@ -52,7 +52,7 @@ class CRUDFolder(CRUDBase[Folder, FolderCreate, FolderUpdate]):
                 len(ducklake_layer_ids),
                 id,
             )
-            await delete_layers_via_geoapi(
+            await delete_layers_via_processes(
                 ducklake_layer_ids,
                 access_token,
             )

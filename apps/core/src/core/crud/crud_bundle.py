@@ -13,17 +13,15 @@ from core.schemas.bundle import (
     BundleCreate,
     BundleUpdate,
 )
-from core.services.geoapi import (
-    delete_bundle_artifacts_via_geoapi,
-    delete_layers_via_geoapi,
+from core.services.processes import (
+    delete_bundle_artifacts_via_processes,
+    delete_layers_via_processes,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class CRUDBundle(
-    CRUDBase[Bundle, BundleCreate, BundleUpdate]
-):
+class CRUDBundle(CRUDBase[Bundle, BundleCreate, BundleUpdate]):
     async def delete(
         self,
         async_session: AsyncSession,
@@ -93,13 +91,13 @@ class CRUDBundle(
                 len(ducklake_layer_ids),
                 id,
             )
-            await delete_layers_via_geoapi(ducklake_layer_ids, access_token)
+            await delete_layers_via_processes(ducklake_layer_ids, access_token)
 
         # Artifact files sit on the data volume, so a worker removes them — the
         # same split as the DuckLake/PMTiles cleanup above.
         if has_artifacts:
             logger.info("Dispatching artifact cleanup for bundle %s", id)
-            await delete_bundle_artifacts_via_geoapi([str(id)], access_token)
+            await delete_bundle_artifacts_via_processes([str(id)], access_token)
         return True
 
 

@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List, Union
 from uuid import UUID
 
@@ -13,7 +14,7 @@ from core.crud.crud_project import project as crud_project
 from core.db.models._link_model import LayerProjectGroup, LayerProjectLink
 from core.db.models.project import Project
 from core.db.session import AsyncSession
-from core.deps.auth import auth_z
+from core.deps.auth import auth, auth_z
 from core.endpoints.deps import get_db, get_user_id
 from core.endpoints.v2.bundle import authorize_bundle
 from core.schemas.project import (
@@ -27,7 +28,9 @@ from core.schemas.project import (
 from core.schemas.project import (
     request_examples as project_request_examples,
 )
-from core.services.windmill import run_script as run_windmill_script
+from core.services.processes import execute_process
+
+logger = logging.getLogger("project_layer")
 
 router = APIRouter()
 
@@ -89,6 +92,7 @@ async def add_layers_to_project(
 )
 async def add_catalog_items_to_project(
     async_session: AsyncSession = Depends(get_db),
+    access_token: str = Depends(auth),
     project_id: UUID4 = Path(
         ...,
         description="The ID of the project to add the catalog items to",
@@ -201,16 +205,24 @@ async def add_catalog_items_to_project(
             if add_link:
                 layer_ids.append(layer_id)
             if should_enqueue:
-                # Enqueued server-side: materialization must finish whether or
-                # not the browser stays open. Enqueue failure keeps the layer
-                # at status=pending, which the next add resolves.
-                await run_windmill_script(
-                    "f/goat/tools/catalog_materialize",
-                    {
-                        "layer_id": result["layer_id"],
-                        "user_id": settings.CATALOG_USER_ID,
-                    },
-                )
+                # Enqueued server-side through the processes service (same path
+                # as bundle import and layer/bundle-delete cleanup) so
+                # materialization finishes whether or not the browser stays
+                # open. Best-effort: a processes hiccup leaves the layer at
+                # status=pending, which the next add resolves — so it must not
+                # fail the whole add.
+                try:
+                    await execute_process(
+                        process_id="catalog_materialize",
+                        inputs={"layer_id": result["layer_id"]},
+                        access_token=access_token,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Catalog materialize for layer %s did not start: %s",
+                        result["layer_id"],
+                        e,
+                    )
     finally:
         await conn.close()
 

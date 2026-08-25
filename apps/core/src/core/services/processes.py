@@ -18,15 +18,15 @@ async def execute_process(
     Returns the submitted job id. Raises HTTPException on failure so callers can
     surface the problem (and run any compensating action, e.g. marking a created
     record failed). Callers that want best-effort behaviour should catch it (see
-    ``delete_layers_via_geoapi``).
+    ``delete_layers_via_processes``).
     """
-    if not settings.GOAT_GEOAPI_HOST:
+    if not settings.processes_url:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Processes service (GOAT_GEOAPI_HOST) is not configured",
+            detail="Processes service (GOAT_PROCESSES_URL) is not configured",
         )
 
-    url = f"{settings.GOAT_GEOAPI_HOST}/processes/{process_id}/execution"
+    url = f"{settings.processes_url}/processes/{process_id}/execution"
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
@@ -53,7 +53,7 @@ async def execute_process(
             )
 
 
-async def delete_bundle_artifacts_via_geoapi(
+async def delete_bundle_artifacts_via_processes(
     bundle_ids: list[str], access_token: str
 ) -> None:
     """Remove bundles' built artifacts via the ``bundle_artifact_delete`` process.
@@ -79,9 +79,7 @@ async def delete_bundle_artifacts_via_geoapi(
         )
 
 
-async def delete_layers_via_geoapi(
-    layer_ids: list[str], access_token: str
-) -> None:
+async def delete_layers_via_processes(layer_ids: list[str], access_token: str) -> None:
     """Delete layers' DuckLake tables via the ``layer_delete_multi`` process.
 
     Best-effort: called after the layers' PostgreSQL records are already gone, so

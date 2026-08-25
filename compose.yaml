@@ -184,7 +184,7 @@ x-service-core: &service-core
     # Core triggers background jobs (layer cleanup on folder/bundle delete,
     # bundle imports) through the processes service; unset, those triggers
     # fail with 503 while everything else still works.
-    GOAT_GEOAPI_HOST: http://processes:8000
+    GOAT_PROCESSES_URL: http://processes:8000
   # Only the catalog subtree, read-only: promote reads the mirror from it and
   # nothing else on the volume is core's business. (Kubernetes equivalent: a
   # volumeMount with subPath: catalog and readOnly: true.)

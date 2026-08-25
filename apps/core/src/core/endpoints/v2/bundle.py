@@ -50,7 +50,7 @@ from core.schemas.bundle import (
     BundleUpdate,
     request_examples,
 )
-from core.services.geoapi import execute_process
+from core.services.processes import execute_process
 from core.services.s3 import s3_service
 
 RESOURCE_TYPE = "bundle"

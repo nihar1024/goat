@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -15,14 +16,29 @@ import core._dotenv  # noqa: E402, F401, I001
 from core.core.config import settings
 from core.db.session import session_manager
 from core.endpoints.v2.api import router as api_router_v2
+from core.health import build_prober
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     print("Starting up...")
     session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
+
+    # Object-storage probing. Reports goat_dependency_up through the OTLP path
+    # goatobs already set up; nothing here is wired to a readiness probe, so a
+    # failing dependency never pulls pods out of the load balancer.
+    prober = build_prober()
+    probing = None
+    if prober is not None:
+        prober.register_gauge()
+        probing = asyncio.create_task(prober.run_forever())
+
     yield
+
     print("Shutting down...")
+    if probing is not None:
+        probing.cancel()
+        await asyncio.gather(probing, return_exceptions=True)
     await session_manager.close()
 
 

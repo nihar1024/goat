@@ -1,7 +1,12 @@
 import type { MapRef } from "react-map-gl/maplibre";
 import { useCallback, useEffect, useRef } from "react";
 
-import { type SnapTarget, findSnapTarget, snapLineEndpoints } from "@/lib/utils/snapping";
+import {
+  type SnapTarget,
+  clampToleranceToGround,
+  findSnapTarget,
+  snapLineEndpoints,
+} from "@/lib/utils/snapping";
 
 /** How close, in screen pixels, an endpoint has to be to snap. */
 const SNAP_RADIUS_PX = 12;
@@ -9,17 +14,17 @@ const SNAP_RADIUS_PX = 12;
 /**
  * Below this zoom, snapping is switched off.
  *
- * Not about coordinate precision: the feature tile source is capped at zoom 14
- * and overzoomed above it, so geometry accuracy stops improving there (~0.5 m of
- * grid quantisation, comfortably inside the server's 1 m tolerance — and the
- * server moves the endpoint onto the node exactly anyway).
+ * The feature tile source is capped at zoom 14 and overzoomed above it, so this
+ * is where the rendered geometry stops getting more accurate (~0.5 m of grid
+ * quantisation, inside the server's 1 m tolerance — and the server moves the
+ * endpoint onto the node exactly anyway). Below 14 the tiles themselves are
+ * coarser, which no tolerance can compensate for.
  *
- * It is about how much ground the snap radius covers. Twelve pixels is a few
- * metres at z16 and hundreds by z10, so a far-away zoom would yank an endpoint
- * onto whatever happened to be under a coarse cursor. Guessing the user's intent
- * that loosely is worse than not snapping.
+ * How far a snap may reach is handled separately, by MAX_SNAP_DISTANCE_M: the
+ * pixel radius covers ~10 m of ground at z16 but ~38 m at z14, so the ground cap
+ * is what stops a zoomed-out cursor grabbing across the street.
  */
-const MIN_SNAP_ZOOM = 16;
+const MIN_SNAP_ZOOM = 14;
 
 const INDICATOR_SOURCE = "edge-snap-indicator";
 const INDICATOR_LAYER = "edge-snap-indicator-circle";
@@ -61,7 +66,10 @@ export function useEdgeSnapping(
       if (map.getZoom() < MIN_SNAP_ZOOM) return null;
       const screen = map.project(position);
       const offset = map.unproject([screen.x + SNAP_RADIUS_PX, screen.y]);
-      return Math.abs(offset.lng - position[0]);
+      return clampToleranceToGround(
+        Math.abs(offset.lng - position[0]),
+        position[1]
+      );
     },
     [mapRef]
   );

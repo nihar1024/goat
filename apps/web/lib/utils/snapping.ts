@@ -11,6 +11,16 @@
  * knows the current scale.
  */
 
+/**
+ * The furthest an endpoint may be pulled, in ground metres.
+ *
+ * A pixel radius is the right feel at close zoom but grows with the scale: 12 px
+ * is about 10 m of ground at z16 and 38 m by z14. Without a ceiling, zooming out
+ * turns snapping from "connect to what I am pointing at" into "connect to
+ * whatever is on this block".
+ */
+export const MAX_SNAP_DISTANCE_M = 10;
+
 export type SnapKind = "vertex" | "edge";
 
 export interface SnapTarget {
@@ -133,4 +143,24 @@ export function snapLineEndpoints(
     }
   }
   return { coordinates: result, snapped };
+}
+
+
+/**
+ * The snap tolerance in degrees, clamped so it never exceeds a ground distance.
+ *
+ * Takes the tolerance a pixel radius implies (which only the map can measure)
+ * and caps it. At close zoom the pixel radius is already inside the ceiling and
+ * nothing changes; zoomed out, the radius stops growing and the user simply has
+ * to be geometrically closer.
+ */
+export function clampToleranceToGround(
+  degreesFromPixels: number,
+  latitude: number,
+  maxMetres: number = MAX_SNAP_DISTANCE_M
+): number {
+  const metresPerDegree = 111320 * Math.cos((latitude * Math.PI) / 180);
+  if (metresPerDegree <= 0) return degreesFromPixels;
+  const maxDegrees = maxMetres / metresPerDegree;
+  return Math.min(degreesFromPixels, maxDegrees);
 }

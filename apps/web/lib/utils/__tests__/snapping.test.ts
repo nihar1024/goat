@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { findSnapTarget, snapLineEndpoints } from "@/lib/utils/snapping";
+import {
+  MAX_SNAP_DISTANCE_M,
+  clampToleranceToGround,
+  findSnapTarget,
+  snapLineEndpoints,
+} from "@/lib/utils/snapping";
 
 const line = (coordinates: [number, number][]): GeoJSON.Feature => ({
   type: "Feature",
@@ -97,5 +102,32 @@ describe("snapLineEndpoints", () => {
       coordinates: [[0.3, 0]],
       snapped: 0,
     });
+  });
+});
+
+describe("clampToleranceToGround", () => {
+  const LAT = 48.26;
+  const metresPerDegree = 111320 * Math.cos((LAT * Math.PI) / 180);
+  const degreesFor = (metres: number) => metres / metresPerDegree;
+
+  it("leaves a close-zoom tolerance alone", () => {
+    // ~9.5 m, what 12 px covers at z16 — already inside the ceiling.
+    const asked = degreesFor(9.5);
+    expect(clampToleranceToGround(asked, LAT)).toBeCloseTo(asked, 12);
+  });
+
+  it("caps a zoomed-out tolerance at the ground limit", () => {
+    // ~38 m, what 12 px covers at z14: without the cap a cursor would grab
+    // across the street.
+    const capped = clampToleranceToGround(degreesFor(38), LAT);
+    expect(capped * metresPerDegree).toBeCloseTo(MAX_SNAP_DISTANCE_M, 6);
+  });
+
+  it("converts the ceiling per latitude, not per degree", () => {
+    // A degree of longitude is shorter further from the equator, so the same
+    // ground limit is a larger angle there.
+    const north = clampToleranceToGround(1, 60);
+    const equator = clampToleranceToGround(1, 0);
+    expect(north).toBeGreaterThan(equator);
   });
 });

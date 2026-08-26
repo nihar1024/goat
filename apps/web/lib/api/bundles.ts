@@ -24,6 +24,8 @@ export interface BundleRead {
   folder_id: string;
   bundle_type: string;
   status: string;
+  /** The bundle's derived artifacts and their build state. */
+  artifacts?: BundleArtifact[];
   description?: string | null;
   thumbnail_url?: string;
   created_at?: string;
@@ -41,12 +43,32 @@ export interface BundleRead {
   data_reference_year?: number | null;
 }
 
+export interface BundleArtifact {
+  kind: string;
+  status: string;
+  /** The bundle revision this artifact was built from; null if never built. */
+  revision?: number | null;
+  size?: number | null;
+  updated_at?: string | null;
+}
+
 export interface BundleMember {
   layer_id: string;
   role: string | null;
   name?: string | null;
   type?: string | null;
   feature_layer_geometry_type?: string | null;
+  /** Resolved from the bundle type's spec: may this member's features be edited. */
+  editable?: boolean;
+}
+
+export interface BundleForLayer {
+  bundle_id: string;
+  bundle_type: string;
+  role: string | null;
+  editable: boolean;
+  /** Sent back as base_revision on save, so a concurrent change is refused. */
+  layers_revision: number;
 }
 
 export interface BundleDependency {
@@ -210,6 +232,23 @@ export const useBundleLayers = (bundleId: string | null) => {
     fetcher
   );
   return { members: data, isLoading, isError: !!error };
+};
+
+/** The bundle a layer belongs to, or undefined for an ordinary layer.
+ *
+ *  A plain layer is the common case, so a 404 is an answer rather than an
+ *  error — it means "not a member". */
+export const useBundleForLayer = (layerId: string | null) => {
+  const { data, isLoading } = useSWR<BundleForLayer | null>(
+    layerId ? `${BUNDLES_API_BASE_URL}/by-layer/${layerId}` : null,
+    async (url: string) => {
+      const response = await apiRequestAuth(url);
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error("Failed to resolve the layer's bundle");
+      return response.json();
+    }
+  );
+  return { bundleForLayer: data ?? undefined, isLoading };
 };
 
 /** Other bundles this bundle depends on (e.g. a GTFS feed's street network). */

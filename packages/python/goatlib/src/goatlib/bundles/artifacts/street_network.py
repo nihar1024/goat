@@ -146,7 +146,9 @@ class RoutingArtifactSource(Protocol):
     it back would close a cycle.
     """
 
-    def resolve_bundle_artifact(self, bundle_id: str, kind: str) -> str | None: ...
+    def resolve_bundle_artifact(
+        self, bundle_id: str, kind: str
+    ) -> Tuple[str | None, str | None]: ...
 
 
 def unpack_routing_network(
@@ -184,12 +186,28 @@ def fetch_routing_network(
     Returns the ``(edges, nodes)`` paths to hand to the analysis params, so a
     consumer needs one call and no knowledge of the artifact's packaging.
     """
-    archive = source.resolve_bundle_artifact(
+    archive, status = source.resolve_bundle_artifact(
         bundle_id, BundleArtifactKind.street_network_graph.value
     )
     if not archive:
+        # The status separates "not ready yet" from "was ready until someone
+        # edited it", which are different things to tell a user.
+        if status == "stale":
+            raise ValueError(
+                "This street network is being updated after an edit. Try again "
+                "once the update finishes."
+            )
+        if status == "building":
+            raise ValueError(
+                "This street network is still being prepared. Try again shortly."
+            )
+        if status == "failed":
+            raise ValueError(
+                "This street network's last update failed. Update it from the "
+                "bundle before using it."
+            )
         raise ValueError(
-            "The selected street network bundle has no ready routing graph yet."
+            "The selected street network bundle is not ready to route on yet."
         )
     return unpack_routing_network(archive, dest_dir)
 
@@ -224,7 +242,21 @@ def _transform(
     node_count = con.execute(
         f"SELECT count(*) FROM read_parquet('{nodes_out}')"
     ).fetchone()
-    return (edge_count[0] if edge_count else 0, node_count[0] if node_count else 0)
+    edges_written = edge_count[0] if edge_count else 0
+
+    # The edge query inner-joins source/target against the node ids, so an edge
+    # naming a node the layer does not hold is dropped rather than rejected —
+    # the graph would just be missing that street. Count the loss and refuse.
+    source_count = con.execute("SELECT count(*) FROM edge_src").fetchone()
+    edges_read = source_count[0] if source_count else 0
+    if edges_written != edges_read:
+        raise ValueError(
+            f"{edges_read - edges_written} of {edges_read} edge(s) reference a node "
+            "that is not in the nodes layer. Those streets would be missing from "
+            "the routable network, so the update is refused."
+        )
+
+    return (edges_written, node_count[0] if node_count else 0)
 
 
 def _node_query() -> str:

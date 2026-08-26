@@ -145,6 +145,14 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
         ),
         description="Processing lifecycle status (import sets processing → ready/failed)",
     )
+    layers_revision: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default="0"),
+        description=(
+            "Bumped on every member-layer edit; an artifact publishes only if "
+            "the revision it was built from still matches"
+        ),
+    )
 
     # Relationships
     user: "User" = Relationship(back_populates="bundles")

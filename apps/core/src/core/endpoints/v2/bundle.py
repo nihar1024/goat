@@ -35,6 +35,8 @@ from core.db.session import AsyncSession
 from core.deps.auth import auth, auth_z
 from core.endpoints.deps import get_db, get_user_id
 from core.schemas.bundle import (
+    BundleArtifactSummary,
+    BundleByLayerResponse,
     BundleCreate,
     BundleDependencyCreate,
     BundleDependencyResponse,
@@ -432,7 +434,32 @@ async def read_bundle(
     bundle = await authorize_bundle(
         async_session, bundle_id, user_id, "read"
     )
-    return BundleRead(**bundle.model_dump())
+    artifacts = (
+        (
+            await async_session.execute(
+                select(BundleArtifact)
+                .where(BundleArtifact.bundle_id == bundle_id)
+                .order_by(BundleArtifact.kind)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return BundleRead(
+        **bundle.model_dump(),
+        artifacts=[
+            BundleArtifactSummary(
+                # Loaded values may be the enum or the raw string, depending on
+                # whether SQLModel coerced the column.
+                kind=getattr(a.kind, "value", a.kind),
+                status=getattr(a.status, "value", a.status),
+                revision=a.revision,
+                size=a.size,
+                updated_at=a.updated_at,
+            )
+            for a in artifacts
+        ],
+    )
 
 
 @router.put(
@@ -543,6 +570,48 @@ async def delete_bundle(
 # goatlib). Roles are validated against the bundle type's spec.
 
 
+def role_is_editable(bundle_type: str, role: str | None) -> bool:
+    """Whether the spec marks this role's member layer editable."""
+    if not role:
+        return False
+    spec_role = get_spec(bundle_type).role(role)
+    return bool(spec_role and spec_role.editable)
+
+
+@router.get(
+    "/by-layer/{layer_id}",
+    summary="The bundle a layer belongs to, if any",
+    response_model=BundleByLayerResponse,
+    status_code=200,
+    dependencies=[Depends(auth_z)],
+)
+async def read_bundle_by_layer(
+    *,
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+    layer_id: UUID4 = Path(..., description="The layer"),
+) -> BundleByLayerResponse:
+    """Resolve a layer to its bundle, role and editability."""
+    link = (
+        await async_session.execute(
+            select(BundleLayerLink).where(BundleLayerLink.layer_id == layer_id)
+        )
+    ).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Layer is not part of a bundle",
+        )
+    bundle = await authorize_bundle(async_session, link.bundle_id, user_id, "read")
+    return BundleByLayerResponse(
+        bundle_id=link.bundle_id,
+        bundle_type=bundle.bundle_type,
+        role=link.role,
+        editable=role_is_editable(bundle.bundle_type, link.role),
+        layers_revision=bundle.layers_revision,
+    )
+
+
 @router.get(
     "/{bundle_id}/layers",
     summary="List the layers in a bundle with their roles",
@@ -557,7 +626,7 @@ async def list_bundle_layers(
     bundle_id: UUID4 = Path(..., description="The bundle"),
 ) -> List[BundleMemberResponse]:
     """List member layers and their roles (owner or shared)."""
-    await authorize_bundle(async_session, bundle_id, user_id, "read")
+    bundle = await authorize_bundle(async_session, bundle_id, user_id, "read")
     rows = (
         await async_session.execute(
             select(BundleLayerLink, Layer)
@@ -579,6 +648,7 @@ async def list_bundle_layers(
                 "value",
                 layer.feature_layer_geometry_type,
             ),
+            editable=role_is_editable(bundle.bundle_type, link.role),
         )
         for link, layer in rows
     ]

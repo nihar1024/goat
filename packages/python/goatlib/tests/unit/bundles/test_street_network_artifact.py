@@ -109,13 +109,16 @@ def test_tar_contains_exactly_the_two_files(tmp_path) -> None:
 class _FakeSource:
     """Stands in for a tool runner: hands back a local archive, records the ask."""
 
-    def __init__(self, archive: str | None) -> None:
+    def __init__(self, archive: str | None, status: str | None = None) -> None:
         self.archive = archive
+        self.status = status or ("ready" if archive else None)
         self.asked: Tuple[str, str] | None = None
 
-    def resolve_bundle_artifact(self, bundle_id: str, kind: str) -> str | None:
+    def resolve_bundle_artifact(
+        self, bundle_id: str, kind: str
+    ) -> Tuple[str | None, str | None]:
         self.asked = (bundle_id, kind)
-        return self.archive
+        return self.archive, self.status
 
 
 def _build_tar(tmp_path: Path) -> str:
@@ -156,7 +159,7 @@ def test_fetch_round_trips_what_the_builder_wrote(tmp_path, con) -> None:
 
 
 def test_fetch_rejects_a_bundle_with_no_ready_graph(tmp_path) -> None:
-    with pytest.raises(ValueError, match="no ready routing graph"):
+    with pytest.raises(ValueError, match="not ready to route on"):
         fetch_routing_network(_FakeSource(None), "bundle-1", tmp_path)
 
 
@@ -428,3 +431,46 @@ def test_projected_coordinates_are_not_axis_swapped(artifact, con) -> None:
         lat = math.degrees(2 * math.atan(math.exp(y / 6378137.0)) - math.pi / 2)
         assert 10.0 < lon < 12.0, (x, y)
         assert 47.0 < lat < 49.0, (x, y)
+
+
+def test_build_raises_when_an_edge_references_a_missing_node(tmp_path, con) -> None:
+    """A dropped edge is a missing street, so the build must fail loudly."""
+    from goatlib.bundles.artifacts.street_network import _transform
+
+    edges = tmp_path / "edges.parquet"
+    nodes = tmp_path / "nodes.parquet"
+    con.execute(f"""
+        COPY (SELECT 'n1' AS id, ST_Point(11.0, 48.0) AS geometry)
+        TO '{nodes}' (FORMAT PARQUET)
+    """)
+    con.execute(f"""
+        COPY (
+            SELECT 'e1' AS id, 'residential' AS "class", 'n1' AS source_node,
+                   'ghost' AS target_node, NULL AS surface,
+                   30 AS speed_limit_kph_forward, 30 AS speed_limit_kph_backward,
+                   ST_GeomFromText('LINESTRING(11 48, 11.001 48)') AS geometry
+        ) TO '{edges}' (FORMAT PARQUET)
+    """)
+    with pytest.raises(ValueError, match="node"):
+        _transform(
+            con,
+            str(edges),
+            str(nodes),
+            str(tmp_path / "out_edges.parquet"),
+            str(tmp_path / "out_nodes.parquet"),
+        )
+
+
+def test_fetch_explains_a_stale_artifact(tmp_path) -> None:
+    with pytest.raises(ValueError, match="being updated"):
+        fetch_routing_network(_FakeSource(None, "stale"), "bundle-1", tmp_path)
+
+
+def test_fetch_explains_a_build_in_progress(tmp_path) -> None:
+    with pytest.raises(ValueError, match="still being prepared"):
+        fetch_routing_network(_FakeSource(None, "building"), "bundle-1", tmp_path)
+
+
+def test_fetch_explains_a_failed_rebuild(tmp_path) -> None:
+    with pytest.raises(ValueError, match="last update failed"):
+        fetch_routing_network(_FakeSource(None, "failed"), "bundle-1", tmp_path)

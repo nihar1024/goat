@@ -630,6 +630,17 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
         toolbox_hidden=True,
     ),
     ToolDefinition(
+        name="bundle_artifact_rebuild",
+        display_name="Bundle Artifact Rebuild",
+        description="Rebuild a bundle's derived artifacts from its member layers",
+        module_path="goatlib.tools.bundle_artifact_rebuild",
+        params_class_name="BundleArtifactRebuildParams",
+        windmill_path="f/goat/tools/bundle_artifact_rebuild",
+        category="data",
+        keywords=("rebuild", "bundle", "artifact", "graph", "routing"),
+        toolbox_hidden=True,
+    ),
+    ToolDefinition(
         name="layer_update",
         display_name="Layer Update",
         description="Update layer data from S3 file or refresh WFS source",

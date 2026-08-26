@@ -10,7 +10,7 @@ from goatlib.models.bundle import (
     BundleArtifactStatus,
 )
 from pydantic import field_serializer
-from sqlalchemy import BigInteger, ForeignKey, Text
+from sqlalchemy import BigInteger, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import Column, Field, Relationship, UniqueConstraint, text
 
@@ -87,6 +87,11 @@ class BundleArtifact(DateTimeBase, table=True):
         default=None,
         sa_column=Column(UUID_PG(as_uuid=True), nullable=True),
         description="Windmill job ID of the build that produced this artifact",
+    )
+    revision: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+        description="Bundle layers_revision this artifact was built from",
     )
 
     # Relationships

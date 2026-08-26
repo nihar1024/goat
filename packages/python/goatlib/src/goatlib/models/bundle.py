@@ -61,6 +61,9 @@ class RoleSpec(BaseModel):
     geometry: Optional[GeometryKind] = None
     # Columns the member layer must expose for downstream tools (native names).
     required_columns: Tuple[str, ...] = ()
+    # Whether a user may edit this member layer's features. False until someone
+    # has decided what saving it means for the bundle's derived artifacts.
+    editable: bool = False
     description: Optional[str] = None
 
 
@@ -156,6 +159,9 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                     "source_node",
                     "target_node",
                 ),
+                # Nodes are maintained by the editor when edges are saved, so
+                # only the edges layer is offered for editing.
+                editable=True,
                 description=(
                     "Routable street segments, split so each has exactly two "
                     "connectors and no linear references."

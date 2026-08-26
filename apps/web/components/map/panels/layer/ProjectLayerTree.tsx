@@ -31,10 +31,12 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import { useUserProfile } from "@/lib/api/users";
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
 import useStartEditingGuard from "@/hooks/map/useStartEditingGuard";
+import { useBundleMemberGates } from "@/hooks/map/useBundleMemberGates";
 import { emitInteractionEvent } from "@/lib/store/interaction/slice";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setDataPanelLayerId, setIsDataPanelOpen } from "@/lib/store/map/slice";
 import { rgbToHex } from "@/lib/utils/helpers";
+import { isBundleMemberLayer, isEditableBundleMember } from "@/lib/utils/bundleEditable";
 import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
 import { zoomToLayer, zoomToProjectLayer } from "@/lib/utils/map/navigate";
 // API & Store
@@ -509,6 +511,10 @@ export const ProjectLayerTree = ({
   const currentZoom = useAppSelector((state) => (dimOutOfZoom && viewMode === "view" ? state.map.currentZoom : undefined));
   const editingLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
   const startEditingGuard = useStartEditingGuard();
+  // Which member layers of the project's bundles may be edited, by role.
+  const bundleMemberGates = useBundleMemberGates(
+    projectLayerGroups.map((group) => group.bundle_id)
+  );
 
   const [items, setItems] = useState<ProjectTreeItem[]>([]);
   const itemsRef = useRef<ProjectTreeItem[]>([]);
@@ -813,6 +819,17 @@ export const ProjectLayerTree = ({
       menuOptions = menuOptions.filter((opt) => opt.id !== ContentActions.DELETE);
     }
 
+    // A bundle member is editable only where its role's spec says so: editing
+    // one drives the whole bundle's derived artifacts.
+    if (
+      node.type === "layer" &&
+      node.layer_id &&
+      isBundleMemberLayer(node.layer_id, bundleMemberGates) &&
+      !isEditableBundleMember(node.layer_id, bundleMemberGates)
+    ) {
+      menuOptions = menuOptions.filter((opt) => opt.id !== MapLayerActions.EDIT_FEATURES);
+    }
+
     // Filter menu options based on view mode
     if (viewMode === "view") {
       menuOptions = filterMenuForViewMode(menuOptions, allowedActions);
@@ -1035,6 +1052,7 @@ export const ProjectLayerTree = ({
     mapMode, userProfile, projectOwnerId,
     dispatch,
     activeLayerId, activeRightPanel,
+    bundleMemberGates,
   ]);
 
   // --- ICONS & LEGEND ---

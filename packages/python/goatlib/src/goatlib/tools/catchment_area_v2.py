@@ -997,13 +997,23 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             params.routing_mode == CatchmentAreaRoutingMode.pt
             and params.pt_network_bundle_id
         ):
-            timetable = self.resolve_bundle_artifact(
+            timetable, status = self.resolve_bundle_artifact(
                 params.pt_network_bundle_id, "pt_network_graph"
             )
             if not timetable:
+                if status in ("stale", "building"):
+                    raise ValueError(
+                        "This public-transport bundle is being updated. Try again "
+                        "once it finishes."
+                    )
+                if status == "failed":
+                    raise ValueError(
+                        "This public-transport bundle's last update failed. Update "
+                        "it from the bundle before using it."
+                    )
                 raise ValueError(
-                    "The selected public-transport bundle has no ready routing "
-                    "graph yet."
+                    "The selected public-transport bundle is not ready to route "
+                    "on yet."
                 )
             analysis_params.timetable_path = timetable
 

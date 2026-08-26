@@ -51,6 +51,17 @@ router = APIRouter(tags=["Features Write"])
 UserIdDep = Annotated[UUID, Depends(get_user_id)]
 
 
+async def layer_is_bundle_member(layer_id: str) -> bool:
+    """Whether a layer belongs to a bundle."""
+    pool = layer_service._pool
+    if not pool:
+        return False
+    row = await pool.fetchrow(
+        "SELECT 1 FROM customer.bundle_layer WHERE layer_id = $1::uuid", layer_id
+    )
+    return row is not None
+
+
 async def _get_authorized_metadata(
     layer_info: LayerInfo, user_id: UUID
 ) -> LayerMetadata:
@@ -70,6 +81,18 @@ async def _get_authorized_metadata(
     Raises:
         HTTPException: If layer not found or user not authorized
     """
+    # A bundle member's edits drive the bundle's derived artifacts, so they go
+    # through the bundle's batch endpoint or not at all — a write landing here
+    # would leave the routing graph disagreeing with the layer.
+    if await layer_is_bundle_member(layer_info.layer_id):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This layer is part of a bundle. Edit it through the bundle so its "
+                "routing data stays in step."
+            ),
+        )
+
     metadata = await layer_service.get_layer_metadata(layer_info)
     if not metadata:
         raise HTTPException(status_code=404, detail="Collection not found")

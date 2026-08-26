@@ -971,24 +971,30 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         logger.info(f"Filtered temp layer written to: {temp_path}")
         return temp_path
 
-    def resolve_bundle_artifact(self: Self, bundle_id: str, kind: str) -> str | None:
-        """Path of a bundle's ready artifact of ``kind``, or ``None`` when the
-        bundle has no ready artifact of that kind (or its file has gone).
+    def resolve_bundle_artifact(
+        self: Self, bundle_id: str, kind: str
+    ) -> tuple[str | None, str | None]:
+        """Path and status of a bundle's artifact of ``kind``.
 
-        Artifacts live on the data volume, so this hands back the stored file
-        itself — no copy. Callers must treat it as read-only. Shared by tools
-        that route off a bundle's artifacts (e.g. a PT timetable graph); the
-        caller decides whether a missing artifact is fatal or falls back to a
-        default."""
+        The path is only handed back for a ready artifact whose file is still
+        there; the status comes back either way, so a caller can tell "being
+        rebuilt after an edit" from "never built" and say so.
+
+        Artifacts live on the data volume, so this is the stored file itself —
+        no copy. Callers must treat it as read-only."""
         if self.db_service is None:
-            return None
-        storage_path = _get_or_create_event_loop().run_until_complete(
-            self.db_service.get_bundle_artifact_path(bundle_id, kind)
+            return None, None
+        row = _get_or_create_event_loop().run_until_complete(
+            self.db_service.get_bundle_artifact(bundle_id, kind)
         )
-        if not storage_path:
-            return None
+        if not row:
+            return None, None
+        status = row.get("status")
+        storage_path = row.get("storage_path")
+        if status != "ready" or not storage_path:
+            return None, status
         resolved = resolve_artifact(self.settings.bundles_data_dir, storage_path)
-        return str(resolved) if resolved else None
+        return (str(resolved) if resolved else None), status
 
     def export_layer_to_parquet(
         self: Self,

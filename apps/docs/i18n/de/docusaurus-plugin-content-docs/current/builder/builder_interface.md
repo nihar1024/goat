@@ -72,7 +72,7 @@ Um ein Panel zu löschen, klicken Sie unten in den Einstellungen auf `Panel lös
 
 ## Widgets
 
-**Widgets sind die Bausteine Ihres Dashboards**. Sie ermöglichen es Ihnen, Daten, Statistiken, Diagramme und Projektelemente wie Text oder Bilder anzuzeigen. Jedes Widget ist hochgradig anpassbar: Sie können den Inhalt, das Erscheinungsbild und das Verhalten nach Ihren Bedürfnissen anpassen, egal ob Sie wichtige Kennzahlen hervorheben, Trends visualisieren oder Kontext mit Text und Grafiken hinzufügen möchten.
+**Widgets sind die Bausteine Ihres Dashboards**. Sie ermöglichen es Ihnen, Daten, Statistiken, Diagramme und Projektelemente wie Texte oder Bilder anzuzeigen. Jedes Widget ist hochgradig anpassbar: Sie können den Inhalt, das Erscheinungsbild und das Verhalten nach Ihren Bedürfnissen anpassen, egal ob Sie wichtige Kennzahlen hervorheben, Trends visualisieren oder Kontext mit Text und Grafiken hinzufügen möchten.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
   <img src={require('/img/builder/widgets_de.webp').default} alt="Builder Interface Overview in GOAT" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>

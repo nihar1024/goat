@@ -55,9 +55,7 @@ class LayerProjectLink(DateTimeBase, table=True):
         default=None,
         sa_column=Column(
             Integer,
-            ForeignKey(
-                f"{settings.SCHEMA}.layer_project_group.id", ondelete="CASCADE"
-            ),
+            ForeignKey(f"{settings.SCHEMA}.layer_project_group.id", ondelete="CASCADE"),
             nullable=True,
         ),
         description="The Group ID this layer belongs to",
@@ -116,9 +114,7 @@ class LayerProjectGroup(DateTimeBase, table=True):
         default=None,
         sa_column=Column(
             Integer,
-            ForeignKey(
-                f"{settings.SCHEMA}.layer_project_group.id", ondelete="CASCADE"
-            ),
+            ForeignKey(f"{settings.SCHEMA}.layer_project_group.id", ondelete="CASCADE"),
             nullable=True,
         ),
     )
@@ -251,9 +247,7 @@ class LayerOrganizationLink(SQLModel, table=True):
     organization_id: Optional[UUID] = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),
-            ForeignKey(
-                f"{settings.SCHEMA}.organization.id", ondelete="CASCADE"
-            ),
+            ForeignKey(f"{settings.SCHEMA}.organization.id", ondelete="CASCADE"),
             nullable=False,
         )
     )
@@ -431,9 +425,7 @@ class ProjectOrganizationLink(SQLModel, table=True):
     organization_id: Optional[UUID] = Field(
         sa_column=Column(
             UUID_PG(as_uuid=True),
-            ForeignKey(
-                f"{settings.SCHEMA}.organization.id", ondelete="CASCADE"
-            ),
+            ForeignKey(f"{settings.SCHEMA}.organization.id", ondelete="CASCADE"),
             nullable=False,
         )
     )
@@ -793,9 +785,7 @@ class BundleLayerLink(SQLModel, table=True):
     __tablename__ = "bundle_layer"
     __table_args__ = (
         UniqueConstraint("layer_id", name="uq_bundle_layer_layer"),
-        UniqueConstraint(
-            "bundle_id", "role", name="uq_bundle_layer_role"
-        ),
+        UniqueConstraint("bundle_id", "role", name="uq_bundle_layer_role"),
         {"schema": settings.SCHEMA},
     )
 
@@ -828,12 +818,6 @@ class BundleLayerLink(SQLModel, table=True):
         back_populates="bundle_link",
         sa_relationship_kwargs={"uselist": False},
     )
-
-
-sa.Index(
-    "idx_bundle_layer_bundle",
-    BundleLayerLink.__table__.c.bundle_id,
-)
 
 
 class BundleDependencyLink(SQLModel, table=True):
@@ -882,9 +866,7 @@ class BundleDependencyLink(SQLModel, table=True):
     # Two FKs to bundle -> relationships must name their foreign key.
     bundle: "Bundle" = Relationship(
         back_populates="dependency_links",
-        sa_relationship_kwargs={
-            "foreign_keys": "[BundleDependencyLink.bundle_id]"
-        },
+        sa_relationship_kwargs={"foreign_keys": "[BundleDependencyLink.bundle_id]"},
     )
     depends_on_bundle: "Bundle" = Relationship(
         back_populates="dependent_links",
@@ -894,10 +876,10 @@ class BundleDependencyLink(SQLModel, table=True):
     )
 
 
-sa.Index(
-    "idx_bundle_dependency_bundle",
-    BundleDependencyLink.__table__.c.bundle_id,
-)
+# No index on bundle_id alone: uq_bundle_dependency_kind (bundle_id,
+# dependency_kind) already indexes it as the leading column. The reverse
+# direction (finding dependents of a bundle) is not covered by that, so it
+# keeps its own index.
 sa.Index(
     "idx_bundle_dependency_depends_on",
     BundleDependencyLink.__table__.c.depends_on_bundle_id,

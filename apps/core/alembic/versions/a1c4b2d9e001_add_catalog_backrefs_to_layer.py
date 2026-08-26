@@ -10,7 +10,7 @@ live model metadata, so a fresh install already has these columns when this
 revision runs.
 
 Revision ID: a1c4b2d9e001
-Revises: init
+Revises: 12d658d174ae
 """
 
 from alembic import op
@@ -18,7 +18,7 @@ from alembic import op
 from core.core.config import settings
 
 revision = "a1c4b2d9e001"
-down_revision = "init"
+down_revision = "12d658d174ae"
 branch_labels = None
 depends_on = None
 

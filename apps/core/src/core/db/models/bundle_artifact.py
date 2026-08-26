@@ -34,9 +34,7 @@ class BundleArtifact(DateTimeBase, table=True):
 
     __tablename__ = "bundle_artifact"
     __table_args__ = (
-        UniqueConstraint(
-            "bundle_id", "kind", name="uq_bundle_artifact_kind"
-        ),
+        UniqueConstraint("bundle_id", "kind", name="uq_bundle_artifact_kind"),
         {"schema": settings.SCHEMA},
     )
 
@@ -55,7 +53,8 @@ class BundleArtifact(DateTimeBase, table=True):
             UUID_PG(as_uuid=True),
             ForeignKey(f"{settings.SCHEMA}.bundle.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
+            # No standalone index: uq_bundle_artifact_kind (bundle_id, kind)
+            # already indexes bundle_id as its leading column.
         ),
         description="Bundle this artifact was derived from",
     )

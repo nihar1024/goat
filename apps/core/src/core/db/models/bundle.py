@@ -67,9 +67,7 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
     bundle_type: BundleTypeName = Field(
         sa_column=Column(
             Text,
-            ForeignKey(
-                f"{settings.SCHEMA}.bundle_type.type", ondelete="RESTRICT"
-            ),
+            ForeignKey(f"{settings.SCHEMA}.bundle_type.type", ondelete="RESTRICT"),
             nullable=False,
             index=True,
         ),
@@ -84,11 +82,6 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
         default=settings.DEFAULT_LAYER_THUMBNAIL,
         sa_column=Column(Text, nullable=True),
         description="Bundle thumbnail URL",
-    )
-    records: Dict[str, Any] | None = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True),
-        description="Structured records associated with the bundle",
     )
     # Dataset-level provenance, mirroring the equivalent layer fields. A bundle
     # is the unit a user acquires (a GTFS feed, an Overture extract), so licence
@@ -140,9 +133,7 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
     )
     status: BundleStatus = Field(
         default=BundleStatus.ready,
-        sa_column=Column(
-            Text, nullable=False, server_default=BundleStatus.ready
-        ),
+        sa_column=Column(Text, nullable=False, server_default=BundleStatus.ready),
         description="Processing lifecycle status (import sets processing → ready/failed)",
     )
 

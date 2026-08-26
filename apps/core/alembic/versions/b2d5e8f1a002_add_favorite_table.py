@@ -9,7 +9,7 @@ schema from live model metadata, so a fresh install already has the table
 when this revision runs.
 
 Revision ID: b2d5e8f1a002
-Revises: 7732fb7ef953
+Revises: a1c4b2d9e001
 """
 
 import sqlalchemy as sa
@@ -18,7 +18,7 @@ from alembic import op
 from core.core.config import settings
 
 revision = "b2d5e8f1a002"
-down_revision = "7732fb7ef953"
+down_revision = "a1c4b2d9e001"
 branch_labels = None
 depends_on = None
 

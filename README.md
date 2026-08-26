@@ -131,7 +131,7 @@ The `compose.yaml` uses profiles to control which services start:
 
 | Profile | Description |
 |---------|-------------|
-| (none) | Infrastructure only: PostgreSQL, MinIO, Redis, RabbitMQ, Windmill server/worker |
+| (none) | Infrastructure only: PostgreSQL, MinIO, Redis, Windmill server/worker |
 | `dev` | Infrastructure + devcontainer with local code mounts for development |
 | `prod` | Infrastructure + all production services (core, geoapi, web, processes, workers) |
 
@@ -141,7 +141,7 @@ The `prod` profile provisions:
 
 - PostgreSQL with PostGIS  
 - MinIO (S3 compatible storage)  
-- Redis & RabbitMQ  
+- Redis  
 - Windmill (workflow engine for analytics tools)
 - GOAT Core (FastAPI backend)  
 - GOAT GeoAPI (FastAPI backend for geodata)  

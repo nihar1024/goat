@@ -13,8 +13,10 @@ from goatlib.tools.catalog_promote import (
     CatalogItemNotFoundError,
     _jsonable,
     layer_type,
+    published_style,
     read_item,
     resolve_item_ids,
+    style_key_for,
 )
 
 
@@ -135,3 +137,58 @@ def test_resolve_item_ids_dedupes_a_dataset_and_its_own_member(mirror: Path) -> 
 def test_resolve_item_ids_unknown_id_raises(mirror: Path) -> None:
     with pytest.raises(CatalogItemNotFoundError):
         resolve_item_ids(mirror, ["item-1", "no-such-thing"])
+
+
+def _styled(href: str | None) -> dict:
+    """An item row carrying (or not carrying) a style asset."""
+    return {"assets": {"style": {"href": href}} if href else {}}
+
+
+def test_style_key_resolves_a_tree_relative_href() -> None:
+    """Contract C8: published hrefs walk out of the JSON tree; only the
+    basename and the bucket's fixed styles/ prefix identify the object."""
+    assert style_key_for("../../../styles/ab-12.json") == "styles/ab-12.json"
+    assert style_key_for("styles/ab-12.json") == "styles/ab-12.json"
+
+
+def test_style_key_rejects_anything_but_json() -> None:
+    with pytest.raises(ValueError):
+        style_key_for("../../../data/ab-12.parquet")
+    with pytest.raises(ValueError):
+        style_key_for("")
+
+
+def test_published_style_is_used_when_the_item_has_one() -> None:
+    read = lambda key: b'{"color": [102, 194, 165], "opacity": 0.8}'  # noqa: E731
+    style = published_style(_styled("../../../styles/ab-12.json"), read_object=read)
+    assert style == {"color": [102, 194, 165], "opacity": 0.8}
+
+
+def test_published_style_is_none_without_a_style_asset() -> None:
+    assert published_style(_styled(None), read_object=lambda key: b"{}") is None
+
+
+def test_published_style_survives_an_unreadable_object() -> None:
+    """A missing or unreachable object falls back to the default style rather
+    than failing the add."""
+
+    def read(key: str) -> bytes:
+        raise RuntimeError("NoSuchKey")
+
+    assert (
+        published_style(_styled("../../../styles/ab-12.json"), read_object=read) is None
+    )
+
+
+def test_published_style_rejects_a_non_object_document() -> None:
+    read = lambda key: b"[1, 2, 3]"  # noqa: E731
+    assert (
+        published_style(_styled("../../../styles/ab-12.json"), read_object=read) is None
+    )
+
+
+def test_published_style_rejects_malformed_json() -> None:
+    read = lambda key: b"{not json"  # noqa: E731
+    assert (
+        published_style(_styled("../../../styles/ab-12.json"), read_object=read) is None
+    )

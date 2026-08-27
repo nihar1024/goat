@@ -26,13 +26,19 @@ drawable when that finishes.
 from __future__ import annotations
 
 import json
+import logging
+import os
+import posixpath
 import uuid as uuid_module
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import asyncpg
 import duckdb
+
+logger = logging.getLogger(__name__)
 
 _ITEM_COLUMNS = [
     "id",
@@ -165,6 +171,79 @@ def _jsonable(item: dict[str, Any]) -> dict[str, Any]:
     return {k: conv(v) for k, v in item.items()}
 
 
+def style_key_for(style_href: str) -> str:
+    """The catalog-bucket key for an item's style asset.
+
+    Same shape as :func:`goatlib.tools.catalog_materialize.bucket_key_for` and
+    for the same reason: the published href walks out of the JSON tree
+    (``../../../styles/<uuid>.json`` — contract C8), so only its basename is
+    meaningful and the prefix is fixed by the bucket layout.
+    """
+    name = posixpath.basename(style_href or "")
+    if not name.endswith(".json"):
+        raise ValueError(f"Not a style asset: {style_href!r}")
+    return f"styles/{name}"
+
+
+def _read_catalog_object(key: str) -> bytes:
+    """One object out of the catalog bucket.
+
+    Its own credentials, like the materialize job's: the catalog bucket
+    belongs to another team, and reading it is not the same grant as reading
+    GOAT's own storage.
+    """
+    import boto3
+
+    bucket = os.environ.get("CATALOG_S3_BUCKET", "")
+    if not bucket:
+        raise RuntimeError("CATALOG_S3_BUCKET is not configured")
+    client = boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("CATALOG_S3_ENDPOINT_URL") or None,
+        aws_access_key_id=os.environ.get("CATALOG_S3_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("CATALOG_S3_SECRET_ACCESS_KEY"),
+        region_name=os.environ.get("CATALOG_S3_REGION") or None,
+    )
+    body: bytes = client.get_object(Bucket=bucket, Key=key)["Body"].read()
+    return body
+
+
+def published_style(
+    item: dict[str, Any],
+    *,
+    read_object: Callable[[str], bytes] | None = None,
+) -> dict[str, Any] | None:
+    """The dataset's own rendering, from the style asset it publishes.
+
+    ``None`` whenever there is not one to use — the item publishes no style
+    (every ``table`` does, plus 92 layers that publish nothing), the bucket is
+    not configured for this deployment, the object is gone, or what came back
+    is not a style object. Each of those falls back to GOAT's default rather
+    than failing the add: a dataset that draws in the wrong colours is a far
+    smaller thing than one that cannot be added at all.
+
+    Stored verbatim. A raster item publishes a raster style and promotes to a
+    raster layer, so the shapes match without dispatching here; validating the
+    members would be a second copy of a schema that is the renderer's.
+    """
+    assets = item.get("assets")
+    asset = assets.get("style") if isinstance(assets, dict) else None
+    href = asset.get("href") if isinstance(asset, dict) else None
+    if not href:
+        return None
+
+    reader = read_object or _read_catalog_object
+    try:
+        document = json.loads(reader(style_key_for(str(href))))
+    except Exception as exc:
+        logger.warning("Catalog style %s not applied: %s", href, exc)
+        return None
+    if not isinstance(document, dict):
+        logger.warning("Catalog style %s is not a style object", href)
+        return None
+    return document
+
+
 def _default_style(geometry_type: str | None) -> dict[str, Any]:
     from goatlib.tools.style import get_default_style
 
@@ -211,7 +290,12 @@ async def promote(
         }
 
     ltype, geom_type = layer_type(item)
-    style = _default_style(geom_type) if geom_type else {}
+    # The dataset's own rendering when it publishes one; GOAT's default is the
+    # fallback, not the rule. The style has to be on the row *here*: the
+    # project link copies `properties` off the layer as it is created, which is
+    # what makes styling per-project, so a style arriving later would never
+    # reach the layer someone just added.
+    style = published_style(item) or (_default_style(geom_type) if geom_type else {})
     if style:
         style.setdefault("visibility", True)
     name = (item.get("title") or "").strip() or item_id

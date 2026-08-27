@@ -119,7 +119,11 @@ async def add_catalog_items_to_project(
     from pathlib import Path as FSPath
 
     import asyncpg
-    from goatlib.tools.catalog_promote import CatalogItemNotFoundError, promote
+    from goatlib.tools.catalog_promote import (
+        CatalogItemNotFoundError,
+        promote,
+        resolve_item_ids,
+    )
 
     mirror = FSPath(settings.CATALOG_DATA_DIR) / "mirror_items.parquet"
     if not mirror.exists():
@@ -137,22 +141,25 @@ async def add_catalog_items_to_project(
     )
     layer_ids: List[UUID4] = []
     reused_link_ids: List[int] = []
+    # What a user picks is a dataset; what promotes is a layer. A single-layer
+    # dataset's Collection id is not its item's id, so the ids are resolved
+    # against the mirror before anything is promoted.
+    try:
+        item_ids = resolve_item_ids(mirror, catalog_ids)
+    except CatalogItemNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
     conn = await asyncpg.connect(dsn)
     try:
-        for catalog_id in catalog_ids:
-            try:
-                result = await promote(
-                    conn,
-                    catalog_id,
-                    mirror_items_path=mirror,
-                    owner_id=uuid_module.UUID(settings.CATALOG_USER_ID),
-                    folder_id=uuid_module.UUID(settings.CATALOG_FOLDER_ID),
-                    schema=settings.SCHEMA,
-                )
-            except CatalogItemNotFoundError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
-                )
+        for catalog_id in item_ids:
+            result = await promote(
+                conn,
+                catalog_id,
+                mirror_items_path=mirror,
+                owner_id=uuid_module.UUID(settings.CATALOG_USER_ID),
+                folder_id=uuid_module.UUID(settings.CATALOG_FOLDER_ID),
+                schema=settings.SCHEMA,
+            )
             layer_id = uuid_module.UUID(result["layer_id"])
             # Enqueue for a fresh layer — and re-enqueue for an existing one
             # whose data never arrived (`failed`, or `pending` with no job

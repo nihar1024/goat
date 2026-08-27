@@ -79,6 +79,61 @@ def read_item(mirror_items_path: str | Path, item_id: str) -> dict[str, Any]:
         con.close()
 
 
+def resolve_item_ids(
+    mirror_items_path: str | Path, catalog_ids: list[str]
+) -> list[str]:
+    """The item ids named by `catalog_ids`, expanding any dataset id among them.
+
+    A caller names what it picked, and what a user picks in the catalog is a
+    *dataset* — a Collection. Promotion is per Item, and a Collection's id is
+    not one of its items' ids (the harvester mints a separate uuid for each),
+    so a dataset id has to be resolved to the layers inside it. A single-layer
+    dataset resolves to its one item; a bundle to all of its members, which is
+    what adding it means.
+
+    Request order is preserved, and an id already covered by an earlier one is
+    dropped: ticking a bundle and one of its layers is one request for that
+    layer, not two entries in the project.
+    """
+    if not catalog_ids:
+        return []
+
+    con = duckdb.connect()
+    try:
+        placeholders = ", ".join("?" * len(catalog_ids))
+        rows = con.execute(
+            f"""
+            SELECT id, collection FROM read_parquet(?)
+            WHERE id IN ({placeholders}) OR collection IN ({placeholders})
+            ORDER BY id
+            """,
+            [str(mirror_items_path), *catalog_ids, *catalog_ids],
+        ).fetchall()
+    finally:
+        con.close()
+
+    items = {row[0] for row in rows}
+    members: dict[str, list[str]] = {}
+    for item_id, collection_id in rows:
+        if collection_id is not None:
+            members.setdefault(collection_id, []).append(item_id)
+
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for catalog_id in catalog_ids:
+        if catalog_id in items:
+            expanded = [catalog_id]
+        elif catalog_id in members:
+            expanded = members[catalog_id]
+        else:
+            raise CatalogItemNotFoundError(f"Catalog item not found: {catalog_id}")
+        for item_id in expanded:
+            if item_id not in seen:
+                seen.add(item_id)
+                resolved.append(item_id)
+    return resolved
+
+
 def layer_type(item: dict[str, Any]) -> tuple[str, str | None]:
     """(layer type, geometry type) for the layer row.
 

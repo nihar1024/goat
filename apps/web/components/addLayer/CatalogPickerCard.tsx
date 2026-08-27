@@ -55,9 +55,10 @@ const CatalogPickerCard = ({
   });
 
   /**
-   * The layer ids this card stands for. A single-layer dataset's card carries the
-   * *item* id, which is what its href points at — the collection id would promote
-   * nothing.
+   * The ids this card stands for. A bundle enumerates its members, so its layers
+   * can be ticked one by one; a single-layer dataset stands for its own Collection
+   * id, which core resolves to the layer inside it — asking for that id here would
+   * be a request per card for something the add already knows how to look up.
    */
   const memberIds = useMemo(() => {
     if (isBundle) return items.map((item) => item.id);

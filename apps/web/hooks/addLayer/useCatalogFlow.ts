@@ -219,9 +219,10 @@ export const useCatalogFlow = ({
   }, [resetPages]);
 
   /**
-   * Promote-on-use: the selection already holds STAC *item* ids — the picker
-   * card resolves a dataset to its item, and a bundle to its member items,
-   * before anything reaches the selection — so the ids go to core verbatim.
+   * Promote-on-use: the selection holds what the picker cards stand for — a
+   * dataset's own Collection id, and a bundle's member *item* ids, which is
+   * what listing its layers individually means. Core resolves either kind
+   * against the mirror before promoting, so the ids go over verbatim.
    * The response's layers may be `pending`; the layer tree polls them to ready.
    */
   const [isAdding, setIsAdding] = useState(false);

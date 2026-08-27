@@ -14,6 +14,7 @@ from goatlib.tools.catalog_promote import (
     _jsonable,
     layer_type,
     read_item,
+    resolve_item_ids,
 )
 
 
@@ -26,21 +27,27 @@ def mirror(tmp_path: Path) -> Path:
         f"""
         COPY (
             SELECT * FROM (VALUES
-                ('item-1', 'Schulstandorte Bayern', 'Alle Schulen',
+                ('item-1', 'dataset-1', 'Schulstandorte Bayern', 'Alle Schulen',
                  'CC-BY-4.0', 'places', 'LDBV', ['schulen', 'bildung'],
                  'de', '2024-11', '../../../data/item-1.parquet',
                  'feature', 'point', 'harvested from ...',
                  TIMESTAMP '2024-01-01', 9.5, 47.2, 13.9, 50.6,
                  [{{'rel': 'via', 'href': 'https://geodaten.bayern.de/x'}}],
                  NULL),
-                ('item-2', 'Statistik ohne Geometrie', NULL,
+                ('item-2', 'dataset-2', 'Statistik ohne Geometrie', NULL,
                  'not-a-license', 'nonsense-category', NULL, [],
                  'German', '3', 'data/item-2.parquet',
                  'table', NULL, NULL,
                  NULL, NULL, NULL, NULL, NULL,
+                 [], NULL),
+                ('item-3', 'dataset-2', 'Zweite Ebene', NULL,
+                 'CC-BY-4.0', 'places', NULL, [],
+                 'de', '1', '../../../data/item-3.parquet',
+                 'feature', 'polygon', NULL,
+                 NULL, NULL, NULL, NULL, NULL,
                  [], NULL)
             ) AS t(
-                id, title, description, license, category, publisher,
+                id, collection, title, description, license, category, publisher,
                 keywords, language_code, version, parquet_url,
                 "goat:layerType", "goat:geometryType", "processing:lineage",
                 datetime_start, bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax,
@@ -100,3 +107,31 @@ def test_bucket_key_rejects_non_parquet() -> None:
         bucket_key_for("styles/ab-12.json")
     with _pytest.raises(ValueError):
         bucket_key_for("")
+
+
+def test_resolve_item_ids_passes_item_ids_through(mirror: Path) -> None:
+    assert resolve_item_ids(mirror, ["item-1", "item-2"]) == ["item-1", "item-2"]
+
+
+def test_resolve_item_ids_expands_a_single_layer_dataset(mirror: Path) -> None:
+    """A Collection's id is not one of its items' ids, so a caller naming the
+    dataset must still promote the layer inside it."""
+    assert resolve_item_ids(mirror, ["dataset-1"]) == ["item-1"]
+
+
+def test_resolve_item_ids_expands_every_member_of_a_dataset(mirror: Path) -> None:
+    assert resolve_item_ids(mirror, ["dataset-2"]) == ["item-2", "item-3"]
+
+
+def test_resolve_item_ids_keeps_request_order(mirror: Path) -> None:
+    assert resolve_item_ids(mirror, ["item-3", "dataset-1"]) == ["item-3", "item-1"]
+
+
+def test_resolve_item_ids_dedupes_a_dataset_and_its_own_member(mirror: Path) -> None:
+    """Ticking a bundle and one of its layers is one request for that layer."""
+    assert resolve_item_ids(mirror, ["dataset-2", "item-2"]) == ["item-2", "item-3"]
+
+
+def test_resolve_item_ids_unknown_id_raises(mirror: Path) -> None:
+    with pytest.raises(CatalogItemNotFoundError):
+        resolve_item_ids(mirror, ["item-1", "no-such-thing"])

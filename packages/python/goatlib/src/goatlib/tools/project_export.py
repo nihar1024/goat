@@ -188,8 +188,10 @@ class ProjectExportRunner(SimpleToolRunner):
                         "thumbnail_url": row["thumbnail_url"],
                         "tags": list(row["tags"]) if row["tags"] else None,
                         "in_catalog": row["in_catalog"],
-                        "user_id": str(row["user_id"]),
-                        "folder_id": str(row["folder_id"]),
+                        "user_id": str(row["user_id"]) if row["user_id"] else None,
+                        "folder_id": (
+                            str(row["folder_id"]) if row["folder_id"] else None
+                        ),
                         # Per-column metadata: formula/computed kinds and
                         # display config. Without it, imported layers keep
                         # the values but lose the definitions.

@@ -65,15 +65,6 @@ class Settings(BaseSettings):
     DEFAULT_USER_FIRSTNAME: str = "GOAT"
     DEFAULT_USER_LASTNAME: str = "Admin"
     DEFAULT_ORGANIZATION_NAME: str = "GOAT"
-    # System identity that owns promoted catalog layers (seeded by
-    # initial_data in EVERY environment, unlike the default identity above).
-    # A catalog layer is shared across users and orgs, so it cannot belong to
-    # any of them; this user's org is quota-exempt because its storage is the
-    # shared cache, billed to nobody. Fixed UUIDs so all environments agree.
-    CATALOG_USER_ID: str = "ca7a1000-0000-4000-8000-000000000001"
-    CATALOG_USER_EMAIL: str = "catalog@goat.local"
-    CATALOG_ORGANIZATION_NAME: str = "GOAT Catalog"
-    CATALOG_FOLDER_ID: str = "ca7a1000-0000-4000-8000-000000000002"
     # The catalog mirror directory (mirror_items.parquet, written by goatlib
     # sync_catalog) — the ONLY thing core reads from the shared volume, and
     # only ever reads. Deployments should mount just this subtree, read-only;

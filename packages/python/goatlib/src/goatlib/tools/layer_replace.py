@@ -72,7 +72,8 @@ class LayerReplaceMixin:
             if not row:
                 raise ValueError(f"Layer not found: {layer_id}")
 
-            owner_id = str(row["user_id"])
+            # NULL owner = a catalog layer, which is nobody's to change.
+            owner_id = str(row["user_id"]) if row["user_id"] else None
             if owner_id != user_id:
                 raise PermissionError(
                     f"User {user_id} cannot update layer {layer_id} owned by {owner_id}"

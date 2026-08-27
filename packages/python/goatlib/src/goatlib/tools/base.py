@@ -730,7 +730,7 @@ class SimpleToolRunner:
                 "SELECT user_id FROM customer.layer WHERE id = $1",
                 uuid_mod.UUID(layer_id),
             )
-            if row:
+            if row and row["user_id"]:
                 return str(row["user_id"])
             return None
         finally:

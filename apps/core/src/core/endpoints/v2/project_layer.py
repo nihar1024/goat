@@ -112,8 +112,9 @@ async def add_catalog_items_to_project(
 
     Promote-on-use: an item already promoted at its current version resolves
     to the existing shared layer and only a project link is created; a first
-    use creates the layer row (owned by the catalog system user, data
-    materialized asynchronously) and then links it.
+    use creates the layer row (unowned — a catalog dataset belongs to the
+    provider that published it — with data materialized asynchronously) and
+    then links it.
     """
     import uuid as uuid_module
     from pathlib import Path as FSPath
@@ -156,8 +157,6 @@ async def add_catalog_items_to_project(
                 conn,
                 catalog_id,
                 mirror_items_path=mirror,
-                owner_id=uuid_module.UUID(settings.CATALOG_USER_ID),
-                folder_id=uuid_module.UUID(settings.CATALOG_FOLDER_ID),
                 schema=settings.SCHEMA,
             )
             layer_id = uuid_module.UUID(result["layer_id"])

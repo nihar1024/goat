@@ -155,7 +155,8 @@ class LayerDeleteRunner(SimpleToolRunner):
                 return False, None
 
             # Verify ownership
-            layer_owner_id = str(row["user_id"])
+            # NULL owner = a catalog layer, which is nobody's to change.
+            layer_owner_id = str(row["user_id"]) if row["user_id"] else None
             if layer_owner_id != user_id:
                 raise PermissionError(
                     f"User {user_id} cannot delete layer {layer_id} owned by {layer_owner_id}"

@@ -543,7 +543,8 @@ export const ProjectLayerTree = ({
         properties: layer.properties,
         query: layer.query,
         other_properties: layer.other_properties,
-        user_id: layer.user_id,
+        // A catalog layer has no owner; the tree's node type says "unknown".
+        user_id: layer.user_id ?? undefined,
         in_catalog: layer.in_catalog || isCatalogLayer(layer),
       });
     });

@@ -143,13 +143,18 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
         ),
         description="Layer ID",
     )
-    user_id: UUID = Field(
+    user_id: UUID | None = Field(
+        default=None,
         sa_column=Column(
             UUID_PG(as_uuid=True),
             ForeignKey(f"{settings.SCHEMA}.user.id", ondelete="CASCADE"),
-            nullable=False,
+            nullable=True,
         ),
-        description="Layer owner ID",
+        description=(
+            "Layer owner. NULL for a catalog layer: it belongs to the provider "
+            "that published it, not to anyone here, which is what keeps it out "
+            "of every content listing and every storage quota."
+        ),
     )
     catalog_external_uid: str | None = Field(
         default=None,
@@ -170,13 +175,14 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
             "layer rather than touching this one."
         ),
     )
-    folder_id: UUID = Field(
+    folder_id: UUID | None = Field(
+        default=None,
         sa_column=Column(
             UUID_PG(as_uuid=True),
             ForeignKey(f"{settings.SCHEMA}.folder.id", ondelete="CASCADE"),
-            nullable=False,
+            nullable=True,
         ),
-        description="Layer folder ID",
+        description="Folder the layer lives in. NULL for an unowned catalog layer.",
     )
     type: LayerType = Field(
         sa_column=Column(Text, nullable=False), description="Layer type"

@@ -269,14 +269,50 @@ mutations. Still open:
       `project_import.py` are identical to `origin/catalog` — they belong to the
       flat-layer-storage work, not to this removal.
 
+- [x] **Catalog layers have no owner.** DECIDED 2026-08-27: the synthetic
+      `catalog@goat.local` user existed only because `layer.user_id` was
+      `NOT NULL`, and it dragged a fabricated organization with it (invented
+      phone number, industry `other`, region `EU`, 2^31 quotas) plus an
+      owner-role link and a folder. `user_id` and `folder_id` are now nullable
+      and NULL for every promoted catalog layer, and that whole identity is
+      deleted — `CATALOG_USER_ID` / `CATALOG_USER_EMAIL` /
+      `CATALOG_ORGANIZATION_NAME` / `CATALOG_FOLDER_ID` and
+      `seed_catalog_identity` with it.
+
+      NULL is the truth (a catalog dataset belongs to the provider that
+      published it) and every consumer already behaved correctly for it: the
+      storage trigger finds no organization and bills nobody, "My Content"
+      filters on `user_id = you` and never lists them, `check_layer` grants read
+      through `catalog_external_uid IS NOT NULL`, and `canEditLayerFeatures`
+      already returns false on a falsy owner.
+
+      The ordering trap, since it would have destroyed data: `layer.folder_id`
+      is `ON DELETE CASCADE`, so the rows are detached **before** the folder and
+      user are deleted. Dropping the folder first takes the 17 layers with it,
+      and all 17 are live in users' projects. (The DB has no FK on
+      `layer.user_id` even though the model declares one — pre-existing drift.)
+      Verified up **and** down in one rolled-back transaction: 17 layers keep
+      their project links, the user and org disappear, no other layer is
+      touched, and the legacy `catalog@plan4better.de` account keeps its 66
+      `in_catalog` layers.
+
 - [ ] **`in_catalog` is now doing two jobs and should be resolved.** The column
       is the old catalog's flag (66 rows), but the *field name* has been reused
       in the map UI as the read-only marker for catalog layers of either
       generation — `ProjectLayerTree` sets
       `in_catalog: layer.in_catalog || isCatalogLayer(layer)`, and rename,
-      delete, the edit table and the layer menu all gate on it. Making it a
-      derived value (`catalog_external_uid IS NOT NULL`) would let the column
-      go; doing that carelessly would make the 66 old rows editable.
+      delete, the edit table and the layer menu all gate on it.
+
+      Now that catalog layers are unowned, the honest replacement is "I don't
+      own this dataset", which `canEditLayerFeatures` already computes. The
+      blocker is the 66 legacy rows: they are owned by the real
+      `catalog@plan4better.de` login, so ownership alone would make them
+      editable, and `check_layer` still grants read through the flag. Options,
+      in order of preference: set those 66 to NULL owner too (one UPDATE, then
+      `check_layer` keys on `user_id IS NULL OR catalog_external_uid IS NOT
+      NULL` and the flag drops), or leave the column as a pure legacy marker.
+      Do **not** fabricate `catalog_external_uid` values for them — it is the
+      STAC item id and carries promote's idempotency contract.
 
 - [ ] **Decide what identifies a catalog-sourced bundle**, when P5 locked
       bundles land. Today no catalog dataset creates a `customer.bundle` row at

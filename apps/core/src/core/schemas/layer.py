@@ -52,7 +52,7 @@ class ThumbnailUrlMixin(BaseModel):
 
 
 class LayerReadBaseAttributes(BaseModel):
-    user_id: UUID = Field(..., description="User ID of the owner")
+    user_id: UUID | None = Field(None, description="Owner, or None for a catalog layer")
     shared_with: Dict[str, Any] | None = Field(
         None, description="List of user IDs the layer is shared with"
     )

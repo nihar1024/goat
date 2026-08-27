@@ -3,8 +3,8 @@
 The catalog's source of truth is the STAC mirror on the shared volume
 (``mirror_items.parquet``); nothing about a harvested dataset lives in
 Postgres until someone uses it. The first add-to-project promotes the item:
-one layer row, owned by the catalog system user, shared by every user and
-org that adds the same item at the same version.
+one layer row with no owner, shared by every user and org that adds the same
+item at the same version.
 
 The row carries only what rendering needs — name, description, type,
 geometry type, extent, style. Everything else the item says about itself
@@ -255,12 +255,15 @@ async def promote(
     item_id: str,
     *,
     mirror_items_path: str | Path,
-    owner_id: uuid_module.UUID,
-    folder_id: uuid_module.UUID,
     schema: str = "customer",
 ) -> dict[str, Any]:
     """Return the shared ``customer.layer`` for a catalog item, creating it
     if this is the first use of this (item, version).
+
+    The row has **no owner**: ``user_id`` and ``folder_id`` are NULL, because a
+    catalog dataset belongs to the provider that published it, not to anyone
+    here. That is also what keeps it out of every user's content listing and
+    out of any organization's storage accounting.
 
     Race-safe via the partial unique index on
     ``(catalog_external_uid, catalog_version)``: the INSERT is
@@ -313,20 +316,20 @@ async def promote(
     inserted = await conn.fetchrow(
         f"""
         INSERT INTO {schema}.layer (
-            id, user_id, folder_id, name, description, type,
+            id, name, description, type,
             feature_layer_type, feature_layer_geometry_type, extent,
             properties, other_properties,
             in_catalog, catalog_external_uid, catalog_version,
             created_at, updated_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6,
-            CASE WHEN $6 = 'feature' THEN 'standard' ELSE NULL END,
-            $7,
-            CASE WHEN $8 THEN
-                ST_Multi(ST_MakeEnvelope($9, $10, $11, $12, 4326))
+            $1, $2, $3, $4,
+            CASE WHEN $4 = 'feature' THEN 'standard' ELSE NULL END,
+            $5,
+            CASE WHEN $6 THEN
+                ST_Multi(ST_MakeEnvelope($7, $8, $9, $10, 4326))
             END,
-            $13::jsonb, $14::jsonb,
-            FALSE, $15, $16,
+            $11::jsonb, $12::jsonb,
+            FALSE, $13, $14,
             NOW(), NOW()
         )
         ON CONFLICT (catalog_external_uid, catalog_version)
@@ -335,8 +338,6 @@ async def promote(
         RETURNING id
         """,
         new_id,
-        owner_id,
-        folder_id,
         name,
         item.get("description"),
         ltype,

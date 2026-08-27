@@ -673,7 +673,9 @@ class LayerService:
             layers = []
             for row in rows:
                 layer_id = str(row["id"]).replace("-", "")
-                user_id_str = str(row["user_id"]).replace("-", "")
+                user_id_str = (
+                    str(row["user_id"]).replace("-", "") if row["user_id"] else None
+                )
 
                 bounds = [
                     row["xmin"] or -180,

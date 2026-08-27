@@ -1,4 +1,4 @@
-"""drop the legacy layer columns, the data_store table and the scenario tables
+"""drop the legacy columns and tables, and unown the catalog layers
 
 Seventeen nullable columns on ``customer.layer`` and one whole table, all left
 over from things GOAT no longer has: the old catalog page, the shared-wide-table
@@ -75,6 +75,27 @@ turns out to matter.
 
 ``customer.bundle`` keeps its ``dataset_metadata`` document: there an importer
 really does fill it, reading ``feed_publisher_name`` out of a GTFS feed.
+
+**A catalog layer now has no owner.** ``layer.user_id`` and ``layer.folder_id``
+become nullable and are set to NULL for every promoted catalog layer, and the
+synthetic identity that used to hold them — the ``catalog@goat.local`` user, its
+``GOAT Catalog`` organization (invented phone number, industry and 2^31 quotas)
+and its ``catalog`` folder — is deleted.
+
+NULL is the truth: a catalog dataset belongs to the provider that published it,
+not to anyone here. Every consumer already behaves correctly for it — the
+storage trigger looks up the owner's organization and finds none, so catalog
+bytes are billed to nobody; "My Content" filters on ``user_id = you`` and so
+never lists them; and ``check_layer`` already grants read through
+``catalog_external_uid IS NOT NULL``, never through the user.
+
+Order matters here: ``layer.folder_id`` is ``ON DELETE CASCADE``, so the rows
+are detached **before** the folder and user are removed. Dropping the folder
+first would take the layers with it, and they are live in users' projects.
+
+The legacy ``catalog@plan4better.de`` account is untouched: it is a real login
+with 85 working layers and 13 projects of its own, and it still owns the 66
+``in_catalog`` layers.
 
 Revision ID: c3e7a91b4d10
 Revises: b2d5e8f1a002
@@ -182,6 +203,43 @@ def upgrade() -> None:
     for name in _SCENARIO_TABLES:
         if name in tables:
             op.drop_table(name, schema=SCHEMA)
+
+    # A catalog layer belongs to the provider that published it, not to anyone
+    # here, so it gets no owner.
+    op.alter_column("layer", "user_id", nullable=True, schema=SCHEMA)
+    op.alter_column("layer", "folder_id", nullable=True, schema=SCHEMA)
+    op.execute(
+        f"""
+        UPDATE {SCHEMA}.layer
+        SET user_id = NULL, folder_id = NULL
+        WHERE catalog_external_uid IS NOT NULL
+        """
+    )
+
+    # Detached first: layer.folder_id is ON DELETE CASCADE, so removing the
+    # folder while rows still point at it would delete layers that are live in
+    # users' projects.
+    op.execute(
+        f"""
+        WITH identity AS (
+            SELECT id, organization_id FROM {SCHEMA}."user"
+            WHERE email = 'catalog@goat.local'
+        ),
+        dropped_folders AS (
+            DELETE FROM {SCHEMA}.folder
+            WHERE user_id IN (SELECT id FROM identity)
+        ),
+        dropped_roles AS (
+            DELETE FROM {SCHEMA}.user_role
+            WHERE user_id IN (SELECT id FROM identity)
+        ),
+        dropped_user AS (
+            DELETE FROM {SCHEMA}."user" WHERE id IN (SELECT id FROM identity)
+        )
+        DELETE FROM {SCHEMA}.organization
+        WHERE id IN (SELECT organization_id FROM identity WHERE organization_id IS NOT NULL)
+        """
+    )
 
 
 def downgrade() -> None:
@@ -324,3 +382,59 @@ def downgrade() -> None:
             sa.Column("active_scenario_id", postgresql.UUID(as_uuid=True)),
             schema=SCHEMA,
         )
+
+    # The owner columns go back to NOT NULL, which means the catalog layers
+    # need an owner again — so the synthetic identity is recreated and they are
+    # reattached to it. Not restored: the organization's invented profile.
+    # User first with no organization, then the organization pointing back at
+    # it, then the link — organization.contact_user_id is NOT NULL, so the two
+    # cannot be inserted in one step.
+    op.execute(
+        f"""
+        INSERT INTO {SCHEMA}."user" (id, email, firstname, lastname, avatar,
+            created_at, updated_at)
+        VALUES ('ca7a1000-0000-4000-8000-000000000001', 'catalog@goat.local',
+            'GOAT', 'Catalog', '', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        """
+    )
+    op.execute(
+        f"""
+        INSERT INTO {SCHEMA}.organization (id, name, avatar, on_trial, plan_name,
+            total_credits, total_storage, total_projects, total_editors,
+            total_viewers, type, size, industry, department, use_case,
+            phone_number, location, region, stripe_id, suspended,
+            contact_user_id, created_at, updated_at)
+        VALUES ('ca7a1000-0000-4000-8000-000000000003', 'GOAT Catalog', '', FALSE,
+            'goat_starter', 2147483647, 2147483647, 2147483647, 2147483647,
+            2147483647, 'other', '1-10', 'other', 'general', 'other',
+            '+0000000000', 'system', 'EU', '', FALSE,
+            'ca7a1000-0000-4000-8000-000000000001', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        """
+    )
+    op.execute(
+        f"""
+        UPDATE {SCHEMA}."user"
+        SET organization_id = 'ca7a1000-0000-4000-8000-000000000003'
+        WHERE id = 'ca7a1000-0000-4000-8000-000000000001'
+        """
+    )
+    op.execute(
+        f"""
+        INSERT INTO {SCHEMA}.folder (id, user_id, name, created_at, updated_at)
+        VALUES ('ca7a1000-0000-4000-8000-000000000002',
+            'ca7a1000-0000-4000-8000-000000000001', 'catalog', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+        """
+    )
+    op.execute(
+        f"""
+        UPDATE {SCHEMA}.layer
+        SET user_id = 'ca7a1000-0000-4000-8000-000000000001',
+            folder_id = 'ca7a1000-0000-4000-8000-000000000002'
+        WHERE user_id IS NULL OR folder_id IS NULL
+        """
+    )
+    op.alter_column("layer", "folder_id", nullable=False, schema=SCHEMA)
+    op.alter_column("layer", "user_id", nullable=False, schema=SCHEMA)

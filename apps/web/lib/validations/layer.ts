@@ -577,7 +577,8 @@ export const layerSchema = layerStoredMetadataSchema.extend({
   total_count: z.number().optional(),
   extent: z.string().default(DEFAULT_WKT_EXTENT),
   folder_id: z.string(),
-  user_id: z.string().uuid(),
+  // Null for a catalog layer: it belongs to the provider that published it.
+  user_id: z.string().uuid().nullish(),
   type: layerType,
   size: z.number().optional(),
   other_properties: otherPropertiesSchmea.optional(),

@@ -4,7 +4,7 @@ import logging
 import core._dotenv  # noqa: E402, F401, I001
 from core.core.config import settings
 from core.db.seed_bundle_types import seed_bundle_types
-from core.db.seed_default import seed_catalog_identity, seed_default_user_org
+from core.db.seed_default import seed_default_user_org
 from core.db.seed_roles import seed_roles
 from core.db.session import session_manager
 from core.db.sql.init_functions import init_functions
@@ -36,11 +36,6 @@ async def main() -> None:
             async with session_manager.session() as session:
                 await seed_default_user_org(session)
             logger.info("Default user/organization ensured (AUTH disabled).")
-        # Unlike the default identity, the catalog identity exists in every
-        # environment: promoted catalog layers need an owner everywhere.
-        async with session_manager.session() as session:
-            await seed_catalog_identity(session)
-        logger.info("Catalog identity ensured.")
         logger.info("Initial data setup completed.")
     finally:
         await session_manager.close()

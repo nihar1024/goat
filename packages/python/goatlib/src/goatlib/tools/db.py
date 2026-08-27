@@ -661,8 +661,9 @@ class ToolDatabaseService:
             return {
                 "id": str(row["id"]),
                 "name": row["name"],
-                "user_id": str(row["user_id"]),
-                "folder_id": str(row["folder_id"]),
+                # NULL for a catalog layer, which belongs to nobody here.
+                "user_id": str(row["user_id"]) if row["user_id"] else None,
+                "folder_id": str(row["folder_id"]) if row["folder_id"] else None,
                 "type": row["type"],
                 "feature_layer_type": row["feature_layer_type"],
                 "geometry_type": row["feature_layer_geometry_type"],

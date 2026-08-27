@@ -29,7 +29,9 @@ const CatalogFeatureTable = ({
   columns,
   truncated,
 }: {
-  features: GeoJSON.Feature[];
+  /** A geometry-less dataset's rows arrive as Features with a `null` geometry;
+   * this table reads attributes either way. */
+  features: GeoJSON.Feature<GeoJSON.Geometry | null>[];
   columns: CatalogColumn[];
   /** Whether the dataset holds more features than these — the preview's `goat:truncated`. */
   truncated?: boolean;

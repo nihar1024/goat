@@ -222,7 +222,9 @@ export type CatalogNutsRegion = {
 /** A bounded sample of an item's features, for the preview map. */
 export type CatalogPreview = {
   type: "FeatureCollection";
-  features: GeoJSON.Feature[];
+  /** A dataset with no geometry — most of the catalog is attribute tables — samples
+   * its rows instead, as Features with a `null` geometry. */
+  features: GeoJSON.Feature<GeoJSON.Geometry | null>[];
   bbox?: number[] | null;
   "goat:item_bbox"?: number[] | null;
   "goat:total"?: number | null;

@@ -688,11 +688,14 @@ async def stac_item_preview(
     store: CatalogStore = Depends(get_store),
     reader: PreviewReader = Depends(get_preview_reader),
 ) -> Response:
-    """A sample of the item's features as GeoJSON, for drawing a preview map.
+    """A sample of the item's data as GeoJSON, for drawing a preview map.
 
     At most 100 features and 2 MB, whichever comes first, and no parameters:
     this shows what the data looks like, it does not return the data. Add the
     layer to a project to work with it.
+
+    An item with no geometry samples its rows instead, as Features with a
+    `null` geometry — the same shape, with nothing to draw on a map.
 
     Answers 404 where a deployment does not offer previews.
     """

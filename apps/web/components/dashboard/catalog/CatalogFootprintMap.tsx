@@ -62,13 +62,15 @@ const CatalogFootprintMap = ({
     };
   }, [item.geometry]);
 
-  const sample = useMemo<GeoJSON.FeatureCollection | null>(
-    () =>
-      preview?.features?.length
-        ? { type: "FeatureCollection", features: preview.features }
-        : null,
-    [preview]
-  );
+  const sample = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    // A preview of a dataset without geometry is rows, not shapes — there is no
+    // map for this component to be on in that case, but the sample is still
+    // filtered rather than trusted to be drawable.
+    const drawable = (preview?.features ?? []).filter(
+      (feature): feature is GeoJSON.Feature => !!feature.geometry
+    );
+    return drawable.length ? { type: "FeatureCollection", features: drawable } : null;
+  }, [preview]);
   const shown = sample ?? footprint;
 
   // Only worth fetching a style when there is data to draw with it.

@@ -3,7 +3,13 @@
 The catalog serves metadata; this is the one endpoint that touches the data
 itself, so that a detail page can show *what the dataset looks like* rather
 than only what it claims to be -- the map preview a Carto-style catalog page
-is built around.
+is built around, and the rows behind it.
+
+**Geometry is optional.** A dataset with geometry samples features; an
+attribute table samples rows and gives each a ``null`` geometry -- a Feature
+the GeoJSON spec allows, which a client renders as a table and fits no map to.
+One response shape for both, because the question a detail page asks ("what
+does a record look like") is the same question either way.
 
 Three decisions shape it, each measured against the real bucket rather than
 assumed:
@@ -272,14 +278,22 @@ class PreviewReader:
             self._con = con
             return con
 
-    def _geometry_column(self, cursor: duckdb.DuckDBPyConnection, url: str) -> str:
+    def _geometry_column(
+        self, cursor: duckdb.DuckDBPyConnection, url: str
+    ) -> str | None:
+        """The file's geometry column, or ``None`` where it has none.
+
+        Absence is a shape, not an error: an attribute table has rows worth
+        showing and no map to draw them on, and after the 2026-08 harvest that
+        is most of the catalog.
+        """
         described = cursor.execute(
             "DESCRIBE SELECT * FROM read_parquet(?)", [url]
         ).fetchall()
         for name, type_name, *_ in described:
             if str(type_name).upper().startswith(_GEOMETRY_TYPE_PREFIX):
                 return str(name)
-        raise ApiError(404, "item has no geometry to preview")
+        return None
 
     def object_url(self, row: dict[str, Any]) -> str:
         """The DuckDB-readable URL of this item's data object.
@@ -309,7 +323,13 @@ class PreviewReader:
         return payload
 
     def read(self, row: dict[str, Any], limit: int) -> dict[str, Any]:
-        """Sample ``limit`` features of the item's data as a FeatureCollection."""
+        """Sample ``limit`` rows of the item's data as a FeatureCollection.
+
+        A dataset with geometry samples features; one without samples rows and
+        gives each a ``null`` geometry, which is a Feature the GeoJSON spec
+        allows and a client can render as a table. One response shape either
+        way, so a caller reads the sample the same for both.
+        """
         settings = self._settings
         url = self.object_url(row)
 
@@ -401,7 +421,7 @@ def _bbox_of(features: list[dict[str, Any]]) -> list[float] | None:
 def _fetch(
     cursor: duckdb.DuckDBPyConnection,
     url: str,
-    geometry_column: str,
+    geometry_column: str | None,
     limit: int,
     tolerance: float,
     settings: CatalogSettings,
@@ -430,6 +450,9 @@ def _fetch(
     preview with blockier shapes still shows the dataset's shape; one with a
     quarter of the features shows the wrong extent.
     """
+    if geometry_column is None:
+        return _fetch_rows(cursor, url, limit, settings)
+
     quoted = geometry_column.replace('"', '""')
     for attempt in range(3):
         step = tolerance * (4**attempt) if tolerance > 0 else 0.0
@@ -459,7 +482,40 @@ def _fetch(
     return features, True
 
 
-def _feature(row: dict[str, Any], geometry_column: str) -> dict[str, Any]:
+def _fetch_rows(
+    cursor: duckdb.DuckDBPyConnection,
+    url: str,
+    limit: int,
+    settings: CatalogSettings,
+) -> tuple[list[dict[str, Any]], bool]:
+    """The same bounded sample for a file with no geometry column.
+
+    Its own read rather than a branch inside the loop above: with nothing to
+    simplify there is no tolerance to coarsen, so the retry that trades detail
+    for bytes would re-run an identical query three times. Over budget, rows
+    are dropped -- the only lever a table has.
+
+    Reservoir sampling for the same reason as features: the published files are
+    ordered, so the first N rows are not a sample of the dataset.
+    """
+    result = cursor.execute(
+        "SELECT NULL AS __geometry, * FROM read_parquet(?) "
+        f"USING SAMPLE {int(limit)} ROWS (reservoir, {_SAMPLE_SEED})",
+        [url],
+    )
+    names = [d[0] for d in result.description]
+    rows = result.fetchall()
+    features = [
+        _feature(dict(zip(names, values, strict=True)), None) for values in rows
+    ]
+    truncated = len(rows) >= limit
+    while features and len(json.dumps(features)) > settings.preview_max_bytes:
+        features.pop()
+        truncated = True
+    return features, truncated
+
+
+def _feature(row: dict[str, Any], geometry_column: str | None) -> dict[str, Any]:
     raw = row.pop("__geometry", None)
     geometry = json.loads(raw) if isinstance(raw, str) else None
     properties = {

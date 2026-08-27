@@ -192,6 +192,20 @@ def data_parquet(tmp_path: Path) -> Path:
     return path
 
 
+def _flat_parquet(tmp_path: Path, *, rows: int, width: int = 1) -> Path:
+    """An attribute table: no geometry column anywhere in it."""
+    path = tmp_path / f"flat-{rows}-{width}.parquet"
+    con = duckdb.connect()
+    con.execute(f"""
+        COPY (
+            SELECT i AS a, repeat('x', {width}) || i AS b
+            FROM range({rows}) AS t(i)
+        ) TO '{path.as_posix()}' (FORMAT PARQUET)
+    """)
+    con.close()
+    return path
+
+
 class _LocalReader(PreviewReader):
     """A reader whose 'bucket object' is one local parquet.
 
@@ -300,18 +314,42 @@ class TestPreviewReader:
         assert len(_json.dumps(doc["features"])) <= 2000
         assert doc["goat:truncated"] is True
 
-    def test_an_item_without_geometry_is_404(
+    def test_a_geometryless_item_previews_its_rows(
         self, tmp_path: Path, reader: PreviewReader
     ) -> None:
-        flat = tmp_path / "flat.parquet"
-        con = duckdb.connect()
-        con.execute(
-            f"COPY (SELECT 1 AS a, 'x' AS b) TO '{flat.as_posix()}' (FORMAT PARQUET)"
-        )
-        con.close()
-        with pytest.raises(ApiError) as exc:
-            reader.read(_row(__local_path=flat.as_posix()), limit=10)
-        assert exc.value.status_code == 404
+        """70% of the catalog is now attribute tables. Having no geometry is a
+        reason to draw no map, not a reason to withhold the data."""
+        flat = _flat_parquet(tmp_path, rows=50)
+        doc = reader.read(_row(__local_path=flat.as_posix()), limit=10)
+
+        assert doc["type"] == "FeatureCollection"
+        assert len(doc["features"]) == 10
+        assert all(feature["geometry"] is None for feature in doc["features"])
+        assert set(doc["features"][0]["properties"]) == {"a", "b"}
+        assert doc["goat:truncated"] is True
+
+    def test_a_geometryless_preview_reports_no_extent(
+        self, tmp_path: Path, reader: PreviewReader
+    ) -> None:
+        """No geometry, no bbox to fit a map to — and the client keys its map
+        off exactly that."""
+        flat = _flat_parquet(tmp_path, rows=5)
+        doc = reader.read(_row(__local_path=flat.as_posix()), limit=10)
+        assert "bbox" not in doc
+        assert doc["goat:truncated"] is False
+
+    def test_geometryless_rows_respect_the_byte_budget(
+        self, tmp_path: Path, reader: PreviewReader
+    ) -> None:
+        """The cap is on the response, not on geometries: a table of wide text
+        can blow it just as a feature collection can."""
+        import json as _json
+
+        flat = _flat_parquet(tmp_path, rows=500, width=200)
+        reader._settings.preview_max_bytes = 2000  # noqa: SLF001
+        doc = reader.read(_row(__local_path=flat.as_posix()), limit=100)
+        assert len(_json.dumps(doc["features"])) <= 2000
+        assert doc["goat:truncated"] is True
 
 
 # ────────────────────────────────────────────────────────────────────────

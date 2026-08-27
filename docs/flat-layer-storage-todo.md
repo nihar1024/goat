@@ -661,8 +661,14 @@ would hit first.
       compiles to an impossible envelope → 200 with empty results.
 - [x] `run_aggregations` resolves facets via the item registry only; a
       collection-only facet → `KeyError` → 500 on schema drift.
-- [ ] `store.registry`/`store._con` read as two unlocked attributes across a
-      reload swap (transient torn state).
+- [x] `store.registry`/`store._con` read as two unlocked attributes across a
+      reload swap (transient torn state). Everything a reload replaces now lives
+      in one `CatalogState`, so the swap is a single rebinding, and the paths
+      that compile SQL from the registry and then run it (`search_items`,
+      `search_collections`, `run_aggregations`) take `store.snapshot()` once and
+      execute on that generation's connection. Pinned by a test that swaps the
+      store inside `build_filters` — it fails on the old code. Note the snapshot
+      pins the *schema*, not the data: views re-read their files.
 
 ### Web (from the last finder)
 

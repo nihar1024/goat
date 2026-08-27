@@ -257,8 +257,6 @@ RESOURCES_PERMISSIONS = [
         "permissions": ["delete-layer"],
     },
     {"url_pattern": "layer", "method": ["POST"], "permissions": ["read-layer"]},
-    {"url_pattern": "layer/catalog", "method": ["POST"]},
-    {"url_pattern": "layer/metadata/aggregate", "method": ["POST"]},
     {"url_pattern": "project", "method": ["GET"], "permissions": ["read-project"]},
     {
         "url_pattern": "project",

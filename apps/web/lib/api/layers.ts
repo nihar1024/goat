@@ -3,7 +3,6 @@ import useSWR from "swr";
 import { apiRequestAuth, fetcher } from "@/lib/api/fetcher";
 import { type Job, PROCESSES_API_BASE_URL, executeProcessAsync } from "@/lib/api/processes";
 import { GEOAPI_BASE_URL } from "@/lib/constants";
-import type { PaginatedQueryParams } from "@/lib/validations/common";
 import type {
   ClassBreaks,
   CreatableFieldKind,
@@ -11,10 +10,8 @@ import type {
   CreateRasterLayer,
   DatasetCollectionItems,
   DatasetDownloadRequest,
-  DatasetMetadataAggregated,
   FieldKind,
   GetCollectionItemsQueryParams,
-  GetDatasetSchema,
   GetLayerUniqueValuesQueryParams,
   Layer,
   LayerClassBreaks,
@@ -55,42 +52,6 @@ const processExecuteFetcher = async ([url, body]: [string, object]) => {
     throw new Error(error.detail?.detail || error.detail || "Process execution failed");
   }
   return response.json();
-};
-
-export const useLayers = (queryParams?: PaginatedQueryParams, payload: GetDatasetSchema = {}) => {
-  const { data, isLoading, error, mutate, isValidating } = useSWR<LayerPaginated>(
-    [`${LAYERS_API_BASE_URL}`, queryParams, payload],
-    fetcher
-  );
-  return {
-    layers: data,
-    isLoading: isLoading,
-    isError: error,
-    mutate,
-    isValidating,
-  };
-};
-
-export const useCatalogLayers = (queryParams?: PaginatedQueryParams, payload: GetDatasetSchema = {}) => {
-  const { data, isLoading, error, mutate, isValidating } = useSWR<LayerPaginated>(
-    [`${LAYERS_API_BASE_URL}/catalog`, queryParams, payload],
-    fetcher
-  );
-  return {
-    layers: data,
-    isLoading: isLoading,
-    isError: error,
-    mutate,
-    isValidating,
-  };
-};
-
-export const useMetadataAggregated = (payload: GetDatasetSchema = {}) => {
-  const { data, isLoading, error, mutate } = useSWR<DatasetMetadataAggregated>(
-    [`${LAYERS_API_BASE_URL}/metadata/aggregate`, null, payload],
-    fetcher
-  );
-  return { metadata: data, isLoading, isError: error, mutate };
 };
 
 export const useDataset = (datasetId: string) => {

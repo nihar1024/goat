@@ -200,7 +200,6 @@ async def test_schemas(postgres_pool: asyncpg.Pool) -> None:
                 tags TEXT[],
                 thumbnail_url TEXT,
                 layer_order INTEGER[],
-                active_scenario_id UUID,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
@@ -220,7 +219,6 @@ async def test_schemas(postgres_pool: asyncpg.Pool) -> None:
                 feature_layer_type TEXT,
                 feature_layer_geometry_type TEXT,
                 extent GEOMETRY(MultiPolygon, 4326),
-                attribute_mapping JSONB,
                 size BIGINT DEFAULT 0,
                 properties JSONB,
                 other_properties JSONB,

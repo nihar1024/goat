@@ -28,9 +28,7 @@ class BundleImportParams(ToolInputBase):
     s3_key: str = Field(
         ..., description="Object-storage key of the uploaded source (e.g. gtfs.zip)"
     )
-    bundle_type: str = Field(
-        ..., description="Bundle type (e.g. pt_network_gtfs)"
-    )
+    bundle_type: str = Field(..., description="Bundle type (e.g. pt_network_gtfs)")
     project_id: str | None = Field(
         None,
         description="If set, add the imported bundle to this project as a group",

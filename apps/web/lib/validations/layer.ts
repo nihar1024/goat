@@ -6,8 +6,6 @@ import { DEFAULT_COLOR, DEFAULT_COLOR_RANGE } from "@/lib/constants/color";
 import { formatNumberTypes } from "@/lib/validations/common";
 import {
   contentMetadataSchema,
-  dataCategory,
-  dataLicense,
   dataType,
   featureDataExchangeType,
   featureLayerGeometryType,
@@ -471,23 +469,15 @@ export const featureLayerProperties = featureLayerPointPropertiesSchema
 
 export const featureLabelProperties = z.object({});
 
-// lineage, positional_accuracy, attribute_accuracy, completeness
-export const layerMetadataSchema = contentMetadataSchema.extend({
-  lineage: z.string().optional(),
-  positional_accuracy: z.string().optional(),
-  attribute_accuracy: z.string().optional(),
-  completeness: z.string().optional(),
-  upload_reference_system: z.number().optional(),
-  upload_file_type: featureDataExchangeType.optional(),
-  geographical_code: z.string().length(2).optional(),
-  language_code: z.string().optional(),
-  data_reference_year: z.coerce.number().optional(),
-  distributor_name: z.string().optional(),
-  distributor_email: z.string().email().optional(),
-  distribution_url: z.string().url().optional(),
-  license: dataLicense.optional(),
-  attribution: z.string().optional(),
-  data_category: dataCategory.optional(),
+/**
+ * What the metadata FORM edits — flat, because a form is a flat set of inputs.
+ * It is packed into `dataset_metadata` on submit and unpacked on seed, the
+ * same way a bundle's is.
+ */
+export const layerMetadataSchema = contentMetadataSchema;
+
+/** What a stored layer carries: the document, not the loose fields. */
+export const layerStoredMetadataSchema = contentMetadataSchema.extend({
   in_catalog: z.boolean().optional().default(false),
 });
 
@@ -581,7 +571,7 @@ export const rasterLayerPropertiesSchema = layerPropertiesBaseSchema.extend({
     .default({ style_type: "image", opacity: 1.0 } as z.infer<typeof rasterStyleImageProperties>),
 });
 
-export const layerSchema = layerMetadataSchema.extend({
+export const layerSchema = layerStoredMetadataSchema.extend({
   id: z.string(),
   properties: featureLayerProperties.or(rasterLayerPropertiesSchema).or(z.record(z.any())).default({}),
   total_count: z.number().optional(),
@@ -598,7 +588,6 @@ export const layerSchema = layerMetadataSchema.extend({
   job_id: z.string().optional(),
   data_type: dataType.optional(),
   legend_urls: z.array(z.string()).optional(),
-  attribute_mapping: z.object({}).optional(),
   shared_with: shareLayerSchema.optional(),
   owned_by: publicUserSchema.optional(),
   updated_at: z.string(),
@@ -611,7 +600,7 @@ export const getLayerUniqueValuesQueryParamsSchema = paginatedSchema.extend({
   query: z.string().optional(),
 });
 
-export const createLayerBaseSchema = layerMetadataSchema.extend({
+export const createLayerBaseSchema = layerStoredMetadataSchema.extend({
   folder_id: z.string().uuid(),
 });
 
@@ -712,33 +701,13 @@ export const getDatasetSchema = z.object({
   search: z.string().optional(),
   type: layerType.array().optional(),
   feature_layer_type: featureLayerType.optional(),
-  license: z.array(dataLicense).optional(),
-  data_category: z.array(dataCategory).optional(),
-  geographical_code: z.array(z.string().length(2)).optional(),
-  language_code: z.array(z.string()).optional(),
-  distributor_name: z.array(z.string()).optional(),
   in_catalog: z.boolean().optional(),
   spatial_search: z.string().optional(),
-});
-
-export const datasetMetadataValue = z.object({
-  value: z.string(),
-  count: z.number(),
-});
-export const datasetMetadataAggregated = z.object({
-  type: z.array(datasetMetadataValue),
-  data_category: z.array(datasetMetadataValue),
-  geographical_code: z.array(datasetMetadataValue),
-  language_code: z.array(datasetMetadataValue),
-  distributor_name: z.array(datasetMetadataValue),
-  license: z.array(datasetMetadataValue),
 });
 
 export type DatasetCollectionItems = z.infer<typeof datasetCollectionItems>;
 export type GetCollectionItemsQueryParams = z.infer<typeof datasetCollectionItemsQueryParams>;
 export type GetDatasetSchema = z.infer<typeof getDatasetSchema>;
-export type DatasetMetadataValue = z.infer<typeof datasetMetadataValue>;
-export type DatasetMetadataAggregated = z.infer<typeof datasetMetadataAggregated>;
 
 export type DatasetDownloadRequest = z.infer<typeof datasetDownloadRequestSchema>;
 

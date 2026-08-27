@@ -30,11 +30,7 @@ from core.schemas.error import (
     LayerNotFoundError,
 )
 from core.schemas.layer import (
-    ICatalogLayerGet,
     ILayerGet,
-    IMetadataAggregate,
-    IMetadataAggregateRead,
-    MetadataGroupAttributes,
     get_layer_schema,
     layer_update_class,
 )
@@ -75,8 +71,7 @@ class CRUDLayer(CRUDBase):
     async def get_base_filter(
         self,
         user_id: UUID,
-        params: ILayerGet | ICatalogLayerGet | IMetadataAggregate,
-        attributes_to_exclude: List[str] = [],
+        params: ILayerGet,
         team_id: UUID | None = None,
         organization_id: UUID | None = None,
     ) -> List[Any]:
@@ -89,7 +84,6 @@ class CRUDLayer(CRUDBase):
                     "search",
                     "spatial_search",
                     "in_catalog",
-                    *attributes_to_exclude,
                 )
                 and value is not None
             ):
@@ -98,43 +92,32 @@ class CRUDLayer(CRUDBase):
                     value = [value]
                 filters.append(getattr(Layer, key).in_(value))
 
-        # Check if ILayer get then it is organization layers
-        if isinstance(params, ILayerGet):
-            if params.in_catalog is not None:
-                if not team_id and not organization_id:
-                    filters.append(
-                        and_(
-                            Layer.in_catalog == bool(params.in_catalog),
-                            Layer.user_id == user_id,
-                        )
+        if params.in_catalog is not None:
+            if not team_id and not organization_id:
+                filters.append(
+                    and_(
+                        Layer.in_catalog == bool(params.in_catalog),
+                        Layer.user_id == user_id,
                     )
-                else:
-                    filters.append(
-                        and_(
-                            Layer.in_catalog == bool(params.in_catalog),
-                        )
-                    )
+                )
             else:
-                if not team_id and not organization_id:
-                    filters.append(Layer.user_id == user_id)
-                    # My Content is folder-scoped navigation: a layer sitting in
-                    # a folder the user does not own is unreachable there.
-                    filters.append(
-                        or_(
-                            Layer.folder_id.is_(None),
-                            Layer.folder_id.in_(
-                                select(Folder.id).where(Folder.user_id == user_id)
-                            ),
-                        )
-                    )
-        else:
-            filters.append(Layer.in_catalog == bool(True))
+                filters.append(Layer.in_catalog == bool(params.in_catalog))
+        elif not team_id and not organization_id:
+            filters.append(Layer.user_id == user_id)
+            # My Content is folder-scoped navigation: a layer sitting in
+            # a folder the user does not own is unreachable there.
+            filters.append(
+                or_(
+                    Layer.folder_id.is_(None),
+                    Layer.folder_id.in_(
+                        select(Folder.id).where(Folder.user_id == user_id)
+                    ),
+                )
+            )
 
         # Layers that belong to a bundle are surfaced via the bundle,
         # not as standalone datasets — exclude them from content listings.
-        filters.append(
-            Layer.id.notin_(select(BundleLayerLink.layer_id))
-        )
+        filters.append(Layer.id.notin_(select(BundleLayerLink.layer_id)))
 
         # Add search filter
         if params.search is not None:
@@ -142,7 +125,6 @@ class CRUDLayer(CRUDBase):
                 or_(
                     func.lower(Layer.name).contains(params.search.lower()),
                     func.lower(Layer.description).contains(params.search.lower()),
-                    func.lower(Layer.distributor_name).contains(params.search.lower()),
                 )
             )
         if params.spatial_search is not None:
@@ -160,7 +142,7 @@ class CRUDLayer(CRUDBase):
         order_by: str,
         order: str,
         page_params: PaginationParams,
-        params: ILayerGet | ICatalogLayerGet,
+        params: ILayerGet,
         team_id: UUID | None = None,
         organization_id: UUID | None = None,
     ) -> Page[BaseModel]:
@@ -313,47 +295,6 @@ class CRUDLayer(CRUDBase):
         )
         layers.items = layers_arr
         return layers
-
-    async def metadata_aggregate(
-        self,
-        async_session: AsyncSession,
-        user_id: UUID,
-        params: IMetadataAggregate,
-    ) -> IMetadataAggregateRead:
-        """Get metadata aggregate for layers."""
-
-        if params is None:
-            params = ILayerGet()
-
-        # Loop through all attributes
-        result = {}
-        for attribute in params:
-            key = attribute[0]
-            if key in ("search", "spatial_search", "folder_id"):
-                continue
-
-            # Build filter for respective group
-            filters = await self.get_base_filter(
-                user_id=user_id, params=params, attributes_to_exclude=[key]
-            )
-            # Get attribute from layer
-            group_by = getattr(Layer, key)
-            sql_query = (
-                select(group_by, func.count(Layer.id).label("count"))
-                .where(and_(*filters))
-                .group_by(group_by)
-            )
-            res = await async_session.execute(sql_query)
-            res = res.fetchall()
-            # Create metadata object
-            metadata = [
-                MetadataGroupAttributes(value=str(r[0]), count=r[1])
-                for r in res
-                if r[0] is not None
-            ]
-            result[key] = metadata
-
-        return IMetadataAggregateRead(**result)
 
 
 layer = CRUDLayer(Layer)

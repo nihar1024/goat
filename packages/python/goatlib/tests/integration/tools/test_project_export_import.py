@@ -141,24 +141,9 @@ async def extended_test_schemas(postgres_pool: Any, test_schemas: None) -> None:
                 END $$;
             """)
 
-        # Add missing columns to layer (quality/metadata fields the import needs)
+        # Add missing columns to layer that the import needs
         layer_cols = [
             ("url", "TEXT"),
-            ("upload_reference_system", "INTEGER"),
-            ("upload_file_type", "TEXT"),
-            ("lineage", "TEXT"),
-            ("positional_accuracy", "TEXT"),
-            ("attribute_accuracy", "TEXT"),
-            ("completeness", "TEXT"),
-            ("geographical_code", "TEXT"),
-            ("language_code", "TEXT"),
-            ("distributor_name", "TEXT"),
-            ("distributor_email", "TEXT"),
-            ("distribution_url", "TEXT"),
-            ("license", "TEXT"),
-            ("attribution", "TEXT"),
-            ("data_reference_year", "INTEGER"),
-            ("data_category", "TEXT"),
             ("field_config", "JSONB NOT NULL DEFAULT '{}'::jsonb"),
         ]
         for col_name, col_type in layer_cols:

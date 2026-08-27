@@ -53,7 +53,6 @@ import Container from "@/components/map/panels/Container";
 import Selector from "@/components/map/panels/common/Selector";
 import ToolsHeader from "@/components/map/panels/common/ToolsHeader";
 import Expression from "@/components/map/panels/filter/Expression";
-import CatalogExplorerModal from "@/components/modals/CatalogExplorer";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
 
 // Tab panel component
@@ -89,7 +88,6 @@ function a11yProps(index: number) {
 enum DatasetSourceType {
   FromProject = "from_project",
   DatasetExplorer = "dataset_explorer",
-  CatalogExplorer = "catalog_explorer",
 }
 
 interface DatasetNodeSettingsProps {
@@ -129,7 +127,6 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
 
   // Modal states
   const [datasetExplorerOpen, setDatasetExplorerOpen] = useState(false);
-  const [catalogExplorerOpen, setCatalogExplorerOpen] = useState(false);
 
   // Show layer selector (for "From project" option)
   const [showLayerSelector, setShowLayerSelector] = useState(false);
@@ -223,7 +220,6 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
   const menuItems = [
     { type: DatasetSourceType.FromProject, icon: ICON_NAME.LAYERS, label: t("from_project") },
     { type: DatasetSourceType.DatasetExplorer, icon: ICON_NAME.DATABASE, label: t("dataset_explorer") },
-    { type: DatasetSourceType.CatalogExplorer, icon: ICON_NAME.GLOBE, label: t("catalog_explorer") },
   ];
 
   // Handle tab change
@@ -250,9 +246,6 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
         break;
       case DatasetSourceType.DatasetExplorer:
         setDatasetExplorerOpen(true);
-        break;
-      case DatasetSourceType.CatalogExplorer:
-        setCatalogExplorerOpen(true);
         break;
     }
   };
@@ -316,7 +309,7 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
     [layers, node, dispatch, logicalOperators]
   );
 
-  // Handle layer selection from Dataset Explorer or Catalog Explorer (workflow-only, no project add)
+  // Handle layer selection from the Dataset Explorer (workflow-only, no project add)
   const handleExplorerLayerSelect = useCallback(
     (layer: Layer) => {
       if (node.type !== "dataset") return;
@@ -812,14 +805,6 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
             <DatasetExplorerModal
               open={datasetExplorerOpen}
               onClose={() => setDatasetExplorerOpen(false)}
-              projectId={projectId as string}
-              onLayerSelect={handleExplorerLayerSelect}
-            />
-          )}
-          {catalogExplorerOpen && (
-            <CatalogExplorerModal
-              open={catalogExplorerOpen}
-              onClose={() => setCatalogExplorerOpen(false)}
               projectId={projectId as string}
               onLayerSelect={handleExplorerLayerSelect}
             />

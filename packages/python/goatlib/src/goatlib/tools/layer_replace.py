@@ -13,7 +13,6 @@ The mixin expects the host class to provide ``duckdb_con``, ``settings``, and
 already do.
 """
 
-import json
 import logging
 import uuid as uuid_module
 from pathlib import Path
@@ -63,7 +62,7 @@ class LayerReplaceMixin:
                 f"""
                 SELECT id, user_id, folder_id, name, type, data_type,
                        feature_layer_type, feature_layer_geometry_type,
-                       attribute_mapping, other_properties
+                       other_properties
                 FROM {self.settings.customer_schema}.layer
                 WHERE id = $1
                 """,
@@ -88,7 +87,6 @@ class LayerReplaceMixin:
                 "data_type": row["data_type"],
                 "feature_layer_type": row["feature_layer_type"],
                 "geometry_type": row["feature_layer_geometry_type"],
-                "attribute_mapping": row["attribute_mapping"] or {},
                 "other_properties": row["other_properties"] or {},
             }
         finally:
@@ -277,7 +275,6 @@ class LayerReplaceMixin:
         extent_wkt: str | None,
         size: int,
         geometry_type: str | None,
-        attribute_mapping: dict[str, Any] | None,
     ) -> None:
         """UPDATE customer.layer with data-derived fields only.
 
@@ -308,11 +305,6 @@ class LayerReplaceMixin:
             if normalized_geom:
                 updates.append(f"feature_layer_geometry_type = ${param_idx}")
                 params.append(normalized_geom)
-                param_idx += 1
-
-            if attribute_mapping:
-                updates.append(f"attribute_mapping = ${param_idx}::jsonb")
-                params.append(json.dumps(attribute_mapping))
                 param_idx += 1
 
             await pool.execute(

@@ -38,17 +38,6 @@ export const dataLicense = z.enum([
   "OTHER",
 ]);
 
-export const dataCategory = z.enum([
-  "basemap",
-  "imagery",
-  "boundary",
-  "people",
-  "transportation",
-  "environment",
-  "landuse",
-  "places",
-]);
-
 export const layerType = z.enum(["feature", "raster", "table"]);
 
 export const featureLayerType = z.enum(["standard", "tool", "street_network"]);
@@ -90,7 +79,6 @@ export type SortType = z.infer<typeof sortTypes>;
 export type StatisticOperation = z.infer<typeof statisticOperationEnum>;
 export type LayerType = z.infer<typeof layerType>;
 export type DataLicense = z.infer<typeof dataLicense>;
-export type DataCategory = z.infer<typeof dataCategory>;
 export type FeatureLayerGeometryType = z.infer<typeof featureLayerGeometryType>;
 export type TableDataExchangeType = z.infer<typeof tableDataExchangeType>;
 export type FeatureDataExchangeType = z.infer<typeof featureDataExchangeType>;

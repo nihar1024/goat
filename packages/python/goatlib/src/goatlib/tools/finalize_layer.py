@@ -219,12 +219,6 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
             snapshot_id=snapshot_id,
         )
 
-        attr_mapping = {
-            col: col
-            for col in table_info.get("columns", {})
-            if col.lower() not in ("geometry", "geom", "id")
-        }
-
         loop.run_until_complete(
             self._update_layer_metadata(
                 layer_id=existing_id,
@@ -232,7 +226,6 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
                 extent_wkt=table_info.get("extent_wkt"),
                 size=table_info.get("size", 0),
                 geometry_type=table_info.get("geometry_type"),
-                attribute_mapping=attr_mapping,
             )
         )
 

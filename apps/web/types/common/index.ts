@@ -54,10 +54,8 @@ export type ResponseResult = {
   status?: "error" | "success";
 };
 
+/** The one source still handed off by name; the rest of the Add Layer flow is
+ * driven by `components/addLayer/sources.ts`. */
 export enum AddLayerSourceType {
   DatasourceExplorer,
-  DatasourceUpload,
-  DataSourceExternal,
-  CatalogExplorer,
-  CreateEmptyLayer,
 }

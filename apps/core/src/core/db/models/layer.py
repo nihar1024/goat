@@ -2,11 +2,9 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Union
 from uuid import UUID
 
-import pycountry
 from geoalchemy2 import Geometry, WKBElement
 from geoalchemy2.shape import to_shape
 from pydantic import (
-    EmailStr,
     HttpUrl,
     computed_field,
     field_serializer,
@@ -43,7 +41,6 @@ if TYPE_CHECKING:
         LayerProjectLink,
         LayerTeamLink,
     )
-    from .data_store import DataStore
 
 
 class FeatureType(str, Enum):
@@ -52,18 +49,6 @@ class FeatureType(str, Enum):
     standard = "standard"
     tool = "tool"
     street_network = "street_network"
-
-
-class FileUploadType(str, Enum):
-    """All allowed file upload types"""
-
-    csv = "csv"
-    xlsx = "xlsx"
-    geojson = "geojson"
-    gpkg = "gpkg"
-    kml = "kml"
-    zip = "zip"  # Commonly used for shapefiles
-    parquet = "parquet"  # GeoParquet files
 
 
 class RasterDataType(str, Enum):
@@ -99,32 +84,6 @@ class FeatureGeometryType(str, Enum):
     polygon = "polygon"
 
 
-class DataLicense(str, Enum):
-    DDN2 = "DDN2"
-    DDZ2 = "DDZ2"
-    CC_BY = "CC_BY"
-    CC_BY_SA = "CC_BY_SA"
-    CC_BY_ND = "CC_BY_ND"
-    CC_BY_NC = "CC_BY_NC"
-    CC_BY_NC_SA = "CC_BY_NC_SA"
-    CC_BY_NC_ND = "CC_BY_NC_ND"
-    CC_ZERO = "CC_ZERO"
-    ODC_BY = "ODC_BY"
-    ODC_ODbL = "ODC_ODbL"
-    OTHER = "OTHER"
-
-
-class DataCategory(str, Enum):
-    basemap = "basemap"
-    imagery = "imagery"
-    boundary = "boundary"
-    people = "people"
-    transportation = "transportation"
-    environment = "environment"
-    landuse = "landuse"
-    places = "places"
-
-
 class GeospatialAttributes(SQLModel):
     """Some general geospatial attributes."""
 
@@ -148,110 +107,9 @@ class GeospatialAttributes(SQLModel):
         return v
 
 
-def validate_language_code(v: str | None) -> str | None:
-    if v and pycountry.languages.get(alpha_2=v) is None:
-        raise ValueError(f"The passed language {v} is not valid.")
-    return v
-
-
-def validate_geographical_code(v: str | None) -> str | None:
-    continents = [
-        "Africa",
-        "Antarctica",
-        "Asia",
-        "Europe",
-        "North America",
-        "Oceania",
-        "South America",
-        "World",
-    ]
-
-    if v:
-        # Accept either a country code or one of the continent names
-        if pycountry.countries.get(alpha_2=v) is None and v not in continents:
-            raise ValueError(f"The passed country {v} is not valid.")
-    return v
-
-
 class LayerBase(ContentBaseAttributes):
     """Base model for layers."""
 
-    # Data Quality Information
-    lineage: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Descriptive information about the source of the data and its derivation",
-    )
-    positional_accuracy: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Quantitative value indicating positional accuracy",
-    )
-    attribute_accuracy: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Quantitative value indicating the accuracy of attribute data",
-    )
-    completeness: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Quantitative value indicating the completeness of the data",
-    )
-
-    # Distribution and Geographical Information
-    geographical_code: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=13,  # ISO 3166-1 alpha-2 country codes are 2 letters
-        description="Tag indicating the primary geographical area it is following the ISO 3166-1 alpha-2 standard for country codes and for continents the following values are used: Africa, Antarctica, Asia, Europe, North America, Oceania, South America, World",
-    )
-    language_code: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=2,  # ISO 639-1 language codes are 2 letters
-        description="Language of the data",
-    )
-    distributor_name: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Name of the entity distributing the data",
-    )
-    distributor_email: EmailStr | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="Contact information for the distributor",
-    )
-    distribution_url: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="URL to the data distribution",
-    )
-    license: DataLicense | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="License of the data",
-    )
-    attribution: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Data source of the layer",
-    )
-    data_reference_year: int | None = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=True),
-        description="Data reference year of the layer",
-    )
-    data_category: DataCategory | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="Data category of the layer",
-    )
     in_catalog: bool | None = Field(
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default="False"),
@@ -267,55 +125,6 @@ class LayerBase(ContentBaseAttributes):
         sa_column=Column(ARRAY(Text), nullable=True),
         description="Layer tags",
     )
-
-    # Check if language and geographical_tag valid according to pycountry
-    @field_validator("language_code", mode="after", check_fields=False)
-    @classmethod
-    def language_code_valid(cls: type["LayerBase"], value: str | None) -> str | None:
-        return validate_language_code(value)
-
-    @field_validator("geographical_code", mode="after", check_fields=False)
-    @classmethod
-    def geographical_code_valid(
-        cls: type["LayerBase"], value: str | None
-    ) -> str | None:
-        return validate_geographical_code(value)
-
-    @field_validator("distribution_url", mode="before")
-    @classmethod
-    def convert_httpurl_to_str(
-        cls: type["LayerBase"], value: str | HttpUrl | None
-    ) -> str | None:
-        """Convert HttpUrl to string for distribution_url.
-
-        Note: thumbnail_url is handled separately by ThumbnailUrlMixin
-        in the schema layer, as it may be stored as an S3 key.
-        """
-        if value is None:
-            return value
-        elif isinstance(value, HttpUrl):
-            return str(value)
-        assert HttpUrl(value)
-        return value
-
-
-layer_base_example = {
-    "lineage": "Derived from web research and ground surveys conducted in 2021 by trained professionals.",
-    "positional_accuracy": "High accuracy with an error margin of ±2 meters.",
-    "attribute_accuracy": "Attribute data verified with 90% confidence level.",
-    "completeness": "Data is 98% complete, missing data in remote areas.",
-    "upload_reference_system": 4326,
-    "upload_file_type": "geojson",
-    "geographical_code": "de",  # ISO Alpha-2 code for Germany
-    "language_code": "de",  # ISO Alpha-2 code for German
-    "distributor_name": "Plan4Better GmbH",
-    "distributor_email": "info@plan4better.de",
-    "distribution_url": "https://plan4better.de/data/samples/sample_data.geojson",
-    "license": "ODC_ODbL",  # Assuming this is a value from the DataLicense Enum
-    "attribution": "Dataset provided by Plan4Better GmbH.",
-    "data_reference_year": 2021,
-    "data_category": "transportation",  # Assuming this is a value from the DataCategory Enum
-}
 
 
 class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
@@ -372,14 +181,6 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
     type: LayerType = Field(
         sa_column=Column(Text, nullable=False), description="Layer type"
     )
-    data_store_id: UUID | None = Field(
-        default=None,
-        sa_column=Column(
-            UUID_PG(as_uuid=True),
-            ForeignKey(f"{settings.SCHEMA}.data_store.id"),
-        ),
-        description="Data store ID of the layer",
-    )
     extent: str | None = Field(
         default=None,
         sa_column=Column(
@@ -433,21 +234,6 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
         sa_column=Column(Integer, nullable=True),
         description="Size of the layer in bytes",
     )
-    attribute_mapping: Dict[str, Any] | None = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True),
-        description="Attribute mapping for feature layers",
-    )
-    upload_reference_system: int | None = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=True),
-        description="Description of the spatial reference systems",
-    )
-    upload_file_type: FileUploadType | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="Description of the upload file type",
-    )
     field_config: Dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(
@@ -466,7 +252,6 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
     )
 
     # Relationships
-    data_store: "DataStore" = Relationship(back_populates="layers")
     layer_projects: List["LayerProjectLink"] = Relationship(
         back_populates="layer", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
@@ -502,10 +287,10 @@ class Layer(LayerBase, GeospatialAttributes, DateTimeBase, table=True):
     def _serialize_enum(self, value: Enum | str | None) -> str | None:
         return serialize_str_enum(value)
 
-    @field_validator("url", "distribution_url", mode="before")
+    @field_validator("url", mode="before")
     @classmethod
     def convert_httpurl_to_str(cls, value: str | HttpUrl | None) -> str | None:
-        """Convert HttpUrl to string for url and distribution_url.
+        """Convert HttpUrl to string for url.
 
         Note: thumbnail_url is handled separately by ThumbnailUrlMixin
         in the schema layer, as it may be stored as an S3 key.

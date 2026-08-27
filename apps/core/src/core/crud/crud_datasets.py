@@ -46,11 +46,6 @@ class CRUDDatasets:
     _BUNDLE_INCOMPATIBLE_FILTERS = (
         "type",
         "feature_layer_type",
-        "license",
-        "data_category",
-        "geographical_code",
-        "language_code",
-        "distributor_name",
         "spatial_search",
         "in_catalog",
     )
@@ -92,7 +87,9 @@ class CRUDDatasets:
         if team_id:
             direct.append(
                 Layer.id.in_(
-                    select(LayerTeamLink.layer_id).where(LayerTeamLink.team_id == team_id)
+                    select(LayerTeamLink.layer_id).where(
+                        LayerTeamLink.team_id == team_id
+                    )
                 )
             )
         if organization_id:
@@ -278,7 +275,11 @@ class CRUDDatasets:
         else:
             union_sq = layer_rows.subquery()
 
-        sort_key = order_by if order_by in ("name", "created_at", "updated_at") else "updated_at"
+        sort_key = (
+            order_by
+            if order_by in ("name", "created_at", "updated_at")
+            else "updated_at"
+        )
         sort_col = union_sq.c[sort_key]
         # ``order`` may arrive as an OrderEnum; compare on its value.
         is_ascending = str(getattr(order, "value", order)) == "ascendent"

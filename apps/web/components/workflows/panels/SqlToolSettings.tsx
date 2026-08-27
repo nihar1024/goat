@@ -60,7 +60,6 @@ import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import Container from "@/components/map/panels/Container";
 import Selector from "@/components/map/panels/common/Selector";
 import ToolsHeader from "@/components/map/panels/common/ToolsHeader";
-import CatalogExplorerModal from "@/components/modals/CatalogExplorer";
 import DatasetExplorerModal from "@/components/modals/DatasetExplorer";
 const FormulaBuilder = dynamic(() => import("@/components/modals/FormulaBuilder"), { ssr: false });
 import type { FormulaField, SqlTable } from "@/components/modals/FormulaBuilder";
@@ -90,7 +89,6 @@ interface SqlToolSettingsProps {
 enum LayerSourceType {
   FromProject = "from_project",
   DatasetExplorer = "dataset_explorer",
-  CatalogExplorer = "catalog_explorer",
 }
 
 /**
@@ -249,7 +247,6 @@ export default function SqlToolSettings({ node, onBack }: SqlToolSettingsProps) 
 
   // Modal states
   const [datasetExplorerOpen, setDatasetExplorerOpen] = useState(false);
-  const [catalogExplorerOpen, setCatalogExplorerOpen] = useState(false);
 
   // "From project" selector state
   const [showProjectSelector, setShowProjectSelector] = useState(false);
@@ -622,7 +619,6 @@ export default function SqlToolSettings({ node, onBack }: SqlToolSettingsProps) 
   const menuItems = [
     { type: LayerSourceType.FromProject, icon: ICON_NAME.LAYERS, label: t("from_project") },
     { type: LayerSourceType.DatasetExplorer, icon: ICON_NAME.DATABASE, label: t("dataset_explorer") },
-    { type: LayerSourceType.CatalogExplorer, icon: ICON_NAME.GLOBE, label: t("catalog_explorer") },
   ];
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -642,9 +638,6 @@ export default function SqlToolSettings({ node, onBack }: SqlToolSettingsProps) 
       case LayerSourceType.DatasetExplorer:
         setDatasetExplorerOpen(true);
         break;
-      case LayerSourceType.CatalogExplorer:
-        setCatalogExplorerOpen(true);
-        break;
     }
   };
 
@@ -662,7 +655,7 @@ export default function SqlToolSettings({ node, onBack }: SqlToolSettingsProps) 
     [projectLayers, addAdditionalLayer]
   );
 
-  // Handle layer selection from Dataset Explorer or Catalog Explorer
+  // Handle layer selection from the Dataset Explorer
   const handleExplorerLayerSelect = useCallback(
     (layer: Layer) => {
       addAdditionalLayer(layer.id, layer.name);
@@ -1063,15 +1056,6 @@ export default function SqlToolSettings({ node, onBack }: SqlToolSettingsProps) 
         />
       )}
 
-      {/* Catalog Explorer Modal */}
-      {catalogExplorerOpen && (
-        <CatalogExplorerModal
-          open={catalogExplorerOpen}
-          onClose={() => setCatalogExplorerOpen(false)}
-          projectId={projectId as string}
-          onLayerSelect={handleExplorerLayerSelect}
-        />
-      )}
 
       {/* Save Dataset Dialog */}
       <SaveDatasetDialog

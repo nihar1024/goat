@@ -17,7 +17,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
-import { LAYERS_API_BASE_URL, updateDataset, useDataset } from "@/lib/api/layers";
+import { matchesContentListKey } from "@/lib/api/datasets";
+import { updateDataset, useDataset } from "@/lib/api/layers";
 import { updateProjectLayer, useProjectLayers } from "@/lib/api/projects";
 import type { ProjectLayer } from "@/lib/validations/project";
 
@@ -59,7 +60,7 @@ const ProjectLayerRenameModal: React.FC<ProjectLayerRenameDialogProps> = ({
           name: layerName,
         });
         // Invalidate dataset layers cache
-        mutate(`${LAYERS_API_BASE_URL}`);
+        mutate(matchesContentListKey);
         toast.success(t("rename_layer_success"));
       }
 

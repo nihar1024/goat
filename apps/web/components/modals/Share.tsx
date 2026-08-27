@@ -64,7 +64,7 @@ import {
   shareFolderGrant,
   useFolderGrants,
 } from "@/lib/api/folders";
-import { LAYERS_API_BASE_URL } from "@/lib/api/layers";
+import { matchesContentListKey } from "@/lib/api/datasets";
 import {
   PROJECTS_API_BASE_URL,
   publishProject,
@@ -804,7 +804,7 @@ const ShareModal: React.FC<ShareProps> = ({ open, onClose, type, content }) => {
         mutate((key) => Array.isArray(key) && key[0] === PROJECTS_API_BASE_URL);
       } else if (type === "layer") {
         await shareLayer(content.id, sharedWith);
-        mutate((key) => Array.isArray(key) && key[0] === LAYERS_API_BASE_URL);
+        mutate(matchesContentListKey);
       } else if (type === "folder") {
         const oldGrants = folderGrants?.grants ?? [];
         const newTeams = (sharedWith.teams ?? []).filter((t) => t.role !== "");

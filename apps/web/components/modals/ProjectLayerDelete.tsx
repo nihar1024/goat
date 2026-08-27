@@ -19,7 +19,8 @@ import { Trans } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
-import { LAYERS_API_BASE_URL, deleteLayer, useDataset } from "@/lib/api/layers";
+import { matchesContentListKey } from "@/lib/api/datasets";
+import { deleteLayer, useDataset } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { deleteProjectLayer, useProjectLayers } from "@/lib/api/projects";
 import { setRunningJobIds } from "@/lib/store/jobs/slice";
@@ -68,7 +69,7 @@ const ProjectLayerDeleteModal: React.FC<ProjectLayerDeleteDialogProps> = ({
           toast.info(`"${t("delete_dataset_source")}" - ${t("job_started")}`);
         }
         // Invalidate dataset layers cache
-        mutate(`${LAYERS_API_BASE_URL}`);
+        mutate(matchesContentListKey);
       }
 
       onDelete?.();

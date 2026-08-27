@@ -86,7 +86,7 @@ def _pt_arrival_unix_minutes(pt_day: Weekday, seconds_of_day: int) -> int:
 class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     """Windmill-facing params. Paths are resolved from layer IDs in process();
     routing_mode/cost_type + PT arrival fields drive the live OD-matrix
-    computation. No scenario selector — mirrors the other v2 tools."""
+    computation."""
 
     # Four sections mirroring the v2 heatmap tools (routing → configuration →
     # opportunities → result); configuration/opportunities/result reveal only
@@ -191,7 +191,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=list(PTMode),
         description="Public transport modes to include.",
         json_schema_extra=ui_field(
-            section="routing", field_order=2, label_key="choose_pt_mode",
+            section="routing",
+            field_order=2,
+            label_key="choose_pt_mode",
             enum_labels=PT_MODE_LABELS,
             visible_when={"routing_mode": "pt"},
         ),
@@ -205,8 +207,11 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=CostType.time,
         description="Measure the model by travel time or travel distance.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=1, label_key="measure_type",
-            enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+            section="configuration",
+            field_order=1,
+            label_key="measure_type",
+            enum_labels=COST_TYPE_LABELS,
+            enum_icons=COST_TYPE_ICONS,
             inline_group="cost_config",
             visible_when={
                 "routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}
@@ -219,8 +224,12 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
         description="Upper limit for the selected measure type: travel time or travel distance.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=2, label_key="limit", description_key="limit",
-            inline_group="cost_config", inline_flex="1 0 0",
+            section="configuration",
+            field_order=2,
+            label_key="limit",
+            description_key="limit",
+            inline_group="cost_config",
+            inline_flex="1 0 0",
             widget_options=budget_widget_options(),
         ),
     )
@@ -229,8 +238,11 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=Weekday.weekday,
         description="Day type for the PT schedule.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=3, label_key="weekday",
-            enum_labels=WEEKDAY_LABELS, visible_when={"routing_mode": "pt"},
+            section="configuration",
+            field_order=3,
+            label_key="weekday",
+            enum_labels=WEEKDAY_LABELS,
+            visible_when={"routing_mode": "pt"},
         ),
     )
     pt_arrival_time: int = Field(
@@ -239,8 +251,11 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         le=86399,
         description="Arrive-by time of day (seconds from midnight).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=4, label_key="arrival_time",
-            widget="time-picker", visible_when={"routing_mode": "pt"},
+            section="configuration",
+            field_order=4,
+            label_key="arrival_time",
+            widget="time-picker",
+            visible_when={"routing_mode": "pt"},
         ),
     )
     # ---- Demand section ---------------------------------------------------
@@ -248,7 +263,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ...,
         description="Layer containing demand data (e.g., population).",
         json_schema_extra=ui_field(
-            section="demand", field_order=1, widget="layer-selector",
+            section="demand",
+            field_order=1,
+            widget="layer-selector",
             label_key="demand_path",
         ),
     )
@@ -260,9 +277,14 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ...,
         description="Field from the demand layer with the demand value.",
         json_schema_extra=ui_field(
-            section="demand", field_order=3, label_key="demand_field",
+            section="demand",
+            field_order=3,
+            label_key="demand_field",
             widget="field-selector",
-            widget_options={"source_layer": "demand_layer_id", "field_types": ["number"]},
+            widget_options={
+                "source_layer": "demand_layer_id",
+                "field_types": ["number"],
+            },
             visible_when={"demand_layer_id": {"$ne": None}},
         ),
     )
@@ -270,14 +292,18 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ...,
         description="Reference area polygon layer.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=10, widget="layer-selector",
+            section="configuration",
+            field_order=10,
+            widget="layer-selector",
             widget_options={"geometry_types": ["Polygon", "MultiPolygon"]},
             label_key="reference_area_path",
         ),
     )
     reference_area_layer_filter: dict[str, Any] | None = Field(
         None,
-        json_schema_extra=ui_field(section="configuration", field_order=11, hidden=True),
+        json_schema_extra=ui_field(
+            section="configuration", field_order=11, hidden=True
+        ),
     )
     # Advanced-options toggle (same widget as the v2 heatmaps) + the fields it
     # gates: Huff alpha/beta and the PT access/egress legs.
@@ -285,23 +311,31 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=False,
         description="Show advanced configuration options.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=15, label_key="advanced_options",
+            section="configuration",
+            field_order=15,
+            label_key="advanced_options",
             widget="advanced-toggle",
         ),
     )
     attractiveness_param: float = Field(
-        default=1.0, gt=0.0,
+        default=1.0,
+        gt=0.0,
         description="Huff attractiveness exponent (alpha).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=16, label_key="attractiveness_param",
+            section="configuration",
+            field_order=16,
+            label_key="attractiveness_param",
             visible_when={"show_advanced": True},
         ),
     )
     distance_decay: float = Field(
-        default=2.0, gt=0.0,
+        default=2.0,
+        gt=0.0,
         description="Huff distance-decay exponent (beta).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=17, label_key="distance_decay",
+            section="configuration",
+            field_order=17,
+            label_key="distance_decay",
             visible_when={"show_advanced": True},
         ),
     )
@@ -314,7 +348,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             "limits and ignores this setting."
         ),
         json_schema_extra=ui_field(
-            section="configuration", field_order=19, label_key="speed",
+            section="configuration",
+            field_order=19,
+            label_key="speed",
             visible_when={
                 "$and": [
                     {"routing_mode": {"$in": ["walking", "bicycle", "pedelec"]}},
@@ -329,12 +365,21 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"routing_mode": "walking"},
-                         "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"routing_mode": "bicycle"},
-                         "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"routing_mode": "pedelec"},
-                         "message": "pedelec_speed_limit_message"},
+                        {
+                            "value": 30,
+                            "when": {"routing_mode": "walking"},
+                            "message": "walking_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"routing_mode": "bicycle"},
+                            "message": "bicycle_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"routing_mode": "pedelec"},
+                            "message": "pedelec_speed_limit_message",
+                        },
                     ],
                     "min": 1,
                     "message": "walking_speed_limit_message",
@@ -346,7 +391,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=5,
         description="Maximum number of transit transfers.",
         json_schema_extra=ui_field(
-            section="configuration", field_order=18, label_key="max_transfers",
+            section="configuration",
+            field_order=18,
+            label_key="max_transfers",
             visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
             widget_options={"max_value_from": {"fields": [], "max": 5, "min": 0}},
         ),
@@ -356,11 +403,15 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         description="Mode to reach transit stops (walk-only for PT).",
         json_schema_extra={
             **ui_field(
-                section="configuration", field_order=20, label_key="access_mode",
+                section="configuration",
+                field_order=20,
+                label_key="access_mode",
                 group_label="groups.access_leg",
                 enum_icons=ACCESS_EGRESS_MODE_ICONS,
                 enum_labels=ACCESS_EGRESS_MODE_LABELS,
-                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+                visible_when={
+                    "$and": [{"routing_mode": "pt"}, {"show_advanced": True}]
+                },
             ),
             "enum": ["walk"],
         },
@@ -368,13 +419,18 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     access_cost_type: Literal["time"] = Field(
         default="time",
         description="Access leg cost type. Time-only: the access/egress "
-                    "lookup tables are built on travel time.",
+        "lookup tables are built on travel time.",
         json_schema_extra={
             **ui_field(
-                section="configuration", field_order=21, label_key="measure_type",
-                enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+                section="configuration",
+                field_order=21,
+                label_key="measure_type",
+                enum_labels=COST_TYPE_LABELS,
+                enum_icons=COST_TYPE_ICONS,
                 inline_group="access_cost",
-                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+                visible_when={
+                    "$and": [{"routing_mode": "pt"}, {"show_advanced": True}]
+                },
             ),
             "enum": ["time"],
         },
@@ -384,11 +440,16 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
         description="Access leg budget (≤ the lookup table max).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=22, label_key="limit", description_key="limit",
-            inline_group="access_cost", inline_flex="1 0 0",
+            section="configuration",
+            field_order=22,
+            label_key="limit",
+            description_key="limit",
+            inline_group="access_cost",
+            inline_flex="1 0 0",
             visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
             widget_options=leg_budget_widget_options(
-                "access_cost_type", "pt_access_time_limit_message",
+                "access_cost_type",
+                "pt_access_time_limit_message",
                 lookup_table=True,
             ),
         ),
@@ -398,11 +459,15 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         description="Mode from transit stops to the opportunity (walk-only for PT).",
         json_schema_extra={
             **ui_field(
-                section="configuration", field_order=23, label_key="pt_egress_mode",
+                section="configuration",
+                field_order=23,
+                label_key="pt_egress_mode",
                 group_label="groups.egress_leg",
                 enum_icons=ACCESS_EGRESS_MODE_ICONS,
                 enum_labels=ACCESS_EGRESS_MODE_LABELS,
-                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+                visible_when={
+                    "$and": [{"routing_mode": "pt"}, {"show_advanced": True}]
+                },
             ),
             "enum": ["walk"],
         },
@@ -410,13 +475,18 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     egress_cost_type: Literal["time"] = Field(
         default="time",
         description="Egress leg cost type. Time-only: the access/egress "
-                    "lookup tables are built on travel time.",
+        "lookup tables are built on travel time.",
         json_schema_extra={
             **ui_field(
-                section="configuration", field_order=24, label_key="measure_type",
-                enum_labels=COST_TYPE_LABELS, enum_icons=COST_TYPE_ICONS,
+                section="configuration",
+                field_order=24,
+                label_key="measure_type",
+                enum_labels=COST_TYPE_LABELS,
+                enum_icons=COST_TYPE_ICONS,
                 inline_group="egress_cost",
-                visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
+                visible_when={
+                    "$and": [{"routing_mode": "pt"}, {"show_advanced": True}]
+                },
             ),
             "enum": ["time"],
         },
@@ -426,11 +496,16 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=DEFAULT_MAX_TIME_ACTIVE_MIN,
         description="Egress leg budget (≤ the lookup table max).",
         json_schema_extra=ui_field(
-            section="configuration", field_order=25, label_key="limit", description_key="limit",
-            inline_group="egress_cost", inline_flex="1 0 0",
+            section="configuration",
+            field_order=25,
+            label_key="limit",
+            description_key="limit",
+            inline_group="egress_cost",
+            inline_flex="1 0 0",
             visible_when={"$and": [{"routing_mode": "pt"}, {"show_advanced": True}]},
             widget_options=leg_budget_widget_options(
-                "egress_cost_type", "pt_egress_time_limit_message",
+                "egress_cost_type",
+                "pt_egress_time_limit_message",
                 lookup_table=True,
             ),
         ),
@@ -441,7 +516,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ...,
         description="Layer containing opportunity data.",
         json_schema_extra=ui_field(
-            section="opportunities", field_order=1, widget="layer-selector",
+            section="opportunities",
+            field_order=1,
+            widget="layer-selector",
             label_key="opportunity_path",
         ),
     )
@@ -453,9 +530,14 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ...,
         description="Field from the opportunity layer with the attractivity value.",
         json_schema_extra=ui_field(
-            section="opportunities", field_order=3, label_key="attractivity",
+            section="opportunities",
+            field_order=3,
+            label_key="attractivity",
             widget="field-selector",
-            widget_options={"source_layer": "opportunity_layer_id", "field_types": ["number"]},
+            widget_options={
+                "source_layer": "opportunity_layer_id",
+                "field_types": ["number"],
+            },
             visible_when={"opportunity_layer_id": {"$ne": None}},
         ),
     )
@@ -465,7 +547,9 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         default=get_default_layer_name("huff_model", "en"),
         description="Name for the Huff model result layer.",
         json_schema_extra=ui_field(
-            section="result", field_order=1, label_key="result_layer_name",
+            section="result",
+            field_order=1,
+            label_key="result_layer_name",
             widget_options={
                 "default_en": get_default_layer_name("huff_model", "en"),
                 "default_de": get_default_layer_name("huff_model", "de"),
@@ -482,10 +566,12 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
     def _check_budget(self: Self) -> Self:
         validate_cost_type(self.routing_mode, self.cost_type)
         validate_budget(self.routing_mode, self.cost_type, self.max_cost)
-        validate_leg_budget(self.access_cost_type, self.access_max_cost,
-                            "access", lookup_table=True)
-        validate_leg_budget(self.egress_cost_type, self.egress_max_cost,
-                            "egress", lookup_table=True)
+        validate_leg_budget(
+            self.access_cost_type, self.access_max_cost, "access", lookup_table=True
+        )
+        validate_leg_budget(
+            self.egress_cost_type, self.egress_max_cost, "egress", lookup_table=True
+        )
         return self
 
 
@@ -526,19 +612,19 @@ class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
         output_path = temp_dir / "output.parquet"
 
         demand_path = self.export_layer_to_parquet(
-            layer_id=params.demand_layer_id, user_id=params.user_id,
+            layer_id=params.demand_layer_id,
+            user_id=params.user_id,
             cql_filter=params.demand_layer_filter,
-            scenario_id=params.scenario_id, project_id=params.project_id,
         )
         opportunity_path = self.export_layer_to_parquet(
-            layer_id=params.opportunity_layer_id, user_id=params.user_id,
+            layer_id=params.opportunity_layer_id,
+            user_id=params.user_id,
             cql_filter=params.opportunity_layer_filter,
-            scenario_id=params.scenario_id, project_id=params.project_id,
         )
         reference_area_path = self.export_layer_to_parquet(
-            layer_id=params.reference_area_layer_id, user_id=params.user_id,
+            layer_id=params.reference_area_layer_id,
+            user_id=params.user_id,
             cql_filter=params.reference_area_layer_filter,
-            scenario_id=params.scenario_id, project_id=params.project_id,
         )
 
         # UI-layer HeatmapRoutingMode → analysis-layer RoutingMode (same values).
@@ -557,23 +643,44 @@ class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
         analysis_params = HuffmodelV2Params(
             **params.model_dump(
                 exclude={
-                    "output_path", "arrival_time", "user_id", "folder_id",
-                    "project_id", "scenario_id", "output_name", "routing_mode",
-                    "demand_path", "opportunity_path", "reference_area_path",
-                    "demand_layer_id", "demand_layer_filter",
-                    "opportunity_layer_id", "opportunity_layer_filter",
-                    "reference_area_layer_id", "reference_area_layer_filter",
-                    "result_layer_name", "show_advanced",
-                    "street_network_bundle_id", "edge_path", "node_path",
-                    "transit_modes", "max_transfers", "pt_modes", "pt_max_transfers",
-                    "pt_day", "pt_arrival_time",
+                    "output_path",
+                    "arrival_time",
+                    "user_id",
+                    "folder_id",
+                    "project_id",
+                    "output_name",
+                    "routing_mode",
+                    "demand_path",
+                    "opportunity_path",
+                    "reference_area_path",
+                    "demand_layer_id",
+                    "demand_layer_filter",
+                    "opportunity_layer_id",
+                    "opportunity_layer_filter",
+                    "reference_area_layer_id",
+                    "reference_area_layer_filter",
+                    "result_layer_name",
+                    "show_advanced",
+                    "street_network_bundle_id",
+                    "edge_path",
+                    "node_path",
+                    "transit_modes",
+                    "max_transfers",
+                    "pt_modes",
+                    "pt_max_transfers",
+                    "pt_day",
+                    "pt_arrival_time",
                     # access/egress mode + cost_type are walk-only / time-only
                     # UI tokens; the analysis layer takes its own enums and
                     # names the budgets *_max_time (set explicitly below).
-                    "access_mode", "egress_mode",
-                    "access_cost_type", "egress_cost_type",
-                    "access_max_cost", "egress_max_cost",
-                    "access_max_time", "egress_max_time",
+                    "access_mode",
+                    "egress_mode",
+                    "access_cost_type",
+                    "egress_cost_type",
+                    "access_max_cost",
+                    "egress_max_cost",
+                    "access_max_time",
+                    "egress_max_time",
                 }
             ),
             routing_mode=routing_mode,

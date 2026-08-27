@@ -15,9 +15,6 @@
     "reference_area": {
       "label": "Reference area"
     },
-    "scenario": {
-      "label": "Scenario"
-    },
     "input": {
       "label": "Input"
     },
@@ -110,14 +107,6 @@
     }
   },
   "fields": {
-    "pt_network_bundle_id": {
-      "label": "Public Transport Network bundle",
-      "description": "Choose a custom Public Transport Network bundle to use for routing. If unset, the default bundle will be used."
-    },
-    "street_network_bundle_id": {
-      "label": "Street Network bundle",
-      "description": "Choose a custom Street Network bundle to use for routing. If unset, the default network will be used."
-    },
     "routing_mode": {
       "label": "Transport mode",
       "description": "Select the transport mode for accessibility analysis"
@@ -353,10 +342,6 @@
     "mitre_limit": {
       "label": "Mitre Limit",
       "description": "Ratio for mitred join length"
-    },
-    "scenario_id": {
-      "label": "Scenario",
-      "description": "Select a scenario for analysis"
     },
     "od_matrix_path": {
       "label": "OD Matrix",

@@ -108,15 +108,6 @@ SECTION_RESULT_CATCHMENT = UISection(
     depends_on={"routing_mode": {"$ne": None}},
 )
 
-SECTION_SCENARIO = UISection(
-    id="scenario",
-    order=8,
-    icon="git-branch",
-    label_key="scenario",
-    collapsible=True,
-    collapsed=True,
-    depends_on={"routing_mode": {"$ne": None}},
-)
 
 # =========================================================================
 # Label Mappings
@@ -207,7 +198,6 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             SECTION_CONFIGURATION,
             SECTION_STARTING,
             SECTION_RESULT_CATCHMENT,
-            SECTION_SCENARIO,
         )
     }
 
@@ -408,7 +398,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
     speed: float | None = Field(
         default=None,
         description="Travel speed in km/h. None when the routing mode doesn't "
-                    "use a user-supplied speed (PT/Car).",
+        "use a user-supplied speed (PT/Car).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=3,
@@ -427,12 +417,21 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 # matching `when` clause wins, with its own translation key.
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"routing_mode": "walking"},
-                         "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"routing_mode": "bicycle"},
-                         "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"routing_mode": "pedelec"},
-                         "message": "pedelec_speed_limit_message"},
+                        {
+                            "value": 30,
+                            "when": {"routing_mode": "walking"},
+                            "message": "walking_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"routing_mode": "bicycle"},
+                            "message": "bicycle_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"routing_mode": "pedelec"},
+                            "message": "pedelec_speed_limit_message",
+                        },
                     ],
                     "min": 1,
                     "message": "walking_speed_limit_message",
@@ -448,9 +447,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=6,
             label_key="steps",
-            visible_when={
-                "catchment_area_type": {"$in": ["polygon", "network"]}
-            },
+            visible_when={"catchment_area_type": {"$in": ["polygon", "network"]}},
             widget_options={
                 "max_value_from": {
                     "fields": [
@@ -471,9 +468,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             section="configuration",
             field_order=7,
             label_key="step_sizes",
-            visible_when={
-                "catchment_area_type": {"$in": ["polygon", "network"]}
-            },
+            visible_when={"catchment_area_type": {"$in": ["polygon", "network"]}},
             widget="chips",
             widget_options={
                 "compute_from": {
@@ -585,14 +580,16 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                     {"show_advanced": True},
                 ]
             },
-            widget_options=leg_budget_widget_options("access_cost_type", "access_budget_exceeds_limit"),
+            widget_options=leg_budget_widget_options(
+                "access_cost_type", "access_budget_exceeds_limit"
+            ),
         ),
     )
 
     access_speed: float | None = Field(
         default=None,
         description="Access leg speed in km/h. None for car access (per-edge "
-                    "OSM maxspeed governs cost).",
+        "OSM maxspeed governs cost).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=23,
@@ -604,12 +601,21 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"access_mode": "walk"},
-                         "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"access_mode": "bicycle"},
-                         "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"access_mode": "pedelec"},
-                         "message": "pedelec_speed_limit_message"},
+                        {
+                            "value": 30,
+                            "when": {"access_mode": "walk"},
+                            "message": "walking_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"access_mode": "bicycle"},
+                            "message": "bicycle_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"access_mode": "pedelec"},
+                            "message": "pedelec_speed_limit_message",
+                        },
                     ],
                     "min": 1,
                     "message": "walking_speed_limit_message",
@@ -683,14 +689,16 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                     {"show_advanced": True},
                 ]
             },
-            widget_options=leg_budget_widget_options("egress_cost_type", "egress_budget_exceeds_limit"),
+            widget_options=leg_budget_widget_options(
+                "egress_cost_type", "egress_budget_exceeds_limit"
+            ),
         ),
     )
 
     egress_speed: float | None = Field(
         default=None,
         description="Egress leg speed in km/h. None for car egress (per-edge "
-                    "OSM maxspeed governs cost).",
+        "OSM maxspeed governs cost).",
         json_schema_extra=ui_field(
             section="configuration",
             field_order=27,
@@ -702,12 +710,21 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
                 },
                 "max_value_from": {
                     "fields": [
-                        {"value": 30, "when": {"egress_mode": "walk"},
-                         "message": "walking_speed_limit_message"},
-                        {"value": 60, "when": {"egress_mode": "bicycle"},
-                         "message": "bicycle_speed_limit_message"},
-                        {"value": 60, "when": {"egress_mode": "pedelec"},
-                         "message": "pedelec_speed_limit_message"},
+                        {
+                            "value": 30,
+                            "when": {"egress_mode": "walk"},
+                            "message": "walking_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"egress_mode": "bicycle"},
+                            "message": "bicycle_speed_limit_message",
+                        },
+                        {
+                            "value": 60,
+                            "when": {"egress_mode": "pedelec"},
+                            "message": "pedelec_speed_limit_message",
+                        },
                     ],
                     "min": 1,
                     "message": "walking_speed_limit_message",
@@ -785,7 +802,6 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         ),
     )
 
-
     point_grid_layer_id: str | None = Field(
         default=None,
         description="Point layer to use as grid for point_grid catchment type.",
@@ -854,8 +870,6 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
         return self
 
 
-
-
 # =========================================================================
 # Tool Runner
 # =========================================================================
@@ -878,8 +892,6 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
         latitudes, longitudes = self._get_starting_coordinates(
             params.starting_points,
             params.user_id,
-            scenario_id=params.scenario_id,
-            project_id=params.project_id,
         )
 
         # Validate starting point count
@@ -891,9 +903,7 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                     f"Got {n_points}."
                 )
         elif n_points > 1000:
-            raise ValueError(
-                f"Maximum 1,000 starting points allowed. Got {n_points}."
-            )
+            raise ValueError(f"Maximum 1,000 starting points allowed. Got {n_points}.")
 
         # Build PT time window
         time_window = None
@@ -916,8 +926,6 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                 params.point_grid_layer_id,
                 params.user_id,
                 cql_filter=params.point_grid_layer_filter,
-                scenario_id=params.scenario_id,
-                project_id=params.project_id,
             )
             # Convert to the format expected by C++: id, x_3857, y_3857
             grid_parquet = tempfile.NamedTemporaryFile(
@@ -929,7 +937,11 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
                 f"DESCRIBE SELECT * FROM read_parquet('{raw_layer_path}')"
             ).fetchall()
             geom_col = next(
-                (c[0] for c in cols if "GEOMETRY" in c[1].upper() or c[0] in ("geom", "geometry")),
+                (
+                    c[0]
+                    for c in cols
+                    if "GEOMETRY" in c[1].upper() or c[0] in ("geom", "geometry")
+                ),
                 "geometry",
             )
             # Convert WGS84 lon/lat to Web Mercator (EPSG:3857)

@@ -206,7 +206,7 @@ class BundleImportRunner(BaseToolRunner):
         Copies the table directly rather than going through
         ``export_layer_to_parquet``: that resolves the layer's owner with a nested
         ``run_until_complete``, which cannot work inside this already-running
-        event loop, and none of its filtering or scenario merging applies here.
+        event loop, and none of its filtering applies here.
         The owner is known anyway — ``_ingest_layers`` just created these layers
         for ``user_id``.
         """

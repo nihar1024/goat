@@ -43,12 +43,60 @@ human glance at the map canvas.
     set explicitly only if the volume layout differs.
   - processes: `BUNDLES_DATA_DIR` consistent with the workers (it resolves
     bundle artifacts for tool runs).
-- [ ] Per-env DB steps, in order: `alembic upgrade head` (bundle tables +
-      catalog backrefs + merge revision `7732fb7ef953`) → `initial_data.py`
-      (re-installs `check_layer` with the catalog + bundle branches, seeds the
-      `datasets` authz resource row, bundle types, catalog identity).
-- [ ] Windmill sync per env: `catalog_materialize`, `bundle_import`,
-      `bundle_artifact_delete`, and the `catalog_gc` scheduled task.
+- [ ] **PRE-FLIGHT, before `alembic upgrade head`, per env.** Both must pass.
+      1. Nothing is about to be cascade-deleted. `layer.folder_id` is
+         `ON DELETE CASCADE`, and the migration NULLs `folder_id` only where
+         `catalog_external_uid IS NOT NULL` before dropping the catalog folder.
+         Any layer sitting in that folder *without* a backref is destroyed:
+
+         ```sql
+         SELECT count(*) FROM customer.layer
+         WHERE folder_id = (SELECT f.id FROM customer.folder f
+                            JOIN customer."user" u ON u.id = f.user_id
+                            WHERE u.email = 'catalog@goat.local')
+           AND catalog_external_uid IS NULL;   -- must be 0
+         ```
+      2. `pg_dump` the three scenario tables if their contents might ever be
+         wanted. The migration drops them, and the payload becomes
+         uninterpretable anyway once `attribute_mapping` goes with it.
+
+- [ ] **Deploy ordering: `core` cannot be rolling-updated across this
+      migration.** It is the only service with an ORM `Layer`/`Project` model,
+      so its `select(Layer)` names every column explicitly — an old pod hits
+      `UndefinedColumn` on `lineage`, `attribute_mapping`, `data_store_id` and
+      `project.active_scenario_id` the instant the migration lands, on every
+      layer and project request. Either take a brief core outage (`Recreate`,
+      or scale to 0 → migrate → scale up on the new image) or set
+      `maxUnavailable=100%` so no old replica survives. geoapi, processes,
+      workers and the catalog service are safe: they use asyncpg with explicit
+      column lists and never name a dropped column.
+
+- [ ] Per-env DB steps, in order: `alembic upgrade head` (chain is
+      `init → 12d658d174ae` bundle tables `→ a1c4b2d9e001` catalog backrefs
+      `→ b2d5e8f1a002` favourites `→ c3e7a91b4d10` legacy drops + unowned
+      catalog layers) → `initial_data.py` (re-installs `check_layer` with the
+      catalog + bundle branches **and `create_layer` with the NULL-owner
+      guard**, seeds the `datasets` authz resource row and bundle types).
+      `seed_catalog_identity` is gone — there is no catalog user to seed.
+
+      The `create_layer` trigger guard is not optional: without it the
+      AFTER INSERT trigger writes `NEW.user_id` into `layer_user.user_id`
+      (NOT NULL) and **every first-time catalog promote 500s**. Already-promoted
+      items take the UPDATE path and hide it.
+
+- [ ] **Windmill: sync ALL tools, not a subset.** `scenario_id` came off
+      `ToolInputBase`, so every published script's signature changed — run
+      `python -m goatlib.tools.sync_windmill` and `python -m
+      goatlib.tasks.sync_windmill` per env, then verify no registered tool
+      still mentions `scenario`. Two hazards:
+      * `sync_tool` **deletes before it creates**, and swallows failures. A
+        half-finished run leaves tools missing from the workspace with a
+        zero exit code. Run it as a pre-deploy job that fails on any
+        `status == "failed"`, and check the synced count.
+      * A job enqueued with the OLD signature against NEW code does **not**
+        error: `scenario_id` lands in `**kwargs` and Pydantic drops it
+        (`extra="ignore"`), so the tool returns an answer computed without it.
+        Drain the tool queue before syncing.
 - [ ] Verify `GOAT_GEOAPI_HOST` is set on core in the charts (it predates this
       branch — folder-delete layer cleanup posts through it — but was missing
       from compose/.env.example until now; unset, bundle imports 503 and
@@ -326,6 +374,76 @@ mutations. Still open:
       as separate layers, and the harvester still publishes no
       `goat:bundleType` and no locked marker (verified against the 2026-08-27
       mirror), so the constraint would be designed blind.
+
+## Found by the post-merge review (2026-08-27)
+
+- [x] **`create_layer` trigger 500'd every first-time catalog promote.** The
+      AFTER INSERT trigger writes `NEW.user_id` into `layer_user.user_id`
+      (NOT NULL), and promoted catalog layers now have none. Guarded with an
+      early `RETURN NEW` when the owner is NULL. Proven by promoting a
+      never-promoted item ("Velopumpen") for real inside a rolled-back
+      transaction: succeeds, 0 `layer_user` grant rows.
+
+      **Why nothing caught it:** the 17 already-promoted layers take the
+      `UPDATE … RETURNING id` path, so only a *first* promote hits the INSERT;
+      `test_catalog_promote.py` mocks the connection; and the goatlib
+      integration conftest builds its own schema with no `layer_user` table and
+      no triggers. → `promote()` has no integration coverage against a real
+      schema. Worth adding.
+
+- [x] **`create_query_shared_content` inner-joined `User`**, so a layer with no
+      owner vanished from every listing built on it, with no error. Benign
+      today (those listings are owner-scoped anyway) but a trap for anyone
+      surfacing catalog layers later — the open "workflow nodes lost their
+      catalog source" item is exactly that. Now a LEFT join, with `get_owned_by`
+      returning None instead of a dict of nulls.
+
+- [x] **Migration hardening.** `downgrade()` was not re-runnable (unguarded
+      `create_foreign_key` → `DuplicateObject`); and the upgrade now sets
+      `lock_timeout = '5s'` — the 17 drops take ACCESS EXCLUSIVE on
+      `customer.layer` for the whole alembic transaction, so one long-lived
+      reader would have every query on the table queue behind the waiting
+      migration.
+
+- [ ] **`update_layer_status` writes to a column that does not exist.**
+      `goatlib/tools/db.py:623` does `SET total_count = $n`; `customer.layer`
+      has no `total_count`. Not a live bug — the method has zero callers — but
+      it should go, and it explains the frontend's dead `total_count`:
+      `LayerStyle.tsx:608` gates clustering on
+      `(activeLayer.total_count ?? 0) <= 100_000`, which is **always true**, so
+      the cap has never applied. Use `useProjectLayerFeatureCount` instead (its
+      own comment says so) and drop the field from the zod schemas.
+
+- [ ] **~4,000 lines of dead frontend**, verified as closed clusters:
+      * The pre-Windmill toolbox (~2,400 lines): `Aggregate`, `Join`,
+        `OevGueteklassen`, `TripCount` panels — 0 importers each — plus
+        `lib/api/tools.ts` (imported only by them) and `lib/api/catchmentArea.ts`.
+        They POST to `api/v2/tool/*` and `api/v2/motorized-mobility/*`, which
+        core no longer registers. Move `oev-gueteklassen/utils.ts` first — it is
+        the one live file in that tree (`OevStationConfigInput.tsx` imports it).
+      * `Layer.tsx` (591 lines) where only `LayerVisibilityToggle` (~29) is used.
+      * ~20 orphan files (~1,100 lines) incl. `InteractionOptions.tsx` (718),
+        `ExportNodeSettings.tsx`, `LayerInfo.tsx`, `ListTile.tsx`, and three
+        **zero-byte** tracked files.
+      * `apps/docs/openapi.json` — a 153 KB `/api/v1/` snapshot from the
+        previous API generation, referenced by nothing.
+
+- [ ] **`apps/core/src/core/utils/__init__.py` is ~90% dead** — 22 unreferenced
+      functions verified individually. Only `sanitize_filename` and the
+      `optional` re-export survive. Removing them also retires `geojson` and
+      `rich` from `apps/core/pyproject.toml`; `requests` and `alembic-utils`
+      are already unused today.
+
+- [ ] **`DatasetExternal.tsx` is a capability loss, not dead code.** 884 lines,
+      0 importers, and the only WMS/WFS/XYZ/COG entry point in the app — while
+      the render path still reads `other_properties.legend_urls`. GOAT can
+      display external layers it can no longer create. Product decision; keep it
+      out of any mechanical sweep.
+
+- [ ] **`check_layer` grants a whole batch when one layer passes.**
+      `status_check` is set TRUE inside the per-layer loop and never reset.
+      Pre-existing, but the new catalog branch makes it easier to hit: one
+      unowned catalog layer in a batch authorises the rest. Separate ticket.
 
 ## Test-suite hygiene
 

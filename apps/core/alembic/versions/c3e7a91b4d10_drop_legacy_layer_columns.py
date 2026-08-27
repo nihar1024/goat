@@ -184,6 +184,13 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
+    # Every drop below takes ACCESS EXCLUSIVE on customer.layer for the whole
+    # alembic transaction. The drops are metadata-only and fast, but *acquiring*
+    # the lock is not: one long-lived reader (a pinned geoapi connection, a
+    # running tool) blocks it, and then every query on the table queues behind
+    # the waiting migration. Fail fast instead and let the operator retry.
+    op.execute("SET lock_timeout = '5s'")
+
     columns = {c["name"] for c in inspector.get_columns("layer", schema=SCHEMA)}
     for name, _type in _COLUMNS:
         if name in columns:
@@ -284,15 +291,19 @@ def downgrade() -> None:
         if name not in columns:
             op.add_column("layer", sa.Column(name, type_, nullable=True), schema=SCHEMA)
 
-    op.create_foreign_key(
-        "layer_data_store_id_fkey",
-        "layer",
-        "data_store",
-        ["data_store_id"],
-        ["id"],
-        source_schema=SCHEMA,
-        referent_schema=SCHEMA,
-    )
+    existing_fks = {
+        fk["name"] for fk in inspector.get_foreign_keys("layer", schema=SCHEMA)
+    }
+    if "layer_data_store_id_fkey" not in existing_fks:
+        op.create_foreign_key(
+            "layer_data_store_id_fkey",
+            "layer",
+            "data_store",
+            ["data_store_id"],
+            ["id"],
+            source_schema=SCHEMA,
+            referent_schema=SCHEMA,
+        )
 
     tables = set(inspector.get_table_names(schema=SCHEMA))
     if "scenario" not in tables:

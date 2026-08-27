@@ -119,9 +119,12 @@ def create_query_shared_content(
         User.lastname.label("user_lastname"),
         User.avatar.label("user_avatar"),
         *read_column,
-    ).join(
+    ).outerjoin(
+        # LEFT, not INNER: a catalog layer has no owner, and an inner join would
+        # drop it from the listing silently rather than returning it with an
+        # empty `owned_by`.
         User,
-        model.user_id == User.id,  # Join on owner_id field with User model
+        model.user_id == User.id,
     )
 
     if team_id:
@@ -178,7 +181,7 @@ def create_query_shared_content(
                 User.lastname.label("user_lastname"),
                 User.avatar.label("user_avatar"),
             )
-            .join(User, model.user_id == User.id)
+            .outerjoin(User, model.user_id == User.id)  # LEFT: see above
             .where(and_(*filters))
             .options(
                 selectinload(getattr(model, "team_links")).selectinload(
@@ -215,8 +218,10 @@ def build_shared_with_object(
     :return: A list of dictionaries containing the model and the shared_with data
     """
 
-    def get_owned_by(item: Row[Any]) -> dict[str, Any]:
-        """Helper function to build the 'owned_by' dictionary."""
+    def get_owned_by(item: Row[Any]) -> dict[str, Any] | None:
+        """The owner, or None when there isn't one (a catalog layer)."""
+        if item[2] is None:
+            return None
         return {
             "id": item[2],
             "firstname": item[3],

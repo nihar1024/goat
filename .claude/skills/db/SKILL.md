@@ -1,6 +1,6 @@
 ---
 name: db
-description: Use when inspecting, debugging, or understanding the GOAT PostgreSQL database — querying projects, layers, users, orgs, teams, roles, scenarios, jobs, or checking data state during local dev.
+description: Use when inspecting, debugging, or understanding the GOAT PostgreSQL database — querying projects, layers, users, orgs, teams, roles, jobs, or checking data state during local dev.
 ---
 
 # Database Query
@@ -30,7 +30,7 @@ docker exec -e PGPASSWORD=$POSTGRES_PASSWORD "$DBC" psql -h 127.0.0.1 -U $POSTGR
 
 | Schema | Purpose |
 |--------|---------|
-| `customer` | Everything: users, orgs, teams, roles/permissions, projects, layers, scenarios, jobs, workflows |
+| `customer` | Everything: users, orgs, teams, roles/permissions, projects, layers, jobs, workflows |
 | `ducklake` | DuckLake catalog (managed by geoapi, don't modify directly) |
 
 ## Key Tables & Relationships
@@ -58,9 +58,6 @@ SELECT table_name FROM information_schema.tables WHERE table_schema='customer' O
 - **layer_project_group** (id int) — layer groups. project_id, parent_id (self-ref nesting), order
 - **folder** (id uuid) — user_id, name
 - **job** (id uuid) — user_id. type, status, payload (jsonb)
-- **scenario** (id uuid) — project_id, user_id, name
-- **scenario_feature** (id uuid) — layer_project_id, feature_id (text), edit_type, geom, h3_3, h3_6. Generic typed columns: integer_attr1..25, float_attr1..25, text_attr1..25, plus bigint/jsonb/boolean/array/timestamp attrs
-- **scenario_scenario_feature** — M2M scenario ↔ scenario_feature
 - **workflow** (id uuid) — project_id, name, config (jsonb), is_default
 - **report** / **report_layout** (id uuid) — project_id, name, config (jsonb), is_default
 - **project_public** — public sharing config: password, config (jsonb snapshot)
@@ -89,18 +86,14 @@ ORDER BY lp.order;
 SELECT id, type, status, created_at, payload->>'tool_type' AS tool
 FROM customer.job ORDER BY created_at DESC LIMIT 10;
 
--- Scenario features for a scenario
-SELECT sf.id, sf.feature_id, sf.edit_type, ST_AsText(sf.geom) AS geom
-FROM customer.scenario_feature sf
-JOIN customer.scenario_scenario_feature ssf ON ssf.scenario_feature_id = sf.id
-WHERE ssf.scenario_id = 'SCENARIO_UUID';
 ```
 
 ## Important Notes
 
 - Layer **metadata** lives in PostgreSQL (`customer.layer`), layer **data** lives in DuckLake (managed by geoapi)
 - `layer_project.properties` = style/rendering config (jsonb); `layer_project.query` = active filters (jsonb)
-- `scenario`, `scenario_feature` and `scenario_scenario_feature` are dead: no code references them, and the feature is gone from the API and the UI. `scenario_feature` is the last table still using generic columns (integer_attr1..25); nothing maps them back any more
+- Scenarios are **gone** (2026-08-27): the feature, the three tables and `project.active_scenario_id` were all removed. `scenario_feature` was the last table using generic columns (`integer_attr1..25`); nothing in GOAT uses that scheme any more
+- A **catalog layer has no owner**: `layer.user_id` and `layer.folder_id` are NULL for promoted catalog layers. Joins from `layer` to `user` must be LEFT joins or those rows vanish
 - A public dashboard reads the `project_public.config` snapshot, not the live project — re-publish to reflect changes
 - Always use READ-ONLY queries. Never INSERT/UPDATE/DELETE unless explicitly asked
 - Use `ST_AsText()` or `ST_AsGeoJSON()` to read geometry columns

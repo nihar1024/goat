@@ -600,45 +600,6 @@ class ToolDatabaseService:
         )
         logger.info(f"Deleted layer: {layer_id}")
 
-    async def update_layer_status(
-        self: Self,
-        layer_id: str,
-        feature_count: int | None = None,
-        extent_wkt: str | None = None,
-    ) -> None:
-        """Update layer metadata after processing.
-
-        Useful for updating feature count and extent after data ingestion.
-
-        Args:
-            layer_id: Layer UUID
-            feature_count: Updated feature count
-            extent_wkt: Updated extent as WKT
-        """
-        updates = ["updated_at = NOW()"]
-        params = [uuid_module.UUID(layer_id)]
-        param_idx = 2
-
-        if feature_count is not None:
-            updates.append(f"total_count = ${param_idx}")
-            params.append(feature_count)
-            param_idx += 1
-
-        if extent_wkt is not None:
-            updates.append(f"extent = ST_Multi(ST_GeomFromText(${param_idx}, 4326))")
-            params.append(extent_wkt)
-            param_idx += 1
-
-        await self.pool.execute(
-            f"""
-            UPDATE {self.schema}.layer
-            SET {', '.join(updates)}
-            WHERE id = $1
-            """,
-            *params,
-        )
-        logger.info(f"Updated layer status: {layer_id}")
-
     async def get_layer_info(self: Self, layer_id: str) -> dict[str, Any] | None:
         """Get layer information from the database.
 

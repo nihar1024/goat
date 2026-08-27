@@ -449,7 +449,7 @@ Second wave, from the adversarial diff review. All fixed unless marked.
       adding a stray human to that org and running the migration: the human
       survives, the org is kept, the synthetic user still goes.
 
-- [ ] **Bundle metadata cannot be cleared.** Two independent filters drop an
+- [x] **Bundle metadata cannot be cleared.** Two independent filters drop an
       emptied field before it can reach the database: `Metadata.tsx` strips
       `""` out of the payload, and `CRUDBundle.update` only merges when the
       document is non-None — so `{"license": ""}` never leaves the browser and
@@ -488,7 +488,7 @@ Second wave, from the adversarial diff review. All fixed unless marked.
       reader would have every query on the table queue behind the waiting
       migration.
 
-- [ ] **`update_layer_status` writes to a column that does not exist.**
+- [x] **`update_layer_status` writes to a column that does not exist.**
       `goatlib/tools/db.py:623` does `SET total_count = $n`; `customer.layer`
       has no `total_count`. Not a live bug — the method has zero callers — but
       it should go, and it explains the frontend's dead `total_count`:
@@ -497,7 +497,7 @@ Second wave, from the adversarial diff review. All fixed unless marked.
       the cap has never applied. Use `useProjectLayerFeatureCount` instead (its
       own comment says so) and drop the field from the zod schemas.
 
-- [ ] **~4,000 lines of dead frontend**, verified as closed clusters:
+- [x] **~4,000 lines of dead frontend**, verified as closed clusters: `DatasetExternal.tsx` kept — see the item below, it is a product call.
       * The pre-Windmill toolbox (~2,400 lines): `Aggregate`, `Join`,
         `OevGueteklassen`, `TripCount` panels — 0 importers each — plus
         `lib/api/tools.ts` (imported only by them) and `lib/api/catchmentArea.ts`.
@@ -511,7 +511,7 @@ Second wave, from the adversarial diff review. All fixed unless marked.
       * `apps/docs/openapi.json` — a 153 KB `/api/v1/` snapshot from the
         previous API generation, referenced by nothing.
 
-- [ ] **`apps/core/src/core/utils/__init__.py` is ~90% dead** — 22 unreferenced
+- [x] **`apps/core/src/core/utils/__init__.py` is ~90% dead** — 22 unreferenced
       functions verified individually. Only `sanitize_filename` and the
       `optional` re-export survive. Removing them also retires `geojson` and
       `rich` from `apps/core/pyproject.toml`; `requests` and `alembic-utils`
@@ -523,7 +523,7 @@ Second wave, from the adversarial diff review. All fixed unless marked.
       display external layers it can no longer create. Product decision; keep it
       out of any mechanical sweep.
 
-- [ ] **`check_layer` grants a whole batch when one layer passes.**
+- [x] **`check_layer` grants a whole batch when one layer passes.**
       `status_check` is set TRUE inside the per-layer loop and never reset.
       Pre-existing, but the new catalog branch makes it easier to hit: one
       unowned catalog layer in a batch authorises the rest. Separate ticket.
@@ -550,16 +550,16 @@ would hit first.
 
 ### Catalog layers as tool input — half broken
 
-- [ ] **Filtering a catalog layer then running any tool crashes.**
+- [x] **Filtering a catalog layer then running any tool crashes.**
       `base._export_catalog_filtered` reads `filters.clause`; `QueryFilters` has
       only `clauses`. Unconditional `AttributeError`.
-- [ ] **…and once that is fixed, the filter is silently dropped.** The same
+- [x] **…and once that is fixed, the filter is silently dropped.** The same
       function passes `json.dumps(cql_filter)` where `build_cql_filter` wants
       `{"filter": …, "lang": "cql2-json"}` (see the correct calls at
       `base.py:1066/1212`); the TypeError is swallowed and an empty filter comes
       back, so a 200-feature filter would buffer the whole 5M-row layer with no
       error. It also omits the geometry-column argument.
-- [ ] **Exporting a project that contains a catalog layer aborts.**
+- [x] **Exporting a project that contains a catalog layer aborts.**
       `project_export._export_layer_data` does `table_path.split(".", 2)`
       expecting `lake.schema.table`; `resolve_layer_table_path` returns the
       two-part `catalog_layers."t_<id>"` for a catalog layer → `ValueError`,
@@ -567,141 +567,141 @@ would hit first.
       single catalog layer export produces a nonsense `DESCRIBE`),
       `layer_delete_multi.py:89` and `finalize_layer.py:213`. Four copies, no
       shared helper — one `split_table_path()` that understands both shapes.
-- [ ] **A retry loses the catalog view.** `_execute_with_retry` drops
+- [x] **A retry loses the catalog view.** `_execute_with_retry` drops
       `self._duckdb_con` on a transient DuckLake error and re-runs on a fresh
       connection where the in-memory `catalog_layers."t_<id>"` view was never
       created → `CatalogException` reported as "layer not found". geoapi solved
       this with connection hooks (`dependencies.py:59-70`); the runner has none.
-- [ ] **Workflow if-nodes resolve catalog layers to a nonexistent table** —
+- [x] **Workflow if-nodes resolve catalog layers to a nonexistent table** —
       `if_node._resolve_layer_sql_ref` lacks the `_catalog_layer_parquet` branch
       the base runner has; the broad excepts swallow it and the workflow silently
       takes the wrong branch.
-- [ ] `CATALOG_LAYERS_DIR` is honoured by geoapi and hardcoded as
+- [x] `CATALOG_LAYERS_DIR` is honoured by geoapi and hardcoded as
       `DATA_DIR/catalog/layers` in goatlib `base.py:92` and
       `catalog_materialize.py:67`. Set it and geoapi reads a directory nothing
       writes to.
 
 ### Materialize lifecycle can strand a layer
 
-- [ ] **Deterministic input errors leave `pending` forever.** In
+- [x] **Deterministic input errors leave `pending` forever.** In
       `catalog_materialize.run`, "no handler for layer type" and "no
       parquet_url" raise *before* `_set_status("running")` and before the inner
       `try` that writes `failed`. The web shows "preparing" indefinitely, polls
       every 4s, and core's heal re-enqueues on `pending` — an infinite loop that
       never reaches the `failed` caption the UI has a string for.
-- [ ] **A crashed worker leaves `running`, which the heal treats as terminal.**
+- [x] **A crashed worker leaves `running`, which the heal treats as terminal.**
       `should_enqueue = status in ("pending", "failed")`; nothing writes a
       heartbeat or job id, so an OOM-killed materialize is stuck with no
       operator-free recovery.
-- [ ] **A tippecanoe failure writes `ready`** (`catalog_materialize.py:364`)
+- [x] **A tippecanoe failure writes `ready`** (`catalog_materialize.py:364`)
       with `tiles: failed`, so re-adding cannot rebuild the cache and the layer
       serves dynamic tiles at full cost forever.
-- [ ] **Duplicate enqueue while queued.** A second add during the window
+- [x] **Duplicate enqueue while queued.** A second add during the window
       between `execute_process` returning and the worker flipping `running`
       sees `pending` and enqueues again — two jobs race on the same output file.
-- [ ] **After materialize finishes, the map never refetches tiles.**
+- [x] **After materialize finishes, the map never refetches tiles.**
       `Layers.tsx:825` keys the source on `layer.updated_at`, but
       `layer_projects_to_schemas` overwrites it with the *link's* `updated_at`
       (`crud_layer_project.py:57`), which materialize never bumps. The 4s poll
       clears the caption and nothing else; the layer stays blank until a pan or
       reload.
-- [ ] **Publishing freezes the live status.** `crud_project` builds
+- [x] **Publishing freezes the live status.** `crud_project` builds
       `project_public.config` from `get_layers()` (with the overlay) and stores
       it as JSON — a project published seconds after adding a catalog dataset
       describes it as `pending` forever.
-- [ ] `pending` is the only status with no `updated_at`, and the failed→pending
+- [x] `pending` is the only status with no `updated_at`, and the failed→pending
       heal `jsonb_set`s the object wholesale, discarding the prior error.
 
 ### GC
 
-- [ ] **GC vs promote race.** Promote protects a reused layer by bumping
+- [x] **GC vs promote race.** Promote protects a reused layer by bumping
       `updated_at`; GC's guarded DELETE re-checks only `NOT EXISTS (layer_project)`,
       not the grace window. Candidates are selected once, then deleted in a
       loop — a re-add that lands between the two gets its layer (and files)
       deleted, then FK-fails on the link. Add
       `AND updated_at < NOW() - grace` to the DELETE.
-- [ ] **Orphaned files.** GC deletes the row first; a materialize job still
+- [ ] **Orphaned files.** (GC now skips `running` layers and rows younger than the grace period; the `tmp*/` staging dirs are still unmatched.) GC deletes the row first; a materialize job still
       running then writes the parquet/PMTiles and its status UPDATE matches 0
       rows silently. And a SIGKILL mid-materialize leaves `tmp*/` staging dirs
       (~2× layer size) in the shared layers dir that GC's four exact filenames
       never match.
-- [ ] geoapi `_catalog_views` is never unregistered — a view for a
+- [x] geoapi `_catalog_views` is never unregistered — a view for a
       GC-deleted file is replayed onto every new connection forever.
 
 ### Correctness elsewhere
 
-- [ ] **`check_layer` bundle block picks ONE role with `LIMIT 1` and no
+- [x] **`check_layer` bundle block picks ONE role with `LIMIT 1` and no
       `ORDER BY`.** A user reaching a bundle as org-viewer *and* team-editor gets
       whichever row the planner returns — intermittent 401s on writes that the
       Python `authorize_bundle` (set-union) allows. The folder block has the same
       shape but is pre-existing.
-- [ ] **Collection Search compiles `filter=` against the item registry**
+- [x] **Collection Search compiles `filter=` against the item registry**
       (`stac.py:365`, also `stac_aggregate` and `mcp.search_catalog`) though
       `store.collection_registry` exists — hidden columns leak and the member
       semi-join promotion is bypassed, silently dropping mixed-geometry
       datasets.
-- [ ] **`tile_service._pmtiles_exists` check-then-get on a `TTLCache`.**
+- [x] **`tile_service._pmtiles_exists` check-then-get on a `TTLCache`.**
       `not in` and `[]` each re-evaluate expiry, so an entry can pass the test
       and `KeyError` on the read (also thread-unsafe). Use one `.get()`.
-- [ ] **Mixed layer+bundle listing paginates on a non-unique sort key**
+- [x] **Mixed layer+bundle listing paginates on a non-unique sort key**
       (`crud_datasets.py:286`) — rows tied on `updated_at` (every bundle import
       produces a block of them) can appear on two pages or none. Add
       `(kind, id)` as tiebreaker.
-- [ ] **`add_bundle` on a still-importing bundle** commits a locked, empty
+- [x] **`add_bundle` on a still-importing bundle** commits a locked, empty
       group; the import job's later attach then 409s on the duplicate check.
       Reject `status != ready`.
-- [ ] **geoapi `_ensure_catalog_view` registers under the lock, creates after
+- [x] **geoapi `_ensure_catalog_view` registers under the lock, creates after
       releasing it** — a second thread sees `known=True` and queries a view that
       does not exist yet → 500 under routine 4-worker concurrency.
-- [ ] `get_runner_class` picks the first `*ToolRunner` in `dir()` —
+- [x] `get_runner_class` picks the first `*ToolRunner` in `dir()` —
       `catchment_area_v2` resolves to the imported v1 `CatchmentAreaToolRunner`
       ('T' < 'V'); ten registry entries resolve to the imported
       `SimpleToolRunner`. Benign only because both catchments say `polygon`.
-- [ ] Antimeridian bbox (`minx > maxx`, valid per STAC) passes validation and
+- [x] Antimeridian bbox (`minx > maxx`, valid per STAC) passes validation and
       compiles to an impossible envelope → 200 with empty results.
-- [ ] `run_aggregations` resolves facets via the item registry only; a
+- [x] `run_aggregations` resolves facets via the item registry only; a
       collection-only facet → `KeyError` → 500 on schema drift.
 - [ ] `store.registry`/`store._con` read as two unlocked attributes across a
       reload swap (transient torn state).
 
 ### Web (from the last finder)
 
-- [ ] **Detail-page stars are local `useState`, not `useFavoriteStars`** —
+- [x] **Detail-page stars are local `useState`, not `useFavoriteStars`** —
       favouriting on `/catalog/{id}` is never saved and disagrees with the list
       and the picker. The 'in memory until core keeps them' comments in
       `CatalogDetailView.tsx:36` / `CatalogBody.tsx:35` predate
       `lib/api/favorites.ts`.
-- [ ] **A failed create wipes the form.** `useCreateFlow.submit`'s `finally`
+- [x] **A failed create wipes the form.** `useCreateFlow.submit`'s `finally`
       calls `reset()` + `onDone()` even when `createEmptyLayer` rejected — 15
       field definitions gone with nothing to retry from.
-- [ ] **Update-available check capped at 100.** `useCatalogItemVersions` asks
+- [x] **Update-available check capped at 100.** `useCatalogItemVersions` asks
       for `limit: itemIds.length`; the server clamps at 100 and nothing pages,
       so layers beyond the first 100 never show the badge.
-- [ ] **Concurrent uploads drop each other's job ids** — `setRunningJobIds([...runningJobIds, jobId])`
+- [x] **Concurrent uploads drop each other's job ids** — `setRunningJobIds([...runningJobIds, jobId])`
       uses the array captured at upload start (`useDatasetImport.ts:120`,
       `useCreateFlow.ts:129`); the first upload's completion toast and list
       refresh never fire.
-- [ ] Uppercase extensions (`EXPORT.CSV`) are refused by a case-sensitive
+- [x] Uppercase extensions (`EXPORT.CSV`) are refused by a case-sensitive
       check with a hardcoded, truncated English message (`useUploadFlow.ts:195`),
       although the tabular reader lowercases and would handle them.
-- [ ] Picker `hasMore` compares the deduped list to the server total, so one
+- [x] Picker `hasMore` compares the deduped list to the server total, so one
       duplicate leaves the skeleton row spinning forever; a bundle checkbox
       click while members load is silently lost; the failed-favourite path is a
       `void mutate` with no `.catch()`.
-- [ ] **Latent, not live:** `CatalogPickerCard` derives a single-layer id from
+- [x] **Latent, not live:** `CatalogPickerCard` derives a single-layer id from
       the percent-encoded href, which is encoded again on POST. All 22,965 real
       collection ids are plain UUIDs so it works today; the fixtures' `src:uuid`
       ids would 404. Use `collection.id` directly.
 
 ### Labels and docs
 
-- [ ] Seven `label_key`s have no translation in either language — `polygon_union`
+- [x] Seven `label_key`s have no translation in either language — `polygon_union`
       (buffer), `egress_mode` (catchment v2), `input_layer_1..3` + `sql_query`
       (custom SQL) — and section `sql` is missing; `_resolve_property` deletes
       `label_key` whether or not it resolves, so they render with **no label at
       all**. `size_field` is top-level in `en.json` but under `fields` in
       `de.json`: German label, no English one.
-- [ ] Integration tests still assert the retired `lake.user_<uid>` layout
+- [x] Integration tests still assert the retired `lake.user_<uid>` layout
       (`test_layer_import_runner.py:132`, `test_project_export_import.py:686-724`,
       conftest helpers) while production writes to `main` — they fail against
       correct code, and a regression in the `main` write path cannot be caught.
@@ -710,12 +710,12 @@ would hit first.
       with no message.
 - [ ] Custom SQL workflow node lost its catalog source with the old explorer
       (separate surface from the dataset node already logged).
-- [ ] `apps/docs` `getting_started/welcome.md:16` and the DE tutorial intro still
+- [x] `apps/docs` `getting_started/welcome.md:16` and the DE tutorial intro still
       advertise scenarios. `.github/copilot-instructions.md` fixed.
 
 ### Efficiency (all in `apps/catalog`)
 
-- [ ] All 15 `/stac` handlers are `async def` running synchronous DuckDB
+- [x] All 15 `/stac` handlers are `async def` running synchronous DuckDB
       scans on the event loop — one slow query freezes the service. Make them
       plain `def` or offload to a thread.
 - [ ] The reload path SHA-256s every served parquet end-to-end on the request
@@ -723,7 +723,7 @@ would hit first.
 - [ ] `run_aggregations` runs one full filtered scan per facet (N+1) and
       `search_*` run count and page as two scans; `record_to_item` deep-copies
       every row for no reason.
-- [ ] `add_catalog_items_to_project` opens a DuckDB connection and rescans the
+- [x] `add_catalog_items_to_project` opens a DuckDB connection and rescans the
       mirror per item, synchronously in the async handler, after
       `resolve_item_ids` already scanned it.
 

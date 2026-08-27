@@ -120,3 +120,55 @@ def test_a_text_file_handed_over_directly_is_still_data(tmp_path):
     path.write_text("id;value\n1;42\n")
 
     assert discover_inputs(str(path)) == [str(path)]
+
+
+def test_an_archive_of_only_skipped_text_tables_says_why_it_is_empty(tmp_path):
+    """A zipped folder of tab-delimited exports imports nothing — with a reason.
+
+    `.txt`/`.dsv` are not read from inside an archive (far more often a README than
+    a dataset), so this archive yields no dataset at all. Silently returning nothing
+    left the user with an import that "worked" and produced no layer.
+    """
+    archive = _archive(
+        tmp_path / "exports.zip",
+        {
+            "exports/stops.txt": "id\tname\n1\tKarlsplatz\n",
+            "exports/routes.dsv": "id|name\n1|U1\n",
+        },
+    )
+
+    with pytest.raises(DiscoveryError) as excinfo:
+        discover_inputs(str(archive))
+
+    message = str(excinfo.value)
+    assert ".txt" in message and ".dsv" in message
+    assert "stops.txt" in message
+    assert "Upload them directly" in message
+
+
+def test_a_skipped_text_file_beside_real_data_is_still_silent(tmp_path):
+    """The message is only for the all-skipped case; a README next to a CSV is normal."""
+    archive = _archive(
+        tmp_path / "mixed.zip",
+        {
+            "notes.txt": "read me",
+            "data/cities.csv": "id,name\n1,Wien\n",
+        },
+    )
+
+    found = discover_inputs(str(archive))
+
+    assert [Path(p).name for p in found] == ["cities.csv"]
+
+
+def test_a_nested_archive_holding_the_only_data_does_not_trip_the_message(tmp_path):
+    """`found` is tracked across nesting: the data is real, it just sits one zip deeper."""
+    inner = _archive(tmp_path / "inner.zip", {"cities.csv": "id,name\n1,Wien\n"})
+    outer = _archive(
+        tmp_path / "outer.zip",
+        {"readme.txt": "notes", "inner.zip": inner.read_bytes()},
+    )
+
+    found = discover_inputs(str(outer))
+
+    assert [Path(p).name for p in found] == ["cities.csv"]

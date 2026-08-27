@@ -213,9 +213,19 @@ def _extract_zip_safely(zip_path: Path) -> Iterator[Path]:
         pass
 
 
-def _discover_from_zip(zip_path: Path) -> Iterator[Path]:
+def _discover_from_zip(
+    zip_path: Path, _skipped: list[Path] | None = None
+) -> Iterator[Path]:
     """
     Discover convertible files within a ZIP archive.
+
+    Plain-text tables (``ARCHIVE_SKIP_EXTS``) are not imported from inside an
+    archive, where a ``.txt`` is far more often a README than a dataset. When
+    they are the *only* thing an archive holds, the caller would otherwise get
+    an empty result and no explanation, so that case raises ``DiscoveryError``
+    naming the skipped files. Nested archives share the outer call's ``_skipped``
+    list and never raise themselves: only the top level knows whether the
+    archive as a whole yielded anything.
 
     Args:
         zip_path: Path to ZIP file
@@ -223,6 +233,9 @@ def _discover_from_zip(zip_path: Path) -> Iterator[Path]:
     Yields:
         Paths to discovered convertible files
     """
+    top_level = _skipped is None
+    skipped: list[Path] = [] if _skipped is None else _skipped
+    found = False
     with _extract_zip_safely(zip_path) as tmp_dir:
         # Recursively, because the archive's folders are kept: a dataset can sit at any
         # depth, and `sorted` so the order a caller sees does not depend on the
@@ -238,25 +251,43 @@ def _discover_from_zip(zip_path: Path) -> Iterator[Path]:
             # Handle nested archives
             if ext == FileFormat.ZIP.value:
                 try:
-                    yield from _discover_from_zip(item_path)
+                    for nested in _discover_from_zip(item_path, skipped):
+                        found = True
+                        yield nested
                 except zipfile.BadZipFile:
                     logger.warning("Invalid nested ZIP: %s", item_path)
                 continue
 
             # Handle GeoPackages
             if ext == FileFormat.GPKG.value:
-                yield from (Path(v) for v in _discover_gpkg_layers(item_path))
+                for layer in _discover_gpkg_layers(item_path):
+                    found = True
+                    yield Path(layer)
                 continue
 
             # A shapefile needs no grouping now: its sidecars kept the directory they
             # were archived in, which is where GDAL looks for them.
             if ext == FileFormat.SHP.value:
+                found = True
                 yield item_path
                 continue
 
             # Handle other supported formats
-            if ext in ALL_EXTS and ext not in ARCHIVE_SKIP_EXTS:
+            if ext in ALL_EXTS:
+                if ext in ARCHIVE_SKIP_EXTS:
+                    skipped.append(item_path.relative_to(tmp_dir))
+                    continue
+                found = True
                 yield item_path
+
+    if top_level and not found and skipped:
+        exts = ", ".join(sorted({p.suffix.lower() for p in skipped}))
+        names = ", ".join(str(p) for p in skipped[:5])
+        more = f" (+{len(skipped) - 5} more)" if len(skipped) > 5 else ""
+        raise DiscoveryError(
+            f"{zip_path.name} contains no importable dataset: {exts} files are not "
+            f"read from inside an archive ({names}{more}). Upload them directly."
+        )
 
 
 def discover_inputs(src_path: str | Path) -> list[str]:

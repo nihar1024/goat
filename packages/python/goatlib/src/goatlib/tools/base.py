@@ -70,29 +70,11 @@ TParams = TypeVar("TParams", bound=ToolInputBase)
 def _catalog_layer_parquet(layer_id: str) -> "Path | None":
     """The materialized file of a promoted catalog layer, or None.
 
-    Existence of the file IS the signal — the same check geoapi's resolver
-    makes — so tools and serving agree about what counts as a catalog layer.
+    One definition for every reader — see `goatlib.utils.layer`.
     """
-    import os
+    from goatlib.utils.layer import catalog_layer_parquet
 
-    from goatlib.utils.layer import normalize_layer_id
-
-    if ":" in layer_id:
-        return None
-    try:
-        # Strict UUID gate before the id becomes a filename: is_layer_id accepts
-        # any 36-char/4-hyphen string, so without this a crafted value with
-        # '/' or '.' would traverse out of the catalog layers dir.
-        table = layer_id_to_table_name(normalize_layer_id(layer_id))
-    except Exception:
-        return None
-    path = (
-        Path(os.environ.get("DATA_DIR", "/app/data"))
-        / "catalog"
-        / "layers"
-        / f"{table}.parquet"
-    )
-    return path if path.exists() else None
+    return catalog_layer_parquet(layer_id)
 
 
 def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
@@ -373,6 +355,8 @@ class SimpleToolRunner:
         """Initialize runner."""
         self.settings: ToolSettings | None = None
         self._duckdb_con: duckdb.DuckDBPyConnection | None = None
+        #: layer_id -> parquet path of every catalog view resolved so far
+        self._catalog_views: dict[str, Path] = {}
         self._s3_client: Any | None = None
 
     @staticmethod
@@ -563,9 +547,15 @@ class SimpleToolRunner:
 
     @property
     def duckdb_con(self: Self) -> duckdb.DuckDBPyConnection:
-        """Get or create DuckDB connection (cached)."""
+        """Get or create DuckDB connection (cached).
+
+        A fresh connection gets the catalog views replayed onto it, so a
+        reconnect mid-tool is invisible to code holding a catalog relation.
+        """
         if self._duckdb_con is None:
-            self._duckdb_con = self._get_duckdb_connection()
+            con = self._get_duckdb_connection()
+            self._duckdb_con = con
+            self._replay_catalog_views(con)
         return self._duckdb_con
 
     def recycle_duckdb_connection(self: Self) -> None:
@@ -615,7 +605,6 @@ class SimpleToolRunner:
 
     def _export_catalog_filtered(
         self: Self,
-        layer_id: str,
         catalog_path: "Path",
         cql_filter: dict[str, Any],
     ) -> str:
@@ -626,14 +615,19 @@ class SimpleToolRunner:
         from goatlib.storage.query_builder import build_cql_filter
 
         con = self.duckdb_con
-        cols = [
-            r[0]
-            for r in con.execute(
-                f"DESCRIBE SELECT * FROM read_parquet('{catalog_path}')"
-            ).fetchall()
-        ]
-        filters = build_cql_filter(json.dumps(cql_filter), cols)
-        where = f"WHERE {filters.clause}" if filters.clause else ""
+        described = con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{catalog_path}')"
+        ).fetchall()
+        cols = [r[0] for r in described]
+        # The file's geometry column is whatever the publisher named it.
+        geom_col = next(
+            (r[0] for r in described if "GEOMETRY" in str(r[1]).upper()),
+            "geometry",
+        )
+        filters = build_cql_filter(
+            {"filter": json.dumps(cql_filter), "lang": "cql2-json"}, cols, geom_col
+        )
+        where = f"WHERE {' AND '.join(filters.clauses)}" if filters.clauses else ""
         tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
         tmp.close()
         self._execute_with_retry(
@@ -684,17 +678,27 @@ class SimpleToolRunner:
         own connection; returns the relation to query.
 
         Named by layer so tools reading several catalog layers coexist; the
-        file is immutable, so a stale view cannot serve stale data.
+        file is immutable, so a stale view cannot serve stale data. The view is
+        also remembered on the runner, because a connection is not for keeps:
+        `_execute_with_retry` drops it on a transient DuckLake error and
+        `recycle_duckdb_connection` drops it between batches, and the retry
+        that is meant to heal the failure must find the view on the new
+        connection too.
         """
-        table = layer_id_to_table_name(layer_id)
-        con = self.duckdb_con
-        con.execute("CREATE SCHEMA IF NOT EXISTS catalog_layers")
-        con.execute(
-            f'CREATE VIEW IF NOT EXISTS catalog_layers."{table}" AS '
-            f"SELECT file_row_number AS rowid, * EXCLUDE (file_row_number) "
-            f"FROM read_parquet('{path}', file_row_number=true)"
-        )
-        return f'catalog_layers."{table}"'
+        from goatlib.utils.layer import catalog_layer_relation, catalog_view_sql
+
+        self._catalog_views[layer_id] = path
+        for statement in catalog_view_sql(layer_id, path):
+            self.duckdb_con.execute(statement)
+        return catalog_layer_relation(layer_id)
+
+    def _replay_catalog_views(self: Self, con: duckdb.DuckDBPyConnection) -> None:
+        """Recreate every catalog view this runner has resolved, on `con`."""
+        from goatlib.utils.layer import catalog_view_sql
+
+        for layer_id, path in self._catalog_views.items():
+            for statement in catalog_view_sql(layer_id, path):
+                con.execute(statement)
 
     async def get_postgres_pool(self: Self) -> asyncpg.Pool:
         """Create PostgreSQL connection pool."""
@@ -1144,7 +1148,7 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         if catalog_path is not None:
             if not cql_filter:
                 return str(catalog_path)
-            return self._export_catalog_filtered(layer_id, catalog_path, cql_filter)
+            return self._export_catalog_filtered(catalog_path, cql_filter)
 
         # Look up the layer's actual owner to correctly access shared/catalog layers
         layer_owner_id = self.get_layer_owner_id_sync(layer_id)

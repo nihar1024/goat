@@ -5,7 +5,9 @@ used across geoapi and processes services.
 """
 
 import logging
+import os
 import re
+from pathlib import Path
 from typing import Protocol
 
 from cachetools import TTLCache
@@ -140,6 +142,104 @@ def layer_table_path(layer_id: str) -> str:
     return f"lake.{layer_schema_name()}.{layer_id_to_table_name(layer_id)}"
 
 
+# ---------------------------------------------------------------------------
+# Promoted catalog layers
+#
+# A catalog layer is not a DuckLake table: it is one immutable parquet file,
+# written by `catalog_materialize`, read through a view that adds `rowid`. Every
+# service that touches one — the tool runners, geoapi, GC — must agree on where
+# the file is and what the relation is called, so all of that lives here.
+# ---------------------------------------------------------------------------
+
+#: The DuckDB schema the per-layer views are created in.
+CATALOG_SCHEMA = "catalog_layers"
+
+
+def catalog_layers_dir() -> Path:
+    """Where materialized catalog layers live.
+
+    `CATALOG_LAYERS_DIR` wins; otherwise `DATA_DIR/catalog/layers`. The same
+    derivation geoapi's settings use, so a deployment that overrides the
+    directory moves the writer and every reader together.
+    """
+    override = os.environ.get("CATALOG_LAYERS_DIR")
+    if override:
+        return Path(override)
+    return Path(os.environ.get("DATA_DIR", "/app/data")) / "catalog" / "layers"
+
+
+def catalog_layer_parquet(layer_id: str) -> Path | None:
+    """The materialized file of a promoted catalog layer, or None.
+
+    Existence of the file IS the signal — the same check geoapi's resolver
+    makes — so tools and serving agree about what counts as a catalog layer.
+    A strict UUID gate runs before the id becomes a filename: `is_layer_id`
+    accepts any 36-char/4-hyphen string, so without it a crafted value with
+    '/' or '.' would traverse out of the directory.
+    """
+    if ":" in layer_id:
+        return None
+    try:
+        table = layer_id_to_table_name(normalize_layer_id(layer_id))
+    except Exception:
+        return None
+    path = catalog_layers_dir() / f"{table}.parquet"
+    return path if path.exists() else None
+
+
+def catalog_layer_relation(layer_id: str) -> str:
+    """The SQL relation a catalog layer is read through: `catalog_layers."t_…"`."""
+    return f'{CATALOG_SCHEMA}."{layer_id_to_table_name(layer_id)}"'
+
+
+def catalog_view_sql(layer_id: str, path: Path) -> list[str]:
+    """The statements that create a catalog layer's view on a connection.
+
+    `file_row_number` becomes `rowid`, so every rowid-based query — feature ids,
+    edits, tile joins — works on a catalog layer exactly as on a DuckLake table.
+    """
+    table = layer_id_to_table_name(layer_id)
+    return [
+        f"CREATE SCHEMA IF NOT EXISTS {CATALOG_SCHEMA}",
+        f'CREATE VIEW IF NOT EXISTS {CATALOG_SCHEMA}."{table}" AS '
+        f"SELECT file_row_number AS rowid, * EXCLUDE (file_row_number) "
+        f"FROM read_parquet('{path}', file_row_number=true)",
+    ]
+
+
+def is_catalog_relation(table_path: str) -> bool:
+    """True for the relation `resolve_layer_table_path` returns for a catalog layer."""
+    return table_path.startswith(f"{CATALOG_SCHEMA}.")
+
+
+def table_path_parts(table_path: str) -> tuple[str, str]:
+    """``(schema, table)`` for either relation shape a resolver can return.
+
+    `lake.<schema>.<table>` for a DuckLake table, `catalog_layers."<table>"` for
+    a catalog layer. Callers that used to `split(".", 2)` assumed the first
+    shape only and blew up on the second.
+    """
+    if is_catalog_relation(table_path):
+        table = table_path[len(CATALOG_SCHEMA) + 1 :].strip('"')
+        return CATALOG_SCHEMA, table
+    parts = table_path.split(".")
+    if len(parts) == 3 and parts[0] == "lake":
+        return parts[1].strip('"'), parts[2].strip('"')
+    raise ValueError(f"not a layer relation: {table_path!r}")
+
+
+def quoted_relation(table_path: str) -> str:
+    """The relation, quoted for use in a statement, for either shape.
+
+    `lake."schema"."table"` or `catalog_layers."table"` — the catalog schema is
+    a plain DuckDB schema on the connection, not inside the `lake` catalog.
+    """
+    schema, table = table_path_parts(table_path)
+    if schema == CATALOG_SCHEMA:
+        return f'{CATALOG_SCHEMA}."{table}"'
+    return f'lake."{schema}"."{table}"'
+
+
 def resolve_layer_schema(
     con: "DuckDBConnection",
     layer_id: str,
@@ -260,6 +360,14 @@ def clear_schema_cache() -> None:
 
 
 __all__ = [
+    "CATALOG_SCHEMA",
+    "catalog_layers_dir",
+    "catalog_layer_parquet",
+    "catalog_layer_relation",
+    "catalog_view_sql",
+    "is_catalog_relation",
+    "table_path_parts",
+    "quoted_relation",
     "InvalidLayerIdError",
     "LayerNotFoundError",
     "normalize_layer_id",

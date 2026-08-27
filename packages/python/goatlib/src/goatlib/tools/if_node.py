@@ -20,6 +20,7 @@ import logging
 from typing import Any
 
 from goatlib.utils.layer import (
+    catalog_layer_parquet,
     get_schema_for_layer,
     layer_id_to_table_name,
     layer_table_path,
@@ -208,6 +209,13 @@ def _resolve_layer_sql_ref(
                 raise FileNotFoundError(f"No temp parquet found under {base}")
             parquet_path = matches[0]
         return f"read_parquet('{parquet_path}')"
+
+    # A promoted catalog layer is one parquet file, not a DuckLake table. Same
+    # check the base runner makes, so an if-node and the tool downstream of it
+    # agree about what they are reading.
+    catalog_path = catalog_layer_parquet(layer_id)
+    if catalog_path is not None:
+        return f"read_parquet('{catalog_path}')"
 
     if manager is not None:
         try:

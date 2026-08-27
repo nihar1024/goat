@@ -30,7 +30,10 @@ from pydantic import BaseModel, Field
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.layer_replace import LayerReplaceMixin
 from goatlib.tools.schemas import ToolInputBase
-from goatlib.utils.layer import layer_schema_name
+from goatlib.utils.layer import (
+    layer_schema_name,
+    table_path_parts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +213,7 @@ class FinalizeLayerRunner(LayerReplaceMixin, BaseToolRunner[FinalizeLayerParams]
         self._delete_old_pmtiles(user_id=user_id, layer_id=existing_id)
 
         existing_table = self.resolve_layer_table_path(existing_id)
-        snapshot_id = self._get_ducklake_snapshot_id(*existing_table.split(".", 2)[1:])
+        snapshot_id = self._get_ducklake_snapshot_id(*table_path_parts(existing_table))
 
         self._regenerate_pmtiles(
             user_id=user_id,

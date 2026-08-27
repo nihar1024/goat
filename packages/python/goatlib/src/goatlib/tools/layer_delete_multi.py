@@ -26,6 +26,10 @@ from goatlib.analysis.schemas.ui import (
 )
 from goatlib.tools.base import SimpleToolRunner
 from goatlib.tools.schemas import ToolInputBase
+from goatlib.utils.layer import (
+    is_catalog_relation,
+    table_path_parts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +91,12 @@ class LayerDeleteMultiRunner(SimpleToolRunner):
             True if table was deleted, False if it didn't exist or error
         """
         full_table = self.resolve_layer_table_path(layer_id)
-        _lake, schema, table_name = full_table.split(".", 2)
+        if is_catalog_relation(full_table):
+            # A catalog layer is shared by every project that added it and is
+            # nobody's to drop; the row is GC'd when the last link goes.
+            logger.warning("Refusing to delete catalog layer %s", layer_id)
+            return False
+        schema, table_name = table_path_parts(full_table)
 
         try:
             # Check if table exists. DESCRIBE probes only this table;

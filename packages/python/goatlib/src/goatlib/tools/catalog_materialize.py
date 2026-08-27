@@ -64,7 +64,11 @@ def bucket_key_for(parquet_url: str) -> str:
 
 
 def catalog_layers_dir() -> Path:
-    return Path(os.environ.get("DATA_DIR", "/app/data")) / "catalog" / "layers"
+    """Where the materialized files go — the shared definition, so the writer
+    and every reader honour the same `CATALOG_LAYERS_DIR`."""
+    from goatlib.utils.layer import catalog_layers_dir as _shared
+
+    return _shared()
 
 
 class CatalogMaterializeRunner(SimpleToolRunner):

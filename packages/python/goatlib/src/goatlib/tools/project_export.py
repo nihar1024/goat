@@ -32,6 +32,9 @@ from goatlib.tools.project_schemas import (
     ExportManifest,
 )
 from goatlib.tools.schemas import ToolInputBase
+from goatlib.utils.layer import (
+    quoted_relation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -389,9 +392,8 @@ class ProjectExportRunner(SimpleToolRunner):
         # Check table exists. DESCRIBE probes only this table;
         # information_schema.tables would lazily load every table in the
         # catalog to answer.
-        _lake, schema, table_name = table_path.split(".", 2)
         try:
-            self.duckdb_con.execute(f'DESCRIBE lake."{schema}"."{table_name}"')
+            self.duckdb_con.execute(f"DESCRIBE {quoted_relation(table_path)}")
         except duckdb.CatalogException:
             logger.warning("DuckLake table not found: %s", table_path)
             return 0

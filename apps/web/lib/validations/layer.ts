@@ -574,7 +574,6 @@ export const rasterLayerPropertiesSchema = layerPropertiesBaseSchema.extend({
 export const layerSchema = layerStoredMetadataSchema.extend({
   id: z.string(),
   properties: featureLayerProperties.or(rasterLayerPropertiesSchema).or(z.record(z.any())).default({}),
-  total_count: z.number().optional(),
   extent: z.string().default(DEFAULT_WKT_EXTENT),
   // Both absent for a catalog layer: it belongs to the provider that published
   // it, so it has no owner and lives in no one's folder. The API omits them
@@ -590,7 +589,6 @@ export const layerSchema = layerStoredMetadataSchema.extend({
   tool_type: z.string().optional(),
   job_id: z.string().optional(),
   data_type: dataType.optional(),
-  legend_urls: z.array(z.string()).optional(),
   shared_with: shareLayerSchema.optional(),
   owned_by: publicUserSchema.optional(),
   updated_at: z.string(),

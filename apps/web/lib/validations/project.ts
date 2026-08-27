@@ -286,8 +286,6 @@ export const projectLayerSchema = layerSchema.extend({
   order: z.number().optional(),
   layer_project_group_id: z.number().nullable().optional(),
   charts: z.object({}).optional(),
-  filtered_count: z.number().optional(),
-  legend_urls: z.array(z.string()).optional(),
 });
 
 export const projectLayerGroupSchema = z.object({

@@ -22,6 +22,7 @@ import {
 import type { ProjectLayer } from "@/lib/validations/project";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
+import { useProjectLayerFeatureCount } from "@/hooks/map/useProjectLayerFeatureCount";
 import { useActiveLayer, useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import AccordionWrapper from "@/components/common/AccordionWrapper";
@@ -61,6 +62,10 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
     };
 
   const { activeLayer } = useActiveLayer(projectId);
+  const { featureCount } = useProjectLayerFeatureCount({
+    projectLayer: activeLayer,
+    enabled: activeLayer?.feature_layer_geometry_type === "point",
+  });
 
   const { layers: projectLayers, mutate: mutateProjectLayers } = useFilteredProjectLayers(projectId);
   const { layerFields } = useLayerFields(activeLayer?.layer_id || "");
@@ -605,7 +610,8 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
                           clustering enabled keep the section visible so users
                           can still toggle it off if the layer has grown. */}
                       {activeLayer.feature_layer_geometry_type === "point" &&
-                        ((activeLayer.total_count ?? 0) <= 100_000 ||
+                        (featureCount === undefined ||
+                          featureCount <= 100_000 ||
                           !!(layerProperties as FeatureLayerPointProperties)?.cluster?.enabled) && (
                           <ClusteringSection
                             layerProperties={layerProperties}

@@ -105,14 +105,6 @@ export function derivePreview(source: TabularSource, hasHeader: boolean): Tabula
 }
 
 /** Read a file and derive its preview in one call. */
-export async function parseTabularPreview(
-  file: File,
-  options?: { sheetName?: string; hasHeader?: boolean }
-): Promise<TabularPreview> {
-  const source = await readTabularSource(file, options);
-  return derivePreview(source, options?.hasHeader ?? true);
-}
-
 async function readXlsxSource(
   file: File,
   options?: { sheetName?: string }

@@ -33,6 +33,7 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 import { useDateFnsLocale } from "@/i18n/utils";
 
 import { useDataset } from "@/lib/api/layers";
+import { useFeatureCount } from "@/lib/api/processes";
 import type { AppDispatch } from "@/lib/store";
 import { selectActiveDataPanelView } from "@/lib/store/workflow/selectors";
 import { requestMapView, requestTableView, updateNode } from "@/lib/store/workflow/slice";
@@ -117,6 +118,7 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
 
   // Fetch full layer details using layerId
   const { dataset: selectedLayer } = useDataset(nodeLayerId || "");
+  const { featureCount } = useFeatureCount(selectedLayer?.id);
 
   // Tab state
   const [tabValue, setTabValue] = useState(0);
@@ -530,13 +532,13 @@ export default function DatasetNodeSettings({ node, projectLayers = [], onBack }
                   </Stack>
 
                   {/* Number of features */}
-                  {selectedLayer.total_count !== undefined && (
+                  {featureCount !== undefined && (
                     <Stack spacing={0.5}>
                       <Typography variant="body2" fontWeight="bold">
                         {t("features")}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {selectedLayer.total_count.toLocaleString()}
+                        {featureCount.toLocaleString()}
                       </Typography>
                     </Stack>
                   )}

@@ -34,7 +34,7 @@ import {
   updateCategoryCell,
   updateClassificationCell,
   withFrequencies,
-} from "@/components/map/panels/toolbox/tools/oev-gueteklassen/utils";
+} from "@/components/map/panels/toolbox/generic/inputs/oevGueteklassenUtils";
 import Selector from "@/components/map/panels/common/Selector";
 import FormLabelHelper from "@/components/common/FormLabelHelper";
 interface OevStationConfigInputProps {

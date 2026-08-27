@@ -23,7 +23,7 @@ import EmptySection from "@/components/common/EmptySection";
 import type { PopperMenuItem } from "@/components/common/PopperMenu";
 import MoreMenu from "@/components/common/PopperMenu";
 import DatasetSummary from "@/components/dashboard/dataset/DatasetSummary";
-import { LayerVisibilityToggle } from "@/components/map/panels/layer/Layer";
+import { LayerVisibilityToggle } from "@/components/map/panels/layer/LayerVisibilityToggle";
 import { MaskedImageIcon } from "@/components/map/panels/style/other/MaskedImageIcon";
 import ContentDialogWrapper from "@/components/modals/ContentDialogWrapper";
 import ViewModal from "@/components/modals/View";

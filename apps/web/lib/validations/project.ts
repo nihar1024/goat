@@ -267,7 +267,8 @@ export const projectSchema = contentMetadataSchema.extend({
 // layer_project_group_id: int | None = Field(None, description="Parent group ID")
 export const projectLayerSchema = layerSchema.extend({
   id: z.number(),
-  folder_id: z.string(),
+  // See layerSchema: absent for a catalog layer.
+  folder_id: z.string().nullish(),
   query: z
     .object({
       metadata: z.object({}).passthrough().optional(),

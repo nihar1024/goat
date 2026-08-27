@@ -1,4 +1,4 @@
-import { Divider, Link, Stack, Typography, styled, useTheme } from "@mui/material";
+import { Divider, Stack, Typography, styled, useTheme } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -56,7 +56,7 @@ const MainContentSection = styled("div")({
  * paired with the key our translations and icons are filed under. */
 const SUMMARY_TILES = [
   { field: "license", i18nKey: "license" },
-  { field: "publisher", i18nKey: "distributor_name" },
+  { field: "publisher", i18nKey: "publisher" },
   { field: "category", i18nKey: "data_category" },
   { field: "language_code", i18nKey: "language_code" },
 ] as const;
@@ -145,16 +145,6 @@ const DatasetSummary: React.FC<DatasetSummaryProps> = ({
                         }}>
                         {valueOf(field)}
                       </ReactMarkdown>
-                    )}
-                    {type === "email" && valueOf(field) && (
-                      <Link href={`mailto:${valueOf(field)}`} target="_blank" rel="noopener noreferrer">
-                        {valueOf(field)}
-                      </Link>
-                    )}
-                    {type === "url" && valueOf(field) && (
-                      <Link href={valueOf(field)} target="_blank" rel="noopener noreferrer">
-                        {valueOf(field)}
-                      </Link>
                     )}
                     {type === "text" && valueOf(field) && <Typography>{valueOf(field)}</Typography>}
                   </Stack>

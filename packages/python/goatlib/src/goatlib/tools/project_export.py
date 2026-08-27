@@ -484,7 +484,9 @@ class ProjectExportRunner(SimpleToolRunner):
 
                 # data.parquet (internal layers only)
                 if not is_external:
-                    owner_id = layer.get("user_id", params.user_id)
+                    # `or`, not a dict default: the key is always present now,
+                    # and it is None for an unowned catalog layer.
+                    owner_id = layer.get("user_id") or params.user_id
                     data_path = layer_dir / "data.parquet"
                     row_count = self._export_layer_data(
                         layer_id=layer_id,

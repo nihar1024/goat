@@ -576,8 +576,10 @@ export const layerSchema = layerStoredMetadataSchema.extend({
   properties: featureLayerProperties.or(rasterLayerPropertiesSchema).or(z.record(z.any())).default({}),
   total_count: z.number().optional(),
   extent: z.string().default(DEFAULT_WKT_EXTENT),
-  folder_id: z.string(),
-  // Null for a catalog layer: it belongs to the provider that published it.
+  // Both absent for a catalog layer: it belongs to the provider that published
+  // it, so it has no owner and lives in no one's folder. The API omits them
+  // rather than sending null (response_model_exclude_none).
+  folder_id: z.string().nullish(),
   user_id: z.string().uuid().nullish(),
   type: layerType,
   size: z.number().optional(),

@@ -107,6 +107,14 @@
     }
   },
   "fields": {
+    "pt_network_bundle_id": {
+      "label": "ÖPNV-Netz-Bundle",
+      "description": "Wählen Sie ein benutzerdefiniertes ÖPNV-Netz-Bundle für das Routing. Wenn nicht gesetzt, wird das Standard-Bundle verwendet."
+    },
+    "street_network_bundle_id": {
+      "label": "Straßennetz-Bundle",
+      "description": "Wählen Sie ein benutzerdefiniertes Straßennetz-Bundle für das Routing. Wenn nicht gesetzt, wird das Standardnetz verwendet."
+    },
     "routing_mode": {
       "label": "Verkehrsmittel",
       "description": "Wählen Sie das Verkehrsmittel für die Erreichbarkeitsanalyse"
@@ -1046,7 +1054,7 @@
       "description": "Einzugsgebiete zeigen Flächen auf, die in einer festgelegten Reisezeit oder Entfernung von einem oder mehreren Ausgangspunkten erreicht werden können."
     },
     "travel_cost_matrix": {
-      "title": "Reisezeitmatrix",
+      "title": "Reisekostenmatrix",
       "description": "Berechnet Reisezeiten und Entfernungen zwischen Start- und Zielpunkt-Layern."
     },
     "merge": {
@@ -1105,7 +1113,7 @@
     "geocoding": "Geokodierung",
     "clustered_features": "Clusterzuordnung",
     "cluster_summary": "Cluster-Zusammenfassung",
-    "travel_cost_matrix": "Reisezeitmatrix",
+    "travel_cost_matrix": "Reisekostenmatrix",
     "travel_cost_matrix_destinations": "Zielpunkte"
   },
   "two_sfca_type": {

@@ -176,5 +176,3 @@ async def update_layer(
         )
 
     return result
-
-

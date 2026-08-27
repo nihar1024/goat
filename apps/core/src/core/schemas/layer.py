@@ -5,6 +5,7 @@ from uuid import UUID
 # Third party imports
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     HttpUrl,
     RootModel,
@@ -74,7 +75,17 @@ class LayerProperties(BaseModel):
 
 
 class ExternalServiceOtherProperties(BaseModel):
-    """Model for external service properties."""
+    """The WMS/WFS fields of `other_properties`, plus whatever else is in there.
+
+    `extra="allow"` because this model is the declared type of `other_properties`
+    on every layer read schema, and the column is a free-form document: a
+    promoted catalog layer keeps its `catalog_item` snapshot and its
+    `catalog_materialize` status in it. Without this, Pydantic silently drops
+    every key not named below, so `GET /layer/{id}` returned `{}` for a catalog
+    layer and its detail page had nothing to show.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     url: str | None = Field(
         default=None,

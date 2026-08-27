@@ -377,6 +377,71 @@ mutations. Still open:
 
 ## Found by the post-merge review (2026-08-27)
 
+Second wave, from the adversarial diff review. All fixed unless marked.
+
+- [x] **`customer.bundle` would never have got `dataset_metadata` on an existing
+      environment.** The bundle revision `12d658d174ae` was edited in place, but
+      it is already applied on dev and locally, so `alembic upgrade head` would
+      have succeeded and then every `PUT /bundle/{id}` and every GTFS/Overture
+      import would fail on `UndefinedColumn` — and `runner.py` deletes the
+      just-ingested member layers when the metadata step fails. The transition
+      now lives in `c3e7a91b4d10`: add the column, fold the eight flat columns
+      into it with `jsonb_strip_nulls`, drop them and the unused `properties`.
+      Proven up and down on the real (old-shape) table — values survive both
+      directions.
+
+- [x] **`git checkout --` cost the goatlib translations too.** Same mistake as
+      the web locales earlier in the day, and this time I did not notice:
+      `5d6d5d8e6` dropped `fields.pt_network_bundle_id` and
+      `fields.street_network_bundle_id` in **both** languages, and reverted two
+      German renames. Those are live bundle-selector labels in Catchment Area v2
+      and Heatmap v2, and `_resolve_property` deletes `label_key` whether or not
+      it resolves — so the fields would have rendered as `Pt Network Bundle Id`
+      with no description, in both languages. Rebuilt from the pre-change file
+      minus only the scenario keys; the net diff is now exactly three keys per
+      language.
+
+- [x] **`GET /layer/{id}` silently dropped the catalog record.**
+      `other_properties` is typed `ExternalServiceOtherProperties` — a closed
+      WMS model — on every layer read schema, so Pydantic stripped
+      `catalog_item` and `catalog_materialize` and the dataset detail page had
+      nothing to show. Verified with a round-trip returning `{}`. The model now
+      allows extra keys; the WMS fields stay typed.
+
+- [x] **The `style(goatlib)` commit un-formatted three files** it claimed to
+      format (`tasks/download_s3_folder.py`, `tasks/ducklake_compact.py`,
+      `endpoints/v2/layer.py` — the last from the `metadata_aggregate` cut).
+      All 82 touched Python files now pass `ruff format --check`.
+
+- [x] **Migration downgrade over-claimed layers.** It re-owned everything
+      `WHERE user_id IS NULL OR folder_id IS NULL`, but a real user's layer can
+      legitimately sit outside a folder (`get_base_filter` handles exactly
+      that), so downgrading would have transferred it to the synthetic catalog
+      user — irreversibly, since `user_id` goes back to NOT NULL. Now
+      `WHERE catalog_external_uid IS NOT NULL`, matching what upgrade nulled.
+
+- [x] `project_export`'s `layer.get("user_id", params.user_id)` fallback was
+      dead — the key is always present now and `None` for a catalog layer.
+      Changed to `or`. Harmless today only because `_export_layer_data` ignores
+      the argument.
+
+- [x] One value, two labels: the summary tiled `publisher` under the
+      "Distributor Name" heading while the list below called it "Publisher".
+      Unified on `publisher` (icon added to `METADATA_HEADER_ICONS`), and the
+      `email`/`url` render branches went — no field has those types now.
+
+- [ ] **Bundle metadata cannot be cleared.** `Metadata.tsx` filters `""` out of
+      the payload and `CRUDBundle.update` only merges when the document is not
+      None, so emptying a field is a no-op. Same as the old per-column
+      behaviour, so not a regression — but the merge semantics make it
+      permanent rather than incidental. Needs an explicit "clear" signal.
+
+- [ ] **The upgrade's identity-deletion CTE trusts that only the synthetic user
+      is in the `GOAT Catalog` org.** `user.organization_id` is
+      `ON DELETE CASCADE`, so any other member would be deleted with all their
+      content. Nothing asserts it. Add a guard or a pre-flight count.
+
+
 - [x] **`create_layer` trigger 500'd every first-time catalog promote.** The
       AFTER INSERT trigger writes `NEW.user_id` into `layer_user.user_id`
       (NOT NULL), and promoted catalog layers now have none. Guarded with an

@@ -73,8 +73,13 @@ whether or not the table survives; keeping it would preserve bytes, not
 information. Take a ``pg_dump`` of the three tables before running this if that
 turns out to matter.
 
-``customer.bundle`` keeps its ``dataset_metadata`` document: there an importer
-really does fill it, reading ``feed_publisher_name`` out of a GTFS feed.
+``customer.bundle`` keeps its provenance, but as one ``dataset_metadata``
+document rather than eight flat columns — there an importer really does fill it,
+reading ``feed_publisher_name`` out of a GTFS feed. The bundle revision
+(``12d658d174ae``) was changed to create the table in that shape, which is right
+for a fresh database but reaches no environment that already ran it, so the
+transition happens here: add the column, fold the eight columns into it, drop
+them and the never-used ``properties``.
 
 **A catalog layer now has no owner.** ``layer.user_id`` and ``layer.folder_id``
 become nullable and are set to NULL for every promoted catalog layer, and the
@@ -138,6 +143,18 @@ _COLUMNS: tuple[tuple[str, sa.types.TypeEngine], ...] = (
     ("upload_reference_system", sa.Integer()),
     ("upload_file_type", sa.Text()),
     ("data_store_id", postgresql.UUID(as_uuid=True)),
+)
+
+# The eight columns `customer.bundle` used to carry, folded into one document.
+_BUNDLE_PROVENANCE: tuple[tuple[str, sa.types.TypeEngine], ...] = (
+    ("lineage", sa.Text()),
+    ("geographical_code", sa.Text()),
+    ("distributor_name", sa.Text()),
+    ("distributor_email", sa.Text()),
+    ("distribution_url", sa.Text()),
+    ("license", sa.Text()),
+    ("attribution", sa.Text()),
+    ("data_reference_year", sa.Integer()),
 )
 
 # Children first: `scenario_scenario_feature` references both of the others.
@@ -210,6 +227,37 @@ def upgrade() -> None:
     for name in _SCENARIO_TABLES:
         if name in tables:
             op.drop_table(name, schema=SCHEMA)
+
+    # `customer.bundle`'s own revision now creates `dataset_metadata` directly,
+    # so a fresh database arrives with it and skips all of this. A database that
+    # already ran that revision still has the eight flat columns and needs the
+    # values moved before they are dropped.
+    if "bundle" in tables:
+        bundle_columns = {
+            c["name"] for c in inspector.get_columns("bundle", schema=SCHEMA)
+        }
+        if "dataset_metadata" not in bundle_columns:
+            op.add_column(
+                "bundle",
+                sa.Column("dataset_metadata", postgresql.JSONB(astext_type=sa.Text())),
+                schema=SCHEMA,
+            )
+            # jsonb_strip_nulls so an untouched bundle gets `{}`, not eight nulls.
+            present = [c for c, _ in _BUNDLE_PROVENANCE if c in bundle_columns]
+            if present:
+                pairs = ", ".join(f"'{c}', {c}" for c in present)
+                op.execute(
+                    f"""
+                    UPDATE {SCHEMA}.bundle
+                    SET dataset_metadata = jsonb_strip_nulls(jsonb_build_object({pairs}))
+                    """
+                )
+        for name, _type in _BUNDLE_PROVENANCE:
+            if name in bundle_columns:
+                op.drop_column("bundle", name, schema=SCHEMA)
+        # Never read or written anywhere.
+        if "properties" in bundle_columns:
+            op.drop_column("bundle", "properties", schema=SCHEMA)
 
     # A catalog layer belongs to the provider that published it, not to anyone
     # here, so it gets no owner.
@@ -444,8 +492,30 @@ def downgrade() -> None:
         UPDATE {SCHEMA}.layer
         SET user_id = 'ca7a1000-0000-4000-8000-000000000001',
             folder_id = 'ca7a1000-0000-4000-8000-000000000002'
-        WHERE user_id IS NULL OR folder_id IS NULL
+        WHERE catalog_external_uid IS NOT NULL
         """
     )
     op.alter_column("layer", "folder_id", nullable=False, schema=SCHEMA)
     op.alter_column("layer", "user_id", nullable=False, schema=SCHEMA)
+
+    bundle_columns = {c["name"] for c in inspector.get_columns("bundle", schema=SCHEMA)}
+    for name, type_ in _BUNDLE_PROVENANCE:
+        if name not in bundle_columns:
+            op.add_column(
+                "bundle", sa.Column(name, type_, nullable=True), schema=SCHEMA
+            )
+    if "properties" not in bundle_columns:
+        op.add_column(
+            "bundle",
+            sa.Column("properties", postgresql.JSONB(astext_type=sa.Text())),
+            schema=SCHEMA,
+        )
+    if "dataset_metadata" in bundle_columns:
+        sets = ", ".join(
+            f"{c} = (dataset_metadata ->> '{c}')::{'integer' if c == 'data_reference_year' else 'text'}"
+            for c, _ in _BUNDLE_PROVENANCE
+        )
+        op.execute(
+            f"UPDATE {SCHEMA}.bundle SET {sets} WHERE dataset_metadata IS NOT NULL"
+        )
+        op.drop_column("bundle", "dataset_metadata", schema=SCHEMA)

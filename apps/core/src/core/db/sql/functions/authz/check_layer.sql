@@ -39,8 +39,8 @@ BEGIN
         layer_id_loop := layer_ids[i];
 
         /* 1. Catalog read — the legacy in_catalog flag, or a promoted
-           catalog layer (shared read-only snapshot owned by the catalog
-           system user; identified by its catalog back-reference). */
+           catalog layer (a shared read-only snapshot with no owner at all,
+           identified by its catalog back-reference). */
         IF EXISTS (
             SELECT 1 FROM customer.layer l
             WHERE l.id = layer_id_loop

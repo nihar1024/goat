@@ -13,7 +13,7 @@ Please follow these guidelines when contributing:
 - `.husky/`: Husky hooks for managing Git hooks
 - `.vscode/`: VSCode-specific settings and configurations
 - `apps/`: Contains the main applications for the project
-  - `core/`: The main FastAPI/Python backend application for user management, projects, folders, scenarios, and content metadata. Does NOT handle file uploads, layer data processing, or analytics tools.
+  - `core/`: The main FastAPI/Python backend application for user management, projects, folders, and content metadata. Does NOT handle file uploads, layer data processing, or analytics tools.
   - `docs/`: Documentation for the project using Docusaurus.
   - `geoapi/`: FastAPI/Python API service implementing OGC API standards. Handles:
     - Layer file uploads and imports (via `/upload` endpoints)

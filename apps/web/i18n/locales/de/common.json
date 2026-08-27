@@ -264,7 +264,6 @@
   "caption_typography": "Beschriftungen",
   "catalog": "Katalog",
   "catalog_download_not_allowed": "Daten aus dem Katalog können nicht direkt heruntergeladen werden. Nur Datensätze, die Ihnen gehören, können heruntergeladen werden.",
-  "catalog_explorer": "Katalog-Explorer",
   "catchment_area": "Einzugsgebiet (Legacy)",
   "catchment_area_active_mobility": "Einzugsgebiet Aktive Mobilität",
   "catchment_area_car": "Einzugsgebiet Auto",
@@ -452,7 +451,6 @@
   "dataset_source_description": "Wählen Sie aus den bereits hochgeladenen Datensätzen. Um Daten aus einer externen Quelle hinzuzufügen, wechseln Sie zum Karten-Modus.",
   "dataset_types": "Layertypen",
   "dataset_update": "Datensatz-Aktualisierung",
-  "dataset_upload": "Datensatz-Upload",
   "datasets": "Datensätze",
   "days_left_trial": "Noch {{days_left}} in der Testphase",
   "de": "Deutsch",
@@ -463,7 +461,6 @@
   "default_label": "Standardbeschriftung",
   "default_label_placeholder": "z.B. Alle",
   "default_label_tooltip": "Text, der angezeigt wird, wenn mehrere Werte vorhanden sind",
-  "define_fields": "Felder definieren",
   "delete": "Löschen",
   "delete_account": "Konto löschen",
   "delete_account_confirmation_body": "<p>Bevor Sie Ihr Konto löschen, stellen Sie sicher, dass Sie alle Daten, die Sie behalten möchten, herunterladen, und beachten Sie, dass Folgendes passieren wird:</p><ul><li>Ihre Inhaltsdaten werden <strong>endgültig entfernt</strong>.</li><li>Wenn Sie eine Organisation oder ein Team mit anderen Administratoren gemeinsam besitzen, wird das Eigentum an diesem Team an einen anderen Administrator übertragen.</li><li>Im Falle fehlender Mitadministratoren oder wenn Sie das einzige Mitglied eines Teams oder einer Organisation sind, wird es eine <strong>unwiderrufliche Löschung</strong> zusammen mit allen zugehörigen Daten durchlaufen.</li><li>Denken Sie daran, dass <strong>diese Aktion nicht rückgängig gemacht werden kann;</strong> wenn sie ausgeführt ist, ist sie für immer erledigt.</li></ul><p>Bitte geben Sie <strong>{{email}}</strong> ein, um die Löschung Ihres Kontos zu bestätigen.</p>",
@@ -651,7 +648,6 @@
   "error_updating_share_access": "Fehler beim Aktualisieren des Freigabezugriffs",
   "error_updating_tree": "Fehler beim Aktualisieren der Layer",
   "error_updating_visibility": "Fehler beim Aktualisieren der Sichtbarkeit",
-  "error_uploading_dataset": "Fehler beim Hochladen des Datensatzes",
   "everything_in_professional_plus": "Alles in Professional, plus:",
   "everything_in_starter_plus": "Alles im Starter, plus:",
   "example": "Beispiel",
@@ -1205,9 +1201,7 @@
       "distribution": "Verteilung"
     },
     "headings": {
-      "attribute_accuracy": "Attributgenauigkeit",
       "attribution": "Namensnennung",
-      "completeness": "Vollständigkeit",
       "data_category": "Kategorie",
       "data_reference_year": "Referenzjahr",
       "description": "Beschreibung",
@@ -1220,7 +1214,6 @@
       "language_code": "Sprache",
       "license": "Lizenz",
       "lineage": "Herkunft",
-      "positional_accuracy": "Positionsgenauigkeit",
       "publisher": "Datengeber",
       "themes": "Kategorie",
       "type": "Typ"
@@ -1239,9 +1232,7 @@
       "OTHER": "Other License"
     },
     "no_metadata_available": {
-      "attribute_accuracy": "Keine Attributgenauigkeit verfügbar",
       "attribution": "Keine Namensnennung verfügbar",
-      "completeness": "Keine Vollständigkeit vorhanden",
       "data_reference_year": "Kein Datenbezugsjahr verfügbar",
       "description": "Keine Beschreibung verfügbar",
       "distribution_url": "Keine Datengeber-URL verfügbar",
@@ -1250,7 +1241,9 @@
       "geographical_code": "Kein geografisches Gebiet verfügbar",
       "license": "Keine Lizenz verfügbar",
       "lineage": "Keine Herkunft verfügbar",
-      "positional_accuracy": "Keine Positionsgenauigkeit verfügbar"
+      "publisher": "Kein Datengeber verfügbar",
+      "data_category": "Keine Kategorie verfügbar",
+      "language_code": "Keine Sprache verfügbar"
     },
     "title": "Metadaten",
     "type": {
@@ -1356,7 +1349,6 @@
   "no_matching_categories": "Keine passenden Kategorien",
   "no_matching_runs": "Keine passenden Ausführungen",
   "no_measurements_yet": "Noch keine Messungen",
-  "no_options_for_this_filter": "Für diesen Filter gibt es keine Optionen",
   "no_point_layer_found": "Kein Punkte-Layer gefunden",
   "no_polygon_layer_found": "Kein Polygon-Layer gefunden",
   "no_polygon_or_point_layers": "Keine Polygon- oder Punkte-Layer gefunden",
@@ -1694,7 +1686,6 @@
   "remove_image": "Bild entfernen",
   "remove_bundle": "Datenpaket entfernen",
   "rename": "Umbenennen",
-  "rename_columns_hint": "Sie können Spalten nach dem Import in den Layer-Einstellungen umbenennen.",
   "rename_dataset_source": "Datensatzquelle umbenennen",
   "rename_field": "Umbenennen",
   "rename_group": "Gruppe umbenennen",
@@ -1952,7 +1943,6 @@
   "show_rulers": "Lineale anzeigen",
   "show_slider": "Schieberegler anzeigen",
   "show_title": "Titel anzeigen",
-  "showing_first_rows": "Zeige erste {{count}} von {{total}} Zeilen",
   "showing_rows": "{{count}} Zeilen angezeigt",
   "shp": "Shapefile",
   "simple": "Einfach",
@@ -2145,7 +2135,6 @@
   "update_team_information_description": "Aktualisieren Sie Ihre Teaminformationen",
   "updated_successfully": "Ordner erfolgreich aktualisiert",
   "upload": "Hochladen",
-  "upload_dataset": "Datensatz hochladen",
   "upload_document": "Dokument hochladen",
   "upload_failed": "Upload fehlgeschlagen",
   "upload_icon": "Symbol hochladen",

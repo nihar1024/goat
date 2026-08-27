@@ -256,7 +256,6 @@
   "caption_typography": "Captions",
   "catalog": "Catalog",
   "catalog_download_not_allowed": "Data from the catalog cannot be directly downloaded. Only datasets you own can be downloaded.",
-  "catalog_explorer": "Catalog Explorer",
   "catchment_area": "Catchment Area (Legacy)",
   "catchment_area_v2": "Catchment Area",
   "catchment_area_active_mobility": "Catchment Area Active Mobility",
@@ -439,7 +438,6 @@
   "dataset_source_description": "Select from the already uploaded datasets. To add data from an external source, switch to Map mode.",
   "dataset_types": "Dataset Types",
   "dataset_update": "Dataset Update",
-  "dataset_upload": "Dataset Upload",
   "datasets": "Datasets",
   "days_left_trial": "{{days_left}} left in trial",
   "de": "Deutsch",
@@ -620,7 +618,6 @@
   "error_updating_share_access": "Error updating share access",
   "error_updating_tree": "Error updating layers",
   "error_updating_visibility": "Error updating visibility",
-  "error_uploading_dataset": "Error uploading dataset",
   "everything_in_professional_plus": "Everything in Professional, plus: ",
   "everything_in_starter_plus": "Everything in Starter, plus:",
   "example": "Example",
@@ -1135,9 +1132,7 @@
       "distribution": "Distribution"
     },
     "headings": {
-      "attribute_accuracy": "Attribute Accuracy",
       "attribution": "Attribution",
-      "completeness": "Completeness",
       "data_category": "Data Category",
       "data_reference_year": "Data Reference Year",
       "description": "Description",
@@ -1150,7 +1145,6 @@
       "language_code": "Language",
       "license": "License",
       "lineage": "Lineage",
-      "positional_accuracy": "Positional Accuracy",
       "publisher": "Publisher",
       "themes": "Data Category",
       "type": "Type"
@@ -1169,9 +1163,7 @@
       "OTHER": "Other License"
     },
     "no_metadata_available": {
-      "attribute_accuracy": "No attribute accuracy available",
       "attribution": "No attribution available",
-      "completeness": "No completeness available",
       "data_reference_year": "No data reference year available",
       "description": "No description available",
       "distribution_url": "No distribution URL available",
@@ -1180,7 +1172,9 @@
       "geographical_code": "No geographical area available",
       "license": "No license available",
       "lineage": "No lineage available",
-      "positional_accuracy": "No positional accuracy available"
+      "publisher": "No publisher available",
+      "data_category": "No data category available",
+      "language_code": "No language available"
     },
     "title": "Metadata",
     "type": {
@@ -1280,7 +1274,6 @@
   "no_matching_categories": "No matching categories",
   "no_matching_runs": "No matching runs",
   "no_measurements_yet": "No measurements yet",
-  "no_options_for_this_filter": "There are no options for this filter",
   "no_point_layer_found": "No point layer found",
   "no_polygon_layer_found": "No polygon layer found",
   "no_polygon_or_point_layers": "No polygon or point layers found",
@@ -1614,7 +1607,6 @@
   "remove_image": "Remove Image",
   "remove_bundle": "Remove bundle",
   "rename": "Rename",
-  "rename_columns_hint": "You can rename columns after import in the layer settings.",
   "rename_dataset_source": "Rename dataset source",
   "rename_group": "Rename Group",
   "rename_layer_success": "Datasource renamed successfully",
@@ -1869,7 +1861,6 @@
   "show_rulers": "Show Rulers",
   "show_slider": "Show slider",
   "show_title": "Show title",
-  "showing_first_rows": "Showing first {{count}} of {{total}} rows",
   "showing_rows": "Showing {{count}} rows",
   "shp": "Shapefile",
   "simple": "Simple",
@@ -2044,7 +2035,6 @@
   "updated_successfully": "Folder updated successfully",
   "unsaved_changes": "Unsaved changes",
   "upload": "Upload",
-  "upload_dataset": "Upload Dataset",
   "upload_document": "Upload Document",
   "upload_icon": "Upload icon",
   "upload_image": "Upload Image",
@@ -2370,7 +2360,6 @@
   "computed_on_save": "Computed on save",
   "layer_name": "Layer name",
   "geometry_type": "Geometry type",
-  "define_fields": "Define fields",
   "creating_layer": "Creating layer...",
   "error_creating_layer": "Failed to create layer",
   "interactions": "Interactions",

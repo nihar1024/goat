@@ -18,12 +18,17 @@ import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { mutate } from "swr";
 
-import { isBundleTile, updateBundle, useBundle } from "@/lib/api/bundles";
+import {
+  type BundleDatasetMetadata,
+  isBundleTile,
+  updateBundle,
+  useBundle,
+} from "@/lib/api/bundles";
 import { matchesContentListKey } from "@/lib/api/datasets";
 import { updateDataset } from "@/lib/api/layers";
 import { PROJECTS_API_BASE_URL, updateProject } from "@/lib/api/projects";
-import { bundleMetadataSchema } from "@/lib/validations/bundle";
-import { type LayerMetadata, layerMetadataSchema } from "@/lib/validations/layer";
+import { BUNDLE_METADATA_KEYS, type BundleMetadata, bundleMetadataSchema } from "@/lib/validations/bundle";
+import { layerMetadataSchema } from "@/lib/validations/layer";
 
 import type { ContentDialogBaseProps } from "@/types/dashboard/content";
 
@@ -36,8 +41,9 @@ interface MetadataDialogProps extends ContentDialogBaseProps {}
 const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type }) => {
   const { t } = useTranslation("common");
   const [isBusy, setIsBusy] = useState(false);
-  // Bundles carry the dataset-level subset of the layer vocabulary, so they
-  // reuse this form with the per-layer fields hidden and their own schema.
+  // A layer, a project and a bundle all edit name and description here; only a
+  // bundle also states where its data came from, so the form is typed on the
+  // widest of the three and the provenance inputs render for bundles alone.
   const isBundle = isBundleTile(content);
   const {
     handleSubmit,
@@ -45,10 +51,15 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
     reset,
     formState: { errors, isValid },
     control,
-  } = useForm<LayerMetadata>({
+  } = useForm<BundleMetadata>({
     mode: "onChange",
     resolver: zodResolver(isBundle ? bundleMetadataSchema : layerMetadataSchema),
-    defaultValues: { ...content },
+    // The form is flat; a stored row carries the document. Spreading it over
+    // the top level seeds the inputs without the form knowing either shape.
+    defaultValues: {
+      ...content,
+      ...((content as { dataset_metadata?: Record<string, unknown> }).dataset_metadata ?? {}),
+    },
   });
 
   // Callers pass whatever they hold, and a content tile carries no provenance
@@ -58,37 +69,61 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
   const { bundle } = useBundle(isBundle ? content.id : null);
   useEffect(() => {
     if (!bundle) return;
+    // The form is flat for both kinds; a bundle's provenance is stored as one
+    // document, so it is unpacked here and packed again on submit.
+    const provenance = bundle.dataset_metadata ?? {};
     reset({
       name: bundle.name,
       description: bundle.description ?? undefined,
-      geographical_code: bundle.geographical_code ?? undefined,
-      data_reference_year: bundle.data_reference_year ?? undefined,
-      lineage: bundle.lineage ?? undefined,
-      license: (bundle.license ?? undefined) as LayerMetadata["license"],
-      attribution: bundle.attribution ?? undefined,
-      distributor_name: bundle.distributor_name ?? undefined,
-      distributor_email: bundle.distributor_email ?? undefined,
-      distribution_url: bundle.distribution_url ?? undefined,
+      geographical_code: provenance.geographical_code ?? undefined,
+      data_reference_year: provenance.data_reference_year ?? undefined,
+      lineage: provenance.lineage ?? undefined,
+      license: (provenance.license ?? undefined) as BundleMetadata["license"],
+      attribution: provenance.attribution ?? undefined,
+      distributor_name: provenance.distributor_name ?? undefined,
+      distributor_email: provenance.distributor_email ?? undefined,
+      distribution_url: provenance.distribution_url ?? undefined,
     });
   }, [bundle, reset]);
 
-  const { dataCategoryOptions, geographicalCodeOptions, licenseOptions, languageCodeOptions } =
+  const { geographicalCodeOptions, licenseOptions } =
     useContentMetadataHooks();
 
-  const onSubmit = async (data: LayerMetadata) => {
+  const onSubmit = async (data: BundleMetadata) => {
     try {
       setIsBusy(true);
       const cleanedData = Object.fromEntries(
         Object.entries(data).filter(([_, value]) => value !== null && value !== undefined && value !== "")
       );
+      // Name and description are the row's own columns. Provenance is a bundle
+      // concept — an importer fills it from what the source states about itself
+      // — so only the bundle branch below sends it, as a document the API merges
+      // into what is stored rather than replacing.
+      const provenance = Object.fromEntries(
+        BUNDLE_METADATA_KEYS.filter((key) => key in cleanedData).map((key) => [
+          key,
+          cleanedData[key],
+        ])
+      );
+      const identity = {
+        ...(cleanedData.name !== undefined ? { name: cleanedData.name as string } : {}),
+        ...(cleanedData.description !== undefined
+          ? { description: cleanedData.description as string }
+          : {}),
+      };
       if (isBundle) {
-        await updateBundle(content.id, cleanedData);
+        await updateBundle(content.id, {
+          ...identity,
+          dataset_metadata: provenance as BundleDatasetMetadata,
+        });
         // The detail page reads a single bundle; the grids read the listing.
         mutate(matchesContentListKey);
       } else if (type === "layer") {
+        // A layer is its name, description and tags. Publishing one to the
+        // catalog will be its own job, not a set of metadata fields here.
         await updateDataset(content.id, {
           folder_id: content.folder_id,
-          ...cleanedData,
+          ...identity,
         });
         mutate(matchesContentListKey);
       } else {
@@ -140,30 +175,14 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
               error={!!errors.description}
               helperText={errors.description?.message}
             />
-            {type === "layer" && (
+            {isBundle && (
               <>
-                {!isBundle && (
-                  <RhfAutocompleteField
-                    options={dataCategoryOptions}
-                    control={control}
-                    name="data_category"
-                    label={t("common:metadata.headings.data_category")}
-                  />
-                )}
                 <RhfAutocompleteField
                   options={geographicalCodeOptions}
                   control={control}
                   name="geographical_code"
                   label={t("common:metadata.headings.geographical_code")}
                 />
-                {!isBundle && (
-                  <RhfAutocompleteField
-                    options={languageCodeOptions}
-                    control={control}
-                    name="language_code"
-                    label={t("common:metadata.headings.language_code")}
-                  />
-                )}
                 <TextField
                   fullWidth
                   label={t("common:metadata.headings.data_reference_year")}
@@ -190,31 +209,6 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
                   error={!!errors.lineage}
                   helperText={errors.lineage?.message}
                 />
-                {!isBundle && (
-                  <>
-                    <TextField
-                      fullWidth
-                      label={t("common:metadata.headings.positional_accuracy")}
-                      {...register("positional_accuracy")}
-                      error={!!errors.positional_accuracy}
-                      helperText={errors.positional_accuracy?.message}
-                    />
-                    <TextField
-                      fullWidth
-                      label={t("common:metadata.headings.attribute_accuracy")}
-                      {...register("attribute_accuracy")}
-                      error={!!errors.attribute_accuracy}
-                      helperText={errors.attribute_accuracy?.message}
-                    />
-                    <TextField
-                      fullWidth
-                      label={t("common:metadata.headings.completeness")}
-                      {...register("completeness")}
-                      error={!!errors.completeness}
-                      helperText={errors.completeness?.message}
-                    />
-                  </>
-                )}
                 <Divider />
                 <Box>
                   <Typography variant="body1" fontWeight="bold">

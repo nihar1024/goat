@@ -51,12 +51,11 @@ SELECT table_name FROM information_schema.tables WHERE table_schema='customer' O
 - **layer_organization / layer_team / layer_user** — layer sharing with role
 - **project_organization / project_team / project_user** — project sharing with role
 
-### Projects, layers & scenarios (`customer`)
-- **project** (id uuid) — user_id, folder_id, active_scenario_id, layer_order[], basemap, tags[]
-- **layer** (id uuid) — user_id, folder_id, data_store_id. Key fields: name, type, data_type, tool_type, feature_layer_type, feature_layer_geometry_type, extent (geometry), properties (jsonb), url, size, attribute_mapping (jsonb), in_catalog, tags[]
+### Projects & layers (`customer`)
+- **project** (id uuid) — user_id, folder_id, layer_order[], basemap, tags[]
+- **layer** (id uuid) — user_id, folder_id. Key fields: name, type, data_type, tool_type, job_id, feature_layer_type, feature_layer_geometry_type, extent (geometry), properties (jsonb), other_properties (jsonb — holds `catalog_item` / `catalog_materialize` for promoted catalog layers), field_config (jsonb, per-column metadata), url, size, in_catalog, tags[], catalog_external_uid, catalog_version
 - **layer_project** (id int) — M2M layer ↔ project. name, properties (jsonb style config), other_properties, query (jsonb filters), charts, order, layer_project_group_id
 - **layer_project_group** (id int) — layer groups. project_id, parent_id (self-ref nesting), order
-- **data_store** (id uuid) — storage backends. type
 - **folder** (id uuid) — user_id, name
 - **job** (id uuid) — user_id. type, status, payload (jsonb)
 - **scenario** (id uuid) — project_id, user_id, name
@@ -101,7 +100,7 @@ WHERE ssf.scenario_id = 'SCENARIO_UUID';
 
 - Layer **metadata** lives in PostgreSQL (`customer.layer`), layer **data** lives in DuckLake (managed by geoapi)
 - `layer_project.properties` = style/rendering config (jsonb); `layer_project.query` = active filters (jsonb)
-- `scenario_feature` uses generic columns (integer_attr1..25 etc.) — check `layer.attribute_mapping` for which attr maps to which real column name
+- `scenario`, `scenario_feature` and `scenario_scenario_feature` are dead: no code references them, and the feature is gone from the API and the UI. `scenario_feature` is the last table still using generic columns (integer_attr1..25); nothing maps them back any more
 - A public dashboard reads the `project_public.config` snapshot, not the live project — re-publish to reflect changes
 - Always use READ-ONLY queries. Never INSERT/UPDATE/DELETE unless explicitly asked
 - Use `ST_AsText()` or `ST_AsGeoJSON()` to read geometry columns

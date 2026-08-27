@@ -118,20 +118,155 @@ mutations. Still open:
 
 ## With the legacy-catalog retirement (design §11.4)
 
-- [ ] **Collapse the flat metadata columns on `customer.layer` into JSONB.**
-      Measured on the dev copy (12,257 layers): outside the 66 old
-      `in_catalog` rows, license is set on 25, category on 37,
-      positional_accuracy on 1 — these columns were only ever the old
-      catalog's schema, hardcoded onto every row. Keep `name`,
-      `description` (15% use) and probably `tags`; the rest move to a
-      JSONB `metadata` column. Do it TOGETHER with removing the old catalog
-      UI/endpoints, because those are the main consumers and the sweep
-      (Metadata modal, DatasetSummary, core schemas, project export/import)
-      is the same. The new catalog needs no typed columns in PG — faceting
-      happens in the STAC service — and promoted layers already carry the
-      full item snapshot in `other_properties.catalog_item`, stored at
-      promote time because the mirror is rebuilt wholesale and an old
-      version's metadata exists nowhere else afterwards.
+- [x] **Drop the old catalog's metadata columns from `customer.layer`.**
+      DONE 2026-08-27. Thirteen columns removed (migration
+      `c3e7a91b4d10`, which also carries the drops below) with
+      **nothing replacing them** — the earlier plan to collapse them into a
+      JSONB `dataset_metadata` was dropped once it was clear a layer has no
+      metadata of its own to hold:
+
+      * a user's uploaded dataset is its name, description and tags; publishing
+        one to the catalog will be its own job, not a set of columns;
+      * a promoted catalog layer already carries the catalog's record verbatim
+        in `other_properties.catalog_item`, and `DatasetSummary` now reads it
+        from there, in the catalog's own vocabulary.
+
+      Translating that vocabulary into ours was considered and rejected:
+      `DDN2` is an enum invented for the old catalog's filter dropdown, so
+      mapping `DL-DE-BY-2.0` onto it replaces a real versioned licence
+      identifier with an internal code, loses the `2.0`, and needs a lookup
+      maintained forever — for a shape the catalog may change anyway.
+
+      `customer.bundle` keeps its `dataset_metadata` document, because there an
+      importer genuinely fills it (`feed_publisher_name` out of a GTFS feed).
+
+      Measured before dropping: 109 of 12,281 layers carried any of the
+      thirteen, 66 of them the old `in_catalog` rows.
+
+- [x] **Remove the old catalog.** Endpoints `POST /layer/catalog` and
+      `POST /layer/metadata/aggregate`, their schemas (`ICatalogLayerGet`,
+      `IMetadataAggregate`, `IMetadataAggregateRead`, `MetadataGroupAttributes`),
+      `crud_layer.metadata_aggregate`, the five filter params on
+      `LayerGetBase`, and on the web the `CatalogExplorer` modal, its two
+      workflow-panel entry points, `useCatalogLayers`, `useMetadataAggregated`
+      and `datasetMetadataAggregated`. `METADATA_HEADER_ICONS` moved out of the
+      deleted `CatalogDatasetCard` to `lib/constants/metadataIcons.ts`.
+
+- [ ] **Workflow nodes lost their catalog source with the old explorer.**
+      `DatasetNodeSettings` and `SqlToolSettings` offered "Catalog Explorer" as a
+      data source and nothing replaced it. The new picker (`CatalogBody` +
+      `useCatalogFlow`) can serve it, but a workflow node wants a bare
+      `customer.layer` id and no project link, so it needs: a promote-only
+      endpoint (`promote()` already takes no project — the link is added
+      afterwards in `project_layer.py`), a single-select mode in the picker, and
+      a decision about materialize — a freshly promoted layer is `pending` until
+      the job finishes, and a workflow run against it would find no data.
+
+- [x] **Remove scenarios.** No code referenced them any more: `apps/core` had no
+      model, CRUD or endpoint, `apps/web` had nothing at all, and the last live
+      reader (`get_scenario_features`) was broken — it treated
+      `attribute_mapping` as `{real: generic}` while every stored row is
+      `{generic: real}`, so it emitted `sf."category" AS "text_attr1"` against a
+      table with no such column. Gone from goatlib: `scenario_id` on
+      `ToolInputBase`, `ScenarioSelectorMixin`, `scenario_selector_field`, the
+      `SECTION_SCENARIO` UI sections in 22 tools and both catchment-area
+      runners, the merge path (`base._merge_scenario_features`,
+      `db.get_scenario_features`), the routing payload branch (dead — it tested
+      `hasattr(params, "street_network")`, an attribute no params class has),
+      and the `scenario` / `scenario_id` i18n keys.
+
+- [ ] **Decide what happens to the scenario tables.** `customer.scenario` (214
+      rows), `customer.scenario_feature` (246) and
+      `customer.scenario_scenario_feature` remain, as does
+      `customer.project.active_scenario_id` (160 non-null) — a column no model
+      declares. All code is gone; dropping the data is a separate, one-way call.
+      `scenario_feature` is the last table using the generic-column scheme.
+
+- [x] **Drop `attribute_mapping` and the vestigial upload/data-store columns**
+      (same migration, `c3e7a91b4d10`). `attribute_mapping` mapped generic physical
+      column names back to real ones from the shared-wide-table era; the DuckLake
+      migration already applied it (a layer mapping `{"text_attr1": "category"}`
+      has a `category` column) and the field list now comes from the table schema
+      plus `field_config`. Also dropped: `upload_reference_system` (0 rows) and
+      `upload_file_type` (30) — no writer, no read schema — and `data_store_id`
+      plus the whole `customer.data_store` table (5 rows, no CRUD, no endpoint,
+      no router). Five dead helpers went with it from `core/utils/__init__.py`
+      (`get_layer_columns`, `search_value`, `next_column_name`,
+      `get_result_column`, `build_insert_query`).
+
+      **Kept deliberately:** `tool_type` (9,828 rows) and `job_id` (11,451).
+      Nothing reads either, but they record which tool and which Windmill job
+      produced a layer, across most of the table — provenance, not cruft.
+
+- [x] **The layer Metadata modal edits name and description only.** It was still
+      posting `dataset_metadata` for layers after the columns went, which would
+      have silently dropped every field. The provenance inputs (lineage,
+      distribution, licence, attribution, reference year, geographical code) now
+      render for **bundles** only, packed with `BUNDLE_METADATA_KEYS`; the form
+      is typed on `BundleMetadata`, the widest of the three content kinds it
+      serves. `layerMetadataSchema` is now just `contentMetadataSchema`.
+
+- [x] **Second sweep (2026-08-27), after the first pass left residue.** Three
+      read-only agents swept core, goatlib and web. What was genuinely caused by
+      the removals and is now fixed:
+
+      * `DataLicense` and `validate_geographical_code` still lived in
+        `db/models/layer.py` — only bundle provenance uses them, so they moved to
+        `schemas/metadata.py` and `pycountry` left the layer model.
+      * `seed_roles` still granted `layer/catalog` and `layer/metadata/aggregate`.
+      * `CRUDLayer.get_base_filter` kept an `attributes_to_exclude` parameter
+        (only `metadata_aggregate` ever passed it) and an `isinstance(params,
+        ILayerGet)` guard whose `else` branch existed for the deleted catalog
+        schemas — always true now, so both went.
+      * `"Create scenarios"` in the three gettext catalogs (`.mo` recompiled).
+      * `request_examples` advertised a `get` key, an `export` key for an
+        endpoint core does not have, and feature/table create bodies that only
+        the raster endpoint would ever see.
+      * `export_layer_to_parquet` kept a `project_id` parameter after the
+        scenario merge went — **42 call sites across 26 tool files** were still
+        passing it, plus the chain through both catchment-area coordinate
+        helpers. `db.get_layer_project_id` was orphaned the same way.
+      * `analysis/schemas/__init__.py` listed `"vector"` in `__all__` with no
+        such symbol, so `import *` raised `AttributeError`.
+      * Web: `getDatasetSchema` still declared the five removed filter params,
+        `datasetMetadataValue` was the deleted aggregate endpoint's response
+        shape, `useLayers` was unsubscribed (leaving three `mutate()` calls in
+        rename/delete/share doing nothing — rewired to `matchesContentListKey`),
+        `ICON_NAME.SCENARIO`, four dead `AddLayerSourceType` members, eight
+        orphaned i18n keys, and stale catalog-explorer comments.
+      * **`DatasetSummary` was showing eleven rows that could never resolve** —
+        it reads the catalog record but still listed the old layer-metadata
+        field names. Rewritten against the snapshot's actual keys
+        (`processing:lineage`, `publisher`, `category`), with an explicit
+        `i18nKey` per row because the vocabularies differ, and three missing
+        `no_metadata_available` strings added in EN and DE.
+
+      Checked and deliberately **not** treated as fallout: the `ARG002` unused
+      arguments in `base.py`, `layer_replace.py`, `project_export.py` and
+      `project_import.py` are identical to `origin/catalog` — they belong to the
+      flat-layer-storage work, not to this removal.
+
+- [ ] **`in_catalog` is now doing two jobs and should be resolved.** The column
+      is the old catalog's flag (66 rows), but the *field name* has been reused
+      in the map UI as the read-only marker for catalog layers of either
+      generation — `ProjectLayerTree` sets
+      `in_catalog: layer.in_catalog || isCatalogLayer(layer)`, and rename,
+      delete, the edit table and the layer menu all gate on it. Making it a
+      derived value (`catalog_external_uid IS NOT NULL`) would let the column
+      go; doing that carelessly would make the 66 old rows editable.
+
+- [ ] **Decide what identifies a catalog-sourced bundle**, when P5 locked
+      bundles land. Today no catalog dataset creates a `customer.bundle` row at
+      all: a multi-layer dataset promotes to N layers plus a locked
+      `layer_project_group` whose `bundle_id` stays NULL. If catalog bundles
+      ever do get a row, they want `catalog_external_uid` + `catalog_version`
+      under a partial unique index (the identity contract that gives promote
+      its idempotency), plus the STAC snapshot — not the flat provenance
+      vocabulary, which no catalog path can fill. Deliberately NOT pre-added:
+      "the same bundle at the same version" is undefined while members promote
+      as separate layers, and the harvester still publishes no
+      `goat:bundleType` and no locked marker (verified against the 2026-08-27
+      mirror), so the constraint would be designed blind.
 
 ## Test-suite hygiene
 

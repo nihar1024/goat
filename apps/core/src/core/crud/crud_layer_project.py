@@ -56,6 +56,14 @@ class CRUDLayerProject(CRUDBase):
             del layer_dict["id"]
             # Update layer with layer project
             layer_dict.update(layer_project_model.model_dump())
+            # The link's fields win above, including updated_at — but the map
+            # keys its tile source on that value, and materialize finishing
+            # bumps only the LAYER's. Take the later of the two so either
+            # side changing refetches the tiles.
+            if layer.updated_at and layer_dict.get("updated_at"):
+                layer_dict["updated_at"] = max(
+                    layer.updated_at, layer_dict["updated_at"]
+                )
             # The link froze a copy of other_properties at add time (that is
             # what makes style per-project), but a catalog layer's materialize
             # lifecycle is layer-global and moves on afterwards — serve those
@@ -245,7 +253,11 @@ class CRUDLayerProject(CRUDBase):
             # Copy properties from the existing project-layer link (preserves user's style)
             # rather than from the base layer (which would reset to default style)
             properties = existing_link.properties if existing_link else layer.properties
-            other_properties = existing_link.other_properties if existing_link else layer.other_properties
+            other_properties = (
+                existing_link.other_properties
+                if existing_link
+                else layer.other_properties
+            )
 
             # Create layer project link
             layer_project = LayerProjectLink(

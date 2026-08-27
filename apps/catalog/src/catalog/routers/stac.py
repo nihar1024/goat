@@ -362,7 +362,11 @@ async def stac_collections(
     limit = clamp_limit(query.limit, MAX_LIST_LIMIT)
     offset = query.offset
     base = _stac_base(request)
-    params = query.to_search_params(store.registry, limit=limit)
+    # The COLLECTION registry: it hides what a dataset row does not carry
+    # (`goat:geometryType` is per layer) so a filter naming it is a 400 here,
+    # not a silent column reference that drops every mixed-type bundle. The
+    # query-param path keeps its member semi-join promotion untouched.
+    params = query.to_search_params(store.collection_registry, limit=limit)
     rows, matched = search_collections(store, params)
     ui = _ui_base(request)
     assets = _assets_base(request)
@@ -604,9 +608,12 @@ async def stac_aggregate(
     query: Annotated[AggregateQuery, Query()],
     store: CatalogStore = Depends(get_store),
 ) -> dict[str, Any]:
+    registry = (
+        store.collection_registry if query.unit == "collections" else store.registry
+    )
     return run_aggregations(
         store,
-        query.to_search_params(store.registry),
+        query.to_search_params(registry),
         query.aggregations,
         query.unit,
     )

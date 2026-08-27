@@ -116,6 +116,7 @@ async def add_catalog_items_to_project(
     provider that published it — with data materialized asynchronously) and
     then links it.
     """
+    import json
     import uuid as uuid_module
     from pathlib import Path as FSPath
 
@@ -125,6 +126,8 @@ async def add_catalog_items_to_project(
         promote,
         resolve_item_ids,
     )
+
+    from core.services.materialize_heal import decide_heal
 
     mirror = FSPath(settings.CATALOG_DATA_DIR) / "mirror_items.parquet"
     if not mirror.exists():
@@ -164,32 +167,45 @@ async def add_catalog_items_to_project(
             # whose data never arrived (`failed`, or `pending` with no job
             # behind it because the original enqueue failed). That makes
             # re-adding the dataset the recovery path: no retry affordance,
-            # selecting it again heals it. The job flips to `running` as its
-            # first act, so an actively working layer is never re-enqueued.
+            # selecting it again heals it. The rules live in
+            # `services.materialize_heal` — including how old a `pending` or
+            # `running` has to be before it counts as lost.
             should_enqueue = result["created"]
             add_link = True
             if not should_enqueue:
-                materialize_status = await conn.fetchval(
+                raw_doc = await conn.fetchval(
                     f"""
-                    SELECT other_properties->'catalog_materialize'->>'status'
+                    SELECT other_properties->'catalog_materialize'
                     FROM "{settings.SCHEMA}".layer WHERE id = $1
                     """,
                     layer_id,
                 )
-                should_enqueue = materialize_status in ("pending", "failed")
-                if materialize_status == "failed":
+                materialize_doc = (
+                    json.loads(raw_doc) if isinstance(raw_doc, str) else raw_doc
+                )
+                decision = decide_heal(materialize_doc)
+                should_enqueue = decision.should_enqueue
+                if decision.reset_to_pending:
                     # Back to pending so the tree shows "preparing" again.
+                    # Merged, not replaced: keep the prior error as a trail,
+                    # and stamp it like every other status so age is readable.
                     await conn.execute(
                         f"""
                         UPDATE "{settings.SCHEMA}".layer
                         SET other_properties = jsonb_set(
                             other_properties,
                             '{{catalog_materialize}}',
-                            '{{"status": "pending"}}'
+                            COALESCE(other_properties->'catalog_materialize', '{{}}'::jsonb)
+                                || jsonb_build_object(
+                                    'status', 'pending',
+                                    'updated_at', to_jsonb(now()),
+                                    'heal_reason', $2::text
+                                )
                         )
                         WHERE id = $1
                         """,
                         layer_id,
+                        decision.reason,
                     )
                 if should_enqueue:
                     # A heal reuses the broken entry already in the project

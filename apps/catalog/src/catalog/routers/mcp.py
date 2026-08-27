@@ -328,7 +328,9 @@ async def search_catalog(
                 "limit": limit,
                 "offset": offset,
             }
-        ).to_search_params(store.registry, default_filter_lang="cql2-text", limit=limit)
+        ).to_search_params(
+            store.collection_registry, default_filter_lang="cql2-text", limit=limit
+        )
         # Collection Search, not Item Search: one row per dataset, filtered as a
         # dataset. Item-level filters (`geometry_type`) become semi-joins, so
         # "datasets with a polygon layer" matches on *any* layer -- asking Item

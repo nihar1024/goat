@@ -135,6 +135,14 @@ class CRUDLayerProjectGroup(CRUDBase):
         bundle = await async_session.get(Bundle, bundle_id)
         if bundle is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Bundle not found")
+        if bundle.status != "ready":
+            # A bundle mid-import has no member layers yet; adding it now would
+            # commit a locked, empty group that the import's own attach then
+            # 409s against.
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"Bundle is not ready (status: {bundle.status})",
+            )
 
         # Ordered by link id, so members land in the order the import created
         # them (the bundle spec's role order) rather than however the rows come back.

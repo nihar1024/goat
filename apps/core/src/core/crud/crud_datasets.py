@@ -283,8 +283,14 @@ class CRUDDatasets:
         sort_col = union_sq.c[sort_key]
         # ``order`` may arrive as an OrderEnum; compare on its value.
         is_ascending = str(getattr(order, "value", order)) == "ascendent"
+        # Tiebreakers make the page boundary deterministic: a bundle import
+        # gives its members one updated_at to the microsecond, and an unstable
+        # sort across two LIMIT/OFFSET executions shows an item twice and skips
+        # another.
         ordered = select(union_sq).order_by(
-            sort_col.asc() if is_ascending else sort_col.desc()
+            sort_col.asc() if is_ascending else sort_col.desc(),
+            union_sq.c.kind,
+            union_sq.c.id,
         )
 
         page = await paginate(async_session, ordered, page_params)

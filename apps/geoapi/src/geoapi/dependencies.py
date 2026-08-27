@@ -71,22 +71,32 @@ _ducklake_pool.add_connection_hook(_replay_catalog_views)
 
 
 def _ensure_catalog_view(table_name: str) -> None:
-    """Register a catalog layer's view and create it on the live connection."""
+    """Register a catalog layer's view and create it on the live connections.
+
+    Registration and creation happen under one lock. Registering first and
+    creating after release let a second request see the name as known and
+    query a view that did not exist yet — a 500 under the routine four-worker
+    concurrency of `get_layer_info_sync`.
+    """
     with _catalog_views_lock:
-        known = table_name in _catalog_views
-        if not known:
-            _catalog_views[table_name] = _catalog_parquet_path(table_name)
-    if known:
-        return
-    path = _catalog_views[table_name]
-    # Both owners' LIVE connections, immediately: the replay hooks only cover
-    # connections built after this point, and the pool's bases were built at
-    # startup — long before the first request registered anything.
-    with ducklake_manager.connection() as con:
-        _create_catalog_view(con, table_name, path)
-    _ducklake_pool.apply_to_bases(
-        lambda con: _create_catalog_view(con, table_name, path)
-    )
+        if table_name in _catalog_views:
+            return
+        path = _catalog_parquet_path(table_name)
+        # Both owners' LIVE connections, immediately: the replay hooks only
+        # cover connections built after this point, and the pool's bases were
+        # built at startup — long before the first request registered anything.
+        with ducklake_manager.connection() as con:
+            _create_catalog_view(con, table_name, path)
+        _ducklake_pool.apply_to_bases(
+            lambda con: _create_catalog_view(con, table_name, path)
+        )
+        _catalog_views[table_name] = path
+
+
+def _forget_catalog_view(table_name: str) -> None:
+    """Stop replaying a view whose file is gone (GC, or an operator)."""
+    with _catalog_views_lock:
+        _catalog_views.pop(table_name, None)
 
 
 # Thread pool for sync DuckDB operations in dependencies
@@ -194,6 +204,9 @@ def get_layer_info_sync(collection_id: str) -> LayerInfo:
         # Not a DuckLake table. A materialized catalog layer lives as a
         # parquet file instead; absent that too, the 404 stands.
         if not _catalog_parquet_path(table_name).exists():
+            # If we served this once and the file has since been collected,
+            # stop recreating its view on every new connection.
+            _forget_catalog_view(table_name)
             raise
         _ensure_catalog_view(table_name)
         return LayerInfo(

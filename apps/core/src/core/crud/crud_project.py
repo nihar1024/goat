@@ -98,22 +98,30 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
             grant_conditions = []
             if team_id:
                 grant_conditions.append(
-                    and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id == team_id)
+                    and_(
+                        ResourceGrant.grantee_type == "team",
+                        ResourceGrant.grantee_id == team_id,
+                    )
                 )
             if organization_id:
                 grant_conditions.append(
-                    and_(ResourceGrant.grantee_type == "organization", ResourceGrant.grantee_id == organization_id)
+                    and_(
+                        ResourceGrant.grantee_type == "organization",
+                        ResourceGrant.grantee_id == organization_id,
+                    )
                 )
             if folder_id:
                 # Check whether this folder is accessible via a ResourceGrant for the
                 # given team/org. If so, bypass the ProjectTeamLink join — projects in
                 # folder-shared folders have no such link.
                 grant_result = await async_session.execute(
-                    select(ResourceGrant.id).where(
+                    select(ResourceGrant.id)
+                    .where(
                         ResourceGrant.resource_type == "folder",
                         ResourceGrant.resource_id == folder_id,
                         or_(*grant_conditions),
-                    ).limit(1)
+                    )
+                    .limit(1)
                 )
                 use_folder_grant_query = grant_result.first() is not None
                 filters = [Project.folder_id == folder_id]
@@ -121,11 +129,9 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
                 # At team/org root: exclude projects that live inside a folder
                 # already shared with this team/org — those surface when navigating
                 # into the folder, not at the root level.
-                folder_granted_ids = (
-                    select(ResourceGrant.resource_id).where(
-                        ResourceGrant.resource_type == "folder",
-                        or_(*grant_conditions),
-                    )
+                folder_granted_ids = select(ResourceGrant.resource_id).where(
+                    ResourceGrant.resource_type == "folder",
+                    or_(*grant_conditions),
                 )
                 # NULL-safe: folder_id IS NULL means no folder, so always include it.
                 # Without this, NULL NOT IN (...) evaluates to UNKNOWN (= excluded).
@@ -142,19 +148,27 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
             grant_conditions = []
             if team_ids:
                 grant_conditions.append(
-                    and_(ResourceGrant.grantee_type == "team", ResourceGrant.grantee_id.in_(team_ids))
+                    and_(
+                        ResourceGrant.grantee_type == "team",
+                        ResourceGrant.grantee_id.in_(team_ids),
+                    )
                 )
             if user_organization_id:
                 grant_conditions.append(
-                    and_(ResourceGrant.grantee_type == "organization", ResourceGrant.grantee_id == user_organization_id)
+                    and_(
+                        ResourceGrant.grantee_type == "organization",
+                        ResourceGrant.grantee_id == user_organization_id,
+                    )
                 )
             if grant_conditions:
                 grant_result = await async_session.execute(
-                    select(ResourceGrant.id).where(
+                    select(ResourceGrant.id)
+                    .where(
                         ResourceGrant.resource_type == "folder",
                         ResourceGrant.resource_id == folder_id,
                         or_(*grant_conditions),
-                    ).limit(1)
+                    )
+                    .limit(1)
                 )
                 has_grant = grant_result.first() is not None
 
@@ -323,6 +337,15 @@ class CRUDProject(CRUDBase[Project, Any, Any]):
         project_layers = await crud_layer_project.get_layers(
             async_session=async_session, project_id=project_id
         )
+        # `catalog_materialize` is served live precisely because it keeps
+        # moving; a snapshot of it would describe a long-ready layer as pending
+        # forever. The public viewer needs the item, not the job.
+        for pl in project_layers:
+            props = getattr(pl, "other_properties", None)
+            if isinstance(props, dict) and "catalog_materialize" in props:
+                pl.other_properties = {
+                    k: v for k, v in props.items() if k != "catalog_materialize"
+                }
 
         # Import here to avoid circular imports
         from core.crud.crud_layer_project_group import layer_project_group

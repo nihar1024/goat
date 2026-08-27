@@ -442,15 +442,19 @@ class TileService:
         """
         cache_key = f"{layer_info.schema_name}/{layer_info.table_name}"
 
-        if cache_key not in self._pmtiles_exists_cache:
-            pmtiles_path = self._get_pmtiles_path(layer_info)
-            exists = pmtiles_path.exists()
-            self._pmtiles_exists_cache[cache_key] = exists
-            logger.debug(
-                "PMTiles %s for %s", "available" if exists else "not found", cache_key
-            )
-
-        return self._pmtiles_exists_cache[cache_key]
+        # One read, not check-then-get: on a TTLCache `in` and `[]` each
+        # re-evaluate expiry, so an entry can pass the test and then raise
+        # KeyError on the read (also across threads on the tile executor).
+        cached = self._pmtiles_exists_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        pmtiles_path = self._get_pmtiles_path(layer_info)
+        exists = pmtiles_path.exists()
+        self._pmtiles_exists_cache[cache_key] = exists
+        logger.debug(
+            "PMTiles %s for %s", "available" if exists else "not found", cache_key
+        )
+        return exists
 
     def invalidate_pmtiles_cache(self, schema_name: str, table_name: str) -> None:
         """Invalidate PMTiles cache for a layer.

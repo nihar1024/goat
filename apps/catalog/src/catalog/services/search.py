@@ -138,6 +138,8 @@ def _validate_bbox(bbox: list[float]) -> tuple[float, float, float, float]:
         raise ApiError(400, f"bbox latitude out of range: {bbox!r}")
     if s > n:
         raise ApiError(400, f"bbox south is greater than north: {bbox!r}")
+    # west > east is NOT an error: per OGC/STAC it is a box crossing the
+    # antimeridian, and the SQL builder splits it in two.
     return w, s, e, n
 
 
@@ -382,7 +384,18 @@ def build_filters(
 
     if p.bbox is not None:
         w, s, e, n = _validate_bbox(p.bbox)
-        if p.bbox_mode == "relevant":
+        if w > e:
+            # Crossing the antimeridian: `[170, -10, -170, 10]` means the two
+            # boxes `[170..180]` and `[-180..-170]`, not an inverted envelope
+            # that nothing satisfies. Intersection semantics in both modes; a
+            # relevance fraction across the seam has no single area to compare.
+            halves = []
+            for hw, he in ((w, 180.0), (-180.0, e)):
+                overlaps = envelope_overlaps(hw, s, he, n)
+                env = f"ST_MakeEnvelope({add(hw)}, {add(s)}, {add(he)}, {add(n)})"
+                halves.append(f"({overlaps} AND ST_Intersects({geom}, {env}))")
+            filters.append("(" + " OR ".join(halves) + ")")
+        elif p.bbox_mode == "relevant":
             # `add()` appends to a positional parameter list, so every
             # fragment must be built in the order its placeholders appear in
             # the SQL. Evaluating `envelope_overlaps` inline in the f-string

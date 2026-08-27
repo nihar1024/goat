@@ -108,7 +108,9 @@ def facet_aggregations(
     }
 
 
-def facet_params(store: CatalogStore) -> dict[str, str]:
+def facet_params(
+    store: CatalogStore, unit: AggregationUnit = "items"
+) -> dict[str, str]:
     """``{aggregation name: the query parameter that narrows it}``.
 
     Published so a client can build a whole facet sidebar from discovery
@@ -118,10 +120,18 @@ def facet_params(store: CatalogStore) -> dict[str, str]:
     Without this, every consumer hardcodes that map and drifts from the
     server the first time a facet is added.
     """
-    return {
+    params = {
         f"{q.facet_name}{_COUNT_SUFFIX}": q.param
         for q in store.registry.facets().values()
     }
+    if unit == "collections":
+        # Counting datasets offers the collection registry's facets too (see
+        # `facet_aggregations`), so a facet only a collection row carries must
+        # resolve here as well, or the lookup below is a KeyError -> 500 the
+        # first time the harvester's item schema drifts.
+        for q in store.collection_registry.facets().values():
+            params.setdefault(f"{q.facet_name}{_COUNT_SUFFIX}", q.param)
+    return params
 
 
 def aggregation_names(store: CatalogStore) -> list[str]:
@@ -139,7 +149,7 @@ def available_aggregations(
     that become semi-joins.
     """
     aggregations: list[dict[str, Any]] = [{"name": TOTAL_COUNT, "data_type": "integer"}]
-    params = facet_params(store)
+    params = facet_params(store, unit)
     for name in facet_aggregations(store, unit):
         aggregations.append(
             {
@@ -149,7 +159,7 @@ def available_aggregations(
                 # GOAT extension: the search parameter that narrows this
                 # facet. Not in the Aggregation extension, which describes
                 # what can be counted but not how to filter by it.
-                "goat:filter_param": params[name],
+                "goat:filter_param": params.get(name),
             }
         )
     return {"aggregations": aggregations}
@@ -198,6 +208,7 @@ def run_aggregations(
         where_sql, params = build_filters(p, registry=store.registry)
         collection_facets = set()
 
+    params_by_name = facet_params(store, unit)
     result: list[dict[str, Any]] = []
     for name in requested:
         if name == TOTAL_COUNT:
@@ -241,6 +252,7 @@ def run_aggregations(
                     "data_type": "frequency_distribution",
                     "frequency_distribution_data_type": "string",
                     "buckets": buckets,
+                    "goat:filter_param": params_by_name.get(name),
                 }
             )
             continue
@@ -265,7 +277,7 @@ def run_aggregations(
                 "name": name,
                 "data_type": "frequency_distribution",
                 "buckets": buckets,
-                "goat:filter_param": facet_params(store)[name],
+                "goat:filter_param": params_by_name.get(name),
             }
         )
 

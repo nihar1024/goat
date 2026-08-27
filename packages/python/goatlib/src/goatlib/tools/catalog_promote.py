@@ -31,6 +31,7 @@ import os
 import posixpath
 import uuid as uuid_module
 from collections.abc import Callable
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -303,7 +304,10 @@ async def promote(
         style.setdefault("visibility", True)
     name = (item.get("title") or "").strip() or item_id
     other_properties = {
-        "catalog_materialize": {"status": "pending"},
+        "catalog_materialize": {
+            "status": "pending",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
         "catalog_item": _jsonable(item),
     }
 

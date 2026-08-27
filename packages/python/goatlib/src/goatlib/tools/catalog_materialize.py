@@ -326,15 +326,21 @@ class CatalogMaterializeRunner(SimpleToolRunner):
             item = layer["other_properties"].get("catalog_item") or {}
             parquet_url = item.get("parquet_url")
 
+            # Deterministic input errors must land as `failed`, not raise past
+            # the status writes: a layer left at `pending` shows "preparing"
+            # forever and core's self-heal re-enqueues it every time it is
+            # re-added — a loop that never reaches the `failed` caption.
             handler_key = "vector" if layer["type"] in ("feature", "table") else None
+            problem: str | None = None
             if handler_key != "vector":
-                raise ValueError(
-                    f"No materialize handler for layer type {layer['type']!r}"
+                problem = f"No materialize handler for layer type {layer['type']!r}"
+            elif not parquet_url:
+                problem = "Layer's catalog_item snapshot has no parquet_url to fetch"
+            if problem is not None:
+                loop.run_until_complete(
+                    self._set_status(params.layer_id, "failed", {"error": problem})
                 )
-            if not parquet_url:
-                raise ValueError(
-                    "Layer's catalog_item snapshot has no parquet_url to fetch"
-                )
+                raise ValueError(problem)
 
             loop.run_until_complete(self._set_status(params.layer_id, "running"))
             try:

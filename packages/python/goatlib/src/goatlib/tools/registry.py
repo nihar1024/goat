@@ -69,15 +69,29 @@ class ToolDefinition:
         """
         import importlib
 
+        from goatlib.tools.base import BaseToolRunner, SimpleToolRunner
+
         module = importlib.import_module(self.module_path)
-        # Find the ToolRunner class in the module
-        for name in dir(module):
-            if name.endswith("ToolRunner") and not name.startswith("Base"):
-                cls = getattr(module, name)
-                # Verify it's actually a class
-                if isinstance(cls, type):
-                    return cls
-        return None
+        # The runner this module DEFINES — not one it imports. `catchment_area_v2`
+        # imports the v1 runner and `dir()` is alphabetical, so a name-suffix
+        # scan returned the wrong class; modules whose runner is named `*Runner`
+        # rather than `*ToolRunner` resolved to the imported SimpleToolRunner.
+        runners = [
+            cls
+            for cls in vars(module).values()
+            if isinstance(cls, type)
+            and issubclass(cls, SimpleToolRunner)
+            and cls not in (SimpleToolRunner, BaseToolRunner)
+        ]
+        # Prefer a runner the module defines; a thin module (`heatmap_gravity_v2`,
+        # `bundle_import`) defines none and imports exactly the one it runs.
+        defined = [c for c in runners if c.__module__ == module.__name__]
+        candidates = defined or runners
+        if not candidates:
+            return None
+        # The most derived one, if a module layers a base runner and its tool.
+        candidates.sort(key=lambda c: len(c.__mro__), reverse=True)
+        return candidates[0]
 
     def get_output_geometry_type(self: Self) -> str | None:
         """Get the output geometry type from the tool runner.

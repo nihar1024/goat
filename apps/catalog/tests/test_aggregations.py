@@ -268,3 +268,21 @@ class TestItemFacetsOnCollectionSearch:
             "an item-level facet is available on collection search now, "
             "so it belongs in the list of what the caller could have sent"
         )
+
+
+def test_every_dataset_aggregation_carries_a_filter_param(store: CatalogStore) -> None:
+    """Counting datasets offers the collection registry's facets too; each must
+    still resolve to the parameter that narrows it, or the lookup was a
+    KeyError -> 500 the first time the two registries disagreed."""
+    from catalog.services.aggregations import run_aggregations
+    from catalog.services.search import SearchParams
+
+    body = run_aggregations(store, SearchParams(limit=1), None, "collections")
+    facets = [
+        a
+        for a in body["aggregations"]
+        if a.get("data_type") == "frequency_distribution"
+    ]
+    assert facets, "no facet aggregations were produced"
+    missing = [a["name"] for a in facets if not a.get("goat:filter_param")]
+    assert not missing, missing

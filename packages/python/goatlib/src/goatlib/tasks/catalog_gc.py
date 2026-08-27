@@ -141,12 +141,26 @@ class CatalogGCTask:
                               SELECT 1 FROM {schema}.layer_project lp
                               WHERE lp.layer_id = l.id
                           )
+                          -- Promote protects a reused layer by bumping
+                          -- updated_at; honour that here too, or a re-add that
+                          -- lands between the candidate SELECT and this DELETE
+                          -- loses its layer and then FK-fails on the link.
+                          AND l.updated_at < NOW() - make_interval(hours => $2)
+                          -- A job mid-flight would write its file after the row
+                          -- is gone and leave it orphaned forever.
+                          AND COALESCE(
+                              l.other_properties->'catalog_materialize'->>'status', ''
+                          ) <> 'running'
                         RETURNING l.id
                         """,
                         row["id"],
+                        params.grace_hours,
                     )
                     if deleted_row is None:
-                        logger.info("  skipped %s (relinked meanwhile)", layer_id)
+                        logger.info(
+                            "  skipped %s (relinked, reused or running meanwhile)",
+                            layer_id,
+                        )
                         continue
                     for p in paths:
                         if p.exists():

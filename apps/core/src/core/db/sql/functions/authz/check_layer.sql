@@ -10,8 +10,8 @@ DECLARE
     needed_role_names   TEXT[];
     layer_id_loop       UUID;
     status_check        BOOLEAN := FALSE;
-    folder_grant_role   TEXT;
-    bundle_grant_role TEXT;
+    folder_grant_roles  TEXT[];
+    bundle_grant_roles  TEXT[];
     resource_method_arr TEXT[];
 BEGIN
 
@@ -145,8 +145,11 @@ BEGIN
          *    folder-viewer → read-only (resource must not include
          *                    POST / PUT / DELETE / PATCH)
          */
-        SELECT r.name
-        INTO   folder_grant_role
+        -- Every role the user reaches this folder through, not the first row the
+        -- planner happens to return: a viewer grant via the org and an
+        -- editor grant via a team must add up to editor.
+        SELECT array_agg(DISTINCT r.name)
+        INTO   folder_grant_roles
         FROM   customer.layer            l
         JOIN   customer.resource_grant   rg
             ON rg.resource_type = 'folder'
@@ -171,15 +174,14 @@ BEGIN
                           AND  u.organization_id = rg.grantee_id
                     )
                )
-          )
-        LIMIT 1;
+          );
 
-        IF folder_grant_role = 'folder-editor' THEN
+        IF 'folder-editor' = ANY(folder_grant_roles) THEN
             status_check := TRUE;
             CONTINUE;
         END IF;
 
-        IF folder_grant_role = 'folder-viewer'
+        IF 'folder-viewer' = ANY(folder_grant_roles)
            AND resource_method_arr IS NOT NULL
            AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
         THEN
@@ -211,8 +213,11 @@ BEGIN
             CONTINUE;
         END IF;
 
-        SELECT r.name
-        INTO   bundle_grant_role
+        -- Every role the user reaches this bundle through, not the first row the
+        -- planner happens to return: a viewer grant via the org and an
+        -- editor grant via a team must add up to editor.
+        SELECT array_agg(DISTINCT r.name)
+        INTO   bundle_grant_roles
         FROM   customer.bundle_layer dpl
         JOIN   customer.resource_grant   rg
             ON rg.resource_type = 'bundle'
@@ -236,21 +241,25 @@ BEGIN
                           AND  u.organization_id = rg.grantee_id
                     )
                )
-          )
-        LIMIT 1;
+          );
 
-        IF bundle_grant_role = 'bundle-editor' THEN
+        IF 'bundle-editor' = ANY(bundle_grant_roles) THEN
             status_check := TRUE;
             CONTINUE;
         END IF;
 
-        IF bundle_grant_role = 'bundle-viewer'
+        IF 'bundle-viewer' = ANY(bundle_grant_roles)
            AND resource_method_arr IS NOT NULL
            AND NOT (resource_method_arr && ARRAY['POST','PUT','DELETE','PATCH']::text[])
         THEN
             status_check := TRUE;
             CONTINUE;
         END IF;
+
+        /* Nothing above granted this layer. Fail now: status_check is never
+           reset inside the loop, so without this a batch where layer 1 is
+           allowed and layer 2 is not would pass for both. */
+        RAISE EXCEPTION 'User does not have access to the layers';
 
     END LOOP;
 

@@ -705,6 +705,65 @@ def test_invalid_query_is_still_400(store: CatalogStore) -> None:
     assert exc.value.status_code == 400
 
 
+class TestAntimeridianBbox:
+    """A bbox with west > east crosses the antimeridian (valid per OGC/STAC):
+    it means two boxes, one on each side, not an inverted envelope that
+    nothing satisfies."""
+
+    def test_matches_items_on_both_sides_of_the_seam(self, tmp_path: Path) -> None:
+        import dataclasses
+        import random
+
+        from .fixtures.gen_catalog import _make_row
+
+        def square(w: float, s: float, size: float) -> tuple[str, dict[str, Any]]:
+            e, n = w + size, s + size
+            return (
+                f"POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))",
+                {
+                    "type": "Polygon",
+                    "coordinates": [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+                },
+            )
+
+        base = _make_row(random.Random(1), 0)
+        east_wkt, east_geo = square(175.0, 0.0, 1.0)  # just west of the seam
+        west_wkt, west_geo = square(-176.0, 0.0, 1.0)  # just east of the seam
+        rows = [
+            dataclasses.replace(
+                base,
+                id="fiji-side",
+                collection=None,
+                geometry_wkt=east_wkt,
+                geometry_geojson=east_geo,
+            ),
+            dataclasses.replace(
+                base,
+                id="samoa-side",
+                collection=None,
+                geometry_wkt=west_wkt,
+                geometry_geojson=west_geo,
+            ),
+        ]
+        write_catalog(tmp_path, n=14, extra_rows=rows)
+        write_nuts(tmp_path)
+        s = CatalogStore(CatalogSettings(data_dir=tmp_path))
+        s.ensure_current()
+
+        found, n = search_items(
+            s, SearchParams(bbox=[170.0, -10.0, -170.0, 10.0], limit=10)
+        )
+        ids = {r["id"] for r in found}
+        assert ids == {"fiji-side", "samoa-side"}, ids
+        assert n == 2
+
+        # and a box that stays on one side still excludes the other
+        found, _ = search_items(
+            s, SearchParams(bbox=[170.0, -10.0, 180.0, 10.0], limit=10)
+        )
+        assert {r["id"] for r in found} == {"fiji-side"}
+
+
 class TestNutsSpatialFilter:
     """`?nuts=` filters by a region's geometry (the spatial filter's backend).
 

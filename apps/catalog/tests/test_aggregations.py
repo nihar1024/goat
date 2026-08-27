@@ -303,9 +303,9 @@ class TestSingleScan:
         seen: list[str] = []
         original = store.query
 
-        def recording(sql: str, params: list | None = None):  # type: ignore[no-untyped-def]
+        def recording(sql, params=None, con=None):  # type: ignore[no-untyped-def]
             seen.append(sql)
-            return original(sql, params)
+            return original(sql, params, con=con)
 
         monkeypatch.setattr(store, "query", recording)
         return seen

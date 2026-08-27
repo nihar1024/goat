@@ -237,7 +237,10 @@ def _q_rank_sql(terms: list[list[str]], add: Any) -> str:
 
 
 def safe_query(
-    store: CatalogStore, sql: str, params: list[Any] | None = None
+    store: CatalogStore,
+    sql: str,
+    params: list[Any] | None = None,
+    con: duckdb.DuckDBPyConnection | None = None,
 ) -> list[tuple[Any, ...]]:
     """Run a store query, translating a DuckDB execution error into an
     ``ApiError`` instead of letting it surface as a bare 500.
@@ -258,7 +261,7 @@ def safe_query(
     makes this reachable in production rather than theoretical.
     """
     try:
-        return store.query(sql, params)
+        return store.query(sql, params, con=con)
     except duckdb.OutOfMemoryException as exc:
         raise ApiError(
             503,
@@ -657,7 +660,10 @@ def _build_order_by(
 
 
 def _rows_as_dicts(
-    store: CatalogStore, sql: str, params: list[Any]
+    store: CatalogStore,
+    sql: str,
+    params: list[Any],
+    con: duckdb.DuckDBPyConnection | None = None,
 ) -> list[dict[str, Any]]:
     """Run a query and return rows as ``{column: value}``.
 
@@ -666,7 +672,7 @@ def _rows_as_dicts(
     conversion in SQL keeps it to the page's rows.
     """
     try:
-        return store.query_dicts(sql, params)
+        return store.query_dicts(sql, params, con=con)
     except duckdb.OutOfMemoryException as exc:
         raise ApiError(
             503,
@@ -698,13 +704,20 @@ def search_items(
     # Validated up front (400s either way) since it
     # only ever feeds ORDER BY, never build_filters' WHERE clause.
     boost = _validated_bbox_boost(p)
-    where_sql, params = build_filters(p, registry=store.registry)
-    order_sql, order_params = _build_order_by(p, boost, registry=store.registry)
+    # One generation for the whole call: the WHERE clause is compiled from this
+    # registry and must run on the connection it describes, not on whatever a
+    # reload landing mid-request swapped in.
+    snap = store.snapshot()
+    where_sql, params = build_filters(p, registry=snap.registry)
+    order_sql, order_params = _build_order_by(p, boost, registry=snap.registry)
     limit = max(p.limit, 0)
     offset = max(p.offset, 0)
 
     count_rows = safe_query(
-        store, f"SELECT count(*) FROM {CatalogStore.ITEMS} WHERE {where_sql}", params
+        store,
+        f"SELECT count(*) FROM {CatalogStore.ITEMS} WHERE {where_sql}",
+        params,
+        con=snap.con,
     )
     number_matched = int(count_rows[0][0]) if count_rows else 0
 
@@ -712,7 +725,9 @@ def search_items(
         f"SELECT * REPLACE (ST_AsGeoJSON(geometry) AS geometry) "
         f"FROM {CatalogStore.ITEMS} WHERE {where_sql} {order_sql} LIMIT ? OFFSET ?"
     )
-    rows = _rows_as_dicts(store, select_sql, [*params, *order_params, limit, offset])
+    rows = _rows_as_dicts(
+        store, select_sql, [*params, *order_params, limit, offset], con=snap.con
+    )
     for row in rows:
         if row.get("collection"):
             row["goat:row_collection"] = row["collection"]
@@ -732,10 +747,11 @@ def search_collections(
     ``bbox_boost`` ranks intersecting collections first, validated exactly like
     Item Search's (400 on a malformed box).
     """
-    registry = store.collection_registry
+    snap = store.snapshot()
+    registry = snap.collection_registry
     boost = _validated_bbox_boost(p)
     where_sql, params = build_filters(
-        p, registry=registry, relation="collections", item_registry=store.registry
+        p, registry=registry, relation="collections", item_registry=snap.registry
     )
     order_sql, order_params = _build_order_by(p, boost, registry=registry)
     limit = max(p.limit, 0)
@@ -745,6 +761,7 @@ def search_collections(
         store,
         f"SELECT count(*) FROM {CatalogStore.COLLECTIONS} WHERE {where_sql}",
         params,
+        con=snap.con,
     )
     number_matched = int(count_rows[0][0]) if count_rows else 0
 
@@ -753,7 +770,9 @@ def search_collections(
         f"FROM {CatalogStore.COLLECTIONS} WHERE {where_sql} {order_sql} "
         f"LIMIT ? OFFSET ?"
     )
-    rows = _rows_as_dicts(store, select_sql, [*params, *order_params, limit, offset])
+    rows = _rows_as_dicts(
+        store, select_sql, [*params, *order_params, limit, offset], con=snap.con
+    )
     return rows, number_matched
 
 

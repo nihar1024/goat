@@ -15,11 +15,16 @@ mirror's precomputed ``search_text`` column instead.
 Concurrency model:
 
 - Reads run against a per-call cursor cloned from a connection reference
-  snapshotted at call start (``con = self._con``; ``cur = con.cursor()``).
-  A ``DuckDBPyConnection`` must not be driven from multiple threads at
-  once, but ``cursor()`` is a cheap per-call clone that shares the
-  in-memory database, so concurrent callers never contend on the same
-  cursor object.
+  snapshotted at call start (``con = self._state.con``; ``cur =
+  con.cursor()``). A ``DuckDBPyConnection`` must not be driven from
+  multiple threads at once, but ``cursor()`` is a cheap per-call clone that
+  shares the in-memory database, so concurrent callers never contend on the
+  same cursor object.
+- Everything a reload replaces -- connection, both registries, ETag seed --
+  lives in ONE ``CatalogState`` held as ``self._state``, so the swap is a single
+  rebinding. A caller that needs the registry *and* the connection to agree
+  (it compiles SQL from one and runs it on the other) takes ``snapshot()``
+  once, instead of reading two attributes a reload can land between.
 - Only one reload runs at a time (``_reload_lock``, acquired
   non-blocking): ``ensure_current`` runs on every request, so without it a
   sync landing under load starts a full rebuild in every concurrent
@@ -28,7 +33,7 @@ Concurrency model:
 - A reload builds a completely new connection (with freshly created
   views + NUTS table) OUTSIDE the lock, so concurrent requests are never
   blocked for the duration of a reload. The lock is
-  only held to compare-and-swap ``self._con``/``self._marker``/
+  only held to compare-and-swap ``self._state``/``self._marker``/
   ``self.version``. Because ``_reload_lock`` serialises builds, two of them
   can never be in flight at once, so a slow build cannot land after a
   faster, newer one and regress the store — the single-flight guard
@@ -132,8 +137,13 @@ _Marker = tuple[float, str, float, int]
 
 
 @dataclass
-class _Built:
-    """Result of a from-scratch build, applied under the lock on swap-in."""
+class CatalogState:
+    """One generation of the served catalog: the connection, what is queryable
+    on it, and the ETag seed for the bytes behind it.
+
+    Built from scratch by ``CatalogStore._build`` and applied under the lock on
+    swap-in. Handed out whole by ``CatalogStore.snapshot()`` so a caller can pin
+    a request to one generation."""
 
     con: duckdb.DuckDBPyConnection
     marker: _Marker
@@ -166,13 +176,11 @@ class CatalogStore:
         self.version: str = ""
         self.loaded_at: datetime = datetime.now(timezone.utc)
         self._marker: _Marker = (0.0, "", 0.0, 0)
-        built = self._build()
-        self._con: duckdb.DuckDBPyConnection = built.con
-        self._registry: QueryableRegistry = built.registry
-        self._collection_registry: QueryableRegistry = built.collection_registry
-        self._etag_seed: str = built.etag_seed
-        self._marker = built.marker
-        self.version = built.version
+        #: The whole swappable generation in ONE attribute, so a reload is a
+        #: single rebinding and no reader can see half of it.
+        self._state: CatalogState = self._build()
+        self._marker = self._state.marker
+        self.version = self._state.version
         self.loaded_at = datetime.now(timezone.utc)
 
     def _content_digest(self) -> str:
@@ -291,7 +299,7 @@ class CatalogStore:
         if self._settings.duckdb_threads:
             con.execute(f"SET threads={self._settings.duckdb_threads}")
 
-    def _build(self) -> _Built:
+    def _build(self) -> CatalogState:
         """Build a brand-new connection, catalog view and NUTS table.
 
         Deliberately does NOT touch ``self`` — this runs outside the lock
@@ -375,7 +383,7 @@ class CatalogStore:
                 relation="collections" if relation == self.COLLECTIONS else "items",
             )
 
-        return _Built(
+        return CatalogState(
             con=con,
             marker=marker,
             version=version,
@@ -424,10 +432,7 @@ class CatalogStore:
                 # connection rather than swapping an identical one in.
                 built.con.close()
                 return
-            self._con = built.con
-            self._registry = built.registry
-            self._collection_registry = built.collection_registry
-            self._etag_seed = built.etag_seed
+            self._state = built
             self._marker = built.marker
             self.version = built.version
             self.loaded_at = datetime.now(timezone.utc)
@@ -444,19 +449,19 @@ class CatalogStore:
         Swapped with the connection under the same lock, so a caller cannot
         stamp a tag from one generation onto a body built from another.
         """
-        return self._etag_seed
+        return self._state.etag_seed
 
     @property
     def registry(self) -> QueryableRegistry:
         """What is filterable/sortable/facetable in the currently loaded table.
 
-        Read through a single attribute load, like ``query()`` reads
-        ``self._con``: a reload replaces both in one locked swap, so a caller
-        that grabs the registry and then queries can be one generation behind
-        but never sees a registry describing a different table than the one it
-        queries.
+        A convenience read of ``snapshot().registry`` for callers that only
+        need the queryables (``/queryables``, the conformance classes, MCP's
+        tool descriptions). A caller that goes on to *run* SQL built from it
+        should take ``snapshot()`` and pass its connection, so the schema it
+        compiled against is the one it executes on.
         """
-        return self._registry
+        return self._state.registry
 
     @property
     def collection_registry(self) -> QueryableRegistry:
@@ -466,10 +471,27 @@ class CatalogStore:
         two relations genuinely differ: a collection has no ``parquet_url``,
         no ``goat:geometryType`` and no bundle representative.
         """
-        return self._collection_registry
+        return self._state.collection_registry
 
-    def query(self, sql: str, params: list[Any] | None = None) -> list[tuple[Any, ...]]:
-        con = self._con
+    def snapshot(self) -> CatalogState:
+        """The current generation, as one object.
+
+        A caller that reads the registry, builds SQL from it and then runs that
+        SQL is doing two things a reload sits between: taking a snapshot first
+        pins both to the same generation, so it cannot compile against a new
+        schema and execute against the old connection (or the reverse). The
+        connection a snapshot holds stays usable afterwards -- a reload
+        replaces the store's reference, it does not close the connection.
+        """
+        return self._state
+
+    def query(
+        self,
+        sql: str,
+        params: list[Any] | None = None,
+        con: duckdb.DuckDBPyConnection | None = None,
+    ) -> list[tuple[Any, ...]]:
+        con = con or self._state.con
         cur = con.cursor()
         try:
             result = (
@@ -480,9 +502,12 @@ class CatalogStore:
             cur.close()
 
     def query_dicts(
-        self, sql: str, params: list[Any] | None = None
+        self,
+        sql: str,
+        params: list[Any] | None = None,
+        con: duckdb.DuckDBPyConnection | None = None,
     ) -> list[dict[str, Any]]:
-        con = self._con
+        con = con or self._state.con
         cur = con.cursor()
         try:
             result = (

@@ -20,11 +20,12 @@ names.
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import duckdb
 from pydantic import BaseModel, ConfigDict, Field
 
 from catalog.errors import ApiError
 from catalog.services.search import SearchParams, build_filters, safe_query
-from catalog.store import CatalogStore
+from catalog.store import CatalogState, CatalogStore
 
 TOTAL_COUNT = "total_count"
 
@@ -83,7 +84,9 @@ AggregationUnit = Literal["items", "collections"]
 
 
 def facet_aggregations(
-    store: CatalogStore, unit: AggregationUnit = "items"
+    store: CatalogStore,
+    unit: AggregationUnit = "items",
+    snap: CatalogState | None = None,
 ) -> dict[str, str]:
     """``{aggregation name: column expression}`` for the loaded table.
 
@@ -92,9 +95,10 @@ def facet_aggregations(
     and "how many datasets have a polygon layer" is a question worth answering.
     Those become semi-joins in :func:`run_aggregations`.
     """
+    state = snap or store.snapshot()
     facets = {
         f"{q.facet_name}{_COUNT_SUFFIX}": q.expr
-        for q in store.registry.facets().values()
+        for q in state.registry.facets().values()
     }
     if unit == "items":
         return facets
@@ -104,13 +108,15 @@ def facet_aggregations(
         **facets,
         **{
             f"{q.facet_name}{_COUNT_SUFFIX}": q.expr
-            for q in store.collection_registry.facets().values()
+            for q in state.collection_registry.facets().values()
         },
     }
 
 
 def facet_params(
-    store: CatalogStore, unit: AggregationUnit = "items"
+    store: CatalogStore,
+    unit: AggregationUnit = "items",
+    snap: CatalogState | None = None,
 ) -> dict[str, str]:
     """``{aggregation name: the query parameter that narrows it}``.
 
@@ -121,16 +127,17 @@ def facet_params(
     Without this, every consumer hardcodes that map and drifts from the
     server the first time a facet is added.
     """
+    state = snap or store.snapshot()
     params = {
         f"{q.facet_name}{_COUNT_SUFFIX}": q.param
-        for q in store.registry.facets().values()
+        for q in state.registry.facets().values()
     }
     if unit == "collections":
         # Counting datasets offers the collection registry's facets too (see
         # `facet_aggregations`), so a facet only a collection row carries must
         # resolve here as well, or the lookup below is a KeyError -> 500 the
         # first time the harvester's item schema drifts.
-        for q in store.collection_registry.facets().values():
+        for q in state.collection_registry.facets().values():
             params.setdefault(f"{q.facet_name}{_COUNT_SUFFIX}", q.param)
     return params
 
@@ -177,6 +184,7 @@ class _GroupedCounts:
 def _grouped_counts(
     store: CatalogStore,
     *,
+    con: duckdb.DuckDBPyConnection,
     relation: str,
     where_sql: str,
     params: list[Any],
@@ -198,7 +206,10 @@ def _grouped_counts(
         if not with_total:
             return _GroupedCounts(0, {})
         rows = safe_query(
-            store, f"SELECT count(*) FROM {relation} WHERE {where_sql}", params
+            store,
+            f"SELECT count(*) FROM {relation} WHERE {where_sql}",
+            params,
+            con=con,
         )
         return _GroupedCounts(int(rows[0][0]) if rows else 0, {})
 
@@ -216,6 +227,7 @@ def _grouped_counts(
         GROUP BY GROUPING SETS ({sets})
         """,
         params,
+        con=con,
     )
 
     width = len(columns)
@@ -256,7 +268,10 @@ def run_aggregations(
     listing datasets must ask for ``collections``, or its facet counts describe a
     different set of things than its results do.
     """
-    facets = facet_aggregations(store, unit)
+    # One generation for the whole call: which facets exist, the SQL built from
+    # them and the connection it runs on must all describe the same file.
+    snap = store.snapshot()
+    facets = facet_aggregations(store, unit, snap)
     known = [TOTAL_COUNT, *facets]
     if names is None:
         requested = known
@@ -270,26 +285,27 @@ def run_aggregations(
         relation = CatalogStore.COLLECTIONS
         where_sql, params = build_filters(
             p,
-            registry=store.collection_registry,
+            registry=snap.collection_registry,
             relation="collections",
-            item_registry=store.registry,
+            item_registry=snap.registry,
         )
         collection_facets = {
             f"{q.facet_name}{_COUNT_SUFFIX}"
-            for q in store.collection_registry.facets().values()
+            for q in snap.collection_registry.facets().values()
         }
     else:
         relation = CatalogStore.ITEMS
-        where_sql, params = build_filters(p, registry=store.registry)
+        where_sql, params = build_filters(p, registry=snap.registry)
         collection_facets = set()
 
-    params_by_name = facet_params(store, unit)
+    params_by_name = facet_params(store, unit, snap)
 
     # Everything countable in one pass over `relation`: the total and every facet
     # that groups a column of that same relation. One scan instead of N+1 -- 26 ms
     # against the 38k-row mirror where the loop took 166 ms.
     grouped = _grouped_counts(
         store,
+        con=snap.con,
         relation=relation,
         where_sql=where_sql,
         params=params,
@@ -334,6 +350,7 @@ def run_aggregations(
                 ORDER BY frequency DESC, key ASC
                 """,
                 params,
+                con=snap.con,
             )
             buckets = [
                 {"key": key, "data_type": "string", "frequency": int(frequency)}

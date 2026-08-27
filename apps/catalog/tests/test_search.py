@@ -685,7 +685,9 @@ def test_out_of_memory_is_503_not_400(store: CatalogStore) -> None:
     """
     import duckdb as _duckdb
 
-    def raise_oom(sql: str, params: list[Any] | None = None) -> list[Any]:
+    def raise_oom(
+        sql: str, params: list[Any] | None = None, con: Any | None = None
+    ) -> list[Any]:
         raise _duckdb.OutOfMemoryException("failed to allocate data of size 128 MiB")
 
     original = store.query

@@ -19,6 +19,8 @@ from goatlib.tasks.sync_catalog import (
 )
 
 from catalog.config import CatalogSettings
+from catalog.services import search as search_module
+from catalog.services.search import SearchParams, search_items
 from catalog.services.stac_build import collection_from_row, item_from_row
 from catalog.store import _ITEM_COLUMNS_SQL, CatalogStore
 
@@ -149,24 +151,24 @@ def test_store_ensure_current_noop_when_unchanged(tmp_path: Path) -> None:
     write_catalog(tmp_path)
 
     store = CatalogStore(CatalogSettings(data_dir=tmp_path))
-    con_before = store._con
+    con_before = store.snapshot().con
 
     store.ensure_current()
 
-    assert store._con is con_before
+    assert store.snapshot().con is con_before
 
 
 def test_store_reload_on_marker_change(tmp_path: Path) -> None:
     write_catalog(tmp_path, n=200, version="v-test-1")
 
     store = CatalogStore(CatalogSettings(data_dir=tmp_path))
-    con_before = store._con
+    con_before = store.snapshot().con
     assert store.query(f"SELECT count(*) FROM {store.ITEMS}")[0][0] == 199
 
     write_catalog(tmp_path, n=50, version="v-test-2")
     store.ensure_current()
 
-    assert store._con is not con_before
+    assert store.snapshot().con is not con_before
     assert store.version == "v-test-2"
     assert store.query(f"SELECT count(*) FROM {store.ITEMS}")[0][0] == 49
 
@@ -234,7 +236,7 @@ def test_store_query_survives_slow_rebuild(
     request never mixes new content with an old tag."""
     write_catalog(tmp_path, n=200, version="v-test-1")
     store = CatalogStore(CatalogSettings(data_dir=tmp_path))
-    con_before = store._con
+    con_before = store.snapshot().con
 
     build_started = threading.Event()
     release_build = threading.Event()
@@ -256,14 +258,14 @@ def test_store_query_survives_slow_rebuild(
     # a query must complete immediately rather than block on the store's lock.
     rows = store.query(f"SELECT count(*) FROM {store.ITEMS}")
     assert rows[0][0] > 0
-    assert store._con is con_before  # swap hasn't happened yet
+    assert store.snapshot().con is con_before  # swap hasn't happened yet
 
     release_build.set()
     reload_thread.join(timeout=5)
     assert not reload_thread.is_alive()
 
     assert store.version == "v-test-2"
-    assert store._con is not con_before
+    assert store.snapshot().con is not con_before
     assert store.query(f"SELECT count(*) FROM {store.ITEMS}")[0][0] == 49
 
 
@@ -467,3 +469,54 @@ def test_fixture_matches_the_schema_the_store_declares(tmp_path: Path) -> None:
     con.close()
     missing = set(declared) - set(fixture_columns)
     assert not missing, f"the fixture is missing declared columns: {sorted(missing)}"
+
+
+def test_a_search_that_straddles_a_reload_stays_on_one_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The WHERE clause is compiled from the registry and then run — a reload
+    landing in between used to leave the query on a connection the registry did
+    not describe, so a column added or dropped by the new file surfaced as a
+    binder error on one unlucky request.
+
+    Reproduced by swapping the store mid-call: `build_filters` is where the
+    registry has been read and the SQL not yet executed, which is exactly the
+    window. What the snapshot pins is the *schema* — the relations and NUTS
+    table that connection was built for — not the data: both generations' views
+    read the same paths, so the rows a pinned connection returns are whatever is
+    on disk when the query runs.
+    """
+    write_catalog(tmp_path, n=200, version="v-test-1")
+    store = CatalogStore(CatalogSettings(data_dir=tmp_path))
+    pinned = store.snapshot().con
+
+    ran_on: list[object] = []
+    original_query = store.query
+    original_dicts = store.query_dicts
+
+    def recording(sql, params=None, con=None):  # type: ignore[no-untyped-def]
+        ran_on.append(con)
+        return original_query(sql, params, con=con)
+
+    def recording_dicts(sql, params=None, con=None):  # type: ignore[no-untyped-def]
+        ran_on.append(con)
+        return original_dicts(sql, params, con=con)
+
+    monkeypatch.setattr(store, "query", recording)
+    monkeypatch.setattr(store, "query_dicts", recording_dicts)
+
+    original_filters = search_module.build_filters
+
+    def reload_then_filter(*args, **kwargs):  # type: ignore[no-untyped-def]
+        write_catalog(tmp_path, n=50, version="v-test-2")
+        store.ensure_current()
+        return original_filters(*args, **kwargs)
+
+    monkeypatch.setattr(search_module, "build_filters", reload_then_filter)
+
+    rows, matched = search_items(store, SearchParams(limit=5))
+
+    assert store.snapshot().con is not pinned, "the reload did happen mid-call"
+    assert len(ran_on) == 2, "count and page"
+    assert all(con is pinned for con in ran_on)
+    assert len(rows) == 5 and matched > 0

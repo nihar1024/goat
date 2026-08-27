@@ -705,9 +705,12 @@ would hit first.
       (`test_layer_import_runner.py:132`, `test_project_export_import.py:686-724`,
       conftest helpers) while production writes to `main` — they fail against
       correct code, and a regression in the `main` write path cannot be caught.
-- [ ] `ARCHIVE_SKIP_EXTS` (new on this branch) silently skips `.txt`/`.dsv`
+- [x] `ARCHIVE_SKIP_EXTS` (new on this branch) silently skips `.txt`/`.dsv`
       inside a zip; a zipped folder of tab-delimited exports now imports nothing,
-      with no message.
+      with no message. `_discover_from_zip` now tracks whether anything was
+      yielded (across nesting) and raises `DiscoveryError` naming the skipped
+      files when they were the only candidates. A README beside real data stays
+      silent.
 - [ ] Custom SQL workflow node lost its catalog source with the old explorer
       (separate surface from the dataset node already logged).
 - [x] `apps/docs` `getting_started/welcome.md:16` and the DE tutorial intro still
@@ -718,11 +721,25 @@ would hit first.
 - [x] All 15 `/stac` handlers are `async def` running synchronous DuckDB
       scans on the event loop — one slow query freezes the service. Make them
       plain `def` or offload to a thread.
-- [ ] The reload path SHA-256s every served parquet end-to-end on the request
-      that wins the lock.
-- [ ] `run_aggregations` runs one full filtered scan per facet (N+1) and
-      `search_*` run count and page as two scans; `record_to_item` deep-copies
-      every row for no reason.
+- [x] The reload path SHA-256s every served parquet end-to-end on the request
+      that wins the lock. **Measured, left alone:** 36 ms over the 60 MB of
+      mirror + NUTS, 19% of a 193 ms rebuild, paid by one request per sync and
+      no other. A cheaper seed (mtime, sampled bytes) is what the ETag comment
+      already rejects — it either differs across replicas or fails to change
+      when the converter does.
+- [x] `run_aggregations` runs one full filtered scan per facet (N+1) —
+      now a single `GROUPING SETS` pass (`_grouped_counts`), with the empty
+      grouping set supplying `total_count` for free: 166 ms → 26 ms for the
+      default sidebar over the 38k-row mirror. Facet rows are identified by
+      per-column `GROUPING()` flags rather than a bitmask, so the mapping does
+      not depend on argument order. `record_to_item`/`collection_to_stac` now
+      copy shallowly — every edit replaces a top-level member, so the deep walk
+      was pure cost.
+      **`search_*`'s count+page double scan: measured, rejected.** A single
+      `count(*) OVER ()` scan is *slower* than the two queries — 228 ms vs
+      110 ms unfiltered, 148 ms vs 155 ms filtered — because the window forces
+      the full result set through one operator while `count(*)` alone is served
+      from parquet metadata.
 - [x] `add_catalog_items_to_project` opens a DuckDB connection and rescans the
       mirror per item, synchronously in the async handler, after
       `resolve_item_ids` already scanned it.

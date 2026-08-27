@@ -22,6 +22,7 @@ from catalog.config import CatalogSettings
 from catalog.errors import ApiError
 from catalog.services.assets import (
     ASSET_KINDS,
+    AssetKind,
     AssetReader,
     valid_item_id,
 )
@@ -189,6 +190,42 @@ class TestReachableObjects:
                 THUMB, _row(assets={"thumbnail": {"href": "../../../thumbs/nope.svg"}})
             )
         assert excinfo.value.status_code == 404
+
+
+class TestConcurrentReads:
+    """The reader is shared across FastAPI's threadpool, so two requests read
+    at the same time. A single DuckDB connection is not safe for that: an
+    ``execute`` on one thread can be answered by a ``fetchall`` on another,
+    handing one item's bytes to a request for a different item. The other
+    readers clone a cursor per call; this one must too.
+
+    The objects are a couple of megabytes on purpose. With tiny ones each read
+    finishes before another thread can interleave, and the test passes against
+    the unsafe code.
+    """
+
+    def test_parallel_reads_each_get_their_own_object(self, tmp_path: Path) -> None:
+        import concurrent.futures
+        from collections import Counter
+
+        root = tmp_path / "bucket"
+        (root / "thumbs").mkdir(parents=True)
+        (root / "styles").mkdir(parents=True)
+        thumb = b"A" * 2_000_000
+        style = b"B" * 2_000_000
+        (root / "thumbs" / "item-1.svg").write_bytes(thumb)
+        (root / "styles" / "item-1.json").write_bytes(style)
+        reader = _LocalReader(_settings(tmp_path, assets_max_bytes=10_000_000), root)
+        expected = {THUMB: thumb, STYLE: style}
+
+        def one(kind: AssetKind) -> str:
+            content, _media, _key = reader.read(kind, _row())
+            return "ok" if content == expected[kind] else "another object's bytes"
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            outcomes = Counter(pool.map(one, [THUMB, STYLE] * 1000))
+
+        assert outcomes == {"ok": 2000}, dict(outcomes)
 
 
 class TestMediaType:

@@ -335,8 +335,14 @@ def build_filters(
     # else is filtered.
     filters: list[str] = ["TRUE"]
 
-    geom = "geometry"
-    env_prefix = "bbox"
+    # Qualified with the relation, not bare: the NUTS filter below is a
+    # correlated EXISTS whose inner table has its own `geometry`, and a bare
+    # name inside it resolves to *that* one — the region tested against itself,
+    # which is always true. The envelope columns are qualified for the same
+    # reason, even though nothing in the subquery shadows them today.
+    rel = CatalogStore.ITEMS if relation == "items" else CatalogStore.COLLECTIONS
+    geom = f"{rel}.geometry"
+    env_prefix = f"{rel}.bbox"
 
     def envelope_overlaps(w: float, s: float, e: float, n: float) -> str:
         """Cheap numeric overlap test against the row's stored envelope.

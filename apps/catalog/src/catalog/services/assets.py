@@ -189,18 +189,21 @@ class AssetReader:
         )
 
         url = self.object_url(key)
+        # A cursor per call, never the shared connection: the reader serves
+        # concurrent threadpool requests, and a DuckDB connection is not safe to
+        # execute on from two threads at once — one request's fetch can return
+        # another request's rows, i.e. item A's thumbnail under item B's URL.
+        cursor = self._connect().cursor()
         try:
-            rows = (
-                self._connect()
-                .execute("SELECT content FROM read_blob(?)", [url])
-                .fetchall()
-            )
+            rows = cursor.execute("SELECT content FROM read_blob(?)", [url]).fetchall()
         except duckdb.Error as exc:
             # The object is named by a published href, so a miss is upstream
             # drift (an href pointing at something that was never uploaded)
             # rather than a client error worth a 500.
             logger.warning("asset read failed for %s: %s", key, exc)
             raise ApiError(404, f"{kind.name} is not available") from exc
+        finally:
+            cursor.close()
 
         if not rows or rows[0][0] is None:
             raise ApiError(404, f"{kind.name} is not available")

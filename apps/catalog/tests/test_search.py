@@ -741,6 +741,74 @@ class TestNutsSpatialFilter:
         _, blank = search_items(store, SearchParams(nuts=["", "  "], limit=10))
         assert blank == everything
 
+    def test_matches_the_region_shape_not_its_bounding_box(
+        self, tmp_path: Path
+    ) -> None:
+        """An item inside a region's envelope but outside its geometry must not
+        match.
+
+        The generated regions are rectangles, for which the two tests agree, so
+        this needs a concave one: an L covering ``(0..10, 0..1) U (0..1, 0..10)``,
+        whose envelope is the full ``0..10`` square. One item sits in the empty
+        corner of that square, another inside the L's vertical arm.
+        """
+        import dataclasses
+        import random
+
+        from .fixtures.gen_catalog import _make_row
+
+        def square(w: float, s: float, size: float) -> tuple[str, dict[str, Any]]:
+            e, n = w + size, s + size
+            return (
+                f"POLYGON(({w} {s},{e} {s},{e} {n},{w} {n},{w} {s}))",
+                {
+                    "type": "Polygon",
+                    "coordinates": [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+                },
+            )
+
+        base = _make_row(random.Random(1), 0)
+        outside_wkt, outside_geo = square(5.0, 5.0, 1.0)  # empty corner of the L's bbox
+        inside_wkt, inside_geo = square(0.2, 5.0, 0.5)  # in the vertical arm
+        outside = dataclasses.replace(
+            base,
+            id="in-bbox-not-in-shape",
+            collection=None,
+            geometry_wkt=outside_wkt,
+            geometry_geojson=outside_geo,
+        )
+        inside = dataclasses.replace(
+            base,
+            id="in-shape",
+            collection=None,
+            geometry_wkt=inside_wkt,
+            geometry_geojson=inside_geo,
+        )
+        write_catalog(tmp_path, n=14, extra_rows=[outside, inside])
+        write_nuts(
+            tmp_path,
+            extra_regions=[
+                (
+                    "XX-L",
+                    "L-shaped test region",
+                    1,
+                    "XX",
+                    "POLYGON((0 0,10 0,10 1,1 1,1 10,0 10,0 0))",
+                )
+            ],
+        )
+        s = CatalogStore(CatalogSettings(data_dir=tmp_path))
+        s.ensure_current()
+
+        rows, n = search_items(s, SearchParams(nuts=["XX-L"], limit=10))
+        ids = {r["id"] for r in rows}
+        assert "in-shape" in ids, "an item inside the region must match"
+        assert "in-bbox-not-in-shape" not in ids, (
+            "an item inside the region's bounding box but outside its shape "
+            "matched: the exact test is not being applied"
+        )
+        assert n == 1
+
 
 def test_date_range_matches_a_dataset_through_its_layers(store: CatalogStore) -> None:
     """A dataset is in a date range when any of its layers is.

@@ -845,8 +845,17 @@ def write_catalog(
     (path / "VERSION").write_text(version)
 
 
-def write_nuts(path: Path) -> None:
-    """Write a small deterministic ``nuts.parquet`` lookup into ``path``."""
+def write_nuts(
+    path: Path,
+    extra_regions: list[tuple[str, str, int, str, str]] | None = None,
+) -> None:
+    """Write a small deterministic ``nuts.parquet`` lookup into ``path``.
+
+    ``extra_regions`` appends hand-built ``(nuts_id, nuts_name, level, country,
+    wkt)`` rows. The generated regions are all rectangles, and a rectangle's
+    envelope *is* its geometry, so they cannot tell an exact spatial test from a
+    bounding-box one; a test that needs to must bring a concave shape.
+    """
     path.mkdir(parents=True, exist_ok=True)
     rng = random.Random(42)
 
@@ -867,8 +876,11 @@ def write_nuts(path: Path) -> None:
         con.executemany(
             "INSERT INTO nuts_gen VALUES (?,?,?,?,?)",
             [
-                (nuts_id, nuts_name, level, country, _polygon(rng)[0])
-                for nuts_id, nuts_name, level, country in NUTS_REGIONS
+                *(
+                    (nuts_id, nuts_name, level, country, _polygon(rng)[0])
+                    for nuts_id, nuts_name, level, country in NUTS_REGIONS
+                ),
+                *(extra_regions or []),
             ],
         )
 

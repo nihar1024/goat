@@ -12,7 +12,6 @@ edits the API owes a client: assets backed by GOAT's own storage are removed
 absolute API URLs, and an ``alternate`` "Open in GOAT" link is appended.
 """
 
-import copy
 import json
 import logging
 from datetime import date, datetime, timezone
@@ -574,7 +573,10 @@ def record_to_item(
     ``self`` link points at the collection-agnostic ``{stac_base}/items/{id}``
     route rather than a ``/collections/{cid}/...`` href that would 404.
     """
-    item = copy.deepcopy(rec)
+    # Shallow: every edit below replaces a top-level member (`assets` and
+    # `links` are rebuilt, not mutated), so the caller's nested structures are
+    # never touched and deep-copying every row of a page was pure cost.
+    item = dict(rec)
     item_id = str(item.get("id"))
     row_collection = item.pop("goat:row_collection", None)
 
@@ -647,7 +649,7 @@ def collection_to_stac(
     everything else the publisher wrote (``extent``, ``summaries``,
     ``providers``, ``license``, ``keywords``, ``via`` links) passes through.
     """
-    collection = copy.deepcopy(document)
+    collection = dict(document)
     cid = str(collection.get("id"))
     coll_href = f"{stac_base}/collections/{cid}"
 

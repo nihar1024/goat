@@ -608,3 +608,24 @@ class TestPrivateAssetDetection:
             stac_base=STAC_BASE,
         )
         assert set(item["assets"]) == {"provider_dl"}
+
+
+class TestCallerDocumentIsNotMutated:
+    """Both transforms copy before editing -- they are handed a row's document,
+    and a page of them used to be deep-copied one by one for no reason."""
+
+    def test_record_to_item_leaves_its_argument_alone(self) -> None:
+        document = _row0_document()
+        before = json.dumps(document, sort_keys=True, default=str)
+
+        record_to_item(document, stac_base=STAC_BASE, assets_base="https://x/assets")
+
+        assert json.dumps(document, sort_keys=True, default=str) == before
+
+    def test_collection_to_stac_leaves_its_argument_alone(self) -> None:
+        document = _bundle_collection_document()
+        before = json.dumps(document, sort_keys=True, default=str)
+
+        collection_to_stac(document, stac_base=STAC_BASE)
+
+        assert json.dumps(document, sort_keys=True, default=str) == before

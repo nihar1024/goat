@@ -286,3 +286,74 @@ def test_every_dataset_aggregation_carries_a_filter_param(store: CatalogStore) -
     assert facets, "no facet aggregations were produced"
     missing = [a["name"] for a in facets if not a.get("goat:filter_param")]
     assert not missing, missing
+
+
+class TestSingleScan:
+    """Every facet is counted in one pass, and counts the same thing it used to.
+
+    The per-facet loop ran one full filtered scan per facet plus one for the
+    total -- eight scans of the mirror for the default sidebar. These pin the
+    behaviour that replaced it: identical numbers, one query.
+    """
+
+    @staticmethod
+    def _count_queries(
+        store: CatalogStore, monkeypatch: pytest.MonkeyPatch
+    ) -> list[str]:
+        seen: list[str] = []
+        original = store.query
+
+        def recording(sql: str, params: list | None = None):  # type: ignore[no-untyped-def]
+            seen.append(sql)
+            return original(sql, params)
+
+        monkeypatch.setattr(store, "query", recording)
+        return seen
+
+    def test_all_facets_and_the_total_take_one_query(
+        self, store: CatalogStore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen = self._count_queries(store, monkeypatch)
+
+        run_aggregations(store, SearchParams(), None)
+
+        assert len(seen) == 1, seen
+
+    def test_every_facet_matches_its_own_group_by(self, store: CatalogStore) -> None:
+        """Parity with the per-facet query each bucket list replaced."""
+        result = run_aggregations(store, SearchParams(), None)
+        by_name = {a["name"]: a for a in result["aggregations"]}
+
+        for name, column in facet_aggregations(store).items():
+            expected = [
+                (row[0], row[1])
+                for row in store.query(
+                    f"SELECT {column} AS key, count(*) AS frequency "
+                    f"FROM {store.ITEMS} WHERE {column} IS NOT NULL "
+                    f"GROUP BY {column} ORDER BY frequency DESC, key ASC"
+                )
+            ]
+            actual = [(b["key"], b["frequency"]) for b in by_name[name]["buckets"]]
+            assert actual == expected, name
+
+    def test_the_total_is_the_empty_grouping_set(self, store: CatalogStore) -> None:
+        """Asking for the total alongside facets must not change it."""
+        alone = run_aggregations(store, SearchParams(), ["total_count"])
+        together = run_aggregations(store, SearchParams(), None)
+
+        assert alone["aggregations"][0]["value"] == next(
+            a["value"] for a in together["aggregations"] if a["name"] == "total_count"
+        )
+
+    def test_a_narrowed_search_narrows_every_bucket(self, store: CatalogStore) -> None:
+        """One WHERE clause feeds every grouping set, as the loop's did."""
+        params = SearchParams(q="a")
+        result = run_aggregations(store, params, None)
+        by_name = {a["name"]: a for a in result["aggregations"]}
+        total = by_name["total_count"]["value"]
+
+        for name, aggregation in by_name.items():
+            if name == "total_count":
+                continue
+            bucket_sum = sum(b["frequency"] for b in aggregation["buckets"])
+            assert bucket_sum <= total, name

@@ -4,7 +4,7 @@ import { requestDatasetUpload } from "@/lib/api/datasets";
 import { createLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
 import { uploadFileToS3 } from "@/lib/services/s3";
-import { setRunningJobIds } from "@/lib/store/jobs/slice";
+import { addRunningJobIds } from "@/lib/store/jobs/slice";
 import {
   transferCleared,
   transferFailed,
@@ -14,7 +14,7 @@ import {
 } from "@/lib/store/uploads/slice";
 import { createLayerFromDatasetSchema } from "@/lib/validations/layer";
 
-import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
+import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
 /**
  * The controller for each live transfer, so anything holding an id can cancel it.
@@ -54,7 +54,6 @@ export type DatasetImportRequest = {
  */
 export const useDatasetImport = () => {
   const dispatch = useAppDispatch();
-  const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
   const { mutate: mutateJobs } = useJobs({ read: false });
 
   const importDataset = useCallback(
@@ -117,7 +116,7 @@ export const useDatasetImport = () => {
            */
           mutateJobs();
           setTimeout(() => void mutateJobs(), 1500);
-          dispatch(setRunningJobIds([...runningJobIds, jobId]));
+          dispatch(addRunningJobIds([jobId]));
         }
         return jobId;
       } catch (error) {
@@ -138,7 +137,7 @@ export const useDatasetImport = () => {
         controllers.delete(id);
       }
     },
-    [dispatch, mutateJobs, runningJobIds]
+    [dispatch, mutateJobs]
   );
 
   return { importDataset };

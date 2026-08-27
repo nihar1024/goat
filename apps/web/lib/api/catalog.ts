@@ -141,6 +141,10 @@ export const useCatalogDatasetPages = (
       });
   }, [data]);
   const total = pages[0]?.numberMatched ?? undefined;
+  // Counted BEFORE dedup: `total` is the server's count, so comparing it to the
+  // deduped list would never reach it after one duplicate, and the skeleton
+  // row would spin forever under the last result.
+  const fetched = pages.reduce((n, page) => n + page.collections.length, 0);
   return {
     datasets,
     total,
@@ -148,7 +152,7 @@ export const useCatalogDatasetPages = (
     isLoading: isLoading && datasets.length === 0,
     /** Waiting for a further page, under results already on screen. */
     isLoadingMore: size > pages.length || (isValidating && pages.length > 0 && size > 1),
-    hasMore: total !== undefined ? datasets.length < total : pages.length === size,
+    hasMore: total !== undefined ? fetched < total : pages.length === size,
     loadMore: () => setSize((current) => current + 1),
     /** Back to a single page — what a changed filter means. */
     resetPages: () => setSize(1),
@@ -264,19 +268,25 @@ export const useCatalogCollectionItems = (
  * longer exist in the mirror simply don't appear — absence is not an update.
  */
 export const useCatalogItemVersions = (itemIds: string[]) => {
-  const { data } = useSWR<CatalogItemCollection>(
-    itemIds.length > 0 && CATALOG_API_BASE_URL
-      ? catalogUrl("/search", { ids: itemIds, limit: itemIds.length })
-      : null,
-    fetcher
-  );
+  // The server clamps `limit` to CATALOG_MAX_PAGE_SIZE, so one request per
+  // chunk of ids — asking for `limit: itemIds.length` silently lost every
+  // layer past the hundredth.
+  const key = itemIds.length > 0 && CATALOG_API_BASE_URL ? ["catalog-item-versions", ...itemIds] : null;
+  const { data } = useSWR<CatalogItem[]>(key, async () => {
+    const features: CatalogItem[] = [];
+    for (let i = 0; i < itemIds.length; i += CATALOG_MAX_PAGE_SIZE) {
+      const chunk = itemIds.slice(i, i + CATALOG_MAX_PAGE_SIZE);
+      const page = (await fetcher(
+        catalogUrl("/search", { ids: chunk, limit: CATALOG_MAX_PAGE_SIZE })
+      )) as CatalogItemCollection;
+      features.push(...(page?.features ?? []));
+    }
+    return features;
+  });
   const versions = useMemo<Record<string, string>>(
     () =>
       Object.fromEntries(
-        (data?.features ?? []).map((feature) => [
-          feature.id,
-          String(feature.properties?.version ?? ""),
-        ])
+        (data ?? []).map((feature) => [feature.id, String(feature.properties?.version ?? "")])
       ),
     [data]
   );

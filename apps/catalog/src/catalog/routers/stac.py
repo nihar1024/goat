@@ -33,6 +33,7 @@ from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 from goatlib.api import DEFAULT_OPENAPI_URL
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from catalog.auth import optional_auth
 from catalog.deps import check_not_modified, get_preview_reader, get_store
@@ -67,6 +68,13 @@ from catalog.store import CatalogStore
 # Order matters: optional_auth MUST run before check_not_modified so a
 # conditional GET's If-None-Match can never short-circuit past the auth gate
 # (see catalog.deps.check_not_modified's docstring).
+# Handlers are plain `def` on purpose: every one of them runs a synchronous
+# DuckDB scan, and an `async def` would run that scan on the event loop, where
+# one slow aggregation freezes every other request — not even a 304 check gets
+# through. A plain `def` runs in Starlette's threadpool instead; the store is
+# built for that (a cursor per call). The POST search is the one exception,
+# because it awaits the raw body, so it offloads its scan explicitly.
+
 router = APIRouter(
     prefix="/stac",
     tags=["STAC"],
@@ -285,7 +293,7 @@ def _run_search(
     summary="STAC landing page (Catalog)",
     responses=_documents(stac_build.StacCatalog),
 )
-async def stac_landing(
+def stac_landing(
     request: Request, store: CatalogStore = Depends(get_store)
 ) -> dict[str, Any]:
     base = _stac_base(request)
@@ -308,7 +316,7 @@ async def stac_landing(
     summary="STAC conformance declaration",
     responses=_documents(stac_build.Conformance),
 )
-async def stac_conformance(store: CatalogStore = Depends(get_store)) -> dict[str, Any]:
+def stac_conformance(store: CatalogStore = Depends(get_store)) -> dict[str, Any]:
     """The conformance classes this catalog serves.
 
     What is listed here is what the API will honour; a class the current data
@@ -325,7 +333,7 @@ async def stac_conformance(store: CatalogStore = Depends(get_store)) -> dict[str
     response_class=JSONSchemaResponse,
     responses=_documents(stac_build.Queryables),
 )
-async def stac_queryables(
+def stac_queryables(
     request: Request, store: CatalogStore = Depends(get_store)
 ) -> dict[str, Any]:
     return queryables_schema(_stac_base(request), store.registry)
@@ -337,7 +345,7 @@ async def stac_queryables(
     response_class=JSONSchemaResponse,
     responses=_documents(stac_build.Queryables),
 )
-async def stac_collection_queryables(
+def stac_collection_queryables(
     cid: str, request: Request, store: CatalogStore = Depends(get_store)
 ) -> dict[str, Any]:
     _require_collection_row(store, cid)
@@ -354,7 +362,7 @@ async def stac_collection_queryables(
     summary="STAC collections (Collection Search)",
     responses=_documents(stac_build.StacCollections),
 )
-async def stac_collections(
+def stac_collections(
     request: Request,
     query: Annotated[CollectionSearchQuery, Query()],
     store: CatalogStore = Depends(get_store),
@@ -391,7 +399,7 @@ async def stac_collections(
     summary="A STAC collection",
     responses=_documents(stac_build.StacCollection),
 )
-async def stac_collection(
+def stac_collection(
     cid: str, request: Request, store: CatalogStore = Depends(get_store)
 ) -> dict[str, Any]:
     row = _require_collection_row(store, cid)
@@ -408,7 +416,7 @@ async def stac_collection(
     response_class=GeoJSONResponse,
     responses=_documents(stac_build.StacItemCollection),
 )
-async def stac_collection_items(
+def stac_collection_items(
     cid: str,
     request: Request,
     query: Annotated[ItemsQuery, Query()],
@@ -451,7 +459,7 @@ async def stac_collection_items(
     response_class=GeoJSONResponse,
     responses=_documents(stac_build.StacItem),
 )
-async def stac_collection_item(
+def stac_collection_item(
     cid: str,
     item_id: str,
     request: Request,
@@ -482,7 +490,7 @@ async def stac_collection_item(
     response_class=GeoJSONResponse,
     responses=_documents(stac_build.StacItemCollection),
 )
-async def stac_search_get(
+def stac_search_get(
     request: Request,
     query: Annotated[SearchQuery, Query()],
     store: CatalogStore = Depends(get_store),
@@ -535,8 +543,8 @@ async def stac_search_post(
         default_filter_lang="cql2-json",
         limit=clamp_limit(body.limit, MAX_SEARCH_LIMIT),
     )
-    features, matched = _run_search(
-        store, base, params, _ui_base(request), _assets_base(request)
+    features, matched = await run_in_threadpool(
+        _run_search, store, base, params, _ui_base(request), _assets_base(request)
     )
     self_href = f"{base}/search"
     result = stac_build.item_collection(
@@ -589,7 +597,7 @@ class ResolvedEntry(BaseModel):
     summary="Available facet aggregations (discovery)",
     responses=_documents(AggregationsDiscovery),
 )
-async def stac_aggregations(
+def stac_aggregations(
     unit: Annotated[
         Literal["items", "collections"],
         Query(description="Count layers ('items') or datasets ('collections')"),
@@ -604,7 +612,7 @@ async def stac_aggregations(
     summary="Execute facet aggregations",
     responses=_documents(AggregationCollection),
 )
-async def stac_aggregate(
+def stac_aggregate(
     query: Annotated[AggregateQuery, Query()],
     store: CatalogStore = Depends(get_store),
 ) -> dict[str, Any]:
@@ -629,7 +637,7 @@ async def stac_aggregate(
     summary="Resolve a catalog id (GOAT extension)",
     responses=_documents(ResolvedEntry),
 )
-async def stac_resolve(
+def stac_resolve(
     entry_id: str, request: Request, store: CatalogStore = Depends(get_store)
 ) -> dict[str, Any]:
     """What is this id -- an item or a collection? One lookup, for the
@@ -690,7 +698,7 @@ async def stac_resolve(
     summary="A bounded sample of an item's data (GOAT extension)",
     response_class=GeoJSONResponse,
 )
-async def stac_item_preview(
+def stac_item_preview(
     item_id: str,
     store: CatalogStore = Depends(get_store),
     reader: PreviewReader = Depends(get_preview_reader),
@@ -739,7 +747,7 @@ async def stac_item_preview(
     response_class=GeoJSONResponse,
     responses=_documents(stac_build.StacItem),
 )
-async def stac_item_by_id(
+def stac_item_by_id(
     item_id: str, request: Request, store: CatalogStore = Depends(get_store)
 ) -> dict[str, Any]:
     """Fetch an item by id without knowing its collection -- a convenience

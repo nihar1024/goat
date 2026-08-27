@@ -47,10 +47,17 @@ class CRUDBundle(CRUDBase[Bundle, BundleCreate, BundleUpdate]):
                 # The other fields keep their Python types (`folder_id` is a
                 # UUID the model column expects).
                 merged = dict(db_obj.dataset_metadata or {})
-                merged.update(
-                    obj_in.dataset_metadata.model_dump(mode="json", exclude_unset=True)
-                )
-                data["dataset_metadata"] = merged
+            # Merge, with null meaning "clear": a key that is absent keeps its
+            # stored value, a key sent as null is removed. Without the second
+            # rule an emptied field could never be emptied.
+            for key, value in obj_in.dataset_metadata.model_dump(
+                mode="json", exclude_unset=True
+            ).items():
+                if value is None:
+                    merged.pop(key, None)
+                else:
+                    merged[key] = value
+            data["dataset_metadata"] = merged
             obj_in = data
         return await super().update(db, db_obj=db_obj, obj_in=obj_in)
 

@@ -6,11 +6,11 @@ import { toast } from "react-toastify";
 
 import { createEmptyLayer } from "@/lib/api/layers";
 import { useJobs } from "@/lib/api/processes";
-import { setRunningJobIds } from "@/lib/store/jobs/slice";
+import { addRunningJobIds } from "@/lib/store/jobs/slice";
 import type { CreateEmptyLayerInput, FieldDefinition } from "@/lib/validations/layer";
 import { createEmptyLayerSchema, isCreatableKind } from "@/lib/validations/layer";
 
-import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
+import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
 import type { FlowController } from "@/hooks/addLayer/flow";
 
@@ -56,7 +56,6 @@ export const useCreateFlow = ({
 }): CreateFlow => {
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
-  const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
   const { mutate: mutateJobs } = useJobs({ read: false });
 
   const [isBusy, setIsBusy] = useState(false);
@@ -126,17 +125,19 @@ export const useCreateFlow = ({
       const jobId = response?.jobID;
       if (jobId) {
         mutateJobs();
-        dispatch(setRunningJobIds([...runningJobIds, jobId]));
+        dispatch(addRunningJobIds([jobId]));
       }
       toast.info(t("creating_layer"));
+      // Only a submitted layer clears the editor: after a failure the fields
+      // stay so the user can retry, not rebuild fifteen columns.
+      reset();
+      onDone?.();
     } catch (error) {
       toast.error(t("error_creating_layer"));
       console.error("error", error);
-    } finally {
-      reset();
-      onDone?.();
+      setIsBusy(false);
     }
-  }, [projectId, getValues, mutateJobs, dispatch, runningJobIds, t, reset, onDone]);
+  }, [projectId, getValues, mutateJobs, dispatch, t, reset, onDone]);
 
   const action = useMemo(
     () => ({

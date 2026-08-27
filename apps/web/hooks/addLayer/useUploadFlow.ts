@@ -192,8 +192,10 @@ export const useUploadFlow = ({
       setHasHeader(true);
       setSheet("");
       if (!next?.name) return;
-      if (!ACCEPTED_FILE_TYPES.some((type) => next.name.endsWith(type))) {
-        setFileError("Invalid file type. Please select a file of type");
+      // Case-insensitive, like the tabular reader that will open it — Windows
+      // and most GIS exporters write `EXPORT.CSV`.
+      if (!ACCEPTED_FILE_TYPES.some((type) => next.name.toLowerCase().endsWith(type))) {
+        setFileError(`${t("invalid_file_type")}: ${ACCEPTED_FILE_TYPES.join(", ")}`);
         return;
       }
       setFileValue(next);
@@ -207,7 +209,7 @@ export const useUploadFlow = ({
         shouldValidate: true,
       });
     },
-    [setValue]
+    [setValue, t]
   );
 
   const reset = useCallback(() => {

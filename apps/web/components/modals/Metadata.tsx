@@ -98,11 +98,14 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
       // concept — an importer fills it from what the source states about itself
       // — so only the bundle branch below sends it, as a document the API merges
       // into what is stored rather than replacing.
+      // Every provenance field the form owns, with an emptied one sent as null:
+      // the API merges the document, so a key that is simply absent is a key
+      // that keeps its old value, and there would be no way to clear one.
       const provenance = Object.fromEntries(
-        BUNDLE_METADATA_KEYS.filter((key) => key in cleanedData).map((key) => [
-          key,
-          cleanedData[key],
-        ])
+        BUNDLE_METADATA_KEYS.filter((key) => key in data).map((key) => {
+          const value = (data as Record<string, unknown>)[key];
+          return [key, value === "" || value === undefined ? null : value];
+        })
       );
       const identity = {
         ...(cleanedData.name !== undefined ? { name: cleanedData.name as string } : {}),

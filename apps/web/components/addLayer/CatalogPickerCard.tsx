@@ -62,21 +62,26 @@ const CatalogPickerCard = ({
    */
   const memberIds = useMemo(() => {
     if (isBundle) return items.map((item) => item.id);
-    return [card.href.split("/").pop() ?? collection.id];
-  }, [isBundle, items, card.href, collection.id]);
+    // The id itself, not parsed back out of the card's percent-encoded href —
+    // the POST encodes it again, and an id with a reserved character would go
+    // over double-encoded and 404.
+    return [collection.id];
+  }, [isBundle, items, collection.id]);
 
   const state = cardSelectionState(memberIds, selection.ids);
   const toggleStar = useCallback(() => onToggleStar(collection.id), [onToggleStar, collection.id]);
 
   const toggle = useCallback(() => {
-    if (isBundle && !armed) {
-      // Nothing to select yet: arm the fetch and remember what the click meant.
+    if (isBundle && (!armed || items.length === 0)) {
+      // Nothing to select yet — not armed, or armed by expanding and the
+      // members still loading: arm the fetch and remember what the click meant,
+      // rather than calling setMany([]) and losing the click.
       setArmed(true);
       setPendingSelectAll(true);
       return;
     }
     selection.setMany(memberIds, state.nextSelected);
-  }, [isBundle, armed, selection, memberIds, state.nextSelected]);
+  }, [isBundle, armed, items.length, selection, memberIds, state.nextSelected]);
 
   useEffect(() => {
     if (!pendingSelectAll || !items.length) return;

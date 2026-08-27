@@ -29,7 +29,7 @@ export const setFavorite = async (
  * catalog page and the add-layer picker always agree.
  *
  * The toggle is optimistic: the star flips immediately, the write follows,
- * and a failed write revalidates back to the server's truth.
+ * and a failed write rolls back and then revalidates to the server's truth.
  */
 export const useFavoriteStars = (itemType: FavoriteItemType) => {
   const { data, mutate } = useAuthedSWR<string[]>(
@@ -45,7 +45,7 @@ export const useFavoriteStars = (itemType: FavoriteItemType) => {
   const toggleStar = useCallback(
     (id: string) => {
       const next = !starred[id];
-      void mutate(
+      mutate(
         async (current) => {
           await setFavorite(itemType, id, next);
           const ids = current ?? [];
@@ -59,7 +59,11 @@ export const useFavoriteStars = (itemType: FavoriteItemType) => {
           rollbackOnError: true,
           revalidate: false,
         }
-      );
+      ).catch(() => {
+        // Rolled back already; the server is the truth now, so ask it — and
+        // do not let the rejection escape as an unhandled promise.
+        void mutate();
+      });
     },
     [starred, mutate, itemType]
   );

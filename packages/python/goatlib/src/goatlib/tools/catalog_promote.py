@@ -86,6 +86,35 @@ def read_item(mirror_items_path: str | Path, item_id: str) -> dict[str, Any]:
         con.close()
 
 
+def read_items(
+    mirror_items_path: str | Path, item_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """The rows for several items in ONE scan of the mirror, keyed by id.
+
+    `promote` takes a row through its `item` argument so that adding a bundle
+    of 74 members costs one DuckDB connection and one pass over a file sized
+    for a million rows, not 74 of each.
+    """
+    if not item_ids:
+        return {}
+    con = duckdb.connect()
+    try:
+        cols = ", ".join(_ITEM_COLUMNS)
+        placeholders = ", ".join("?" for _ in item_ids)
+        rows = con.execute(
+            f"SELECT {cols} FROM read_parquet(?) WHERE id IN ({placeholders})",
+            [str(mirror_items_path), *item_ids],
+        ).fetchall()
+    finally:
+        con.close()
+    names = [c.strip('"') for c in _ITEM_COLUMNS]
+    found = {row[0]: dict(zip(names, row)) for row in rows}
+    missing = [i for i in item_ids if i not in found]
+    if missing:
+        raise CatalogItemNotFoundError(f"Catalog item not found: {missing[0]}")
+    return found
+
+
 def resolve_item_ids(
     mirror_items_path: str | Path, catalog_ids: list[str]
 ) -> list[str]:
@@ -257,9 +286,13 @@ async def promote(
     *,
     mirror_items_path: str | Path,
     schema: str = "customer",
+    item: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the shared ``customer.layer`` for a catalog item, creating it
     if this is the first use of this (item, version).
+
+    ``item`` is the mirror row when the caller already has it (see
+    :func:`read_items`); otherwise it is read here.
 
     The row has **no owner**: ``user_id`` and ``folder_id`` are NULL, because a
     catalog dataset belongs to the provider that published it, not to anyone
@@ -271,7 +304,8 @@ async def promote(
     ``ON CONFLICT DO NOTHING``, and when it inserts no row the winner's is
     read back. Returns ``{"layer_id", "created", "parquet_url"}``.
     """
-    item = read_item(mirror_items_path, item_id)
+    if item is None:
+        item = read_item(mirror_items_path, item_id)
     version = str(item.get("version") or "")
 
     # UPDATE, not SELECT: touching updated_at moves a reused layer out of the

@@ -124,8 +124,10 @@ async def add_catalog_items_to_project(
     from goatlib.tools.catalog_promote import (
         CatalogItemNotFoundError,
         promote,
+        read_items,
         resolve_item_ids,
     )
+    from starlette.concurrency import run_in_threadpool
 
     from core.services.materialize_heal import decide_heal
 
@@ -149,7 +151,11 @@ async def add_catalog_items_to_project(
     # dataset's Collection id is not its item's id, so the ids are resolved
     # against the mirror before anything is promoted.
     try:
-        item_ids = resolve_item_ids(mirror, catalog_ids)
+        item_ids = await run_in_threadpool(resolve_item_ids, mirror, catalog_ids)
+        # One scan for every item being added — and off the event loop, so a
+        # mirror sized for a million rows does not stall every other core
+        # request while it is read.
+        items = await run_in_threadpool(read_items, mirror, item_ids)
     except CatalogItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -161,6 +167,7 @@ async def add_catalog_items_to_project(
                 catalog_id,
                 mirror_items_path=mirror,
                 schema=settings.SCHEMA,
+                item=items[catalog_id],
             )
             layer_id = uuid_module.UUID(result["layer_id"])
             # Enqueue for a fresh layer — and re-enqueue for an existing one

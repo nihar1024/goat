@@ -53,6 +53,7 @@ import pytest
 import pytest_asyncio
 from goatlib.tools.base import ToolSettings
 from goatlib.tools.db import ToolDatabaseService
+from goatlib.utils.layer import layer_schema_name
 
 logger = logging.getLogger(__name__)
 
@@ -415,9 +416,13 @@ def test_layer_id() -> str:
     return str(uuid.uuid4())
 
 
-def get_user_schema_name(user_id: str) -> str:
-    """Get the DuckLake schema name for a user."""
-    return f"user_{user_id.replace('-', '')}"
+def get_user_schema_name(user_id: str) -> str:  # noqa: ARG001 - kept for call sites
+    """The DuckLake schema a layer table lives in.
+
+    Storage is flat now: every layer goes in the one shared schema and the
+    owner is not part of the path, so the user id no longer participates.
+    """
+    return layer_schema_name()
 
 
 def get_table_name(layer_id: str) -> str:

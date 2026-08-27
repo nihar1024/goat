@@ -2,7 +2,9 @@
 
 import { Container, Skeleton, Stack, Typography } from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+
+import { useFavoriteStars } from "@/lib/api/favorites";
 import { useTranslation } from "react-i18next";
 
 import type { CatalogCollection, CatalogItem } from "@/lib/validations/catalog";
@@ -33,20 +35,18 @@ const CatalogDetailView = ({
   const router = useRouter();
   const { t } = useTranslation("common");
 
-  /** Saved datasets, in memory until core has somewhere to keep them. */
-  const [starred, setStarred] = useState<Record<string, boolean>>({});
-  const toggleStar = useCallback(
-    (target: CatalogItem) =>
-      setStarred((prev) => ({ ...prev, [target.id]: !prev[target.id] })),
-    []
+  // The same persisted favourites the list page and the Add Layer picker use;
+  // a star set here shows there and survives a reload.
+  const { starred, toggleStar: toggleFavorite } = useFavoriteStars("catalog_item");
+  const toggleStar = useCallback((target: CatalogItem) => toggleFavorite(target.id), [toggleFavorite]);
+  const toggleAll = useCallback(
+    (targets: CatalogItem[], save: boolean) => {
+      for (const target of targets) {
+        if (!!starred[target.id] !== save) toggleFavorite(target.id);
+      }
+    },
+    [starred, toggleFavorite]
   );
-  const toggleAll = useCallback((targets: CatalogItem[], save: boolean) => {
-    setStarred((prev) => {
-      const next = { ...prev };
-      for (const target of targets) next[target.id] = save;
-      return next;
-    });
-  }, []);
 
   // A bundle member came from its bundle, so back belongs to the bundle rather
   // than to whatever the browser remembers.

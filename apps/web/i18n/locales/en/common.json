@@ -1149,19 +1149,6 @@
       "themes": "Data Category",
       "type": "Type"
     },
-    "license": {
-      "CC_BY": "Creative Commons Attribution (CC BY)",
-      "CC_BY_NC": "Creative Commons Attribution-NonCommercial (CC BY-NC)",
-      "CC_BY_NC_ND": "Creative Commons Attribution-NonCommercial-NoDerivs (CC BY-NC-ND)",
-      "CC_BY_NC_SA": "Creative Commons Attribution-NonCommercial-ShareAlike (CC BY-NC-SA)",
-      "CC_BY_ND": "Creative Commons Attribution-NoDerivs (CC BY-ND)",
-      "CC_BY_SA": "Creative Commons Attribution-ShareAlike (CC BY-SA)",
-      "DDN2": "Datenlizenz Deutschland Namensnennung 2.0",
-      "DDZ2": "Datenlizenz Deutschland Zero 2.0",
-      "ODC_BY": "Open Data Commons Attribution License (ODC BY)",
-      "ODC_ODbL": "Open Data Commons Open Database License (ODC ODbL)",
-      "OTHER": "Other License"
-    },
     "no_metadata_available": {
       "attribution": "No attribution available",
       "data_reference_year": "No data reference year available",

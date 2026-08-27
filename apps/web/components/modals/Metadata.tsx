@@ -86,8 +86,7 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
     });
   }, [bundle, reset]);
 
-  const { geographicalCodeOptions, licenseOptions } =
-    useContentMetadataHooks();
+  const { geographicalCodeOptions } = useContentMetadataHooks();
 
   const onSubmit = async (data: BundleMetadata) => {
     try {
@@ -241,11 +240,13 @@ const Metadata: React.FC<MetadataDialogProps> = ({ open, onClose, content, type 
                   error={!!errors.distribution_url}
                   helperText={errors.distribution_url?.message}
                 />
-                <RhfAutocompleteField
-                  options={licenseOptions}
-                  control={control}
-                  name="license"
+                <TextField
+                  fullWidth
                   label={t("common:metadata.headings.license")}
+                  placeholder="DL-DE-BY-2.0"
+                  {...register("license")}
+                  error={!!errors.license}
+                  helperText={errors.license?.message}
                 />
                 <TextField
                   fullWidth

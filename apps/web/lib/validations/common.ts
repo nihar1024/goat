@@ -24,20 +24,6 @@ export const contentMetadataSchema = z.object({
   thumbnail_url: z.string().optional(),
 });
 
-export const dataLicense = z.enum([
-  "DDN2",
-  "DDZ2",
-  "CC_BY",
-  "CC_BY_SA",
-  "CC_BY_ND",
-  "CC_BY_NC",
-  "CC_BY_NC_SA",
-  "CC_BY_NC_ND",
-  "ODC_BY",
-  "ODC_ODbL",
-  "OTHER",
-]);
-
 export const layerType = z.enum(["feature", "raster", "table"]);
 
 export const featureLayerType = z.enum(["standard", "tool", "street_network"]);
@@ -78,7 +64,6 @@ export type FormatNumberTypes = z.infer<typeof formatNumberTypes>;
 export type SortType = z.infer<typeof sortTypes>;
 export type StatisticOperation = z.infer<typeof statisticOperationEnum>;
 export type LayerType = z.infer<typeof layerType>;
-export type DataLicense = z.infer<typeof dataLicense>;
 export type FeatureLayerGeometryType = z.infer<typeof featureLayerGeometryType>;
 export type TableDataExchangeType = z.infer<typeof tableDataExchangeType>;
 export type FeatureDataExchangeType = z.infer<typeof featureDataExchangeType>;

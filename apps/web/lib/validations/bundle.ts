@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import { contentMetadataSchema, dataLicense } from "@/lib/validations/common";
+import { contentMetadataSchema } from "@/lib/validations/common";
 
 /**
  * Editable bundle metadata. The layer vocabulary restricted to fields that
@@ -14,7 +14,9 @@ export const bundleMetadataSchema = contentMetadataSchema.extend({
   distributor_name: z.string().optional(),
   distributor_email: z.string().email().optional(),
   distribution_url: z.string().url().optional(),
-  license: dataLicense.optional(),
+  // Free text: the licence as the source states it (`DL-DE-BY-2.0`), not a
+  // code from a list of ours.
+  license: z.string().optional(),
   attribution: z.string().optional(),
 });
 

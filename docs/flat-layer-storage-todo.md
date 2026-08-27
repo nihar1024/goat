@@ -430,16 +430,34 @@ Second wave, from the adversarial diff review. All fixed unless marked.
       Unified on `publisher` (icon added to `METADATA_HEADER_ICONS`), and the
       `email`/`url` render branches went — no field has those types now.
 
-- [ ] **Bundle metadata cannot be cleared.** `Metadata.tsx` filters `""` out of
-      the payload and `CRUDBundle.update` only merges when the document is not
-      None, so emptying a field is a no-op. Same as the old per-column
-      behaviour, so not a regression — but the merge semantics make it
-      permanent rather than incidental. Needs an explicit "clear" signal.
+- [x] **The bundle licence is free text now.** It was the same `DDN2`/`CC_BY`
+      dropdown we rejected for layers — and it is the one field in the document
+      no importer can ever fill (the GTFS extractor says so outright: *"License
+      and attribution are not derived. GTFS has no license field."*). So it was
+      only ever a human picking the nearest internal code. Now a plain string:
+      write `DL-DE-BY-2.0`, the licence the source actually states. Nothing to
+      migrate — `bundle.license` is already `TEXT` and every stored value is
+      NULL. Gone with it: the `DataLicense` enum, the zod `dataLicense`, the
+      `licenseOptions` hook and 11 `metadata.license.*` strings per language.
+      `metadata.headings.license` stays — it is still the field's label.
 
-- [ ] **The upgrade's identity-deletion CTE trusts that only the synthetic user
-      is in the `GOAT Catalog` org.** `user.organization_id` is
-      `ON DELETE CASCADE`, so any other member would be deleted with all their
-      content. Nothing asserts it. Add a guard or a pre-flight count.
+- [x] **The identity-deletion CTE now refuses to take anyone with it.**
+      `user.organization_id` is `ON DELETE CASCADE`, so deleting the
+      `GOAT Catalog` organization deletes every user in it and all their
+      content. The delete is now conditional on the synthetic user being its
+      only member; otherwise the organization is left standing. Verified by
+      adding a stray human to that org and running the migration: the human
+      survives, the org is kept, the synthetic user still goes.
+
+- [ ] **Bundle metadata cannot be cleared.** Two independent filters drop an
+      emptied field before it can reach the database: `Metadata.tsx` strips
+      `""` out of the payload, and `CRUDBundle.update` only merges when the
+      document is non-None — so `{"license": ""}` never leaves the browser and
+      `{"license": null}` would be ignored if it did. Same as the old
+      per-column behaviour, so not a regression, but merge semantics make it
+      permanent rather than incidental. Fix needs an explicit clear signal
+      (send `null` for a field the user emptied, and have the merge delete keys
+      whose value is `null`).
 
 
 - [x] **`create_layer` trigger 500'd every first-time catalog promote.** The

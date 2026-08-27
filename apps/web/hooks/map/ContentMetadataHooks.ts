@@ -4,7 +4,6 @@ import { useMemo } from "react";
 
 import { useTranslation } from 'react-i18next'
 
-import { dataLicense } from "@/lib/validations/common";
 
 /** The option lists the bundle metadata form needs. A layer has no metadata of
  * its own to pick from, so nothing else consumes these. */
@@ -21,18 +20,8 @@ export const useContentMetadataHooks = () => {
     });
   }, [t]);
 
-  const licenseOptions = useMemo(() => {
-    return dataLicense.options.map((license) => {
-      return {
-        value: license,
-        label: `${t(`common:metadata.license.${license}`)}`,
-      };
-    });
-  }, [t]);
-
   return {
     t,
     geographicalCodeOptions,
-    licenseOptions,
   };
 };

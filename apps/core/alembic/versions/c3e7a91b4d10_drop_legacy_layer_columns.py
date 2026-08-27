@@ -291,8 +291,18 @@ def upgrade() -> None:
         dropped_user AS (
             DELETE FROM {SCHEMA}."user" WHERE id IN (SELECT id FROM identity)
         )
-        DELETE FROM {SCHEMA}.organization
-        WHERE id IN (SELECT organization_id FROM identity WHERE organization_id IS NOT NULL)
+        DELETE FROM {SCHEMA}.organization o
+        WHERE o.id IN (SELECT organization_id FROM identity WHERE organization_id IS NOT NULL)
+          -- Only if the synthetic user was its sole member. `user.organization_id`
+          -- is ON DELETE CASCADE, so deleting an organization deletes everyone in
+          -- it along with all their content; if someone was ever added to this
+          -- one by hand, leave the organization behind rather than take them
+          -- with it.
+          AND NOT EXISTS (
+              SELECT 1 FROM {SCHEMA}."user" u
+              WHERE u.organization_id = o.id
+                AND u.id NOT IN (SELECT id FROM identity)
+          )
         """
     )
 

@@ -1,4 +1,4 @@
-"""drop the legacy columns from layer, and the data_store table
+"""drop the legacy layer columns, the data_store table and the scenario tables
 
 Seventeen nullable columns on ``customer.layer`` and one whole table, all left
 over from things GOAT no longer has: the old catalog page, the shared-wide-table
@@ -54,9 +54,24 @@ Deliberately kept:
 * ``in_catalog``. Its 66 rows are the old catalog's layers and ``check_layer``
   still grants access through it, so retiring it means first deciding what
   identifies those layers instead.
-* ``customer.scenario``, ``scenario_feature``, ``scenario_scenario_feature`` and
-  ``project.active_scenario_id`` (214 / 246 / — / 160 rows). All scenario code is
-  gone as of this revision, but dropping the data is a separate call.
+
+**Scenarios go entirely**, tables included: ``customer.scenario``,
+``scenario_feature``, ``scenario_scenario_feature`` and
+``project.active_scenario_id``. All scenario code is gone as of this revision,
+and the product no longer needs the data (owner's call, made knowing there are
+rows in production).
+
+Measured on the same 12,281-layer copy: 214 scenarios across 118 owners, 246
+features, 245 links, 160 projects still pointing at one; newest scenario
+2026-06-16, newest feature 2026-03-24.
+
+``scenario_feature`` is the last table using the generic-column scheme — 109
+``text_attr1``/``jsonb_attr1``-style columns, 34 of them holding data — and the
+only thing that ever said what those columns *meant* was ``layer.attribute_mapping``,
+which this same revision drops. So the payload stops being interpretable here
+whether or not the table survives; keeping it would preserve bytes, not
+information. Take a ``pg_dump`` of the three tables before running this if that
+turns out to matter.
 
 ``customer.bundle`` keeps its ``dataset_metadata`` document: there an importer
 really does fill it, reading ``feed_publisher_name`` out of a GTFS feed.
@@ -69,6 +84,7 @@ Create Date: 2026-08-27 11:05:00.000000
 
 import sqlalchemy as sa
 from alembic import op
+from geoalchemy2 import Geometry
 from sqlalchemy.dialects import postgresql
 
 from core.core.config import settings
@@ -103,6 +119,43 @@ _COLUMNS: tuple[tuple[str, sa.types.TypeEngine], ...] = (
     ("data_store_id", postgresql.UUID(as_uuid=True)),
 )
 
+# Children first: `scenario_scenario_feature` references both of the others.
+_SCENARIO_TABLES = ("scenario_scenario_feature", "scenario_feature", "scenario")
+
+# `scenario_feature` stored a feature's attributes in fixed generic slots, one
+# family per type. Regenerated rather than spelled out — 109 columns is not worth
+# a literal.
+_SCENARIO_FEATURE_ATTRS: tuple[tuple[str, int, sa.types.TypeEngine], ...] = (
+    ("integer_attr", 25, sa.Integer()),
+    ("float_attr", 25, sa.Float()),
+    ("text_attr", 25, sa.Text()),
+    ("bigint_attr", 5, sa.BigInteger()),
+    ("jsonb_attr", 10, postgresql.JSONB(astext_type=sa.Text())),
+    ("boolean_attr", 10, sa.Boolean()),
+    ("arrint_attr", 3, postgresql.ARRAY(sa.Integer())),
+    ("arrfloat_attr", 3, postgresql.ARRAY(sa.Float())),
+    ("arrtext_attr", 3, postgresql.ARRAY(sa.Text())),
+    ("timestamp_attr", 3, sa.DateTime(timezone=False)),
+)
+
+
+def _timestamps() -> tuple[sa.Column, ...]:
+    """The `DateTimeBase` pair every table in this schema carries."""
+    return (
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+    )
+
 
 def upgrade() -> None:
     # A fresh database is built from the live models by `init`, so none of this
@@ -118,6 +171,17 @@ def upgrade() -> None:
     # After the FK column, so the drop cannot fail on a dependency.
     if "data_store" in inspector.get_table_names(schema=SCHEMA):
         op.drop_table("data_store", schema=SCHEMA)
+
+    project_columns = {
+        c["name"] for c in inspector.get_columns("project", schema=SCHEMA)
+    }
+    if "active_scenario_id" in project_columns:
+        op.drop_column("project", "active_scenario_id", schema=SCHEMA)
+
+    tables = set(inspector.get_table_names(schema=SCHEMA))
+    for name in _SCENARIO_TABLES:
+        if name in tables:
+            op.drop_table(name, schema=SCHEMA)
 
 
 def downgrade() -> None:
@@ -171,3 +235,92 @@ def downgrade() -> None:
         source_schema=SCHEMA,
         referent_schema=SCHEMA,
     )
+
+    tables = set(inspector.get_table_names(schema=SCHEMA))
+    if "scenario" not in tables:
+        op.create_table(
+            "scenario",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                primary_key=True,
+                server_default=sa.text("uuid_generate_v4()"),
+            ),
+            sa.Column("name", sa.Text(), nullable=False),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column(
+                "project_id",
+                postgresql.UUID(as_uuid=True),
+                sa.ForeignKey(f"{SCHEMA}.project.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            *_timestamps(),
+            schema=SCHEMA,
+        )
+
+    if "scenario_feature" not in tables:
+        op.create_table(
+            "scenario_feature",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                primary_key=True,
+                server_default=sa.text("uuid_generate_v4()"),
+            ),
+            sa.Column("geom", Geometry(srid=4326), nullable=True),
+            sa.Column("edit_type", sa.Text(), nullable=False),
+            sa.Column(
+                "layer_project_id",
+                sa.Integer(),
+                sa.ForeignKey(f"{SCHEMA}.layer_project.id", ondelete="CASCADE"),
+                nullable=True,
+            ),
+            sa.Column("feature_id", sa.Text(), nullable=True),
+            sa.Column("h3_3", sa.Integer(), nullable=True),
+            sa.Column("h3_6", sa.Integer(), nullable=True),
+            *(
+                sa.Column(f"{prefix}{n}", type_, nullable=True)
+                for prefix, count, type_ in _SCENARIO_FEATURE_ATTRS
+                for n in range(1, count + 1)
+            ),
+            *_timestamps(),
+            schema=SCHEMA,
+        )
+        op.create_index(
+            "scenario_feature_geom_idx",
+            "scenario_feature",
+            ["geom"],
+            unique=False,
+            postgresql_using="gist",
+            schema=SCHEMA,
+        )
+
+    if "scenario_scenario_feature" not in tables:
+        op.create_table(
+            "scenario_scenario_feature",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column(
+                "scenario_id",
+                postgresql.UUID(as_uuid=True),
+                sa.ForeignKey(f"{SCHEMA}.scenario.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            sa.Column(
+                "scenario_feature_id",
+                postgresql.UUID(as_uuid=True),
+                sa.ForeignKey(f"{SCHEMA}.scenario_feature.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            *_timestamps(),
+            schema=SCHEMA,
+        )
+
+    project_columns = {
+        c["name"] for c in inspector.get_columns("project", schema=SCHEMA)
+    }
+    if "active_scenario_id" not in project_columns:
+        op.add_column(
+            "project",
+            sa.Column("active_scenario_id", postgresql.UUID(as_uuid=True)),
+            schema=SCHEMA,
+        )

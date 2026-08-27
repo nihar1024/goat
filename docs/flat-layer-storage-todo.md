@@ -173,14 +173,37 @@ mutations. Still open:
       runners, the merge path (`base._merge_scenario_features`,
       `db.get_scenario_features`), the routing payload branch (dead — it tested
       `hasattr(params, "street_network")`, an attribute no params class has),
-      and the `scenario` / `scenario_id` i18n keys.
+      and the `scenario` / `scenario_id` i18n keys. The tables go too — see
+      below.
 
-- [ ] **Decide what happens to the scenario tables.** `customer.scenario` (214
-      rows), `customer.scenario_feature` (246) and
-      `customer.scenario_scenario_feature` remain, as does
-      `customer.project.active_scenario_id` (160 non-null) — a column no model
-      declares. All code is gone; dropping the data is a separate, one-way call.
-      `scenario_feature` is the last table using the generic-column scheme.
+      **Rollout step:** re-run `sync_windmill` per environment. Every published
+      tool script carried a `scenario_id` argument in its generated `main()`
+      signature, because the field lived on `ToolInputBase`. Local Windmill was
+      re-synced 2026-08-27 (44 tools + 9 tasks; all 42 registered tools verified
+      clean afterwards). Four unregistered leftovers still mention it —
+      `catchment_area` and `heatmap_{gravity,connectivity,closest_average}_v2`,
+      superseded by renamed tools and never deleted by the syncer — harmless,
+      nothing dispatches them, delete when convenient.
+
+- [x] **Scenario tables dropped.** DECIDED 2026-08-27 by the user, knowing there
+      are rows in production: *"even if there is scenario data in prod we don't
+      need it anymore"*. `customer.scenario` (214 rows, 118 distinct owners),
+      `customer.scenario_feature` (246), `customer.scenario_scenario_feature`
+      (245) and `customer.project.active_scenario_id` (160 non-null) all go in
+      migration `c3e7a91b4d10`, after the column drops so the FKs unwind
+      cleanly. The downgrade recreates all three in shape, regenerating
+      `scenario_feature`'s 109 generic attribute columns from a family table
+      rather than spelling them out; verified by running upgrade **and**
+      downgrade inside one rolled-back transaction against the real database
+      (layer 41 -> 24 -> 41 columns, table set identical, `scenario_feature`
+      back at exactly 121 columns).
+
+      Worth knowing if this is ever second-guessed: the payload would have
+      become unreadable anyway. `scenario_feature` kept attributes in generic
+      slots (`text_attr1`, `jsonb_attr1`, …) and the only thing that said what
+      they meant was `layer.attribute_mapping`, which the same migration drops.
+      Keeping the tables would have preserved bytes, not information. A
+      `pg_dump` of the three tables before running this is the only way back.
 
 - [x] **Drop `attribute_mapping` and the vestigial upload/data-store columns**
       (same migration, `c3e7a91b4d10`). `attribute_mapping` mapped generic physical

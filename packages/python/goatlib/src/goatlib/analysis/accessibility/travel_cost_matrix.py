@@ -113,7 +113,9 @@ class TravelCostMatrixTool(AnalysisTool):
         ]
         destinations = [
             routing.Point3857(*self._to_web_mercator(lon, lat))
-            for lat, lon in zip(params.destination_latitude, params.destination_longitude)
+            for lat, lon in zip(
+                params.destination_latitude, params.destination_longitude
+            )
         ]
 
         mode_map = {
@@ -176,11 +178,13 @@ class TravelCostMatrixTool(AnalysisTool):
             # Fall back to mode-specific default when user didn't set the per-leg
             # speed (e.g. advanced collapsed). Car: no user speed → 0.
             cfg.access_speed_km_h = (
-                params.access_speed if params.access_speed is not None
+                params.access_speed
+                if params.access_speed is not None
                 else _PT_LEG_DEFAULT_SPEED_KMH.get(params.access_mode, 0.0)
             )
             cfg.egress_speed_km_h = (
-                params.egress_speed if params.egress_speed is not None
+                params.egress_speed
+                if params.egress_speed is not None
                 else _PT_LEG_DEFAULT_SPEED_KMH.get(params.egress_mode, 0.0)
             )
 

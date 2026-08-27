@@ -19,3 +19,15 @@ export const bundleMetadataSchema = contentMetadataSchema.extend({
 });
 
 export type BundleMetadata = z.infer<typeof bundleMetadataSchema>;
+
+/** The keys that live inside a bundle's `dataset_metadata`, for packing a flat form into it. */
+export const BUNDLE_METADATA_KEYS = [
+  "lineage",
+  "geographical_code",
+  "data_reference_year",
+  "distributor_name",
+  "distributor_email",
+  "distribution_url",
+  "license",
+  "attribution",
+] as const;

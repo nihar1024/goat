@@ -11,7 +11,7 @@ import type { BundleDependency, BundleRead } from "@/lib/api/bundles";
 
 import { useGetMetadataValueTranslation } from "@/hooks/map/DatasetHooks";
 
-import { METADATA_HEADER_ICONS } from "@/components/dashboard/catalog/CatalogDatasetCard";
+import { METADATA_HEADER_ICONS } from "@/lib/constants/metadataIcons";
 
 const ContainerWrapper = styled("div")({
   containerType: "inline-size",
@@ -116,7 +116,10 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
         <MetadataSection>
           <Stack spacing={4} sx={{ width: "100%" }}>
             {metadataFields.map(({ field, heading, type }) => {
-              const value = bundle[field];
+              // Description is the bundle's own column; the rest live in the
+              // provenance document.
+              const value =
+                field === "description" ? bundle.description : bundle.dataset_metadata?.[field];
               return (
                 <Stack key={field} spacing={1}>
                   <Typography variant="caption">{heading}</Typography>
@@ -189,7 +192,9 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
                   <Typography variant="body2" fontWeight="bold" noWrap>
                     {getMetadataValueTranslation(
                       key,
-                      key === "type" ? bundle.bundle_type : (bundle[key] ?? "")
+                      key === "type"
+                        ? bundle.bundle_type
+                        : (bundle.dataset_metadata?.[key] ?? "")
                     )}
                   </Typography>
                 </div>

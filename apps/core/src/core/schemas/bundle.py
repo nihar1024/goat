@@ -2,62 +2,19 @@ from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field
 
 from core.db.models.bundle_type import BundleTypeName
-from core.db.models.layer import DataLicense, validate_geographical_code
 from core.schemas.layer import ThumbnailUrlMixin
+from core.schemas.metadata import DatasetProvenance
 
 
-class BundleProvenance(BaseModel):
-    """Dataset-level provenance shared by the read/create/update schemas.
-
-    The same vocabulary as a layer's metadata, restricted to the fields that
-    describe a whole acquisition rather than one member layer.
-    """
-
-    lineage: str | None = Field(
-        None, description="Source of the data and its derivation", max_length=500
-    )
-    geographical_code: str | None = Field(
-        None,
-        description="ISO 3166-1 alpha-2 country code, or a continent name",
-        max_length=13,
-    )
-    distributor_name: str | None = Field(
-        None, description="Entity distributing the data", max_length=500
-    )
-    distributor_email: EmailStr | None = Field(
-        None, description="Contact for the distributor"
-    )
-    distribution_url: str | None = Field(None, description="URL to the distribution")
-    license: DataLicense | None = Field(None, description="License of the data")
-    attribution: str | None = Field(
-        None, description="Attribution required by the source", max_length=500
-    )
-    data_reference_year: int | None = Field(
-        None, description="Data reference year of the bundle"
-    )
-
-    @field_validator("geographical_code", mode="after")
-    @classmethod
-    def geographical_code_valid(
-        cls: type["BundleProvenance"], value: str | None
-    ) -> str | None:
-        return validate_geographical_code(value)
-
-
-class BundleBase(BundleProvenance):
+class BundleBase(BaseModel):
     name: str = Field(..., description="Bundle name", max_length=255)
     description: str | None = Field(
         None, description="Bundle description", max_length=2000
     )
-    bundle_type: BundleTypeName = Field(
-        ..., description="Bundle type"
-    )
-    properties: Dict[str, Any] | None = Field(
-        None, description="Dataset-level metadata conforming to the type's structure"
-    )
+    bundle_type: BundleTypeName = Field(..., description="Bundle type")
 
 
 class BundleCreate(BundleBase):
@@ -65,7 +22,7 @@ class BundleCreate(BundleBase):
     user_id: UUID | None = Field(None, description="Bundle owner ID")
 
 
-class BundleUpdate(BundleProvenance):
+class BundleUpdate(BaseModel):
     name: str | None = Field(None, description="Bundle name", max_length=255)
     description: str | None = Field(
         None, description="Bundle description", max_length=2000
@@ -74,8 +31,12 @@ class BundleUpdate(BundleProvenance):
         None,
         description="Move the bundle (and its member layers) to this folder",
     )
-    properties: Dict[str, Any] | None = Field(
-        None, description="Dataset-level metadata conforming to the type's structure"
+    dataset_metadata: DatasetProvenance | None = Field(
+        None,
+        description=(
+            "Dataset-level provenance. Merged into what is stored, so a field "
+            "left out keeps its value rather than being cleared"
+        ),
     )
 
 
@@ -92,9 +53,7 @@ class DatasetContentTile(ThumbnailUrlMixin):
     id: UUID
     name: Optional[str] = None
     folder_id: Optional[UUID] = None
-    type: Optional[str] = Field(
-        None, description="Layer type or bundle type"
-    )
+    type: Optional[str] = Field(None, description="Layer type or bundle type")
     feature_layer_geometry_type: Optional[str] = Field(
         None, description="Geometry type for feature layers (null for bundles)"
     )
@@ -121,8 +80,8 @@ class BundleRead(BundleBase, ThumbnailUrlMixin):
     thumbnail_url: Optional[str] = Field(
         None, description="Thumbnail URL", validate_default=True
     )
-    records: Dict[str, Any] | None = Field(
-        None, description="Structured records associated with the bundle"
+    dataset_metadata: DatasetProvenance | None = Field(
+        None, description="Dataset-level provenance"
     )
     owned_by: Dict[str, Any] | None = Field(
         None, description="Owner info ({id, firstname, lastname, avatar}) for tiles"
@@ -222,6 +181,5 @@ request_examples = {
         "name": "Munich GTFS feed",
         "bundle_type": "pt_network_gtfs",
         "folder_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        "properties": {"layers": {}},
     },
 }

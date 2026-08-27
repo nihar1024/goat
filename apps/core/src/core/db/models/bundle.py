@@ -7,7 +7,7 @@ from uuid import UUID
 
 from goatlib.models.bundle import BundleStatus
 from pydantic import field_serializer
-from sqlalchemy import ForeignKey, Integer, Text
+from sqlalchemy import ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import Column, Field, Relationship, text
@@ -73,63 +73,18 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
         ),
         description="Bundle type (FK to bundle_type.type)",
     )
-    properties: Dict[str, Any] | None = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True),
-        description="Dataset-level metadata conforming to the type's structure",
-    )
     thumbnail_url: str | None = Field(
         default=settings.DEFAULT_LAYER_THUMBNAIL,
         sa_column=Column(Text, nullable=True),
         description="Bundle thumbnail URL",
     )
-    # Dataset-level provenance, mirroring the equivalent layer fields. A bundle
-    # is the unit a user acquires (a GTFS feed, an Overture extract), so licence
-    # and distribution describe it rather than any one member layer. Importers
-    # fill what the source states; the rest is authored.
-    lineage: str | None = Field(
+    dataset_metadata: Dict[str, Any] | None = Field(
         default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Descriptive information about the source of the data and its derivation",
-    )
-    geographical_code: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=13,
-        description="Primary geographical area, ISO 3166-1 alpha-2 or a continent name",
-    )
-    distributor_name: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Name of the entity distributing the data",
-    )
-    distributor_email: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="Contact information for the distributor",
-    )
-    distribution_url: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="URL to the data distribution",
-    )
-    license: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        description="License of the data",
-    )
-    attribution: str | None = Field(
-        default=None,
-        sa_column=Column(Text, nullable=True),
-        max_length=500,
-        description="Data source of the bundle",
-    )
-    data_reference_year: int | None = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=True),
-        description="Data reference year of the bundle",
+        sa_column=Column(JSONB, nullable=True),
+        description=(
+            "Dataset-level provenance: what the source states about itself "
+            "(importers write it) plus what the owner authors"
+        ),
     )
     status: BundleStatus = Field(
         default=BundleStatus.ready,

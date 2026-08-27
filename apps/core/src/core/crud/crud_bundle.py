@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete as sql_delete
@@ -22,6 +23,37 @@ logger = logging.getLogger(__name__)
 
 
 class CRUDBundle(CRUDBase[Bundle, BundleCreate, BundleUpdate]):
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: Bundle,
+        obj_in: BundleUpdate | dict[str, Any] | None = None,
+    ) -> Bundle:
+        """Update a bundle, MERGING `dataset_metadata` rather than replacing it.
+
+        The document holds two authorships at once: what the importer read out
+        of the source and what the owner wrote by hand. A caller sends the
+        fields it owns, so a plain assignment would let an owner editing the
+        licence drop the publisher the import had derived. Merging keeps the
+        per-field semantics the eight columns used to have for free.
+        """
+        if isinstance(obj_in, BundleUpdate):
+            data = obj_in.model_dump(exclude_unset=True)
+            data.pop("dataset_metadata", None)
+            if obj_in.dataset_metadata is not None:
+                # `mode="json"` only for the document: it is going into JSONB,
+                # where a licence has to be its value and not an enum member.
+                # The other fields keep their Python types (`folder_id` is a
+                # UUID the model column expects).
+                merged = dict(db_obj.dataset_metadata or {})
+                merged.update(
+                    obj_in.dataset_metadata.model_dump(mode="json", exclude_unset=True)
+                )
+                data["dataset_metadata"] = merged
+            obj_in = data
+        return await super().update(db, db_obj=db_obj, obj_in=obj_in)
+
     async def delete(
         self,
         async_session: AsyncSession,

@@ -78,17 +78,16 @@ def upgrade() -> None:
         ),
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("bundle_type", sa.Text(), nullable=False),
-        sa.Column("properties", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("thumbnail_url", sa.Text(), nullable=True),
-        # Dataset-level provenance (mirrors the layer provenance fields).
-        sa.Column("lineage", sa.Text(), nullable=True),
-        sa.Column("geographical_code", sa.Text(), nullable=True),
-        sa.Column("distributor_name", sa.Text(), nullable=True),
-        sa.Column("distributor_email", sa.Text(), nullable=True),
-        sa.Column("distribution_url", sa.Text(), nullable=True),
-        sa.Column("license", sa.Text(), nullable=True),
-        sa.Column("attribution", sa.Text(), nullable=True),
-        sa.Column("data_reference_year", sa.Integer(), nullable=True),
+        # Dataset-level provenance, as one document rather than a column each.
+        # The layer vocabulary it draws on is itself queued to collapse into
+        # JSONB (docs/flat-layer-storage-todo.md), so a new table has no reason
+        # to arrive in the shape being retired: nothing filters or joins on
+        # these, importers already produce a sparse dict, and a source that
+        # starts stating a new field costs no migration.
+        sa.Column(
+            "dataset_metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column("status", sa.Text(), server_default="ready", nullable=False),
         sa.ForeignKeyConstraint(
             ["bundle_type"], ["customer.bundle_type.type"], ondelete="RESTRICT"

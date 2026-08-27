@@ -29,8 +29,12 @@ export interface BundleRead {
   created_at?: string;
   updated_at?: string;
   owned_by?: { id: string; firstname: string; lastname: string; avatar?: string | null } | null;
-  /** Dataset-level provenance. Importers fill what the source states; licence,
-   *  attribution and lineage are authored by the owner. */
+  /** Dataset-level provenance, as one document. Importers fill what the source
+   *  states; licence, attribution and lineage are authored by the owner. */
+  dataset_metadata?: BundleDatasetMetadata | null;
+}
+
+export interface BundleDatasetMetadata {
   lineage?: string | null;
   geographical_code?: string | null;
   distributor_name?: string | null;

@@ -1,4 +1,4 @@
-import { Divider, Stack, Typography, styled, useTheme } from "@mui/material";
+import { Box, Divider, Stack, Typography, styled, useTheme } from "@mui/material";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -51,6 +51,24 @@ const MainContentSection = styled("div")({
     flex: "1 1 100%",
   },
 });
+
+/**
+ * Markdown at the app's text scale.
+ *
+ * `ReactMarkdown` emits plain `<p>`/`<ul>`/`<a>`, which inherit the document's
+ * 16px rather than the 14px every other value here is set in — a description
+ * and the publisher beside it rendered at two different sizes. `anywhere` is
+ * what actually breaks the long unbroken strings these records carry: a
+ * slash-joined authority name ("…/Tiefbauamt/Leitung/Dokumentation") or a bare
+ * URL has no space to wrap at, so the panel scrolled sideways.
+ */
+const PROSE_SX = {
+  overflowWrap: "anywhere",
+  typography: "body2",
+  "& :first-of-type": { marginTop: 0 },
+  "& :last-child": { marginBottom: 0 },
+  "& img": { maxWidth: "100%" },
+} as const;
 
 /** What the sidebar tiles summarise: the catalog record's own field names, each
  * paired with the key our translations and icons are filed under. */
@@ -124,29 +142,35 @@ const DatasetSummary: React.FC<DatasetSummaryProps> = ({
                       </Typography>
                     )}
                     {type === "markdown" && valueOf(field) && (
-                      <ReactMarkdown
-                        components={{
-                          img: ({ node: _, ...props }) => {
-                            const hasSize =
-                              props.width !== undefined ||
-                              props.height !== undefined ||
-                              (props.style && (props.style.width || props.style.height));
+                      <Box sx={PROSE_SX}>
+                        <ReactMarkdown
+                          components={{
+                            img: ({ node: _, ...props }) => {
+                              const hasSize =
+                                props.width !== undefined ||
+                                props.height !== undefined ||
+                                (props.style && (props.style.width || props.style.height));
 
-                            const style = hasSize ? props.style : { width: "100%" };
+                              const style = hasSize ? props.style : { width: "100%" };
 
-                            // eslint-disable-next-line jsx-a11y/alt-text
-                            return <img {...props} style={style} />;
-                          },
-                          a: ({ node: _, href, children, ...props }) => (
-                            <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-                              {children}
-                            </a>
-                          ),
-                        }}>
-                        {valueOf(field)}
-                      </ReactMarkdown>
+                              // eslint-disable-next-line jsx-a11y/alt-text
+                              return <img {...props} style={style} />;
+                            },
+                            a: ({ node: _, href, children, ...props }) => (
+                              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                                {children}
+                              </a>
+                            ),
+                          }}>
+                          {valueOf(field)}
+                        </ReactMarkdown>
+                      </Box>
                     )}
-                    {type === "text" && valueOf(field) && <Typography>{valueOf(field)}</Typography>}
+                    {type === "text" && valueOf(field) && (
+                      <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                        {valueOf(field)}
+                      </Typography>
+                    )}
                   </Stack>
                 );
               })}

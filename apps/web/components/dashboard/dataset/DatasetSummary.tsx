@@ -65,6 +65,15 @@ const MainContentSection = styled("div")({
 const PROSE_SX = {
   overflowWrap: "anywhere",
   typography: "body2",
+  /**
+   * Providers indent lines in their records, and CommonMark reads four spaces
+   * or a tab as an indented code block — so a paragraph of ordinary prose
+   * arrives as `<pre>`, which does not wrap at all. One harvested description
+   * in a thousand does this, and it scrolled the whole panel sideways.
+   * De-indenting the source instead would flatten the nested lists that make
+   * up most of the other cases.
+   */
+  "& pre": { whiteSpace: "pre-wrap", overflowWrap: "anywhere" },
   "& :first-of-type": { marginTop: 0 },
   "& :last-child": { marginBottom: 0 },
   "& img": { maxWidth: "100%" },

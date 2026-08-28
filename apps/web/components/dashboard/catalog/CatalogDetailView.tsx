@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 
 import { useFavoriteStars } from "@/lib/api/favorites";
+
+import { favoriteDatasetId } from "@/lib/utils/catalogFavorites";
 import { useTranslation } from "react-i18next";
 
 import type { CatalogCollection, CatalogItem } from "@/lib/validations/catalog";
@@ -36,7 +38,9 @@ const CatalogDetailView = ({
   const { t } = useTranslation("common");
 
   // The same persisted favourites the list page and the Add Layer picker use;
-  // a star set here shows there and survives a reload.
+  // a star set here shows there and survives a reload. Both of those work in
+  // DATASETS, so a layer page saves the dataset it belongs to — see
+  // `favoriteDatasetId`.
   const { starred, toggleStar: toggleFavorite } = useFavoriteStars("catalog_item");
   const toggleStar = useCallback((target: CatalogItem) => toggleFavorite(target.id), [toggleFavorite]);
   const toggleAll = useCallback(
@@ -57,6 +61,9 @@ const CatalogDetailView = ({
     collection && (collection["goat:member_count"] ?? members.length) === 1
       ? members[0]
       : undefined;
+
+  /** Which dataset a star on this page saves. */
+  const savedAs = favoriteDatasetId({ parent, item }) ?? "";
 
   /** Back to the list, with the search that produced it intact. */
   const backToList = useCallback(() => {
@@ -89,8 +96,8 @@ const CatalogDetailView = ({
           item={singleLayer}
           collection={collection}
           onBack={backToList}
-          starred={!!starred[singleLayer.id]}
-          onToggleStar={() => toggleStar(singleLayer)}
+          starred={!!starred[collection.id]}
+          onToggleStar={() => toggleFavorite(collection.id)}
         />
       )}
 
@@ -117,8 +124,8 @@ const CatalogDetailView = ({
               : backToList()
           }
           backLabel={parentIsBundle ? (parent?.title || undefined) : undefined}
-          starred={!!starred[item.id]}
-          onToggleStar={() => toggleStar(item)}
+          starred={!!starred[savedAs]}
+          onToggleStar={() => toggleFavorite(savedAs)}
         />
       )}
     </Container>

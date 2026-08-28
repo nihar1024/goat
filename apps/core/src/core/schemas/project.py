@@ -186,6 +186,13 @@ class IProjectBaseUpdate(SQLModel):
 class LayerProjectIds(BaseModel):
     id: int = Field(..., description="Layer Project ID")
     layer_id: UUID = Field(..., description="Layer ID")
+    #: `updated_at` on a project layer is the LATER of the dataset's and the
+    #: link's, because the map keys its tile source on it and either side
+    #: changing has to refetch. That makes it useless for "how current is this
+    #: data": restyling the layer moves it. This is the dataset's own.
+    dataset_updated_at: datetime | None = Field(
+        None, description="When the underlying dataset last changed"
+    )
 
 
 class IFeatureBaseProject(CQLQuery):

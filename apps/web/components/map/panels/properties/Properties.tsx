@@ -1,5 +1,5 @@
-import { Divider, Stack, Typography } from "@mui/material";
-import { formatDistance } from "date-fns";
+import { Divider, Stack, Tooltip, Typography } from "@mui/material";
+import { format, formatDistance } from "date-fns";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -47,12 +47,20 @@ const PropertiesPanel = ({ activeLayer }: { activeLayer: ProjectLayer }) => {
 
         {updatedAt && (
           <Field label={t("last_updated")}>
-            <Typography variant="body2">
-              {formatDistance(new Date(updatedAt), new Date(), {
+            {/* The date itself, not "12 days ago": this is provenance, and a
+                relative distance is only easy to read for something recent.
+                The relative form stays, one hover away. */}
+            <Tooltip
+              title={formatDistance(new Date(updatedAt), new Date(), {
                 addSuffix: true,
                 locale: dateLocale,
               })}
-            </Typography>
+              placement="bottom-start"
+              arrow>
+              <Typography variant="body2" sx={{ width: "fit-content" }}>
+                {format(new Date(updatedAt), "PP", { locale: dateLocale })}
+              </Typography>
+            </Tooltip>
           </Field>
         )}
       </Stack>

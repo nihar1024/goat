@@ -266,6 +266,9 @@ export const projectSchema = contentMetadataSchema.extend({
 // order: int = Field(0, description="Visual sorting order")
 // layer_project_group_id: int | None = Field(None, description="Parent group ID")
 export const projectLayerSchema = layerSchema.extend({
+  /** The dataset's own last change — `updated_at` also moves when this
+   * project restyles the layer, because the tile source keys on it. */
+  dataset_updated_at: z.string().optional(),
   id: z.number(),
   // See layerSchema: absent for a catalog layer.
   folder_id: z.string().nullish(),

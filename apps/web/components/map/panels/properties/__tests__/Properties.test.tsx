@@ -50,3 +50,17 @@ describe("PropertiesPanel", () => {
     expect(screen.getByText("source")).toBeDefined();
   });
 });
+
+describe("PropertiesPanel last updated", () => {
+  it("shows the provider's date for a catalog layer, not when GOAT copied it", () => {
+    render(<PropertiesPanel activeLayer={layer({ catalog_item: CATALOG_ITEM })} />);
+
+    expect(screen.getByText("Aug 16, 2026")).toBeDefined();
+  });
+
+  it("omits the row when only the copy's timestamps are known", () => {
+    render(<PropertiesPanel activeLayer={layer({ catalog_item: { id: "x" } })} />);
+
+    expect(screen.queryByText("last_updated")).toBeNull();
+  });
+});

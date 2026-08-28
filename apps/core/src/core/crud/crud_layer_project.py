@@ -56,6 +56,9 @@ class CRUDLayerProject(CRUDBase):
             del layer_dict["id"]
             # Update layer with layer project
             layer_dict.update(layer_project_model.model_dump())
+            # Kept apart from the tile-busting value below: this one answers
+            # "how current is the data", which restyling must not change.
+            layer_dict["dataset_updated_at"] = layer.updated_at
             # The link's fields win above, including updated_at — but the map
             # keys its tile source on that value, and materialize finishing
             # bumps only the LAYER's. Take the later of the two so either

@@ -62,7 +62,7 @@ import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput"
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import { COLUMN_MENU_DIVIDER_SX, COLUMN_MENU_PAPER_SX } from "@/components/common/columnMenuStyles";
-import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
+import { canEditLayerFeatures, canEditLayerFields } from "@/lib/utils/layerPermissions";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
 
@@ -125,13 +125,21 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   const { userProfile } = useUserProfile();
   const { layers: projectLayers, mutate: mutateProjectLayers } = useProjectLayers(projectId as string);
   const { project } = useProject(projectId as string);
-  const canEditFeatures = canEditLayerFeatures({
+  // `isEditor` says the user may edit the PROJECT — enough for filters, column
+  // widths and other per-project-layer state, but not for writing to the
+  // dataset. A catalog layer is a shared read-only snapshot that geoapi
+  // refuses every write to, so the actions that reach it are gated separately.
+  const layerPermissionArgs = {
     currentUserId: userProfile?.id,
     layerOwnerId: projectLayer.user_id,
     projectOwnerId: project?.owned_by?.id,
     isProjectEditor: isEditor,
-    layerSize: projectLayer.size,
     inCatalog: projectLayer.in_catalog,
+  };
+  const canEditFields = canEditLayerFields(layerPermissionArgs);
+  const canEditFeatures = canEditLayerFeatures({
+    ...layerPermissionArgs,
+    layerSize: projectLayer.size,
   });
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const editLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
@@ -887,7 +895,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
         <Box sx={{ flex: 1 }} />
 
         {/* Right: action buttons + utility icons */}
-        {isEditor && (
+        {canEditFields && (
           <Button
             size="small"
             variant="outlined"
@@ -1531,7 +1539,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           </ListItemText>
         </MenuItem>
         <Divider sx={COLUMN_MENU_DIVIDER_SX} />
-        {isEditor && (
+        {canEditFields && (
           <MenuItem
             onClick={() => {
               if (columnMenuField) {
@@ -1573,7 +1581,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
               : t("add_filter", { defaultValue: "Add filter" })}
           </ListItemText>
         </MenuItem>
-        {isEditor && (
+        {canEditFields && (
           <MenuItem disabled>
             <ListItemIcon>
               <CalculateIcon />
@@ -1581,7 +1589,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
             <ListItemText>{t("calculate_field", { defaultValue: "Calculate field" })}</ListItemText>
           </MenuItem>
         )}
-        {isEditor && [
+        {canEditFields && [
           <Divider key="delete-column-divider" sx={COLUMN_MENU_DIVIDER_SX} />,
           <MenuItem
             key="delete-column"
@@ -1616,7 +1624,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
           </ListItemIcon>
           <ListItemText primary={t("zoom_to_feature", { defaultValue: "Zoom to feature" })} />
         </ListItemButton>
-        {isEditor && (
+        {canEditFeatures && (
           <ListItemButton
             onClick={handleDeleteRow}
             sx={{ color: (theme) => theme.palette.error.main }}>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
-import { canEditLayerFeatures } from "@/lib/utils/layerPermissions";
+import { canEditLayerFeatures, canEditLayerFields } from "@/lib/utils/layerPermissions";
 
 const USER = "user-1";
 const PROJECT_OWNER = "project-owner-1";
@@ -129,5 +129,73 @@ describe("canEditLayerFeatures", () => {
         isProjectEditor: true,
       })
     ).toBe(false);
+  });
+});
+
+describe("canEditLayerFields", () => {
+  it("allows the layer owner to change their own layer's fields", () => {
+    expect(
+      canEditLayerFields({
+        currentUserId: USER,
+        layerOwnerId: USER,
+        projectOwnerId: PROJECT_OWNER,
+        isProjectEditor: true,
+      })
+    ).toBe(true);
+  });
+
+  it("refuses a catalog layer", () => {
+    // geoapi answers every /columns write with 403 "Catalog layers are
+    // read-only", so offering Edit fields / Delete column on one can only
+    // produce an error toast.
+    expect(
+      canEditLayerFields({
+        currentUserId: USER,
+        layerOwnerId: USER,
+        projectOwnerId: PROJECT_OWNER,
+        isProjectEditor: true,
+        inCatalog: true,
+      })
+    ).toBe(false);
+  });
+
+  it("refuses an unowned layer, which is what a promoted catalog layer is", () => {
+    // Catalog layers carry no owner at all (`layer.user_id IS NULL`), so this
+    // holds even where `in_catalog` is not set on the project layer.
+    expect(
+      canEditLayerFields({
+        currentUserId: USER,
+        layerOwnerId: null,
+        projectOwnerId: PROJECT_OWNER,
+        isProjectEditor: true,
+      })
+    ).toBe(false);
+  });
+
+  it("refuses a project viewer", () => {
+    expect(
+      canEditLayerFields({
+        currentUserId: USER,
+        layerOwnerId: USER,
+        projectOwnerId: PROJECT_OWNER,
+        isProjectEditor: false,
+      })
+    ).toBe(false);
+  });
+
+  it("still allows fields on a layer too large to edit feature by feature", () => {
+    // The size cap exists because feature editing loads the features; a
+    // column operation runs in the database and the server applies no such
+    // limit, so mirroring it here would hide an action the server allows.
+    const args = {
+      currentUserId: USER,
+      layerOwnerId: USER,
+      projectOwnerId: PROJECT_OWNER,
+      isProjectEditor: true,
+      layerSize: MAX_EDITABLE_LAYER_SIZE + 1,
+    };
+
+    expect(canEditLayerFields(args)).toBe(true);
+    expect(canEditLayerFeatures(args)).toBe(false);
   });
 });

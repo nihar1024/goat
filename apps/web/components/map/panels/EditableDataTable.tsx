@@ -62,6 +62,7 @@ import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput"
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import { COLUMN_MENU_DIVIDER_SX, COLUMN_MENU_PAPER_SX } from "@/components/common/columnMenuStyles";
+import { isCatalogLayer } from "@/lib/utils/catalog-layer";
 import { canEditLayerFeatures, canEditLayerFields } from "@/lib/utils/layerPermissions";
 import type { GetCollectionItemsQueryParams } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
@@ -87,6 +88,7 @@ import ColumnFilterPopover from "@/components/map/panels/ColumnFilterPopover";
 import { filterColumnType } from "@/lib/utils/columnFilterOperators";
 import useProjectLayerFilterController from "@/hooks/map/useProjectLayerFilterController";
 import ConfirmModal from "@/components/modals/Confirm";
+import CatalogLayerTag from "@/components/common/CatalogLayerTag";
 import EditFieldsModal from "@/components/modals/EditFields";
 
 dayjs.extend(utc);
@@ -891,6 +893,9 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
         <Typography variant="body2" fontWeight="bold" noWrap sx={{ mr: 1 }}>
           {layerName}
         </Typography>
+        {/* Beside the name, because this toolbar is where a catalog layer's
+            missing edit actions are noticed. */}
+        {isCatalogLayer(projectLayer) && <CatalogLayerTag />}
 
         <Box sx={{ flex: 1 }} />
 

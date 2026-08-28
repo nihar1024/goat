@@ -21,6 +21,12 @@ export default function ToastProvider({ children }: ToastProviderProps) {
        * hardcoded: the dark one paints the toast `#121212` against a `#18202B` page, draws the
        * progress bar in Material purple and spins a light-mode spinner. Remapping the variables
        * is what actually themes the toast — the alternative is restyling every part by class.
+       *
+       * This is the ONLY place that declares them. They used to be in the shared MUI
+       * CssBaseline override as well, which every `ThemeProvider` emits: a page mounting a
+       * second one in a fixed mode (the print preview's white paper, public dashboards)
+       * re-declared the palette later in the sheet and won, so a dark-mode user got a white
+       * toast there while the body colour below still came from the dark theme.
        */}
       <GlobalStyles
         styles={{
@@ -29,8 +35,15 @@ export default function ToastProvider({ children }: ToastProviderProps) {
             "--toastify-color-dark": theme.palette.background.paper,
             "--toastify-text-color-light": theme.palette.text.primary,
             "--toastify-text-color-dark": theme.palette.text.primary,
+            "--toastify-font-family": "inherit",
             "--toastify-color-progress-light": theme.palette.primary.main,
             "--toastify-color-progress-dark": theme.palette.primary.main,
+            // The upload toasts drive a real progress bar, so the per-type
+            // colours are not decoration.
+            "--toastify-color-progress-info": theme.palette.info.main,
+            "--toastify-color-progress-success": theme.palette.success.main,
+            "--toastify-color-progress-warning": theme.palette.warning.main,
+            "--toastify-color-progress-error": theme.palette.error.main,
             "--toastify-color-info": theme.palette.info.main,
             "--toastify-color-success": theme.palette.success.main,
             "--toastify-color-warning": theme.palette.warning.main,

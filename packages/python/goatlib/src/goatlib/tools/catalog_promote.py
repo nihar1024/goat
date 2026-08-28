@@ -56,6 +56,12 @@ _ITEM_COLUMNS = [
     '"goat:geometryType"',
     '"processing:lineage"',
     "datetime_start",
+    # The record's own dates: when the provider published the dataset and when
+    # it last changed. `layer.updated_at` answers a different question — when
+    # GOAT promoted or re-materialized its copy — so a reader asking "how old
+    # is this data" needs these, not that.
+    "created",
+    "updated",
     "bbox_xmin",
     "bbox_ymin",
     "bbox_xmax",

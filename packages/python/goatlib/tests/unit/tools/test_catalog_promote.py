@@ -33,26 +33,28 @@ def mirror(tmp_path: Path) -> Path:
                  'CC-BY-4.0', 'places', 'LDBV', ['schulen', 'bildung'],
                  'de', '2024-11', '../../../data/item-1.parquet',
                  'feature', 'point', 'harvested from ...',
-                 TIMESTAMP '2024-01-01', 9.5, 47.2, 13.9, 50.6,
+                 TIMESTAMP '2024-01-01', TIMESTAMP '2024-02-03',
+                 TIMESTAMP '2025-06-07', 9.5, 47.2, 13.9, 50.6,
                  [{{'rel': 'via', 'href': 'https://geodaten.bayern.de/x'}}],
                  NULL),
                 ('item-2', 'dataset-2', 'Statistik ohne Geometrie', NULL,
                  'not-a-license', 'nonsense-category', NULL, [],
                  'German', '3', 'data/item-2.parquet',
                  'table', NULL, NULL,
-                 NULL, NULL, NULL, NULL, NULL,
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                  [], NULL),
                 ('item-3', 'dataset-2', 'Zweite Ebene', NULL,
                  'CC-BY-4.0', 'places', NULL, [],
                  'de', '1', '../../../data/item-3.parquet',
                  'feature', 'polygon', NULL,
-                 NULL, NULL, NULL, NULL, NULL,
+                 NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                  [], NULL)
             ) AS t(
                 id, collection, title, description, license, category, publisher,
                 keywords, language_code, version, parquet_url,
                 "goat:layerType", "goat:geometryType", "processing:lineage",
-                datetime_start, bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax,
+                datetime_start, created, updated,
+                bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax,
                 links, assets
             )
         ) TO '{out}' (FORMAT PARQUET)
@@ -192,3 +194,23 @@ def test_published_style_rejects_malformed_json() -> None:
     assert (
         published_style(_styled("../../../styles/ab-12.json"), read_object=read) is None
     )
+
+
+def test_snapshot_carries_the_record_s_own_dates(mirror: Path) -> None:
+    """When the *dataset* was published and last changed.
+
+    `layer.updated_at` answers a different question — when GOAT promoted or
+    re-materialized its copy — so a catalog layer showing it as "Last updated"
+    reports the moment it was added, which is never what a reader means.
+    """
+    snap = _jsonable(read_item(mirror, "item-1"))
+
+    assert snap["updated"].startswith("2025-06-07")
+    assert snap["created"].startswith("2024-02-03")
+
+
+def test_snapshot_dates_are_absent_rather_than_invented(mirror: Path) -> None:
+    snap = _jsonable(read_item(mirror, "item-2"))
+
+    assert snap["updated"] is None
+    assert snap["created"] is None

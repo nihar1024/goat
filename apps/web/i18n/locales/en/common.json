@@ -2527,7 +2527,6 @@
   "catalog_entry_not_found": "This catalog entry could not be found.",
   "catalog_layer_tag": "Catalog · read-only",
   "catalog_layer_tag_tooltip": "This layer comes from the catalog. Its data and fields are shared with everyone using it, so they cannot be edited here.",
-  "catalog_open_entry": "Open catalog entry",
   "catalog_layers_in_bundle": "Layers in this bundle",
   "catalog_member_count": "{{count}} layers",
   "catalog_no_geometry": "This dataset has no spatial extent, so there is nothing to show on a map.",

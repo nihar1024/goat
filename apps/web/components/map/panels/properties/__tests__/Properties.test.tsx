@@ -23,13 +23,19 @@ const layer = (other_properties?: unknown) =>
   }) as never;
 
 describe("PropertiesPanel", () => {
-  it("says a catalog layer came from the catalog, and links back to its entry", () => {
+  it("says a catalog layer came from the catalog", () => {
     render(<PropertiesPanel activeLayer={layer({ catalog_item: CATALOG_ITEM })} />);
 
     expect(screen.getByText("source")).toBeDefined();
-    expect(screen.getByRole("link", { name: "catalog_open_entry" }).getAttribute("href")).toBe(
-      `/catalog/${CATALOG_ITEM.id}`
-    );
+    expect(screen.getByText("catalog")).toBeDefined();
+  });
+
+  it("does not link to the catalog entry", () => {
+    // The mirror is rebuilt on every sync, so a promoted layer outlives the
+    // entry it came from — a link back would eventually 404.
+    render(<PropertiesPanel activeLayer={layer({ catalog_item: CATALOG_ITEM })} />);
+
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("says nothing about a source for an ordinary layer", () => {
@@ -38,10 +44,9 @@ describe("PropertiesPanel", () => {
     expect(screen.queryByText("source")).toBeNull();
   });
 
-  it("has no link when the snapshot predates the id being kept", () => {
+  it("marks a layer whose snapshot carries only the materialize state", () => {
     render(<PropertiesPanel activeLayer={layer({ catalog_materialize: { status: "ready" } })} />);
 
     expect(screen.getByText("source")).toBeDefined();
-    expect(screen.queryByRole("link")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { Divider, Link, Stack, Typography } from "@mui/material";
+import { Divider, Stack, Typography } from "@mui/material";
 import { formatDistance } from "date-fns";
 import { useTranslation } from "react-i18next";
 
@@ -13,13 +13,6 @@ import { datasetUpdatedAt } from "@/lib/utils/datasetDates";
 
 import DatasetSummary from "@/components/dashboard/dataset/DatasetSummary";
 
-/** The catalog entry this layer was promoted from, if it was. */
-const catalogEntryId = (layer: ProjectLayer): string | undefined => {
-  const id = (layer.other_properties as { catalog_item?: { id?: string } } | undefined)
-    ?.catalog_item?.id;
-  return typeof id === "string" && id ? id : undefined;
-};
-
 /** One labelled row, in the same three parts as every field above it. */
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <Stack spacing={1}>
@@ -33,35 +26,21 @@ const PropertiesPanel = ({ activeLayer }: { activeLayer: ProjectLayer }) => {
   const { t } = useTranslation("common");
   const dateLocale = useDateFnsLocale();
   const updatedAt = datasetUpdatedAt(activeLayer);
-  const entryId = catalogEntryId(activeLayer);
   return (
     <>
       <Stack spacing={4} sx={{ p: 2 }}>
         <DatasetSummary dataset={activeLayer} hideEmpty={true} hideMainSection={true} />
 
         {/* Where the layer came from. The tab already carries the publisher and
-            the licence; what was missing is that this is someone else's
-            dataset, and the way back to the entry it was taken from. */}
+            the licence; what was missing is that this is someone else's dataset.
+            Deliberately not a link to the catalog entry: the mirror is rebuilt
+            wholesale on every sync, so a promoted layer outlives the entry it
+            came from and the link would eventually 404. */}
         {isCatalogLayer(activeLayer) && (
           <Field label={t("source")}>
             <Stack direction="row" spacing={1} alignItems="center">
               <Icon iconName={ICON_NAME.GLOBE} style={{ fontSize: 13 }} htmlColor="inherit" />
               <Typography variant="body2">{t("catalog")}</Typography>
-              {entryId && (
-                <>
-                  <Typography variant="body2" color="text.disabled">
-                    ·
-                  </Typography>
-                  <Link
-                    variant="body2"
-                    href={`/catalog/${encodeURIComponent(entryId)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    underline="hover">
-                    {t("catalog_open_entry")}
-                  </Link>
-                </>
-              )}
             </Stack>
           </Field>
         )}

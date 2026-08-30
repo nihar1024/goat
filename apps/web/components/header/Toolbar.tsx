@@ -1,6 +1,6 @@
 "use client";
 
-import { AppBar, Box, Divider, IconButton, Toolbar as MUIToolbar, Stack, useTheme } from "@mui/material";
+import { AppBar, Divider, IconButton, Toolbar as MUIToolbar, Stack, useTheme } from "@mui/material";
 import React from "react";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -52,15 +52,21 @@ export function Toolbar(props: MapToolbarProps) {
           </>
         )}
 
+        {/* Three columns rather than an absolutely-centred middle: the side columns
+            share the leftover space equally, which keeps the centre child centred
+            while letting the sides shrink and truncate instead of sliding underneath it. */}
         <Stack
           direction="row"
           alignItems="center"
           sx={{
             gap: theme.spacing(2),
+            flex: "1 1 0",
+            minWidth: 0,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
           }}>
           {LeftToolbarChild}
         </Stack>
-        <Box sx={{ flexGrow: 1 }} />
 
         {CenterToolbarChild && (
           <Stack
@@ -68,17 +74,23 @@ export function Toolbar(props: MapToolbarProps) {
             alignItems="center"
             justifyContent="center"
             sx={{
-              position: "absolute",
-              left: "50%",
-              transform: "translateX(-50%)",
+              flex: "0 0 auto",
+              mx: theme.spacing(2),
             }}>
             {CenterToolbarChild}
           </Stack>
         )}
 
-        <Box sx={{ flexGrow: 1 }} />
-
-        {RightToolbarChild}
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="flex-end"
+          sx={{
+            flex: "1 1 0",
+            minWidth: 0,
+          }}>
+          {RightToolbarChild}
+        </Stack>
       </MUIToolbar>
     </AppBar>
   );

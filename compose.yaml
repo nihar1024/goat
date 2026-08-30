@@ -2,7 +2,7 @@
 # GOAT Docker Compose
 # =============================================================================
 # Profiles:
-#   - (none): Infrastructure only (db, minio, rabbitmq, redis, windmill-server,
+#   - (none): Infrastructure only (db, minio, redis, windmill-server,
 #             windmill-worker-default)
 #   - dev: + devcontainer, tools worker with local goatlib mount, print worker
 #   - prod: + core, geoapi, web, processes, catalog, tools/print workers, init scripts
@@ -307,14 +307,6 @@ services:
       exit 0;
       "
 
-  rabbitmq:
-    image: rabbitmq:4.0.3-management
-    networks:
-      - goat
-    ports:
-      - 5672:5672
-      - 15672:15672
-
   redis:
     image: redis:7.4.1-alpine
     networks:
@@ -451,7 +443,6 @@ services:
       - db
       - minio
       - minio-buckets
-      - rabbitmq
       - redis
       - windmill-server
       - windmill-worker-default

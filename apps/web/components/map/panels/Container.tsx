@@ -142,18 +142,10 @@ export default function Container(props: ContainerProps) {
               sx={{
                 py: theme.spacing(4),
                 px: theme.spacing(3),
-                overflowY: "auto",
-                scrollbarGutter: "stable both-edges",
-                "&::-webkit-scrollbar": {
-                  width: "6px",
-                },
-                "&::-webkit-scrollbar-thumb": {
-                  background: "#2836484D",
-                  borderRadius: "3px",
-                  "&:hover": {
-                    background: "#28364880",
-                  },
-                },
+                // The action bar is the panel's chrome: it keeps its full height and
+                // the body scrolls instead. Without this the flex layout shrinks it
+                // and clips the buttons inside it.
+                flexShrink: 0,
               }}>
               {action}
             </Stack>

@@ -15,7 +15,7 @@ GOAT is an open-source WebGIS platform for integrated planning, built as a monor
 - `packages/js/` — Shared configs (eslint, prettier, tsconfig), types, UI components, keycloak-theme
 
 **Python** (managed by uv workspaces, Python 3.11):
-- `apps/core` — Main FastAPI backend: user management, projects, folders, metadata. Uses SQLAlchemy/SQLModel + PostgreSQL/PostGIS, Alembic migrations, Celery+Redis for background tasks
+- `apps/core` — Main FastAPI backend: user management, projects, folders, metadata. Uses SQLAlchemy/SQLModel + PostgreSQL/PostGIS, Alembic migrations, Redis for caching; background jobs run in Windmill
 - `apps/geoapi` — FastAPI service for OGC API Features/Tiles: layer uploads, serving geospatial data, DuckDB/DuckLake storage
 - `apps/processes` — FastAPI service for OGC API Processes: async tool execution via Windmill, sync analytics queries, job management
 - `apps/catalog` — FastAPI STAC API service for the GOAT data catalog: database-less, serves `catalog.parquet` (+ `nuts.parquet`) from `${DATA_DIR}/catalog` via an in-memory DuckDB table + FTS index; also hosts an MCP server at `/mcp`. Specs: `docs/goat-catalog-design.md`, `docs/goat-catalog-api.md`, `docs/goat-catalog-contract.md`
@@ -71,7 +71,7 @@ cd apps/core && uv run alembic revision --autogenerate -m "description"  # Creat
 
 ### Infrastructure (Docker)
 ```bash
-docker compose up -d              # Start infra only (PostgreSQL, MinIO, Redis, RabbitMQ, Windmill)
+docker compose up -d              # Start infra only (PostgreSQL, MinIO, Redis, Windmill)
 docker compose --profile dev up -d   # Infra + devcontainer
 docker compose --profile prod up -d  # Full production stack
 ```

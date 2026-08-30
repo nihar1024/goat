@@ -28,6 +28,18 @@ const memberIcon = (item: CatalogItem): ICON_NAME => {
   }
 };
 
+/**
+ * Rows a bundle shows before the list starts scrolling.
+ *
+ * 75% of the catalog's multi-layer datasets have five layers or fewer, so most
+ * bundles keep rendering exactly as they did, with no scrollbar. The tail is
+ * what this is for: the largest has 429 layers (50 of which are fetched), and
+ * inline that is a card several screens tall which pushes every other result out
+ * of view. A height cap rather than a row cap, because a picker must not hide
+ * layers the user can tick.
+ */
+const MAX_VISIBLE_MEMBERS = 5;
+
 const CatalogBundleMembers = ({
   collectionId,
   onOpenMember,
@@ -56,6 +68,15 @@ const CatalogBundleMembers = ({
   });
 
   const pad = dense ? 3 : 5;
+  // The row's vertical padding, in theme spacing units — used both by the rows
+  // and by the height the list scrolls at, so the two cannot drift apart.
+  const padY = dense ? 2 : 2.5;
+  // A row is its padding plus one `body2` line and the divider beneath it.
+  // Built as a calc from `theme.spacing` rather than parsed out of it: this
+  // theme returns rem ("0.25rem"), so arithmetic on the string yields NaN and
+  // the cap silently disappears.
+  const rowHeight = `calc(${theme.spacing(padY * 2)} + 21px)`;
+  const scrolls = items.length > MAX_VISIBLE_MEMBERS;
 
   if (isLoading) {
     return (
@@ -75,7 +96,17 @@ const CatalogBundleMembers = ({
   }
 
   return (
-    <Stack divider={<Box sx={{ borderTop: `1px solid ${theme.palette.divider}` }} />}>
+    <Stack
+      divider={<Box sx={{ borderTop: `1px solid ${theme.palette.divider}` }} />}
+      sx={
+        scrolls
+          ? {
+              maxHeight: `calc(${MAX_VISIBLE_MEMBERS} * (${rowHeight}))`,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+            }
+          : undefined
+      }>
       {items.map((member) => {
         const rows = member.properties["table:row_count"];
         const picked = selection?.isSelected(member.id) ?? false;
@@ -105,7 +136,7 @@ const CatalogBundleMembers = ({
               alignItems: "center",
               columnGap: dense ? 2 : 3,
               px: pad,
-              py: dense ? 2 : 2.5,
+              py: padY,
               cursor: onOpenMember || selection ? "pointer" : "default",
               backgroundColor: picked ? theme.palette.action.selected : undefined,
               "&:hover": onOpenMember || selection

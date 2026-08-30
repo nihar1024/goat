@@ -15,7 +15,9 @@ export const FloatingPanel = ({
   children,
   sx,
   width = 300,
-  minHeight = "400px",
+  // Clamped to the available height: a bare 400px floor wins over maxHeight and
+  // overflows the clipping parent, cutting off whatever sits at the panel bottom.
+  minHeight = "min(400px, 100%)",
   maxHeight = "auto",
   fillHeight = false,
 }: FloatingPanelProps) => {

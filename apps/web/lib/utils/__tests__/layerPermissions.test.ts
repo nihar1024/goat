@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
-import { canEditLayerFeatures, canEditLayerFields } from "@/lib/utils/layerPermissions";
+import {
+  canEditLayerFeatures,
+  canEditLayerFields,
+  canSetDefaultStyle,
+} from "@/lib/utils/layerPermissions";
 
 const USER = "user-1";
 const PROJECT_OWNER = "project-owner-1";
@@ -197,5 +201,31 @@ describe("canEditLayerFields", () => {
 
     expect(canEditLayerFields(args)).toBe(true);
     expect(canEditLayerFeatures(args)).toBe(false);
+  });
+});
+
+describe("canSetDefaultStyle", () => {
+  const catalogLayer = { other_properties: { catalog_item: { id: "x" } } } as never;
+  const ownLayer = { other_properties: {} } as never;
+
+  it("refuses a catalog layer", () => {
+    // The button PUTs the dataset row, which `check_layer` grants only
+    // `layer-viewer` on — GET is allowed, PUT and DELETE are not.
+    expect(canSetDefaultStyle(catalogLayer)).toBe(false);
+  });
+
+  it("refuses a layer still being materialized", () => {
+    expect(
+      canSetDefaultStyle({ other_properties: { catalog_materialize: { status: "pending" } } } as never)
+    ).toBe(false);
+  });
+
+  it("allows a layer the user holds", () => {
+    expect(canSetDefaultStyle(ownLayer)).toBe(true);
+  });
+
+  it("refuses when there is no layer", () => {
+    expect(canSetDefaultStyle(null)).toBe(false);
+    expect(canSetDefaultStyle(undefined)).toBe(false);
   });
 });

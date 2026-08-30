@@ -23,6 +23,8 @@ import type { ProjectLayer } from "@/lib/validations/project";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
 import { useProjectLayerFeatureCount } from "@/hooks/map/useProjectLayerFeatureCount";
+
+import { canSetDefaultStyle } from "@/lib/utils/layerPermissions";
 import { useActiveLayer, useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import AccordionWrapper from "@/components/common/AccordionWrapper";
@@ -410,6 +412,7 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
             </Button>
           </span>
         </Tooltip>
+        {canSetDefaultStyle(activeLayer) && (
         <Tooltip title={t("set_as_default_style")} placement="bottom">
           <span style={{ display: "flex" }}>
             <Button
@@ -422,6 +425,7 @@ const LayerStylePanel = ({ projectId }: { projectId: string }) => {
             </Button>
           </span>
         </Tooltip>
+        )}
       </Stack>
       <Box
         sx={{

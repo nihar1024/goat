@@ -1,5 +1,10 @@
 import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
 
+import type { Layer } from "@/lib/validations/layer";
+import type { ProjectLayer } from "@/lib/validations/project";
+
+import { isCatalogLayer } from "@/lib/utils/catalog-layer";
+
 export type CanEditLayerFieldsArgs = {
   /** Id of the signed-in user. */
   currentUserId?: string | null;
@@ -64,4 +69,27 @@ export function canEditLayerFeatures({
   if (!canEditLayerFields(fields)) return false;
   if (layerSize && layerSize > MAX_EDITABLE_LAYER_SIZE) return false;
   return true;
+}
+
+/**
+ * Whether to offer "Set as default style".
+ *
+ * That button writes this project's styling back to the DATASET row, where it
+ * becomes the default for everyone who adds the dataset afterwards — so it
+ * needs write access to the dataset, not to the project.
+ *
+ * A catalog layer never qualifies. It is a shared read-only snapshot with no
+ * owner, so `check_layer` grants it only `layer-viewer` and the `PUT
+ * layer/{id}` behind the button is refused — verified against the function
+ * itself, where GET is granted and PUT and DELETE are not. Offering it can
+ * only produce an error toast, or, on a deployment running with auth off,
+ * quietly rewrite the default style of a dataset shared with everyone.
+ *
+ * Deliberately narrower than the server rule for now: a project VIEWER is also
+ * refused this PUT, and this does not yet say so. Extending it means adding the
+ * same ownership arguments {@link canEditLayerFields} takes.
+ */
+export function canSetDefaultStyle(layer: Layer | ProjectLayer | null | undefined): boolean {
+  if (!layer) return false;
+  return !isCatalogLayer(layer);
 }

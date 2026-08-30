@@ -35,13 +35,41 @@ const toDatetimeInterval = (
   return `${start}/${end}`;
 };
 
+/** What both the picker and the catalog page start at. */
+export const DEFAULT_SORT = "-updated";
+
 export const buildSearchParams = (
   state: CatalogQueryState,
-  { pageSize = CATALOG_PAGE_SIZE }: { pageSize?: number } = {}
+  {
+    pageSize = CATALOG_PAGE_SIZE,
+    viewport,
+  }: {
+    pageSize?: number;
+    /**
+     * The project's current map view, as `[west, south, east, north]`.
+     *
+     * Sent as `bbox_boost`, which RANKS rather than filters: a dataset drawn
+     * around the visible area comes first, one covering it scores lower, one
+     * elsewhere scores zero — and the whole catalog is still returned, so the
+     * count is unchanged and everything else is a scroll away. Absent outside a
+     * project, where there is no map to read.
+     */
+    viewport?: [number, number, number, number];
+  } = {}
 ): CatalogSearchParams => {
   // A drawn or buffered shape travels as `intersects`; a region as its id, so the
   // boundary geometry never crosses the wire.
   const geometry = spatialGeometry(state.spatial);
+  /**
+   * The default sort is not a choice anyone made.
+   *
+   * Sending it told the server the list was explicitly ordered, which switches
+   * OFF every ranking signal — spatial relevance and text relevance alike — so
+   * a filtered or boosted list came back in the same order as an unfiltered
+   * one. The server's own default is this same order (with a stable
+   * tiebreaker), so omitting it changes nothing except letting ranking work.
+   */
+  const explicitSort = state.sortby && state.sortby !== DEFAULT_SORT ? state.sortby : undefined;
   return {
     limit: pageSize,
     offset: (state.page - 1) * pageSize,
@@ -49,7 +77,12 @@ export const buildSearchParams = (
     // share 970 timestamps, one of them 607 times — so ordering by it alone leaves
     // ties in no defined order, and offset paging then returns the same dataset on
     // two different pages.
-    sortby: state.sortby ? `${state.sortby},id` : undefined,
+    sortby: explicitSort ? `${explicitSort},id` : undefined,
+    // Not sent when the user picked an order. The server would still honour it
+    // — `bbox_boost` is a caller's explicit ranking request, unlike the filter
+    // and text relevance it gates behind `sortby` — but someone who asked for
+    // "Title A-Z" did not ask for it to be reshuffled by where the map is.
+    bbox_boost: viewport && !explicitSort ? viewport.join(",") : undefined,
     q: state.q ?? undefined,
     nuts: state.spatial?.kind === "region" ? state.spatial.nutsIds : undefined,
     intersects: geometry ? JSON.stringify(geometry) : undefined,

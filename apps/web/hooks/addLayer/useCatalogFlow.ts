@@ -90,9 +90,12 @@ export type CatalogFlow = FlowController & { catalog: CatalogFlowState };
 export const useCatalogFlow = ({
   projectId,
   onDone,
+  viewport,
 }: {
   projectId?: string;
   onDone?: () => void;
+  /** The project's map view, ranked first without filtering anything out. */
+  viewport?: [number, number, number, number];
 }): CatalogFlow => {
   const { t } = useTranslation("common");
 
@@ -127,7 +130,10 @@ export const useCatalogFlow = ({
     }),
     [q, spatial, dates, facetSelections]
   );
-  const searchParams = useMemo(() => buildSearchParams(queryState), [queryState]);
+  const searchParams = useMemo(
+    () => buildSearchParams(queryState, { viewport }),
+    [queryState, viewport]
+  );
   const facetQueryParams = useMemo(() => buildFacetParams(searchParams), [searchParams]);
   // Favourites filter server-side, like the catalog page: the saved ids join
   // the search, so counts and paging describe the favourites — and nothing

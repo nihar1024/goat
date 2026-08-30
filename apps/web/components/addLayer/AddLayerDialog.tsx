@@ -14,6 +14,8 @@ import {
   useTheme,
 } from "@mui/material";
 import type { ReactNode } from "react";
+import { useState } from "react";
+import { useMap } from "react-map-gl/maplibre";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -168,7 +170,19 @@ const CreateDialog = ({ projectId, onClose }: { projectId?: string; onClose: () 
 };
 
 const CatalogDialog = ({ projectId, onClose }: { projectId?: string; onClose: () => void }) => {
-  const controller = useCatalogFlow({ projectId, onDone: onClose });
+  const { map } = useMap();
+  /**
+   * Read once, when the dialog opens: the map cannot move behind a modal, and
+   * a value that changed would refetch the whole list. Absent on the dashboard,
+   * where there is no map — then nothing is boosted.
+   */
+  const [viewport] = useState<[number, number, number, number] | undefined>(() => {
+    const bounds = map?.getBounds();
+    return bounds
+      ? [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
+      : undefined;
+  });
+  const controller = useCatalogFlow({ projectId, onDone: onClose, viewport });
   return (
     <AddLayerFrame sourceId="catalog" controller={controller} onClose={onClose}>
       <CatalogBody controller={controller} />

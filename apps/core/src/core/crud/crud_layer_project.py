@@ -1,5 +1,5 @@
 # Standard library imports
-from typing import List, Tuple, Union
+from typing import Any, List, Tuple, Union
 from uuid import UUID
 
 # Third party imports
@@ -23,6 +23,29 @@ from core.schemas.project import (
 
 # Local application imports
 from .base import CRUDBase
+
+
+def initial_link_properties(
+    existing_link: Any | None, layer: Any
+) -> dict[str, Any] | None:
+    """What a new project-layer link starts out looking like.
+
+    When the layer is already in this project the style comes off the link
+    already there, so a duplicate matches what the user made rather than
+    snapping back to the dataset's default.
+
+    `visibility` rides in that same blob and is deliberately NOT copied: it is
+    view state, not style. Adding a dataset you had hidden would otherwise give
+    you a second copy you also cannot see, which reads as the add having failed
+    — and the one thing you certainly meant by adding a layer is to look at it.
+    """
+    if existing_link is None:
+        return layer.properties
+    properties = existing_link.properties
+    if not isinstance(properties, dict):
+        return properties
+    # Copied, not mutated: the link already in the project keeps its own state.
+    return {**properties, "visibility": True}
 
 
 class CRUDLayerProject(CRUDBase):
@@ -253,9 +276,7 @@ class CRUDLayerProject(CRUDBase):
                 ]:
                     layer_name = "Copy from " + layer.name
 
-            # Copy properties from the existing project-layer link (preserves user's style)
-            # rather than from the base layer (which would reset to default style)
-            properties = existing_link.properties if existing_link else layer.properties
+            properties = initial_link_properties(existing_link, layer)
             other_properties = (
                 existing_link.other_properties
                 if existing_link

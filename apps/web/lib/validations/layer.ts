@@ -500,7 +500,17 @@ export const otherPropertiesSchmea = z.object({
   tile_size: z.number().optional(),
   // Per-project-layer data table preferences
   table_config: tableConfigSchema.optional(),
-});
+})
+  /**
+   * Not a closed shape: `other_properties` is a free-form blob, and a promoted
+   * catalog layer carries `catalog_item` and `catalog_materialize` in it. A
+   * plain `z.object` STRIPS what it does not declare, so parsing a project
+   * layer through this schema quietly turned a catalog layer into an ordinary
+   * one — and everything keyed off that (the read-only marker, hiding "Set as
+   * default") went with it. The server made the same mistake with a closed
+   * Pydantic model and was fixed the same way.
+   */
+  .passthrough();
 
 // Raster styling schemas
 export const rasterStyleType = z.enum(["image", "color_range", "categories", "hillshade"]);

@@ -53,6 +53,15 @@ class ThumbnailUrlMixin(BaseModel):
 
 
 class LayerReadBaseAttributes(BaseModel):
+    # Reading is not the place to discover that stored data is too long: the
+    # value is already in the database and the user can do nothing about it.
+    # One over-long description used to fail the whole `GET /project/{id}/layer`
+    # response, so a single catalog layer stopped an entire project loading.
+    # The bounds that matter are on input — see `ContentBaseAttributes`, and
+    # `tests/unit/test_read_models_accept_stored_data.py`, which fails if a
+    # length constraint reaches a read model again.
+    name: str | None = Field(None, description="Layer name")
+    description: str | None = Field(None, description="Layer description")
     user_id: UUID | None = Field(None, description="Owner, or None for a catalog layer")
     shared_with: Dict[str, Any] | None = Field(
         None, description="List of user IDs the layer is shared with"

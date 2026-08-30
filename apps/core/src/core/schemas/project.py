@@ -270,7 +270,9 @@ class IFeatureToolProjectUpdate(IFeatureBaseProject):
 
 
 class ITableProjectRead(LayerProjectIds, TableRead, CQLQuery):
-    group: str | None = Field(None, description="Layer group name", max_length=255)
+    # Unbounded on read: one row over a limit fails the whole response, not just
+    # this field. The limit belongs on create/update.
+    group: str | None = Field(None, description="Layer group name")
     other_properties: dict[str, Any] | None = Field(
         None,
         description="Per-project-layer preferences (e.g. data table configuration)",
@@ -296,7 +298,9 @@ class ITableProjectUpdate(CQLQuery):
 
 
 class IRasterProjectRead(LayerProjectIds, RasterRead):
-    group: str | None = Field(None, description="Layer group name", max_length=255)
+    # Unbounded on read: one row over a limit fails the whole response, not just
+    # this field. The limit belongs on create/update.
+    group: str | None = Field(None, description="Layer group name")
     properties: Optional[dict[str, Any]] = Field(
         None,
         description="Layer properties",
@@ -448,18 +452,23 @@ class LayerTreeUpdate(BaseModel):
 
 # --- Schemas for Group CRUD (Renamed) ---
 class ILayerProjectGroupCreate(BaseModel):
-    name: str
+    # The column is unbounded `text`, so nothing else stops a group name of any
+    # size — 5,000 characters was accepted and stored.
+    name: str = Field(..., max_length=255)
     properties: dict[str, Any] | None = None
     parent_id: Optional[int] = None
 
 
 class ILayerProjectGroupUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=255)
     properties: dict[str, Any] | None = None
     parent_id: Optional[int] = None
 
 
 class ILayerProjectGroupRead(ILayerProjectGroupCreate):
+    # Unbounded on read, though it inherits a bounded field: a group named
+    # before the limit existed must still be readable.
+    name: str
     id: int
     project_id: UUID4
     order: int

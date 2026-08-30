@@ -45,6 +45,13 @@ class Settings(BaseSettings):
         "CATALOG_LAYERS_DIR",
         os.path.join(os.getenv("DATA_DIR", "/app/data"), "catalog", "layers"),
     )
+    # Their PMTiles, in a sibling directory: a cache derived from the parquet
+    # above, so it can be wiped to force a rebuild without losing data that
+    # would have to come from the catalog bucket again.
+    CATALOG_TILES_DIR: str = os.getenv(
+        "CATALOG_TILES_DIR",
+        os.path.join(os.getenv("DATA_DIR", "/app/data"), "catalog", "tiles"),
+    )
 
     # S3/MinIO settings (shared for DuckLake and uploads)
     S3_PROVIDER: str = os.getenv("S3_PROVIDER", "hetzner").lower()

@@ -196,11 +196,11 @@ async def test_get_tile_from_pmtiles_missing_file() -> None:
 
 
 def test_catalog_layer_tiles_are_read_from_the_catalog_directory() -> None:
-    """A catalog layer's tiles live beside its parquet, not in the user tiles dir.
+    """A catalog layer's tiles come from the catalog tree, not the user tiles dir.
 
     Catalog artifacts are derived and identical for every deployment — the same
-    dataset through the same converter — so they belong in one wipeable tree
-    that can be rebuilt or shipped prebuilt, rather than mixed into the tiles a
+    dataset through the same converter — so they belong in a wipeable tree that
+    can be rebuilt or shipped prebuilt, rather than mixed into the tiles a
     user's own data produced.
     """
     with tempfile.TemporaryDirectory() as tmpdir:

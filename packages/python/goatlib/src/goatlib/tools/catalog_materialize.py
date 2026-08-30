@@ -38,7 +38,7 @@ from pydantic import Field
 
 from goatlib.tools.base import SimpleToolRunner
 from goatlib.tools.schemas import ToolInputBase
-from goatlib.utils.layer import layer_id_to_table_name
+from goatlib.utils.layer import catalog_tiles_dir, layer_id_to_table_name
 
 logger = logging.getLogger(__name__)
 
@@ -257,9 +257,11 @@ class CatalogMaterializeRunner(SimpleToolRunner):
         """Tiles for the materialized file, written beside its parquet.
 
         Not the user tiles directory: everything a catalog layer produces is
-        derived from a dataset every deployment harvests, so one directory
-        holds the lot -- wipeable, rebuildable, and shippable prebuilt --
-        while the tiles tree stays the user's own data.
+        derived from a dataset every deployment harvests, so it lives under the
+        catalog tree -- wipeable, rebuildable, shippable prebuilt -- while the
+        tiles tree stays the user's own data. In its own directory beside the
+        parquet, because tiles are a cache OF that parquet and get cleared on
+        their own.
 
         The generator's SQL selects ``rowid`` from its source, which a parquet
         scan does not have — a view naming ``file_row_number`` provides it,
@@ -285,7 +287,7 @@ class CatalogMaterializeRunner(SimpleToolRunner):
                 FROM read_parquet('{parquet_path}', file_row_number=true)
             """)
             generator = PMTilesGenerator(
-                tiles_data_dir=catalog_layers_dir(),
+                tiles_data_dir=catalog_tiles_dir(),
                 config=PMTilesConfig(
                     min_zoom=self.settings.pmtiles_min_zoom,
                     max_zoom=self.settings.pmtiles_max_zoom,

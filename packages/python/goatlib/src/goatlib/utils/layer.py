@@ -168,6 +168,24 @@ def catalog_layers_dir() -> Path:
     return Path(os.environ.get("DATA_DIR", "/app/data")) / "catalog" / "layers"
 
 
+def catalog_tiles_dir() -> Path:
+    """Where a materialized catalog layer's PMTiles live.
+
+    A sibling of `catalog_layers_dir`, not the same directory: the parquet is
+    the layer's source of truth while the tiles are a cache derived from it, so
+    the tiles can be wiped to force a rebuild without touching data that would
+    otherwise have to be fetched from the catalog bucket again. It also leaves
+    each free to sit on its own storage — tiles are range-read, bulk data is
+    not.
+
+    `CATALOG_TILES_DIR` wins; otherwise `DATA_DIR/catalog/tiles`.
+    """
+    override = os.environ.get("CATALOG_TILES_DIR")
+    if override:
+        return Path(override)
+    return Path(os.environ.get("DATA_DIR", "/app/data")) / "catalog" / "tiles"
+
+
 def catalog_layer_parquet(layer_id: str) -> Path | None:
     """The materialized file of a promoted catalog layer, or None.
 

@@ -59,17 +59,20 @@ def test_input_errors_land_as_failed_not_pending(
     assert expected_error.split()[0] in (extra or {}).get("error", "")
 
 
-def test_tiles_are_written_beside_the_parquet(tmp_path, monkeypatch) -> None:
-    """A catalog layer's tiles belong to the catalog tree, not the user one.
+def test_tiles_are_written_to_the_catalog_tiles_directory(
+    tmp_path, monkeypatch
+) -> None:
+    """A catalog layer's tiles belong to the catalog tree, in their own directory.
 
     Pinned because the two directories are configured separately: nothing else
     fails if the generator keeps writing into `TILES_DATA_DIR`, the files just
     scatter and the GC's second location quietly becomes the only one in use.
     """
-    monkeypatch.setenv("CATALOG_LAYERS_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("CATALOG_LAYERS_DIR", str(tmp_path / "catalog" / "layers"))
+    monkeypatch.setenv("CATALOG_TILES_DIR", str(tmp_path / "catalog" / "tiles"))
     monkeypatch.setenv("TILES_DATA_DIR", str(tmp_path / "tiles"))
 
-    from goatlib.utils.layer import catalog_layers_dir
+    from goatlib.utils.layer import catalog_layers_dir, catalog_tiles_dir
 
     seen: dict[str, object] = {}
 
@@ -78,7 +81,7 @@ def test_tiles_are_written_beside_the_parquet(tmp_path, monkeypatch) -> None:
             seen["dir"] = tiles_data_dir
 
         def generate_from_table(self, **_kwargs):  # noqa: ANN003
-            return tmp_path / "catalog" / "t_x.pmtiles"
+            return tmp_path / "catalog" / "tiles" / "t_x.pmtiles"
 
         def generate_anchor_from_table(self, **_kwargs):  # noqa: ANN003
             return None
@@ -103,4 +106,8 @@ def test_tiles_are_written_beside_the_parquet(tmp_path, monkeypatch) -> None:
         "00000000-0000-0000-0000-0000000000x1", parquet, "geom"
     )
 
-    assert seen["dir"] == catalog_layers_dir()
+    assert seen["dir"] == catalog_tiles_dir()
+    # Beside the parquet, not in it: the tiles are a cache of that file and are
+    # cleared without touching it.
+    assert seen["dir"] != catalog_layers_dir()
+    assert seen["dir"].parent == catalog_layers_dir().parent

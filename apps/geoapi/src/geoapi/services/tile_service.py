@@ -331,10 +331,11 @@ class TileService:
         self.buffer = settings.DEFAULT_TILE_BUFFER
         self.ducklake_data_dir = Path(settings.DUCKLAKE_DATA_DIR)
         self.tiles_data_dir = Path(settings.TILES_DATA_DIR)
-        # A catalog layer's tiles sit beside its parquet: those artifacts are
-        # derived from a dataset every deployment has, so they belong in one
-        # wipeable tree rather than mixed into the tiles a user's data made.
-        self.catalog_tiles_dir = Path(settings.CATALOG_LAYERS_DIR)
+        # A catalog layer's tiles have their own directory under the catalog
+        # tree: derived from a dataset every deployment has, so wipeable and
+        # rebuildable on their own, and never mixed into the tiles a user's
+        # data produced.
+        self.catalog_tiles_dir = Path(settings.CATALOG_TILES_DIR)
         # Track which PMTiles files exist (LRU cache for 10k+ layers)
         # TTL, not plain LRU: a False verdict must expire, because PMTiles can
         # arrive AFTER a layer starts serving — catalog layers flip ready as

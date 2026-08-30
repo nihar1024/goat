@@ -23,6 +23,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
+from goatlib.tools.registry import TOOL_REGISTRY
 from pydantic import ValidationError
 
 from processes.config import settings
@@ -733,6 +734,12 @@ def _windmill_status_to_ogc(job: dict[str, Any]) -> StatusCode:
         return StatusCode.accepted
 
 
+#: Tools whose jobs run as a side effect of something else the user did.
+_JOB_HIDDEN_PROCESS_IDS = frozenset(
+    tool.name for tool in TOOL_REGISTRY if getattr(tool, "job_hidden", False)
+)
+
+
 def _windmill_job_to_status_info(job: dict[str, Any], base_url: str) -> StatusInfo:
     """Convert Windmill job to OGC StatusInfo."""
     job_id = job.get("id", "")
@@ -744,6 +751,10 @@ def _windmill_job_to_status_info(job: dict[str, Any], base_url: str) -> StatusIn
         process_id = script_path.replace("f/goat/tools/", "")
     else:
         process_id = script_path.replace("f/goat/", "")
+
+    # Whether this job is worth showing is a property of the tool, so it comes
+    # from the registry rather than a list of ids kept in a client.
+    hidden = process_id in _JOB_HIDDEN_PROCESS_IDS
 
     # Parse timestamps
     created = None
@@ -842,6 +853,7 @@ def _windmill_job_to_status_info(job: dict[str, Any], base_url: str) -> StatusIn
         started=started,
         finished=finished,
         inputs=job.get("args"),
+        hidden=hidden,
         links=links,
         workflow_as_code_status=job.get("flow_status", {}).get(
             "workflow_as_code_status"

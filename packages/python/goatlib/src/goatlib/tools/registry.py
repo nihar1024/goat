@@ -36,6 +36,11 @@ class ToolDefinition:
         category: Tool category for grouping (e.g., "geoprocessing", "data")
         keywords: Search keywords for discovery
         toolbox_hidden: If True, hide from toolbox UI (still available via API)
+        job_hidden: If True, this tool's jobs are a side effect of something
+            else the user did rather than something they started, so the job
+            list does not show them. Distinct from `toolbox_hidden`: an export
+            is hidden from the toolbox but its job is exactly what the user is
+            waiting for.
         beta: If True, render in a "Beta" sub-section at the bottom of its
             category in the toolbox UI
         docs_path: Path to documentation (appended to docs base URL)
@@ -51,6 +56,7 @@ class ToolDefinition:
     category: str = "geoprocessing"
     keywords: tuple[str, ...] = ()
     toolbox_hidden: bool = False
+    job_hidden: bool = False
     beta: bool = False
     docs_path: str | None = None
     worker_tag: str = "tools"
@@ -609,6 +615,7 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
         category="data",
         keywords=("catalog", "materialize", "promote"),
         toolbox_hidden=True,
+        job_hidden=True,
     ),
     ToolDefinition(
         name="bundle_import",
@@ -653,6 +660,7 @@ TOOL_REGISTRY: tuple[ToolDefinition, ...] = (
         category="data",
         keywords=("delete", "remove", "bundle", "artifact", "cleanup"),
         toolbox_hidden=True,
+        job_hidden=True,
     ),
     ToolDefinition(
         name="layer_update",

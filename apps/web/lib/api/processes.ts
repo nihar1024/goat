@@ -107,6 +107,10 @@ export interface Job {
   user_id?: string;
   read?: boolean;
   project_id?: string;
+  /** A job the user did not start — a side effect of another action, which
+   * the job tray leaves out. Set by the processes service from the tool
+   * registry, so the list of them is not kept here. */
+  hidden?: boolean;
   inputs?: Record<string, unknown>; // Job inputs (e.g., layout_id for PrintReport)
   result?: Record<string, unknown>; // Job result/output
   // Workflow execution status

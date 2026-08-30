@@ -27,15 +27,15 @@ const JOB_PROCESS_IDS = [
 
 describe("job labels", () => {
   it.each(JOB_PROCESS_IDS)("%s is named in English", (id) => {
-    expect(typeof (en as Record<string, unknown>)[id]).toBe("string");
+    expect(typeof (en as unknown as Record<string, unknown>)[id]).toBe("string");
   });
 
   it.each(JOB_PROCESS_IDS)("%s is named in German", (id) => {
-    expect(typeof (de as Record<string, unknown>)[id]).toBe("string");
+    expect(typeof (de as unknown as Record<string, unknown>)[id]).toBe("string");
   });
 
   it("does not fall back to the raw id for a catalog materialize job", () => {
-    expect((en as Record<string, string>).catalog_materialize).not.toBe("catalog_materialize");
-    expect((de as Record<string, string>).catalog_materialize).not.toBe("catalog_materialize");
+    expect((en as unknown as Record<string, string>).catalog_materialize).not.toBe("catalog_materialize");
+    expect((de as unknown as Record<string, string>).catalog_materialize).not.toBe("catalog_materialize");
   });
 });

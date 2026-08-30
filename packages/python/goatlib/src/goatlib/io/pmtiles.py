@@ -32,7 +32,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Self
 
@@ -530,6 +530,55 @@ class PMTilesGenerator:
             logger.warning(f"Could not detect geometry type: {e}")
         return None
 
+    @staticmethod
+    def _pre_epoch_date_replacements(
+        duckdb_con: "duckdb.DuckDBPyConnection",
+        table_name: str,
+        date_columns: set[str],
+    ) -> str:
+        """A ``REPLACE`` clause casting pre-1970 DATE columns to text, or "".
+
+        GDAL's GeoJSON writer puts a DATE through a unix-time conversion that
+        rejects anything before the epoch (`Invalid unixTime = …`), and the
+        error fails the whole export -- so one historical date costs the layer
+        every tile it would have had. A public catalog is full of them.
+
+        Only columns that actually hold such a date are rewritten: GDAL renders
+        a DATE as `YYYY-MM-DD` and so does the cast, but leaving the untouched
+        ones alone keeps every layer that works today byte-identical.
+        """
+        if not date_columns:
+            return ""
+
+        ordered = sorted(date_columns)
+        try:
+            mins = duckdb_con.execute(
+                "SELECT "
+                + ", ".join(f'min("{name}")' for name in ordered)
+                + f" FROM {table_name}"
+            ).fetchone()
+        except Exception as e:  # noqa: BLE001 - a probe, never a reason to fail
+            logger.debug(f"Could not check date ranges for {table_name}: {e}")
+            return ""
+
+        epoch = date(1970, 1, 1)
+        affected = [
+            name
+            for name, oldest in zip(ordered, mins or (), strict=False)
+            if isinstance(oldest, date) and oldest < epoch
+        ]
+        if not affected:
+            return ""
+
+        logger.debug(
+            f"Casting pre-epoch date columns to text for GeoJSON export: {affected}"
+        )
+        return (
+            "REPLACE ("
+            + ", ".join(f'CAST("{name}" AS VARCHAR) AS "{name}"' for name in affected)
+            + ")"
+        )
+
     def _export_to_geojson(
         self: Self,
         duckdb_con: duckdb.DuckDBPyConnection,
@@ -562,6 +611,7 @@ class PMTilesGenerator:
 
         # Get actual columns and their types from the table
         columns_to_exclude: set[str] = set(exclude_columns)
+        date_columns: set[str] = set()
         try:
             # Use SELECT LIMIT 0 to get column info without fetching data
             # This works better with DuckLake than DESCRIBE
@@ -572,6 +622,8 @@ class PMTilesGenerator:
             for col_info in result:
                 col_name = col_info[0]
                 col_type = col_info[1] if len(col_info) > 1 else ""
+                if str(col_type).strip().upper() == "DATE":
+                    date_columns.add(col_name)
 
                 col_type_lower = str(col_type).lower()
                 # Exclude complex types that GeoJSON/tippecanoe can't handle
@@ -592,6 +644,7 @@ class PMTilesGenerator:
         except Exception as e:
             logger.warning(f"Could not get column list for {table_name}: {e}")
             columns_to_exclude = set()
+            date_columns = set()
 
         # Build exclusion clause for columns that exist
         exclude_clause = ""
@@ -599,11 +652,15 @@ class PMTilesGenerator:
             exclude_clause = f"EXCLUDE({', '.join(sorted(columns_to_exclude))})"
             logger.debug(f"Excluding columns from GeoJSON export: {columns_to_exclude}")
 
+        replace_clause = self._pre_epoch_date_replacements(
+            duckdb_con, table_name, date_columns - columns_to_exclude
+        )
+
         # Include rowid+1 as _rowid — tippecanoe will promote it to MVT feature ID.
         # +1 because MVT feature ID 0 is treated as "unset" by MapLibre.
         sql = f"""
             COPY (
-                SELECT rowid + 1 AS _rowid, * {exclude_clause}
+                SELECT rowid + 1 AS _rowid, * {exclude_clause} {replace_clause}
                 FROM {table_name}
             ) TO '{output_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')
         """

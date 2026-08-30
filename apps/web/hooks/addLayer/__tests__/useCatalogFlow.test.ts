@@ -55,9 +55,10 @@ describe("useCatalogFlow", () => {
     await waitFor(() => expect(result.current.catalog.selection.ids).toEqual([]));
   });
 
-  it("reports a failure even though the dialog has closed", async () => {
+  it("reports the server's refusal, not a generic error", async () => {
     const { toast } = await import("react-toastify");
-    addCatalogLayersToProject.mockRejectedValue(new Error("boom"));
+    const refusal = "120 layers is more than the 100 a single request may add.";
+    addCatalogLayersToProject.mockRejectedValue(new Error(refusal));
     const onDone = vi.fn();
     const { result } = renderHook(() => useCatalogFlow({ projectId: PROJECT, onDone }));
 
@@ -65,7 +66,7 @@ describe("useCatalogFlow", () => {
     act(() => result.current.action.run());
 
     expect(onDone).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("error_adding_layer"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(refusal));
   });
 
   it("does nothing without a project or a selection", () => {

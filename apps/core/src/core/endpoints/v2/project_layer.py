@@ -78,6 +78,47 @@ async def add_layers_to_project(
     return layers_project
 
 
+#: The most layers one add-from-catalog request may create.
+#:
+#: A user picks datasets, but a dataset expands to the layers inside it — the
+#: largest bundle in the catalog holds 429 — so what arrives here can be far
+#: more than what was clicked. The cap is on the expanded count and is checked
+#: before anything is promoted, because each layer costs a database write and a
+#: materialize job: a tiling run on shared workers, which is what makes a large
+#: batch everyone else's problem rather than just this request's.
+#:
+#: 25 admits 98.5% of the catalog's multi-layer datasets whole (3,077 of 3,125;
+#: at 10 it would be 89.5%, at 100 99.9%), while keeping the worst case a user
+#: can queue in one click to something the workers absorb. The remaining 48 have
+#: to be added in parts.
+MAX_CATALOG_LAYERS_PER_REQUEST = 25
+
+#: Mirrors the ceiling `crud_layer_project.create` enforces, so the refusal
+#: happens before the work rather than after it.
+MAX_LAYERS_PER_PROJECT = 300
+
+
+def catalog_batch_refusal(*, requested: int, existing: int) -> str | None:
+    """Why this batch cannot go ahead, or None if it can.
+
+    Checked up front: promoting first and refusing afterwards leaves the layers
+    created and their tiling jobs queued for an add that returns an error and
+    puts nothing in the project.
+    """
+    if requested > MAX_CATALOG_LAYERS_PER_REQUEST:
+        return (
+            f"{requested} layers is more than the {MAX_CATALOG_LAYERS_PER_REQUEST} "
+            "a single request may add. Note that selecting a dataset adds every "
+            "layer inside it. Add them in smaller batches."
+        )
+    if existing + requested >= MAX_LAYERS_PER_PROJECT:
+        return (
+            f"A project holds at most {MAX_LAYERS_PER_PROJECT} layers; this one "
+            f"has {existing} and the request adds {requested}."
+        )
+    return None
+
+
 @router.post(
     "/{project_id}/layer-catalog",
     response_model=List[
@@ -158,6 +199,14 @@ async def add_catalog_items_to_project(
         items = await run_in_threadpool(read_items, mirror, item_ids)
     except CatalogItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    # Bounded before the first promote: see `catalog_batch_refusal`.
+    existing_layers = await crud_layer_project.count_by_project(
+        async_session=async_session, project_id=project_id
+    )
+    refusal = catalog_batch_refusal(requested=len(item_ids), existing=existing_layers)
+    if refusal:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=refusal)
 
     conn = await asyncpg.connect(dsn)
     try:

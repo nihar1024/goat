@@ -243,9 +243,11 @@ export const useCatalogFlow = ({
         );
       })
       .catch((error) => {
-        // The dialog is gone, so this is the only place a failure can surface.
+        // The dialog is gone, so this is the only place a failure can surface —
+        // and a refusal ("120 layers is more than the 100 …") is worth reading.
         console.error(error);
-        toast.error(t("error_adding_layer"));
+        const detail = error instanceof Error ? error.message : "";
+        toast.error(detail || t("error_adding_layer"));
       });
   }, [projectId, ids, t, onDone]);
 

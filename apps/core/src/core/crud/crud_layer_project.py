@@ -5,7 +5,7 @@ from uuid import UUID
 # Third party imports
 from fastapi import HTTPException, status
 from pydantic import BaseModel, TypeAdapter, ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db.models._link_model import LayerProjectLink
@@ -192,6 +192,17 @@ class CRUDLayerProject(CRUDBase):
             ),
         )
         return layer_projects
+
+    async def count_by_project(
+        self, async_session: AsyncSession, project_id: UUID
+    ) -> int:
+        """How many layers this project already holds."""
+        result = await async_session.execute(
+            select(func.count())
+            .select_from(LayerProjectLink)
+            .where(LayerProjectLink.project_id == project_id)
+        )
+        return int(result.scalar_one())
 
     async def create(
         self,

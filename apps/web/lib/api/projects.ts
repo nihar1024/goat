@@ -290,7 +290,14 @@ export const addCatalogLayersToProject = async (projectId: string, catalogIds: s
     { method: "POST", headers: { "Content-Type": "application/json" } }
   );
   if (!response.ok) {
-    throw new Error("Failed to add catalog layers to project");
+    // The server's own words when it has them: a refusal here says how many
+    // layers were asked for and what the limit is, which the generic message
+    // cannot. Falls back when the body is not the expected shape.
+    const detail = await response
+      .json()
+      .then((body) => (typeof body?.detail === "string" ? body.detail : undefined))
+      .catch(() => undefined);
+    throw new Error(detail ?? "Failed to add catalog layers to project");
   }
   return await response.json();
 };

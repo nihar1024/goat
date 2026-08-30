@@ -331,6 +331,10 @@ class TileService:
         self.buffer = settings.DEFAULT_TILE_BUFFER
         self.ducklake_data_dir = Path(settings.DUCKLAKE_DATA_DIR)
         self.tiles_data_dir = Path(settings.TILES_DATA_DIR)
+        # A catalog layer's tiles sit beside its parquet: those artifacts are
+        # derived from a dataset every deployment has, so they belong in one
+        # wipeable tree rather than mixed into the tiles a user's data made.
+        self.catalog_tiles_dir = Path(settings.CATALOG_LAYERS_DIR)
         # Track which PMTiles files exist (LRU cache for 10k+ layers)
         # TTL, not plain LRU: a False verdict must expire, because PMTiles can
         # arrive AFTER a layer starts serving — catalog layers flip ready as
@@ -365,6 +369,13 @@ class TileService:
         cached = self._pmtiles_path_cache.get(layer_id_normalized)
         if cached is not None:
             return cached
+
+        # No `kind` here, so both trees are candidates. The catalog one is a
+        # single stat() and holds at most the promoted layers, so it goes first.
+        catalog = self.catalog_tiles_dir / f"t_{layer_id_normalized}.pmtiles"
+        if catalog.exists():
+            self._pmtiles_path_cache[layer_id_normalized] = catalog
+            return catalog
 
         # Tiles are written flat; the glob below only reaches the legacy
         # schema-nested layout, one directory down.
@@ -418,6 +429,18 @@ class TileService:
             legacy location (returned even when absent, so callers keep
             treating a missing file as "no tiles").
         """
+        if getattr(layer_info, "kind", "lake") == "catalog":
+            catalog = self.catalog_tiles_dir / f"{layer_info.table_name}.pmtiles"
+            if catalog.exists():
+                return catalog
+            # Materialized before the move: served where it was written, so an
+            # un-migrated deployment keeps working. Returned unconditionally
+            # otherwise, so a caller still reads "no tiles" from a missing file
+            # -- but pointing at the catalog tree, which is where the next
+            # materialize writes.
+            moved = self.tiles_data_dir / f"{layer_info.table_name}.pmtiles"
+            return moved if moved.exists() else catalog
+
         flat = self.tiles_data_dir / f"{layer_info.table_name}.pmtiles"
         if flat.exists():
             return flat

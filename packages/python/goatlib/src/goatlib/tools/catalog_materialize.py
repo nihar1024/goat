@@ -254,7 +254,12 @@ class CatalogMaterializeRunner(SimpleToolRunner):
     def _generate_catalog_pmtiles(
         self: Self, layer_id: str, parquet_path: Path, geom_col: str
     ) -> None:
-        """Tiles for the materialized file, at the flat tiles location.
+        """Tiles for the materialized file, written beside its parquet.
+
+        Not the user tiles directory: everything a catalog layer produces is
+        derived from a dataset every deployment harvests, so one directory
+        holds the lot -- wipeable, rebuildable, and shippable prebuilt --
+        while the tiles tree stays the user's own data.
 
         The generator's SQL selects ``rowid`` from its source, which a parquet
         scan does not have — a view naming ``file_row_number`` provides it,
@@ -280,7 +285,7 @@ class CatalogMaterializeRunner(SimpleToolRunner):
                 FROM read_parquet('{parquet_path}', file_row_number=true)
             """)
             generator = PMTilesGenerator(
-                tiles_data_dir=self.settings.tiles_data_dir,
+                tiles_data_dir=catalog_layers_dir(),
                 config=PMTilesConfig(
                     min_zoom=self.settings.pmtiles_min_zoom,
                     max_zoom=self.settings.pmtiles_max_zoom,

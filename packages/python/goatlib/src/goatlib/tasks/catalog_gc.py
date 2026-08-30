@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from pathlib import Path
 from typing import Any, Self
 
@@ -24,7 +23,7 @@ import asyncpg
 from pydantic import BaseModel, Field
 
 from goatlib.tools.base import ToolSettings
-from goatlib.utils.layer import layer_id_to_table_name
+from goatlib.utils.layer import catalog_layers_dir, layer_id_to_table_name
 
 logger = logging.getLogger(__name__)
 
@@ -68,16 +67,26 @@ class CatalogGCTask:
         self.settings = ToolSettings.from_env()
 
     def _artifact_paths(self: Self, layer_id: str) -> list[Path]:
+        """Every file a materialized catalog layer leaves behind.
+
+        Tiles are written beside the parquet now; the user tiles directory is
+        listed too, because a layer materialized before that move still has its
+        tiles there and deleting the row would otherwise orphan them.
+        """
         table = layer_id_to_table_name(layer_id)
-        data_dir = Path(os.environ.get("DATA_DIR", "/app/data"))
+        catalog_dir = catalog_layers_dir()
         tiles_dir = Path(
             self.settings.tiles_data_dir if self.settings else "/app/data/tiles"
         )
+        names = [
+            f"{table}.pmtiles",
+            f"{table}_anchor.pmtiles",
+            f"{table}.pmtiles.meta.json",
+        ]
         return [
-            data_dir / "catalog" / "layers" / f"{table}.parquet",
-            tiles_dir / f"{table}.pmtiles",
-            tiles_dir / f"{table}_anchor.pmtiles",
-            tiles_dir / f"{table}.pmtiles.meta.json",
+            catalog_dir / f"{table}.parquet",
+            *(catalog_dir / name for name in names),
+            *(tiles_dir / name for name in names),
         ]
 
     async def _run(self: Self, params: CatalogGCParams) -> CatalogGCOutput:

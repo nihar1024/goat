@@ -359,10 +359,14 @@ const CatalogCard = ({
             type="button"
             onClick={(event: React.MouseEvent) => {
               event.stopPropagation();
-              setExpanded((open) => {
-                onExpandedChange?.(!open);
-                return !open;
-              });
+              // Both computed here rather than inside the updater: React may run
+              // an updater during the render phase (and runs it twice under
+              // StrictMode), so telling the parent from in there is a setState
+              // while rendering — "Cannot update a component (CatalogPickerCard)
+              // while rendering a different component (CatalogCard)".
+              const next = !expanded;
+              setExpanded(next);
+              onExpandedChange?.(next);
             }}
             sx={{
               display: "flex",

@@ -225,29 +225,35 @@ export const useCatalogFlow = ({
    * against the mirror before promoting, so the ids go over verbatim.
    * The response's layers may be `pending`; the layer tree polls them to ready.
    */
-  const [isAdding, setIsAdding] = useState(false);
-  const addSelection = useCallback(async () => {
+  const addSelection = useCallback(() => {
     if (!projectId || ids.length === 0) return;
-    setIsAdding(true);
-    try {
-      const added = await addCatalogLayersToProject(projectId, ids);
-      await mutate(projectLayersKey(projectId));
-      toast.success(t("catalog_layers_added", { count: added?.length ?? ids.length }));
-      setIds([]);
-      onDone?.();
-    } catch (error) {
-      console.error(error);
-      toast.error(t("error_adding_layer"));
-    } finally {
-      setIsAdding(false);
-    }
+    const selected = ids;
+    // Closed on click, not when the server answers. The request promotes each
+    // item, enqueues its materialize job and then refetches every project
+    // layer — none of which the user is waiting on: materialization is
+    // asynchronous either way, so the layer arrives in the tree as
+    // "preparing" whether the dialog is still open or not.
+    setIds([]);
+    onDone?.();
+    void addCatalogLayersToProject(projectId, selected)
+      .then(async (added) => {
+        await mutate(projectLayersKey(projectId));
+        toast.success(
+          t("catalog_layers_added", { count: added?.length ?? selected.length })
+        );
+      })
+      .catch((error) => {
+        // The dialog is gone, so this is the only place a failure can surface.
+        console.error(error);
+        toast.error(t("error_adding_layer"));
+      });
   }, [projectId, ids, t, onDone]);
 
   const action = useMemo(
     () => ({
       label:
         ids.length > 1 ? t("catalog_add_n_layers", { count: ids.length }) : t("add_layer"),
-      disabled: !projectId || ids.length === 0 || isAdding,
+      disabled: !projectId || ids.length === 0,
       reason: !projectId
         ? t("catalog_add_needs_project")
         : ids.length === 0
@@ -255,12 +261,14 @@ export const useCatalogFlow = ({
           : undefined,
       run: addSelection,
     }),
-    [ids.length, t, projectId, isAdding, addSelection]
+    [ids.length, t, projectId, addSelection]
   );
 
   return {
     action,
-    isBusy: isAdding,
+    // Nothing to wait for: the dialog closes on click and the add
+    // reports itself by toast, like an upload does.
+    isBusy: false,
     reset,
     catalog: {
       favouritesOnly,

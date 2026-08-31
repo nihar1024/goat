@@ -1,9 +1,15 @@
-import { Divider, Link, Stack, Typography, styled, useTheme } from "@mui/material";
+import { Button, Divider, Link, Stack, Typography, styled, useTheme } from "@mui/material";
 import { format } from "date-fns";
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
+import { rebuildBundleArtifact } from "@/lib/api/bundleEdits";
+import { setRunningJobIds } from "@/lib/store/jobs/slice";
+
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { useDateFnsLocale } from "@/i18n/utils";
 
@@ -65,6 +71,9 @@ interface BundleSummaryProps {
 
 const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) => {
   const theme = useTheme();
+  const [isRebuilding, setIsRebuilding] = useState(false);
+  const dispatch = useAppDispatch();
+  const runningJobIds = useAppSelector((state) => state.jobs.runningJobIds);
   const { t, i18n } = useTranslation("common");
   const getMetadataValueTranslation = useGetMetadataValueTranslation();
   const dateLocale = useDateFnsLocale();
@@ -84,9 +93,36 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
       : bundle.status.charAt(0).toUpperCase() + bundle.status.slice(1)
     : undefined;
 
+  // One row per derived artifact. A GTFS bundle has both a timetable and a
+  // stop-to-street linkage, and "something failed" is not useful without saying
+  // which — so the API reports them separately and they are shown that way.
+  const artifacts = bundle.artifacts ?? [];
+  const statusLabel_ = (status: string) =>
+    i18n.exists(`common:artifact_${status}`)
+      ? t(`artifact_${status}`)
+      : status.charAt(0).toUpperCase() + status.slice(1);
+
+  // Offered whenever any of them is unusable, which is also the way back for a
+  // bundle whose preparation never finished or failed — including an import
+  // that died before writing any artifact row at all (failed bundle, empty
+  // artifact list), which is exactly the case this button exists to rescue.
+  const needsRebuild =
+    artifacts.some((artifact) => artifact.status !== "ready") ||
+    (artifacts.length === 0 && bundle.status === "failed");
+  // A build already running makes a second click a duplicate, not a retry.
+  const isBuilding = artifacts.some((artifact) => artifact.status === "building");
+
   // Bundle-specific, so they have no aggregated-field equivalent to reuse.
   const bundleAttributes: { key: string; heading: string; value?: string; icon: ICON_NAME }[] = [
     { key: "status", heading: t("status"), value: statusLabel, icon: ICON_NAME.CIRCLEINFO },
+    ...artifacts.map((artifact) => ({
+      key: artifact.kind,
+      heading: i18n.exists(`common:artifact_kind.${artifact.kind}`)
+        ? t(`artifact_kind.${artifact.kind}`)
+        : artifact.kind,
+      value: statusLabel_(artifact.status),
+      icon: ICON_NAME.STREET_NETWORK,
+    })),
     {
       key: "created_at",
       heading: t("created_at"),
@@ -200,6 +236,29 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
                 </div>
               </div>
             ))}
+            {needsRebuild && (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={isRebuilding || isBuilding}
+                onClick={async () => {
+                  setIsRebuilding(true);
+                  try {
+                    const job = await rebuildBundleArtifact(bundle.id);
+                    // Tracked like any other job, so progress and completion
+                    // show up in the jobs popper instead of going silent.
+                    if (job?.jobID) dispatch(setRunningJobIds([...runningJobIds, job.jobID]));
+                    toast.success(t("bundle_update_started"));
+                  } catch {
+                    toast.error(t("bundle_update_failed_to_start"));
+                  } finally {
+                    setIsRebuilding(false);
+                  }
+                }}
+                sx={{ textTransform: "none" }}>
+                {t("update_bundle")}
+              </Button>
+            )}
             {bundleAttributes.map(({ key, heading, value, icon }) => (
               <div key={key} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <Icon

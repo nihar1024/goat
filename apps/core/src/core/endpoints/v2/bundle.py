@@ -20,6 +20,10 @@ from core.crud.crud_bundle import bundle as crud_bundle
 from core.db.models._link_model import (
     BundleDependencyLink,
     BundleLayerLink,
+    LayerProjectLink,
+    ProjectOrganizationLink,
+    ProjectTeamLink,
+    ProjectUserLink,
     ResourceGrant,
     UserTeamLink,
 )
@@ -36,6 +40,8 @@ from core.db.session import AsyncSession
 from core.deps.auth import auth, auth_z
 from core.endpoints.deps import get_db, get_user_id
 from core.schemas.bundle import (
+    BundleArtifactSummary,
+    BundleByLayerResponse,
     BundleCreate,
     BundleDependencyCreate,
     BundleDependencyResponse,
@@ -184,6 +190,72 @@ async def authorize_bundle(
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND, detail="Bundle not found"
     )
+
+
+async def _bundle_reachable_via_project(
+    async_session: AsyncSession, bundle_id: UUID, user_id: UUID
+) -> bool:
+    """Whether a member layer of the bundle sits in a project the caller can
+    reach (as project owner, direct member, or via team / organization).
+
+    Project sharing mints no bundle or folder grant, yet someone working in
+    such a project handles the member layers daily — they get read-only
+    visibility of the bundle (membership, roles, revision), or the client
+    would route their edits down the per-feature path, which refuses bundle
+    members. Writes stay behind geoapi's layer-edit rule, and everything
+    beyond reading stays behind ``authorize_bundle``.
+    """
+    project_ids = (
+        select(LayerProjectLink.project_id)
+        .join(BundleLayerLink, BundleLayerLink.layer_id == LayerProjectLink.layer_id)
+        .where(BundleLayerLink.bundle_id == bundle_id)
+    )
+    team_ids, org_id = await _user_teams_and_org(async_session, user_id)
+    reach = [
+        select(Project.id)
+        .where(Project.id.in_(project_ids), Project.user_id == user_id)
+        .exists(),
+        select(ProjectUserLink.id)
+        .where(
+            ProjectUserLink.project_id.in_(project_ids),
+            ProjectUserLink.user_id == user_id,
+        )
+        .exists(),
+    ]
+    if team_ids:
+        reach.append(
+            select(ProjectTeamLink.id)
+            .where(
+                ProjectTeamLink.project_id.in_(project_ids),
+                ProjectTeamLink.team_id.in_(team_ids),
+            )
+            .exists()
+        )
+    if org_id:
+        reach.append(
+            select(ProjectOrganizationLink.id)
+            .where(
+                ProjectOrganizationLink.project_id.in_(project_ids),
+                ProjectOrganizationLink.organization_id == org_id,
+            )
+            .exists()
+        )
+    return bool((await async_session.execute(select(or_(*reach)))).scalar())
+
+
+async def _authorize_bundle_read_or_project_reach(
+    async_session: AsyncSession, bundle_id: UUID, user_id: UUID
+) -> Bundle:
+    """Grant-based read, falling back to shared-project reachability."""
+    try:
+        return await authorize_bundle(async_session, bundle_id, user_id, "read")
+    except HTTPException:
+        if not await _bundle_reachable_via_project(async_session, bundle_id, user_id):
+            raise
+        bundle = await async_session.get(Bundle, bundle_id)
+        if bundle is None:
+            raise
+        return bundle
 
 
 ### Bundle CRUD endpoints
@@ -447,7 +519,32 @@ async def read_bundle(
 ) -> BundleRead:
     """Retrieve a bundle the caller owns or has been shared."""
     bundle = await authorize_bundle(async_session, bundle_id, user_id, "read")
-    return BundleRead(**bundle.model_dump())
+    artifacts = (
+        (
+            await async_session.execute(
+                select(BundleArtifact)
+                .where(BundleArtifact.bundle_id == bundle_id)
+                .order_by(BundleArtifact.kind)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return BundleRead(
+        **bundle.model_dump(),
+        artifacts=[
+            BundleArtifactSummary(
+                # Loaded values may be the enum or the raw string, depending on
+                # whether SQLModel coerced the column.
+                kind=getattr(a.kind, "value", a.kind),
+                status=getattr(a.status, "value", a.status),
+                revision=a.revision,
+                size=a.size,
+                updated_at=a.updated_at,
+            )
+            for a in artifacts
+        ],
+    )
 
 
 @router.put(
@@ -554,6 +651,53 @@ async def delete_bundle(
 # goatlib). Roles are validated against the bundle type's spec.
 
 
+def role_is_editable(bundle_type: str, role: str | None) -> bool:
+    """Whether the spec marks this role's member layer editable."""
+    if not role:
+        return False
+    spec_role = get_spec(bundle_type).role(role)
+    return bool(spec_role and spec_role.editable)
+
+
+@router.get(
+    "/by-layer/{layer_id}",
+    summary="The bundle a layer belongs to, if any",
+    response_model=BundleByLayerResponse,
+    status_code=200,
+    dependencies=[Depends(auth_z)],
+)
+async def read_bundle_by_layer(
+    *,
+    async_session: AsyncSession = Depends(get_db),
+    user_id: UUID4 = Depends(get_user_id),
+    layer_id: UUID4 = Path(..., description="The layer"),
+) -> BundleByLayerResponse:
+    """Resolve a layer to its bundle, role and editability."""
+    link = (
+        await async_session.execute(
+            select(BundleLayerLink).where(BundleLayerLink.layer_id == layer_id)
+        )
+    ).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Layer is not part of a bundle",
+        )
+    # Project-reach fallback: a shared-project editor holds no bundle grant,
+    # yet the client needs this answer to route saves to the bundle endpoint
+    # instead of the per-feature one.
+    bundle = await _authorize_bundle_read_or_project_reach(
+        async_session, link.bundle_id, user_id
+    )
+    return BundleByLayerResponse(
+        bundle_id=link.bundle_id,
+        bundle_type=bundle.bundle_type,
+        role=link.role,
+        editable=role_is_editable(bundle.bundle_type, link.role),
+        layers_revision=bundle.layers_revision,
+    )
+
+
 @router.get(
     "/{bundle_id}/layers",
     summary="List the layers in a bundle with their roles",
@@ -568,7 +712,11 @@ async def list_bundle_layers(
     bundle_id: UUID4 = Path(..., description="The bundle"),
 ) -> List[BundleMemberResponse]:
     """List member layers and their roles (owner or shared)."""
-    await authorize_bundle(async_session, bundle_id, user_id, "read")
+    # Same project-reach fallback as ``read_bundle_by_layer``: the web
+    # resolves member editability through this listing.
+    bundle = await _authorize_bundle_read_or_project_reach(
+        async_session, bundle_id, user_id
+    )
     rows = (
         await async_session.execute(
             select(BundleLayerLink, Layer)
@@ -590,6 +738,7 @@ async def list_bundle_layers(
                 "value",
                 layer.feature_layer_geometry_type,
             ),
+            editable=role_is_editable(bundle.bundle_type, link.role),
         )
         for link, layer in rows
     ]

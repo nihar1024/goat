@@ -109,13 +109,16 @@ def test_tar_contains_exactly_the_two_files(tmp_path) -> None:
 class _FakeSource:
     """Stands in for a tool runner: hands back a local archive, records the ask."""
 
-    def __init__(self, archive: str | None) -> None:
+    def __init__(self, archive: str | None, status: str | None = None) -> None:
         self.archive = archive
+        self.status = status or ("ready" if archive else None)
         self.asked: Tuple[str, str] | None = None
 
-    def resolve_bundle_artifact(self, bundle_id: str, kind: str) -> str | None:
+    def resolve_bundle_artifact(
+        self, bundle_id: str, kind: str
+    ) -> Tuple[str | None, str | None]:
         self.asked = (bundle_id, kind)
-        return self.archive
+        return self.archive, self.status
 
 
 def _build_tar(tmp_path: Path) -> str:
@@ -156,7 +159,7 @@ def test_fetch_round_trips_what_the_builder_wrote(tmp_path, con) -> None:
 
 
 def test_fetch_rejects_a_bundle_with_no_ready_graph(tmp_path) -> None:
-    with pytest.raises(ValueError, match="no ready routing graph"):
+    with pytest.raises(ValueError, match="not ready to route on"):
         fetch_routing_network(_FakeSource(None), "bundle-1", tmp_path)
 
 
@@ -428,3 +431,120 @@ def test_projected_coordinates_are_not_axis_swapped(artifact, con) -> None:
         lat = math.degrees(2 * math.atan(math.exp(y / 6378137.0)) - math.pi / 2)
         assert 10.0 < lon < 12.0, (x, y)
         assert 47.0 < lat < 49.0, (x, y)
+
+
+def test_build_raises_when_an_edge_references_a_missing_node(tmp_path, con) -> None:
+    """A dropped edge is a missing street, so the build must fail loudly."""
+    from goatlib.bundles.artifacts.street_network import _transform
+
+    edges = tmp_path / "edges.parquet"
+    nodes = tmp_path / "nodes.parquet"
+    con.execute(f"""
+        COPY (SELECT 'n1' AS id, ST_Point(11.0, 48.0) AS geometry)
+        TO '{nodes}' (FORMAT PARQUET)
+    """)
+    con.execute(f"""
+        COPY (
+            SELECT 'e1' AS id, 'residential' AS "class", 'n1' AS source_node,
+                   'ghost' AS target_node, NULL AS surface,
+                   30 AS speed_limit_kph_forward, 30 AS speed_limit_kph_backward,
+                   ST_GeomFromText('LINESTRING(11 48, 11.001 48)') AS geometry
+        ) TO '{edges}' (FORMAT PARQUET)
+    """)
+    with pytest.raises(ValueError, match="node"):
+        _transform(
+            con,
+            str(edges),
+            str(nodes),
+            str(tmp_path / "out_edges.parquet"),
+            str(tmp_path / "out_nodes.parquet"),
+        )
+
+
+def test_fetch_explains_a_stale_artifact(tmp_path) -> None:
+    with pytest.raises(ValueError, match="being updated"):
+        fetch_routing_network(_FakeSource(None, "stale"), "bundle-1", tmp_path)
+
+
+def test_fetch_explains_a_build_in_progress(tmp_path) -> None:
+    with pytest.raises(ValueError, match="still being prepared"):
+        fetch_routing_network(_FakeSource(None, "building"), "bundle-1", tmp_path)
+
+
+def test_fetch_explains_a_failed_rebuild(tmp_path) -> None:
+    with pytest.raises(ValueError, match="last update failed"):
+        fetch_routing_network(_FakeSource(None, "failed"), "bundle-1", tmp_path)
+
+
+# --- dangling edge references ----------------------------------------------
+
+
+def _write_network(con, root: Path, edge_targets: Tuple[str, str]) -> Tuple[str, str]:
+    """Two nodes and two edges; each edge's target comes from edge_targets."""
+    nodes, edges = str(root / "nodes.parquet"), str(root / "edges.parquet")
+    con.execute(f"""
+        COPY (
+            SELECT * FROM (VALUES
+                ('n1', ST_Point(11.0, 48.0)),
+                ('n2', ST_Point(11.001, 48.0))
+            ) t("id", geometry)
+        ) TO '{nodes}' (FORMAT PARQUET)
+    """)
+    con.execute(f"""
+        COPY (
+            SELECT * FROM (VALUES
+                ('e1', 'residential', CAST(NULL AS VARCHAR), 30, 30,
+                 'n1', '{edge_targets[0]}',
+                 ST_GeomFromText('LINESTRING (11.0 48.0, 11.001 48.0)')),
+                ('e2', 'residential', CAST(NULL AS VARCHAR), 30, 30,
+                 'n1', '{edge_targets[1]}',
+                 ST_GeomFromText('LINESTRING (11.0 48.0, 11.002 48.0)'))
+            ) t("id", "class", surface, speed_limit_kph_forward,
+                speed_limit_kph_backward, source_node, target_node, geometry)
+        ) TO '{edges}' (FORMAT PARQUET)
+    """)
+    return edges, nodes
+
+
+def test_dangling_edges_are_dropped_not_refused(tmp_path, con) -> None:
+    """A layer imported before the editor derived nodes (or touched by old
+    per-feature edits) can hold edges naming nodes that are gone. The build
+    drops those streets and goes on — refusing would leave the bundle
+    permanently stale after its first edit, with no in-product way back."""
+    from goatlib.bundles.artifacts.street_network import _transform
+
+    edges, nodes = _write_network(con, tmp_path, ("n2", "ghost"))
+    build_con = duckdb.connect()
+    build_con.execute("INSTALL spatial; LOAD spatial")
+    try:
+        counts = _transform(
+            build_con,
+            edges,
+            nodes,
+            str(tmp_path / "edges_out.parquet"),
+            str(tmp_path / "nodes_out.parquet"),
+        )
+    finally:
+        build_con.close()
+    assert counts == (1, 2)
+
+
+def test_a_layer_where_no_edge_resolves_is_refused(tmp_path, con) -> None:
+    """All edges dangling is not a graph with gaps — it is the wrong nodes
+    layer, and building an empty network would only hide that."""
+    from goatlib.bundles.artifacts.street_network import _transform
+
+    edges, nodes = _write_network(con, tmp_path, ("ghost", "ghost"))
+    build_con = duckdb.connect()
+    build_con.execute("INSTALL spatial; LOAD spatial")
+    try:
+        with pytest.raises(ValueError, match="routable network"):
+            _transform(
+                build_con,
+                edges,
+                nodes,
+                str(tmp_path / "edges_out.parquet"),
+                str(tmp_path / "nodes_out.parquet"),
+            )
+    finally:
+        build_con.close()

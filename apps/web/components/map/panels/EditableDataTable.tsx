@@ -81,6 +81,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useMap } from "react-map-gl/maplibre";
 import useLayerFields from "@/hooks/map/CommonHooks";
 
+import { useBundleForLayer } from "@/lib/api/bundles";
 import { updateProjectLayer, useProject, useProjectLayers } from "@/lib/api/projects";
 import { useUserProfile } from "@/lib/api/users";
 import ColumnStatsPanel from "@/components/map/panels/ColumnStatsPanel";
@@ -131,18 +132,31 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   // widths and other per-project-layer state, but not for writing to the
   // dataset. A catalog layer is a shared read-only snapshot that geoapi
   // refuses every write to, so the actions that reach it are gated separately.
+  // A bundle member's rows and columns are managed through the bundle (the
+  // map editor for its editable role); every per-feature/column write to it
+  // would 403, so the table offers none.
+  const { bundleForLayer } = useBundleForLayer(layerId);
   const layerPermissionArgs = {
     currentUserId: userProfile?.id,
     layerOwnerId: projectLayer.user_id,
     projectOwnerId: project?.owned_by?.id,
     isProjectEditor: isEditor,
     inCatalog: projectLayer.in_catalog,
+    inBundle: !!bundleForLayer,
   };
   const canEditFields = canEditLayerFields(layerPermissionArgs);
   const canEditFeatures = canEditLayerFeatures({
     ...layerPermissionArgs,
     layerSize: projectLayer.size,
   });
+  // Edit mode is the exception to the bundle gate: an editable member (street
+  // edges) saves its pending edits through the bundle's batch endpoint, so
+  // the toggle stays for it — while direct writes like the row delete remain
+  // off for every member.
+  const canStartEditing = bundleForLayer
+    ? bundleForLayer.editable &&
+      canEditLayerFeatures({ ...layerPermissionArgs, inBundle: false, layerSize: projectLayer.size })
+    : canEditFeatures;
   const activeRightPanel = useAppSelector((state) => state.map.activeRightPanel);
   const editLayerId = useAppSelector((state) => state.featureEditor.activeLayerId);
   const pendingFeatures = useAppSelector((state) => state.featureEditor.pendingFeatures);
@@ -913,7 +927,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
             {t("edit_fields")}
           </Button>
         )}
-        {isEditor && (isEditing || canEditFeatures) && (
+        {isEditor && (isEditing || canStartEditing) && (
           <Button
             size="small"
             variant="outlined"

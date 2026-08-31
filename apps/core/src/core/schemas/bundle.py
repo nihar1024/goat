@@ -69,6 +69,24 @@ class DatasetContentTile(ThumbnailUrlMixin):
     updated_at: Optional[datetime] = None
 
 
+class BundleArtifactSummary(BaseModel):
+    """A derived artifact of a bundle, as reported on a read.
+
+    Reported per artifact rather than collapsed to one status: a GTFS bundle has
+    both a timetable and a stop-to-street linkage, and "one of them failed" is
+    not useful without saying which. The storage path is deliberately absent —
+    it is an internal location, not something a client needs.
+    """
+
+    kind: str
+    status: str
+    # The bundle's layers_revision this artifact was built from, so a client can
+    # tell how far behind it is. Null for an artifact that never built.
+    revision: int | None = None
+    size: int | None = None
+    updated_at: Optional[datetime] = None
+
+
 class BundleRead(BundleBase, ThumbnailUrlMixin):
     id: UUID = Field(..., description="Bundle ID")
     user_id: UUID = Field(..., description="Bundle owner ID")
@@ -85,6 +103,10 @@ class BundleRead(BundleBase, ThumbnailUrlMixin):
     )
     owned_by: Dict[str, Any] | None = Field(
         None, description="Owner info ({id, firstname, lastname, avatar}) for tiles"
+    )
+    artifacts: list["BundleArtifactSummary"] = Field(
+        default_factory=list,
+        description="The bundle's derived artifacts and their build state",
     )
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -174,6 +196,20 @@ class BundleMemberResponse(BaseModel):
     name: Optional[str] = None
     type: Optional[str] = None
     feature_layer_geometry_type: Optional[str] = None
+    # Resolved from the type's spec, so the client never has to know the rules.
+    editable: bool = False
+
+
+class BundleByLayerResponse(BaseModel):
+    """The bundle a layer belongs to, and whether that member is editable."""
+
+    bundle_id: UUID
+    bundle_type: str
+    role: str | None
+    editable: bool = False
+    # An editor sends this back as base_revision, so a save can be refused if
+    # someone else changed the network in the meantime.
+    layers_revision: int = 0
 
 
 request_examples = {

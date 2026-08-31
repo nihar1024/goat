@@ -89,6 +89,14 @@ def upgrade() -> None:
             "dataset_metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True
         ),
         sa.Column("status", sa.Text(), server_default="ready", nullable=False),
+        # Bumped on every member-layer edit; artifact builds record the
+        # revision they read and publish only if it is still current.
+        sa.Column(
+            "layers_revision",
+            sa.Integer(),
+            server_default="0",
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(
             ["bundle_type"], ["customer.bundle_type.type"], ondelete="RESTRICT"
         ),
@@ -129,6 +137,8 @@ def upgrade() -> None:
         sa.Column("storage_path", sa.Text(), nullable=True),
         sa.Column("size", sa.BigInteger(), nullable=True),
         sa.Column("job_id", sa.UUID(), nullable=True),
+        # bundle.layers_revision the build read its member layers at.
+        sa.Column("revision", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
             ["bundle_id"], ["customer.bundle.id"], ondelete="CASCADE"
         ),

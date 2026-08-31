@@ -51,7 +51,18 @@ router = APIRouter(tags=["Features Write"])
 UserIdDep = Annotated[UUID, Depends(get_user_id)]
 
 
-async def _get_authorized_metadata(
+async def layer_is_bundle_member(layer_id: str) -> bool:
+    """Whether a layer belongs to a bundle."""
+    pool = layer_service._pool
+    if not pool:
+        return False
+    row = await pool.fetchrow(
+        "SELECT 1 FROM customer.bundle_layer WHERE layer_id = $1::uuid", layer_id
+    )
+    return row is not None
+
+
+async def get_write_authorized_metadata(
     layer_info: LayerInfo, user_id: UUID
 ) -> LayerMetadata:
     """Get layer metadata and verify the user may write to the layer.
@@ -59,6 +70,11 @@ async def _get_authorized_metadata(
     The layer's owner always may. A non-owner may when the layer's owner has
     put it in a project they both edit — see
     ``LayerService.user_can_edit_layer``.
+
+    This is the ONE write-access rule for layer data: the per-feature routes
+    add the bundle-member refusal on top (``_get_authorized_metadata``), and
+    the bundle batch endpoint builds on this rule directly, so the two cannot
+    drift.
 
     Args:
         layer_info: Layer info from URL
@@ -100,6 +116,25 @@ async def _get_authorized_metadata(
         )
 
     return metadata
+
+
+async def _get_authorized_metadata(
+    layer_info: LayerInfo, user_id: UUID
+) -> LayerMetadata:
+    """Write authorization for the per-feature endpoints: the shared rule plus
+    the bundle-member refusal."""
+    # A bundle member's edits drive the bundle's derived artifacts, so they go
+    # through the bundle's batch endpoint or not at all — a write landing here
+    # would leave the routing graph disagreeing with the layer.
+    if await layer_is_bundle_member(layer_info.layer_id):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This layer is part of a bundle. Edit it through the bundle so its "
+                "routing data stays in step."
+            ),
+        )
+    return await get_write_authorized_metadata(layer_info, user_id)
 
 
 def _invalidate_caches(layer_id: str) -> None:

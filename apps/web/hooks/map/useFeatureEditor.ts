@@ -10,6 +10,8 @@ import { mutate as globalMutate } from "swr";
 import type { MapLayerMouseEvent } from "react-map-gl/maplibre";
 
 import { COLLECTIONS_API_BASE_URL, createFeaturesBulk, deleteFeature, getFeature, getFeatures, replaceFeature } from "@/lib/api/layers";
+import { useBundleEditSave } from "@/hooks/map/useBundleEditSave";
+import { useEdgeSnapping } from "@/hooks/map/useEdgeSnapping";
 import { useProjectLayers } from "@/lib/api/projects";
 import {
   addPendingFeature,
@@ -41,6 +43,9 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
   const { drawControl } = useDraw();
+  const { bundleForLayer, saveBundleEdits } = useBundleEditSave(
+    useAppSelector((state) => state.featureEditor.activeLayerId)
+  );
   const { projectId } = useParams();
   const { layers: projectLayers, mutate: mutateProjectLayers } = useProjectLayers(projectId as string);
   const featureEditor = useAppSelector((state) => state.featureEditor);
@@ -73,6 +78,35 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
 
   // Find the project layer's numeric ID (used as MapLibre layer ID in Layers.tsx)
   const editingProjectLayer = projectLayers?.find((l) => l.layer_id === activeLayerId);
+  // The rendered map layers holding this layer's geometry, which is where snap
+  // candidates are read from. `stroke-<id>` exists for polygons only; a line
+  // layer's decoration layers are symbols, not geometry, so they are no use here.
+  const snapLayerIds = useMemo(() => {
+    if (!editingProjectLayer) return [];
+    const base = String(editingProjectLayer.id);
+    return editingProjectLayer.feature_layer_geometry_type === "polygon"
+      ? [base, `stroke-${base}`]
+      : [base];
+  }, [editingProjectLayer]);
+  // Offered for a bundle's editable member only: its topology is what the server
+  // derives on save. Plain layers keep drawing exactly as before.
+  // Drawing a new edge, or holding a selected edge's vertex: both are moments
+  // where the user is placing an endpoint and wants to see where it will land.
+  // MapboxDraw's direct_select is the state in which vertices are draggable, and
+  // it changes without any React state changing — hence a predicate, read per
+  // mouse move, rather than a flag.
+  const isEditingGesture = useCallback(() => {
+    if (!bundleForLayer?.editable) return false;
+    if (modeRef.current === "draw") return true;
+    return drawControl?.getMode?.() === "direct_select";
+  }, [bundleForLayer, drawControl]);
+
+  const { snapDrawnLine, showIndicator } = useEdgeSnapping(
+    mapRef,
+    !!bundleForLayer?.editable,
+    snapLayerIds,
+    isEditingGesture
+  );
   const editingProjectLayerIdRef = useRef(editingProjectLayer?.id);
   editingProjectLayerIdRef.current = editingProjectLayer?.id;
 
@@ -234,6 +268,19 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
 
       lastCreateTimeRef.current = Date.now();
 
+      // Pull the endpoints onto what they were drawn at, so the geometry stored
+      // matches what the snap indicator promised.
+      if (drawnFeature.geometry.type === "LineString") {
+        const snapped = snapDrawnLine(
+          drawnFeature.geometry.coordinates as [number, number][]
+        );
+        if (snapped) {
+          drawnFeature.geometry = { type: "LineString", coordinates: snapped };
+          drawControl.add(drawnFeature);
+        }
+      }
+      showIndicator(null);
+
       // Set icon properties on the draw feature so MapboxDraw symbol styles pick them up
       if (iconProps) {
         for (const [key, value] of Object.entries(iconProps)) {
@@ -274,7 +321,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       dispatch(setMapCursor(undefined));
 
     },
-    [drawControl, dispatch, pushHistory]
+    [drawControl, dispatch, pushHistory, snapDrawnLine, showIndicator]
   );
 
   // Handle draw.update event — sync geometry changes when user edits vertices
@@ -283,6 +330,17 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       if (!activeFeatureIdRef.current) return;
       const updatedFeature = e.features[0];
       if (!updatedFeature?.geometry) return;
+
+      if (updatedFeature.geometry.type === "LineString") {
+        const snapped = snapDrawnLine(
+          updatedFeature.geometry.coordinates as [number, number][]
+        );
+        if (snapped) {
+          updatedFeature.geometry = { type: "LineString", coordinates: snapped };
+          drawControl?.add(updatedFeature);
+        }
+      }
+      showIndicator(null);
 
       // Snapshot before the geometry update
       pushHistory();
@@ -294,7 +352,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
         })
       );
     },
-    [dispatch, pushHistory]
+    [dispatch, pushHistory, snapDrawnLine, showIndicator, drawControl]
   );
 
   // Deselect the currently active feature — sync geometry, remove from MapboxDraw
@@ -643,12 +701,78 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeLayerId, handleUndo, handleRedo]);
 
+  // Make written features visible again: bump the tile cache-buster and
+  // revalidate the collection caches for every layer the save touched. A bundle
+  // save touches two — the server may have minted or pruned nodes.
+  const refreshAfterSave = useCallback(
+    (layerIds: string[]) => {
+      const ids = layerIds.filter(Boolean);
+      // Refresh tiles by optimistically updating updated_at — the tile URL's
+      // v= cache-buster derives from it, so bumping it makes MapLibre refetch.
+      const bumpLayerUpdatedAt = () =>
+        mutateProjectLayers(
+          (current) =>
+            current?.map((l) =>
+              ids.includes(l.layer_id) ? { ...l, updated_at: new Date().toISOString() } : l
+            ),
+          { revalidate: false },
+        );
+      // Single-argument mutate = revalidate while KEEPING the cached data on
+      // screen. Passing (key, undefined, {revalidate: true}) is NOT the same:
+      // SWR then treats undefined as new data and clears the cache, which
+      // blanks the data table (spinner, lost scroll) on every save.
+      const revalidateCollections = () =>
+        globalMutate((key) => {
+          const prefixes = ids.map((id) => `${COLLECTIONS_API_BASE_URL}/${id}`);
+          if (typeof key === "string") return prefixes.some((p) => key.startsWith(p));
+          if (Array.isArray(key) && typeof key[0] === "string") {
+            return prefixes.some((p) => (key[0] as string).startsWith(p));
+          }
+          return false;
+        });
+      bumpLayerUpdatedAt();
+      revalidateCollections();
+      // The read pool serves a pinned DuckLake snapshot whose post-write
+      // refresh runs on a background thread (~1s) — the immediate revalidate
+      // and tile refetch can race it and get the pre-write snapshot, so do
+      // both once more after the pin has had time to advance. Without the
+      // second updated_at bump the stale tiles would stick: MapLibre only
+      // refetches when the tile URL changes.
+      setTimeout(() => {
+        revalidateCollections();
+        bumpLayerUpdatedAt();
+      }, 2500);
+    },
+    [mutateProjectLayers],
+  );
+
   // --- Save handler ---
   const handleSave = useCallback(async () => {
     if (!activeLayerId || isSaving) return;
 
     const committed = Object.values(pendingFeatures).filter((f) => f.committed);
     if (committed.length === 0) return;
+
+    // An editable bundle member goes through the bundle: the server derives
+    // the nodes layer from these edits and stales the routing graph, which the
+    // per-feature endpoints cannot do (and now refuse to).
+    if (bundleForLayer?.editable) {
+      dispatch(setIsSaving(true));
+      try {
+        const result = await saveBundleEdits(pendingFeatures);
+        if (!result) return;
+        drawControl?.deleteAll();
+        dispatch(clearPendingFeatures());
+        toast.success(t("features_saved"));
+        refreshAfterSave([activeLayerId, result.nodes_layer_id]);
+      } catch (error) {
+        console.error("Failed to save bundle edits:", error);
+        toast.error(t("error_saving_features"));
+      } finally {
+        dispatch(setIsSaving(false));
+      }
+      return;
+    }
 
     const newFeatures = committed.filter((f) => f.action === "create");
     const updatedFeatures = committed.filter((f) => f.action === "update");
@@ -694,51 +818,23 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       drawControl?.deleteAll();
       dispatch(clearPendingFeatures());
       toast.success(t("features_saved"));
-      // Refresh tiles by optimistically updating updated_at — the tile URL's
-      // v= cache-buster derives from it, so bumping it makes MapLibre refetch.
-      const bumpLayerUpdatedAt = () =>
-        mutateProjectLayers(
-          (current) =>
-            current?.map((l) =>
-              l.layer_id === activeLayerId ? { ...l, updated_at: new Date().toISOString() } : l
-            ),
-          { revalidate: false },
-        );
-      bumpLayerUpdatedAt();
-      // Revalidate any SWR cache entry for this layer's collection items
-      // (data table feature pages, queryables) so newly written values
-      // — including recomputed columns like area/perimeter — show up.
-      const itemsPrefix = `${COLLECTIONS_API_BASE_URL}/${activeLayerId}`;
-      // Single-argument mutate = revalidate while KEEPING the cached data on
-      // screen. Passing (key, undefined, {revalidate: true}) is NOT the same:
-      // SWR then treats undefined as new data and clears the cache, which
-      // blanks the data table (spinner, lost scroll) on every save.
-      const revalidateCollection = () =>
-        globalMutate((key) => {
-          if (typeof key === "string") return key.startsWith(itemsPrefix);
-          if (Array.isArray(key) && typeof key[0] === "string") {
-            return key[0].startsWith(itemsPrefix);
-          }
-          return false;
-        });
-      revalidateCollection();
-      // The read pool serves a pinned DuckLake snapshot whose post-write
-      // refresh runs on a background thread (~1s) — the immediate revalidate
-      // and tile refetch can race it and get the pre-write snapshot, so do
-      // both once more after the pin has had time to advance. Without the
-      // second updated_at bump the stale tiles would stick: MapLibre only
-      // refetches when the tile URL changes.
-      setTimeout(() => {
-        revalidateCollection();
-        bumpLayerUpdatedAt();
-      }, 2500);
+      refreshAfterSave([activeLayerId]);
     } catch (error) {
       console.error("Failed to save features:", error);
       toast.error(t("error_saving_features"));
     } finally {
       dispatch(setIsSaving(false));
     }
-  }, [activeLayerId, isSaving, pendingFeatures, dispatch, t]);
+  }, [
+    activeLayerId,
+    isSaving,
+    pendingFeatures,
+    dispatch,
+    t,
+    bundleForLayer,
+    saveBundleEdits,
+    refreshAfterSave,
+  ]);
 
   // --- Discard handler ---
   const handleDiscardRequest = useCallback(() => {

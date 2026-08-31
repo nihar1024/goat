@@ -16,6 +16,10 @@ export type CanEditLayerFieldsArgs = {
   isProjectEditor: boolean;
   /** Catalog layers are read-only regardless of role. */
   inCatalog?: boolean | null;
+  /** Bundle member layers are written through the bundle's batch endpoint
+   *  only; geoapi 403s every per-feature/column write to them. Callers with
+   *  their own bundle-aware path (the map editor) pass nothing here. */
+  inBundle?: boolean | null;
 };
 
 export type CanEditLayerFeaturesArgs = CanEditLayerFieldsArgs & {
@@ -46,8 +50,9 @@ export function canEditLayerFields({
   projectOwnerId,
   isProjectEditor,
   inCatalog,
+  inBundle,
 }: CanEditLayerFieldsArgs): boolean {
-  if (!isProjectEditor || inCatalog) return false;
+  if (!isProjectEditor || inCatalog || inBundle) return false;
   if (!currentUserId || !layerOwnerId) return false;
 
   if (layerOwnerId === currentUserId) return true;

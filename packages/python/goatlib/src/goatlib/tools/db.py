@@ -415,23 +415,123 @@ class ToolDatabaseService:
         )
         logger.info(f"Artifact {artifact_id} status -> {status_value}")
 
-    async def get_bundle_artifact_path(
+    async def mark_bundle_artifacts_failed(self: Self, bundle_id: str) -> None:
+        """Mark every artifact row of a bundle failed.
+
+        For a build that dies before reaching any specific artifact row (the
+        export or the builder itself raised): without this the rows stay
+        'stale'/'building' and consumers keep promising an update that is not
+        running, instead of saying the update failed."""
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle_artifact
+            SET status = 'failed', updated_at = NOW()
+            WHERE bundle_id = $1
+            """,
+            uuid_module.UUID(bundle_id),
+        )
+
+    async def get_bundle_artifact(
         self: Self, bundle_id: str, kind: str
-    ) -> str | None:
-        """Stored path of a bundle's ready artifact of the given kind, relative
-        to the bundles data dir (or None)."""
+    ) -> "dict | None":
+        """Stored path and status of a bundle's artifact of the given kind.
+
+        Returns the row whatever its status, so a caller can tell "being
+        rebuilt after an edit" from "never built".
+        """
         kind_value = getattr(kind, "value", kind)
         row = await self.pool.fetchrow(
             f"""
-            SELECT storage_path FROM {self.schema}.bundle_artifact
-            WHERE bundle_id = $1 AND kind = $2 AND status = 'ready'
-              AND storage_path IS NOT NULL
+            SELECT storage_path, status FROM {self.schema}.bundle_artifact
+            WHERE bundle_id = $1 AND kind = $2
             LIMIT 1
             """,
             uuid_module.UUID(bundle_id),
             kind_value,
         )
-        return row["storage_path"] if row else None
+        return dict(row) if row else None
+
+    async def get_bundle(self: Self, bundle_id: str) -> "dict":
+        """Type and owner of a bundle, for a build that was handed only an id."""
+        row = await self.pool.fetchrow(
+            f"""
+            SELECT bundle_type, user_id, layers_revision
+            FROM {self.schema}.bundle WHERE id = $1
+            """,
+            uuid_module.UUID(bundle_id),
+        )
+        if row is None:
+            raise ValueError(f"Bundle {bundle_id} not found")
+        return dict(row)
+
+    async def get_bundle_revision(self: Self, bundle_id: str) -> int:
+        """Current layers_revision of a bundle."""
+        row = await self.pool.fetchrow(
+            f"SELECT layers_revision FROM {self.schema}.bundle WHERE id = $1",
+            uuid_module.UUID(bundle_id),
+        )
+        if row is None:
+            raise ValueError(f"Bundle {bundle_id} not found")
+        return int(row["layers_revision"])
+
+    async def bump_bundle_revision(self: Self, bundle_id: str) -> int:
+        """Advance a bundle's layers_revision, returning the new value."""
+        row = await self.pool.fetchrow(
+            f"""
+            UPDATE {self.schema}.bundle
+            SET layers_revision = layers_revision + 1, updated_at = NOW()
+            WHERE id = $1
+            RETURNING layers_revision
+            """,
+            uuid_module.UUID(bundle_id),
+        )
+        if row is None:
+            raise ValueError(f"Bundle {bundle_id} not found")
+        return int(row["layers_revision"])
+
+    async def publish_artifact_if_current(
+        self: Self,
+        artifact_id: str,
+        bundle_id: str,
+        built_revision: int,
+        storage_path: str,
+        size: int,
+    ) -> bool:
+        """Mark an artifact ready, unless the layers have moved on since.
+
+        The revision comparison sits in the WHERE clause, so there is no window
+        between checking and writing for a concurrent save to slip through.
+        """
+        result = await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle_artifact a
+            SET status = 'ready',
+                storage_path = $3,
+                size = $4,
+                revision = $5,
+                updated_at = NOW()
+            FROM {self.schema}.bundle b
+            WHERE a.id = $1 AND b.id = $2 AND a.bundle_id = b.id
+              AND b.layers_revision = $5
+            """,
+            uuid_module.UUID(artifact_id),
+            uuid_module.UUID(bundle_id),
+            storage_path,
+            size,
+            built_revision,
+        )
+        return str(result).endswith("1")
+
+    async def list_bundle_layers(self: Self, bundle_id: str) -> "list[dict]":
+        """Role and layer id of each member layer of a bundle."""
+        rows = await self.pool.fetch(
+            f"""
+            SELECT role, layer_id FROM {self.schema}.bundle_layer
+            WHERE bundle_id = $1 ORDER BY id
+            """,
+            uuid_module.UUID(bundle_id),
+        )
+        return [dict(r) for r in rows]
 
     async def add_layer_to_package(
         self: Self,

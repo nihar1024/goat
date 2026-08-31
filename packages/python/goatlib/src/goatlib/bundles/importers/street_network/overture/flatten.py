@@ -28,6 +28,7 @@ from goatlib.bundles.importers.street_network.overture.splitter import (
     LR_SCOPE_KEY,
     SplitResult,
 )
+from goatlib.models.bundle import CLASS_DEFAULT_MAXSPEED, ROUTING_CLASSES
 
 logger = logging.getLogger(__name__)
 
@@ -47,35 +48,6 @@ _ACCESS_OPEN = frozenset({"allowed", "designated"})
 # sits above that — so a denial naming any of these reaches a car, while one
 # naming `truck`, `hgv`, `bus`, `hov`, `bicycle` or `foot` does not.
 CAR_MODES = frozenset({"vehicle", "motor_vehicle", "car"})
-
-# Overture's RoadClass is the OSM `highway` taxonomy, which is what the routing
-# engine's `class_` holds, so classes pass through unchanged. A class outside this
-# set is treated as `unknown`, which the engine does accept — dropping it instead
-# would silently delete the road.
-ROUTING_CLASSES = frozenset(
-    {
-        "motorway", "trunk", "primary", "secondary", "tertiary", "residential",
-        "living_street", "unclassified", "service", "pedestrian", "footway",
-        "steps", "path", "track", "cycleway", "bridleway", "crosswalk", "unknown",
-    }
-)
-
-# Default speed per drivable class, from data_preparation's
-# `overture_street_network_europe.yaml`. This table doubles as the definition of
-# "drivable": a class absent from it takes no speed limit at all.
-CLASS_DEFAULT_MAXSPEED: Dict[str, int] = {
-    "motorway": 80,
-    "trunk": 60,
-    "primary": 50,
-    "secondary": 50,
-    "tertiary": 50,
-    "residential": 30,
-    "living_street": 30,
-    "unclassified": 50,
-    "service": 30,
-    "track": 30,
-    "unknown": 30,
-}
 
 # Scopes we cannot answer for "an ordinary car, at no particular time, travelling
 # through". A rule carrying one of these does not match that fact pattern, so it

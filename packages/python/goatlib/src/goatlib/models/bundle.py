@@ -50,6 +50,38 @@ class BundleStatus(str, Enum):
     failed = "failed"
 
 
+# The street-network edges layer's `class` domain: the OSM `highway` taxonomy,
+# which is what the routing engine's `class_` holds. The vocabulary is part of
+# the bundle type's contract — importers (whatever their source) conform to it,
+# the editor validates against it, and the artifact build maps anything outside
+# it to `unknown`, which the engine does accept — dropping such an edge instead
+# would silently delete the road.
+ROUTING_CLASSES = frozenset(
+    {
+        "motorway", "trunk", "primary", "secondary", "tertiary", "residential",
+        "living_street", "unclassified", "service", "pedestrian", "footway",
+        "steps", "path", "track", "cycleway", "bridleway", "crosswalk", "unknown",
+    }
+)  # fmt: skip
+
+# Default speed per drivable class, from data_preparation's
+# `overture_street_network_europe.yaml`. This table doubles as the definition of
+# "drivable": a class absent from it takes no speed limit at all.
+CLASS_DEFAULT_MAXSPEED: Dict[str, int] = {
+    "motorway": 80,
+    "trunk": 60,
+    "primary": 50,
+    "secondary": 50,
+    "tertiary": 50,
+    "residential": 30,
+    "living_street": 30,
+    "unclassified": 50,
+    "service": 30,
+    "track": 30,
+    "unknown": 30,
+}
+
+
 class RoleSpec(BaseModel):
     """A member-layer role within a bundle type."""
 
@@ -61,6 +93,9 @@ class RoleSpec(BaseModel):
     geometry: Optional[GeometryKind] = None
     # Columns the member layer must expose for downstream tools (native names).
     required_columns: Tuple[str, ...] = ()
+    # Whether a user may edit this member layer's features. False until someone
+    # has decided what saving it means for the bundle's derived artifacts.
+    editable: bool = False
     description: Optional[str] = None
 
 
@@ -156,6 +191,9 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                     "source_node",
                     "target_node",
                 ),
+                # Nodes are maintained by the editor when edges are saved, so
+                # only the edges layer is offered for editing.
+                editable=True,
                 description=(
                     "Routable street segments, split so each has exactly two "
                     "connectors and no linear references."

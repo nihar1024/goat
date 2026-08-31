@@ -7,7 +7,7 @@ from uuid import UUID
 
 from goatlib.models.bundle import BundleStatus
 from pydantic import field_serializer
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import Column, Field, Relationship, text
@@ -90,6 +90,14 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
         default=BundleStatus.ready,
         sa_column=Column(Text, nullable=False, server_default=BundleStatus.ready),
         description="Processing lifecycle status (import sets processing → ready/failed)",
+    )
+    layers_revision: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default="0"),
+        description=(
+            "Bumped on every member-layer edit; an artifact publishes only if "
+            "the revision it was built from still matches"
+        ),
     )
 
     # Relationships

@@ -87,6 +87,8 @@ export type JobType =
   | "project_import"
   | "layer_create"
   | "bundle_import"
+  | "bundle_artifact_rebuild"
+  | "bundle_artifact_delete"
   | "layer_create_filtered";
 
 /**

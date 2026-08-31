@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     # Download/export timeout - longer since exports can be large
     DOWNLOAD_TIMEOUT: int = int(os.getenv("GEOAPI_DOWNLOAD_TIMEOUT", "120"))
 
+    # Processes service, for queuing the artifact rebuild a bundle edit needs.
+    # Unset = the save still lands, but the bundle stays stale until rebuilt
+    # from its bundle page.
+    PROCESSES_URL: str = os.getenv("GOAT_PROCESSES_URL", "")
+
     # Redis settings for distributed tile caching
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
     # Tile cache TTL in seconds (default 1 hour)

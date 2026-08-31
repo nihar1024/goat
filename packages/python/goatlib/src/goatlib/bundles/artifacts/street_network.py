@@ -39,8 +39,7 @@ from typing import Dict, List, Protocol, Tuple
 import duckdb
 
 from goatlib.bundles.artifacts.base import ArtifactBuilder, BuiltArtifact
-from goatlib.bundles.importers.street_network.overture.flatten import ROUTING_CLASSES
-from goatlib.models.bundle import BundleArtifactKind, BundleTypeName
+from goatlib.models.bundle import ROUTING_CLASSES, BundleArtifactKind, BundleTypeName
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +69,10 @@ ROUTING_NODE_TYPES: Dict[str, str] = {
     "y_3857": "DOUBLE",
 }
 
-# The class vocabulary and the drivable-class speed defaults live with the
-# derivation that uses them, in the importer's `flatten` module — the member layer
-# already carries the resolved speeds, so this builder only needs the vocabulary
-# to keep `class_` inside what the engine's WHERE filter accepts.
+# The class vocabulary lives on the bundle type's spec (`goatlib.models.bundle`)
+# — the member layer already carries the resolved speeds, so this builder only
+# needs the vocabulary to keep `class_` inside what the engine's WHERE filter
+# accepts.
 # Cycling cost coefficient per surface: `cost = length * (1 + slope + surface)`,
 # and only bicycle/pedelec read it. Values are the org's own, from
 # data_preparation's `overture_street_network_europe.yaml` (`cycling_surfaces`),
@@ -146,7 +145,9 @@ class RoutingArtifactSource(Protocol):
     it back would close a cycle.
     """
 
-    def resolve_bundle_artifact(self, bundle_id: str, kind: str) -> str | None: ...
+    def resolve_bundle_artifact(
+        self, bundle_id: str, kind: str
+    ) -> Tuple[str | None, str | None]: ...
 
 
 def unpack_routing_network(
@@ -184,12 +185,28 @@ def fetch_routing_network(
     Returns the ``(edges, nodes)`` paths to hand to the analysis params, so a
     consumer needs one call and no knowledge of the artifact's packaging.
     """
-    archive = source.resolve_bundle_artifact(
+    archive, status = source.resolve_bundle_artifact(
         bundle_id, BundleArtifactKind.street_network_graph.value
     )
     if not archive:
+        # The status separates "not ready yet" from "was ready until someone
+        # edited it", which are different things to tell a user.
+        if status == "stale":
+            raise ValueError(
+                "This street network is being updated after an edit. Try again "
+                "once the update finishes."
+            )
+        if status == "building":
+            raise ValueError(
+                "This street network is still being prepared. Try again shortly."
+            )
+        if status == "failed":
+            raise ValueError(
+                "This street network's last update failed. Update it from the "
+                "bundle before using it."
+            )
         raise ValueError(
-            "The selected street network bundle has no ready routing graph yet."
+            "The selected street network bundle is not ready to route on yet."
         )
     return unpack_routing_network(archive, dest_dir)
 
@@ -224,7 +241,32 @@ def _transform(
     node_count = con.execute(
         f"SELECT count(*) FROM read_parquet('{nodes_out}')"
     ).fetchone()
-    return (edge_count[0] if edge_count else 0, node_count[0] if node_count else 0)
+    edges_written = edge_count[0] if edge_count else 0
+
+    # The edge query inner-joins source/target against the node ids, so an edge
+    # naming a node the layer does not hold is dropped: the graph is just
+    # missing that street. Dropping with a loud warning, not refusing — layers
+    # imported before the editor derived nodes (or touched by old per-feature
+    # edits) can hold dangling references, and refusing would leave such a
+    # bundle permanently stale after its first edit, with no in-product way
+    # back. Refuse only when nothing survives: an all-dangling network is not
+    # a graph with gaps, it is the wrong nodes layer.
+    source_count = con.execute("SELECT count(*) FROM edge_src").fetchone()
+    edges_read = source_count[0] if source_count else 0
+    if edges_written == 0 and edges_read > 0:
+        raise ValueError(
+            f"None of the {edges_read} edge(s) reference a node in the nodes "
+            "layer, so no routable network can be built from these layers."
+        )
+    if edges_written != edges_read:
+        logger.warning(
+            "Dropped %d of %d edge(s) referencing a node that is not in the "
+            "nodes layer; those streets are missing from the routable network",
+            edges_read - edges_written,
+            edges_read,
+        )
+
+    return (edges_written, node_count[0] if node_count else 0)
 
 
 def _node_query() -> str:

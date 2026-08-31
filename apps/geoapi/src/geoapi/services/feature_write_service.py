@@ -11,6 +11,7 @@ All writes are serialized by BaseDuckLakeManager's internal threading.Lock.
 
 import json
 import logging
+import re
 from typing import Any, Optional
 
 from geoapi.config import settings
@@ -26,6 +27,17 @@ logger = logging.getLogger(__name__)
 
 # Columns that cannot be modified by users
 PROTECTED_COLUMNS = {"id", "geometry", "geom", "rowid"}
+
+# The GeoParquet bbox struct, kept in step with the geometry on every write.
+# Every ? is the same GeoJSON string. One definition, shared with the bundle
+# editor, so bbox upkeep cannot drift between the two writers.
+BBOX_STRUCT_SQL = (
+    "struct_pack("
+    "xmin := ST_XMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
+    "ymin := ST_YMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
+    "xmax := ST_XMax(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
+    "ymax := ST_YMax(ST_MakeValid(ST_GeomFromGeoJSON(?))))"
+)
 
 
 def _feature_id_to_rowid(feature_id: str) -> int:
@@ -54,6 +66,14 @@ def _validate_column_name(name: str, existing_columns: list[str]) -> None:
 
 def _validate_new_column_name(name: str, existing_columns: list[str]) -> None:
     """Validate that a new column name is safe and doesn't conflict."""
+    # The API models enforce the same pattern; repeated here because column
+    # names end up inside quoted SQL identifiers, so this function must hold
+    # the line even for a caller that skips the API layer.
+    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", name):
+        raise ValueError(
+            "Column names may contain only letters, digits and underscores, "
+            "and must not start with a digit"
+        )
     if name in PROTECTED_COLUMNS:
         raise ValueError(f"Column name '{name}' is reserved")
     if name in settings.HIDDEN_FIELDS:
@@ -110,13 +130,7 @@ class FeatureWriteService:
 
             if "bbox" in column_names:
                 columns.append('"bbox"')
-                placeholders.append(
-                    "struct_pack("
-                    "xmin := ST_XMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                    "ymin := ST_YMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                    "xmax := ST_XMax(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                    "ymax := ST_YMax(ST_MakeValid(ST_GeomFromGeoJSON(?))))"
-                )
+                placeholders.append(BBOX_STRUCT_SQL)
                 values.extend([geom_json, geom_json, geom_json, geom_json])
 
         # Add user-supplied properties, skipping protected AND computed names
@@ -199,13 +213,7 @@ class FeatureWriteService:
 
                     if "bbox" in column_names:
                         columns.append('"bbox"')
-                        placeholders.append(
-                            "struct_pack("
-                            "xmin := ST_XMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                            "ymin := ST_YMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                            "xmax := ST_XMax(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                            "ymax := ST_YMax(ST_MakeValid(ST_GeomFromGeoJSON(?))))"
-                        )
+                        placeholders.append(BBOX_STRUCT_SQL)
                         values.extend([geom_json, geom_json, geom_json, geom_json])
 
                 for col_name, col_value in properties.items():
@@ -351,13 +359,7 @@ class FeatureWriteService:
 
         if geometry and geometry_column and "bbox" in column_names:
             geom_json = json.dumps(geometry)
-            set_clauses.append(
-                '"bbox" = struct_pack('
-                "xmin := ST_XMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                "ymin := ST_YMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                "xmax := ST_XMax(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-                "ymax := ST_YMax(ST_MakeValid(ST_GeomFromGeoJSON(?))))"
-            )
+            set_clauses.append(f'"bbox" = {BBOX_STRUCT_SQL}')
             values.extend([geom_json, geom_json, geom_json, geom_json])
 
         rid = _feature_id_to_rowid(feature_id)

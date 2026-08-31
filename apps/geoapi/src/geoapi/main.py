@@ -26,6 +26,7 @@ from geoapi.ducklake_pool import ducklake_pool
 from geoapi.ducklake_write import ducklake_write_manager
 from geoapi.models import HealthCheck
 from geoapi.routers import (
+    bundle_edits_router,
     download_router,
     expressions_router,
     features_router,
@@ -163,6 +164,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 app.include_router(metadata_router)
 app.include_router(features_router)
 app.include_router(features_write_router)
+app.include_router(bundle_edits_router)
 app.include_router(tiles_router)
 app.include_router(expressions_router)
 app.include_router(download_router)

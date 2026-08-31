@@ -93,7 +93,7 @@ class GeocodingToolParams(ScenarioSelectorMixin, ToolInputBase, LayerInputMixin)
             section="input",
             field_order=1,
             widget="layer-selector",
-            widget_options={"geometry_types": ["no_geometry"]},
+            widget_options={"data_types": ["table"], "geometry_types": ["no_geometry"]},
         ),
     )
 

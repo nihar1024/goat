@@ -49,6 +49,9 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
-markers = ["integration: marks tests as integration tests (require database)"]
+markers = [
+  "unit: marks tests as unit tests (no external services)",
+  "integration: marks tests as integration tests (require database)",
+]
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]

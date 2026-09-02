@@ -791,12 +791,19 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
   const zoom = useAppSelector((state) => state.map.reportCanvasZoom);
+  // Read through a ref so setZoom stays referentially stable: listeners bound once
+  // (the ctrl+wheel handler) would otherwise keep resolving the functional form
+  // against the zoom captured when they were bound.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   const setZoom = useCallback(
     (val: number | ((prev: number) => number)) => {
-      dispatch(setReportCanvasZoom(typeof val === "function" ? val(zoom) : val));
+      dispatch(setReportCanvasZoom(typeof val === "function" ? val(zoomRef.current) : val));
     },
-    [dispatch, zoom]
+    [dispatch]
   );
+  // Set once the user picks their own zoom level, which stops the auto-fit below.
+  const hasUserZoomedRef = useRef(false);
   const [atlasPageIndex, setAtlasPageIndex] = useState(0);
   const paperRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
@@ -915,10 +922,12 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
   );
 
   const handleZoomIn = () => {
+    hasUserZoomedRef.current = true;
     setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
   };
 
   const handleZoomOut = () => {
+    hasUserZoomedRef.current = true;
     setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
   };
 
@@ -938,7 +947,21 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
     const clampedZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, fitZoom));
 
     setZoom(clampedZoom);
-  }, [viewportSize, paperDimensions]);
+  }, [viewportSize, paperDimensions, setZoom]);
+
+  // Open on the whole page rather than a corner of it, and re-fit when the page
+  // size or the available area changes. Stops as soon as the user zooms manually.
+  useEffect(() => {
+    if (hasUserZoomedRef.current) return;
+    if (!viewportSize.width || !viewportSize.height) return;
+    handleFitToScreen();
+  }, [
+    viewportSize.width,
+    viewportSize.height,
+    paperDimensions.widthPx,
+    paperDimensions.heightPx,
+    handleFitToScreen,
+  ]);
 
   const handlePrevPage = () => {
     setAtlasPageIndex((prev) => Math.max(prev - 1, 0));
@@ -1075,6 +1098,7 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
+      hasUserZoomedRef.current = true;
       if (e.deltaY < 0) {
         setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
       } else {
@@ -1083,7 +1107,7 @@ const ReportsCanvas: React.FC<ReportsCanvasProps> = ({
     };
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
-  }, []);
+  }, [setZoom]);
 
   // Cursor style based on panning state
   const canvasCursor = isPanning ? "grabbing" : isSpacePressed ? "grab" : "default";

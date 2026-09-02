@@ -799,7 +799,9 @@ export default function FormulaBuilder({
       PaperProps={{
         sx: {
           maxHeight: "85vh",
-          minHeight: 600,
+          // Clamped so the floor never exceeds maxHeight — otherwise the paper
+          // overflows the centering container and the actions fall off-screen.
+          minHeight: "min(600px, 85vh)",
         },
       }}>
       <DialogTitle>{title || t("formula_builder")}</DialogTitle>

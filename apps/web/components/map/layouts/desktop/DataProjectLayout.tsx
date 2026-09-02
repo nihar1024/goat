@@ -163,9 +163,8 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   const handleDeleteGroup = async (groupData: { groupId?: number }) => {
     if (groupData.groupId) {
       await deleteProjectLayerGroup(projectId, groupData.groupId);
-      if (projectLayerGroups) {
-        mutateProjectLayerGroups();
-      }
+      mutateProjectLayerGroups();
+      mutateProjectLayers();
     }
   };
 

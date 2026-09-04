@@ -18,7 +18,6 @@ export interface BundleEditPayload {
 
 export interface BundleEditResponse {
   revision: number;
-  artifact_status: string;
   bundle_id: string;
   /** The bundle's nodes layer, whose tiles also need refreshing after a save. */
   nodes_layer_id: string;

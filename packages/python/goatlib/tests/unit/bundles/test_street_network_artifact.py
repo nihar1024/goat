@@ -446,7 +446,7 @@ def test_build_raises_when_an_edge_references_a_missing_node(tmp_path, con) -> N
     con.execute(f"""
         COPY (
             SELECT 'e1' AS id, 'residential' AS "class", 'n1' AS source_node,
-                   'ghost' AS target_node, NULL AS surface,
+                   'ghost' AS target_node, NULL AS surface, 74.4 AS length_m,
                    30 AS speed_limit_kph_forward, 30 AS speed_limit_kph_backward,
                    ST_GeomFromText('LINESTRING(11 48, 11.001 48)') AS geometry
         ) TO '{edges}' (FORMAT PARQUET)
@@ -461,9 +461,9 @@ def test_build_raises_when_an_edge_references_a_missing_node(tmp_path, con) -> N
         )
 
 
-def test_fetch_explains_a_stale_artifact(tmp_path) -> None:
+def test_fetch_explains_an_outdated_artifact(tmp_path) -> None:
     with pytest.raises(ValueError, match="being updated"):
-        fetch_routing_network(_FakeSource(None, "stale"), "bundle-1", tmp_path)
+        fetch_routing_network(_FakeSource(None, "outdated"), "bundle-1", tmp_path)
 
 
 def test_fetch_explains_a_build_in_progress(tmp_path) -> None:
@@ -494,13 +494,14 @@ def _write_network(con, root: Path, edge_targets: Tuple[str, str]) -> Tuple[str,
         COPY (
             SELECT * FROM (VALUES
                 ('e1', 'residential', CAST(NULL AS VARCHAR), 30, 30,
-                 'n1', '{edge_targets[0]}',
+                 'n1', '{edge_targets[0]}', 74.4,
                  ST_GeomFromText('LINESTRING (11.0 48.0, 11.001 48.0)')),
                 ('e2', 'residential', CAST(NULL AS VARCHAR), 30, 30,
-                 'n1', '{edge_targets[1]}',
+                 'n1', '{edge_targets[1]}', 148.9,
                  ST_GeomFromText('LINESTRING (11.0 48.0, 11.002 48.0)'))
             ) t("id", "class", surface, speed_limit_kph_forward,
-                speed_limit_kph_backward, source_node, target_node, geometry)
+                speed_limit_kph_backward, source_node, target_node, length_m,
+                geometry)
         ) TO '{edges}' (FORMAT PARQUET)
     """)
     return edges, nodes

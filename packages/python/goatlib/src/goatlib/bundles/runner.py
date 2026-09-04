@@ -19,12 +19,15 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from goatlib.bundles.artifacts.build_mixin import BundleArtifactBuildMixin
+from goatlib.bundles.artifacts.storage import delete_bundle_artifacts
 from goatlib.bundles.importers import get_importer
 from goatlib.bundles.importers.base import ValidationResult
+from goatlib.computed_columns import COMPUTED_KIND_REGISTRY
 from goatlib.io.converter import IOConverter
 from goatlib.models.bundle import (
     BundleStatus,
     BundleTypeName,
+    get_spec,
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.base import BaseToolRunner
@@ -68,14 +71,14 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
 
     Subclasses ``BaseToolRunner`` to reuse its ingest primitives
     (``_ingest_to_ducklake`` etc.), but drives them directly from
-    ``run_import`` — the single-output ``run()``/``process()`` lifecycle is not
-    used.
+    ``ingest_into_package`` — the single-output ``run()``/``process()``
+    lifecycle is not used.
     """
 
     def process(self, params: Any, temp_dir: Path) -> "tuple[Path, DatasetMetadata]":
         raise NotImplementedError(
-            "BundleImportRunner uses run_import(), not the single-output "
-            "run()/process() lifecycle."
+            "BundleImportRunner uses ingest_into_package(), not the "
+            "single-output run()/process() lifecycle."
         )
 
     async def _cleanup_layers(
@@ -153,6 +156,64 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                         user_id=user_id, layer_id=layer_id, parquet_path=parquet_path
                     )
 
+                    # Computed columns the role declares, filled from the
+                    # kind's own SQL so the value matches what a later recompute
+                    # produces.
+                    #
+                    # An importer's writer may already declare the column (to
+                    # place it sensibly and fix its width) and fill it with the
+                    # same expression. Where it has, nothing is recomputed: a
+                    # DuckLake UPDATE rewrites every row of the table, which on
+                    # a city-scale edges layer costs more than the whole import.
+                    role_spec = get_spec(bundle_type).role(extracted.role)
+                    computed = dict(role_spec.computed_columns) if role_spec else {}
+                    field_config: Dict[str, Any] = {}
+                    if computed:
+                        table = self.get_layer_table_path(layer_id)
+                        existing = {
+                            row[0]
+                            for row in self.duckdb_con.execute(
+                                f"SELECT column_name FROM (DESCRIBE {table})"
+                            ).fetchall()
+                        }
+                        for column, kind_name in computed.items():
+                            kind = COMPUTED_KIND_REGISTRY.get(kind_name)
+                            if kind is None:
+                                logger.warning(
+                                    "Role %s declares unknown computed kind %r; "
+                                    "skipping column %s",
+                                    extracted.role,
+                                    kind_name,
+                                    column,
+                                )
+                                continue
+                            if column not in existing:
+                                self.duckdb_con.execute(
+                                    f'ALTER TABLE {table} ADD COLUMN "{column}" '
+                                    f"{kind.duckdb_type}"
+                                )
+                                unfilled = True
+                            else:
+                                # Declared but possibly not filled. One null is
+                                # enough to decide, so stop at the first.
+                                unfilled = bool(
+                                    self.duckdb_con.execute(
+                                        f"SELECT 1 FROM {table} "
+                                        f'WHERE "{column}" IS NULL LIMIT 1'
+                                    ).fetchone()
+                                )
+                            if unfilled:
+                                self.duckdb_con.execute(
+                                    f'UPDATE {table} SET "{column}" = '
+                                    f"{kind.compute_sql()}"
+                                )
+                            field_config[column] = {
+                                "is_computed": True,
+                                "kind": kind_name,
+                                "depends_on": list(kind.depends_on),
+                                "display_config": {},
+                            }
+
                     layer_name = (
                         f"{bundle_name} {extracted.name}"
                         if bundle_name
@@ -172,6 +233,8 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                         feature_count=info.get("feature_count", 0),
                         size=info.get("size", 0),
                     )
+                    if field_config:
+                        await db.set_layer_field_config(layer_id, field_config)
                     await db.add_layer_to_package(
                         bundle_id=bundle_id, layer_id=layer_id, role=extracted.role
                     )
@@ -241,73 +304,6 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
             len(imported),
         )
 
-    async def run_import(
-        self,
-        *,
-        source_path: str,
-        bundle_type: "BundleTypeName | str",
-        user_id: str,
-        folder_id: str,
-        name: str,
-        description: Optional[str] = None,
-        properties: Optional[Dict[str, Any]] = None,
-        bundle_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-    ) -> BundleImportResult:
-        """Full import: validate, create the bundle, and ingest its layers.
-        Used for direct/CLI runs where the bundle doesn't yet exist.
-
-        When ``project_id`` is given, the imported bundle is also added to that
-        project as a locked bundle-backed group."""
-        assert self.settings is not None, "init_from_env()/init() must run first"
-
-        type_value = BundleTypeName(bundle_type).value
-        importer = get_importer(bundle_type)
-
-        validation = importer.validate(source_path)
-        if not validation.valid:
-            raise BundleValidationError(validation)
-
-        bundle_id = bundle_id or str(uuid4())
-        pool = await self.get_postgres_pool()
-        db = ToolDatabaseService(pool, schema=self.settings.customer_schema)
-        try:
-            await db.create_bundle(
-                bundle_id=bundle_id,
-                user_id=user_id,
-                folder_id=folder_id,
-                name=name,
-                bundle_type=type_value,
-                description=description,
-                properties=properties,
-            )
-            imported = await self._ingest_layers(
-                db,
-                source_path=source_path,
-                bundle_type=bundle_type,
-                user_id=user_id,
-                folder_id=folder_id,
-                bundle_id=bundle_id,
-            )
-            await self.build_and_store_artifacts(
-                db,
-                bundle_id=bundle_id,
-                bundle_type=bundle_type,
-                source_path=source_path,
-                user_id=user_id,
-                members=_as_members(imported),
-            )
-            if project_id:
-                await self._add_bundle_to_project(
-                    db, project_id=project_id, bundle_id=bundle_id, imported=imported
-                )
-            return BundleImportResult(
-                bundle_id=bundle_id, bundle_type=type_value, layers=imported
-            )
-        finally:
-            await pool.close()
-            self.cleanup()
-
     async def ingest_into_package(
         self,
         *,
@@ -361,16 +357,16 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                     members=_as_members(imported),
                 )
             except Exception:
-                # Remove member layers that landed before the failure (a
-                # metadata or artifact stage can fail after ingest succeeded) —
-                # a failed bundle holds no layers, so re-running the import
-                # starts clean instead of colliding with its own leftovers.
+                # An import that fails leaves nothing that can be completed:
+                # there is no retry that fills in a half-ingested bundle, and
+                # the only action a bundle in that state offers — rebuild its
+                # artifacts — needs the member layers this is about to remove.
+                # So the whole bundle goes, and the job carries the failure.
                 await self._cleanup_layers(
                     db, user_id, [layer.layer_id for layer in imported]
                 )
-                await db.update_package_status(
-                    bundle_id=bundle_id, status=BundleStatus.failed
-                )
+                delete_bundle_artifacts(self.settings.bundles_data_dir, str(bundle_id))
+                await db.delete_bundle(bundle_id)
                 raise
             await db.update_package_status(
                 bundle_id=bundle_id, status=BundleStatus.ready
@@ -397,29 +393,3 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
         finally:
             await pool.close()
             self.cleanup()
-
-
-async def import_bundle(
-    *,
-    source_path: str,
-    bundle_type: "BundleTypeName | str",
-    user_id: str,
-    folder_id: str,
-    name: str,
-    description: Optional[str] = None,
-    properties: Optional[Dict[str, Any]] = None,
-    bundle_id: Optional[str] = None,
-) -> BundleImportResult:
-    """Convenience entry point: build a runner from the environment and import."""
-    runner = BundleImportRunner()
-    runner.init_from_env()
-    return await runner.run_import(
-        source_path=source_path,
-        bundle_type=bundle_type,
-        user_id=user_id,
-        folder_id=folder_id,
-        name=name,
-        description=description,
-        properties=properties,
-        bundle_id=bundle_id,
-    )

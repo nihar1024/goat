@@ -12,20 +12,25 @@ node — so a user never has to keep source_node and target_node honest by hand.
 
 import asyncio
 import logging
-from typing import Annotated, Any, Literal
+import math
+from dataclasses import dataclass
+from typing import Annotated, Any
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from goatlib.bundles.topology import (
     DegenerateEdgeError,
+    DrawnSegment,
     EdgeCandidate,
     MintNode,
     NodeCandidate,
     ReuseNode,
     SplitEdge,
+    interior_join,
     orphaned_nodes,
     resolve_endpoint,
+    segments_from_breaks,
     validate_edge_endpoints,
 )
 from goatlib.models.bundle import (
@@ -36,7 +41,7 @@ from goatlib.models.bundle import (
 )
 from pydantic import BaseModel, Field
 from pyproj import Transformer
-from shapely.geometry import Point, shape
+from shapely.geometry import LineString, Point, shape
 from shapely.ops import substring
 from shapely.ops import transform as shapely_transform
 
@@ -46,6 +51,7 @@ from geoapi.deps.auth import get_user_id
 from geoapi.ducklake_write import ducklake_write_manager
 from geoapi.routers.features_write import (
     _invalidate_caches_and_pmtiles,
+    _load_field_config,
     get_write_authorized_metadata,
 )
 from geoapi.services import bundle_edit_service as writer
@@ -57,7 +63,12 @@ router = APIRouter(tags=["Bundle Edits"])
 
 UserIdDep = Annotated[UUID, Depends(get_user_id)]
 
-# Metres. An endpoint this close to a node is taken to mean that node.
+# Ground metres. An endpoint this close to a node is taken to mean that node.
+#
+# Distances are measured in EPSG:3857, where a unit is a ground metre only at
+# the equator and shrinks as 1/cos(latitude) away from it — so this has to be
+# scaled per edit or the tolerance quietly tightens with latitude: 0.67 m at
+# Munich, 0.50 m at 60 degrees. See `_mercator_scale`.
 SNAP_TOLERANCE_M = 1.0
 
 # What a drawn edge is when nobody said. The artifact build already maps any
@@ -65,9 +76,9 @@ SNAP_TOLERANCE_M = 1.0
 # so an edit never fails for want of a classification.
 DEFAULT_EDGE_CLASS = "unknown"
 
-# How far beyond the edit's own extent to look for snap candidates. Overshooting
-# costs a few extra rows; undershooting would hide a node the endpoint should
-# have snapped to.
+# How far beyond the edit's own extent to look for snap candidates, in ground
+# metres. Overshooting costs a few extra rows; undershooting would hide a node
+# the endpoint should have snapped to.
 CANDIDATE_PAD_M = 50.0
 
 # Module-level: constructing a Transformer hits the PROJ database, so per-call
@@ -114,7 +125,6 @@ class NodeChanges(BaseModel):
 
 class BundleEditResponse(BaseModel):
     revision: int
-    artifact_status: Literal["stale"]
     bundle_id: str
     # The client has to refresh this layer's tiles too — the server may have
     # minted or pruned nodes — and cannot know which layer it is otherwise.
@@ -187,30 +197,15 @@ async def member_layer_of_role(bundle_id: str, role: str) -> dict[str, Any] | No
     return dict(row) if row else None
 
 
-async def mark_artifacts_stale(bundle_id: str) -> None:
-    """Stop tools routing on a graph that no longer matches the layers.
-
-    Done before the layer write, not after: if the write then fails, the
-    artifact is stale over unchanged layers, which a rebuild fixes. The other
-    order would leave a ready graph that disagrees with the data.
-    """
-    await _pool().execute(
-        """
-        UPDATE customer.bundle_artifact SET status = 'stale', updated_at = NOW()
-        WHERE bundle_id = $1::uuid AND status <> 'stale'
-        """,
-        bundle_id,
-    )
-
-
 async def claim_bundle_revision(bundle_id: str, base_revision: int) -> int:
     """Atomically advance ``layers_revision`` from the client's base.
 
     Compare-and-swap, and done BEFORE the layer write on purpose: two saves
-    from the same base race here and exactly one wins — the loser gets the
-    409 instead of silently overwriting. Claiming before the artifacts are
-    staled also moves the revision past any in-flight rebuild, so a build
-    started earlier can no longer publish over the edit.
+    from the same base race here and exactly one wins — the loser gets the 409
+    instead of silently overwriting. It is also what makes the artifacts
+    outdated, since a consumer compares their revision to this one, and it moves
+    the revision past any in-flight rebuild so a build started earlier can no
+    longer publish over the edit.
     """
     row = await _pool().fetchrow(
         """
@@ -254,12 +249,12 @@ async def dispatch_rebuild(bundle_id: str, authorization: str | None) -> str | N
 
     Dispatched here rather than by the browser because the graph's return to
     ``ready`` must not depend on the client surviving the save. Best-effort:
-    the artifacts are already stale either way, and the bundle page's Update
+    the artifacts are already outdated either way, and the bundle page's Update
     button covers a dispatch that failed.
     """
     if not settings.PROCESSES_URL:
         logger.warning(
-            "GOAT_PROCESSES_URL is not set; bundle %s stays stale until "
+            "GOAT_PROCESSES_URL is not set; bundle %s stays outdated until "
             "rebuilt from its bundle page",
             bundle_id,
         )
@@ -289,9 +284,41 @@ async def dispatch_rebuild(bundle_id: str, authorization: str | None) -> str | N
     return None
 
 
+def _validate_line(geometry: dict[str, Any]) -> None:
+    """Refuse anything that is not a usable line, before shapely sees it.
+
+    Checked here rather than left to ``shape()``, which raises a GEOS error for
+    a one-point line — a bad request that would surface as a server fault.
+    """
+    if not isinstance(geometry, dict) or geometry.get("type") != "LineString":
+        raise HTTPException(
+            status_code=400, detail="An edge must be a GeoJSON LineString."
+        )
+    coordinates = geometry.get("coordinates")
+    if not isinstance(coordinates, list) or len(coordinates) < 2:
+        raise HTTPException(
+            status_code=400, detail="An edge needs at least two points."
+        )
+    for point in coordinates:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Every point of an edge needs a longitude and a latitude.",
+            )
+
+
 def _to_3857(geometry: dict[str, Any]) -> Any:
     """Project a 4326 GeoJSON geometry into metres for measuring distances."""
     return shapely_transform(_TRANSFORM_TO_3857.transform, shape(geometry))
+
+
+def _mercator_scale(latitude: float) -> float:
+    """Projected units per ground metre at a latitude.
+
+    EPSG:3857 is conformal, so one number covers both axes, and over a single
+    edit the latitude spread is far too small for it to vary meaningfully.
+    """
+    return 1.0 / math.cos(math.radians(max(-89.5, min(89.5, latitude))))
 
 
 def _bbox_to_4326(
@@ -309,11 +336,14 @@ def _batch_bbox_3857(
 ) -> tuple[float, float, float, float]:
     """Bounding box of everything being written, padded for the candidate scan."""
     bounds = [_to_3857(g).bounds for g in geometries]
-    xmin = min(b[0] for b in bounds) - CANDIDATE_PAD_M
-    ymin = min(b[1] for b in bounds) - CANDIDATE_PAD_M
-    xmax = max(b[2] for b in bounds) + CANDIDATE_PAD_M
-    ymax = max(b[3] for b in bounds) + CANDIDATE_PAD_M
-    return (xmin, ymin, xmax, ymax)
+    xmin = min(b[0] for b in bounds)
+    ymin = min(b[1] for b in bounds)
+    xmax = max(b[2] for b in bounds)
+    ymax = max(b[3] for b in bounds)
+    pad = CANDIDATE_PAD_M * _mercator_scale(
+        _TRANSFORM_TO_4326.transform(xmin, (ymin + ymax) / 2)[1]
+    )
+    return (xmin - pad, ymin - pad, xmax + pad, ymax + pad)
 
 
 def _fill_class_defaults(properties: dict[str, Any]) -> dict[str, Any]:
@@ -349,8 +379,8 @@ async def apply_bundle_edits(
     user_id: UserIdDep,
     body: BundleEditBatch = Body(...),
 ) -> BundleEditResponse:
-    """Write an edge batch, derive the nodes it implies, stale the graph, and
-    queue the rebuild that brings the graph back."""
+    """Write an edge batch, derive the nodes it implies, advance the revision
+    that makes the graph outdated, and queue the rebuild that renews it."""
     edges_metadata = await authorize_edit(layer_info, user_id)
 
     member = await resolve_bundle_member(layer_info.layer_id)
@@ -374,6 +404,23 @@ async def apply_bundle_edits(
 
     if not (body.create or body.update or body.delete):
         raise HTTPException(status_code=400, detail="The batch contains no edits.")
+
+    # One edit per feature. Two edits naming the same edge would both be
+    # applied, the first one's derived nodes stranded by the second, and only
+    # one of them is what the user meant.
+    targeted = [e.id for e in body.update] + list(body.delete)
+    repeated = {fid for fid in targeted if targeted.count(fid) > 1}
+    if repeated:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The batch edits the same feature more than once: "
+                f"{', '.join(sorted(repeated))}."
+            ),
+        )
+
+    for edit in (*body.create, *body.update):
+        _validate_line(edit.geometry)
 
     # An absent class is filled in below; one the engine does not know is not,
     # because the build would silently map it to a drivable road rather than
@@ -418,21 +465,27 @@ async def apply_bundle_edits(
         None, get_layer_info_sync, str(nodes_member["layer_id"])
     )
 
+    # Claiming the revision is what makes every artifact outdated: a consumer
+    # compares the artifact's revision to this one, so there is no second flag
+    # to write and none to forget.
     revision = await claim_bundle_revision(bundle_id, body.base_revision)
-    await mark_artifacts_stale(bundle_id)
     authorization = request.headers.get("Authorization")
 
     try:
-        changes = await loop.run_in_executor(None, _apply, layer_info, nodes_info, body)
+        # The computed columns the layer declares; the writer refreshes them
+        # after every geometry write, the way the per-feature endpoints do.
+        field_config = await _load_field_config(layer_info)
+        changes = await loop.run_in_executor(
+            None, _apply, layer_info, nodes_info, body, field_config
+        )
     except (DegenerateEdgeError, ValueError) as e:
-        # The layers are unchanged, so hand the claim back (the client's base
-        # stays valid) and queue a rebuild over the artifacts staled above.
+        # The layers are unchanged, so handing the claim back is the whole
+        # repair: the artifacts are current again at the revision they were
+        # built from, and no rebuild has to run to say so.
         await release_bundle_revision(bundle_id, revision)
-        await dispatch_rebuild(bundle_id, authorization)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         await release_bundle_revision(bundle_id, revision)
-        await dispatch_rebuild(bundle_id, authorization)
         raise
 
     # Once per layer, not once per feature: PMTiles are deleted so tiles fall
@@ -445,7 +498,6 @@ async def apply_bundle_edits(
 
     return BundleEditResponse(
         revision=revision,
-        artifact_status="stale",
         bundle_id=bundle_id,
         nodes_layer_id=str(nodes_member["layer_id"]),
         rebuild_job_id=rebuild_job_id,
@@ -454,8 +506,77 @@ async def apply_bundle_edits(
     )
 
 
+@dataclass
+class _Batch:
+    """The state one save's writes have to agree on.
+
+    Two kinds of knowledge about the same nodes, kept apart because they answer
+    different questions. ``candidate_edges`` is what a vertex may snap to, and
+    excludes the rows this batch is rewriting — an edge must not snap to its own
+    former self. ``references`` is which edges hold each node, and counts those
+    rows, because that is what makes a node a junction rather than a leftover.
+    """
+
+    con: Any
+    edges_table: str
+    nodes_table: str
+    edge_columns: list[str]
+    node_columns: list[str]
+    candidate_nodes: list[NodeCandidate]
+    candidate_edges: list[EdgeCandidate]
+    references: dict[str, set[str]]
+    # SNAP_TOLERANCE_M in the projected units distances are measured in, scaled
+    # once for the edit's latitude so a metre means a ground metre.
+    tolerance: float
+    field_config: dict[str, Any] | None
+    edges: EdgeChanges
+    nodes: NodeChanges
+
+    def is_junction(self, node_id: str) -> bool:
+        """Whether anything else meets at this node."""
+        return bool(self.references.get(node_id))
+
+    def record(
+        self, edge_id: str, source_node: str, target_node: str, geometry: Any
+    ) -> None:
+        """A row this batch just wrote, in EPSG:3857.
+
+        Both a snap target and a junction for the lines still to come, so two
+        streets drawn in one save connect to each other and not only to what was
+        already there.
+        """
+        self.references.setdefault(source_node, set()).add(edge_id)
+        self.references.setdefault(target_node, set()).add(edge_id)
+        self.candidate_edges.append(
+            EdgeCandidate(
+                edge_id=edge_id,
+                source_node=source_node,
+                target_node=target_node,
+                geometry=geometry,
+            )
+        )
+
+    def forget(self, edge_id: str) -> None:
+        """A row that is gone — a split replaced it, or it is being rewritten.
+
+        Also drops it from the reported changes: a split of a row this batch
+        created would otherwise hand the client an id that no longer resolves.
+        """
+        for holders in self.references.values():
+            holders.discard(edge_id)
+        self.candidate_edges[:] = [
+            e for e in self.candidate_edges if e.edge_id != edge_id
+        ]
+        for reported in (self.edges.created, self.edges.updated):
+            if edge_id in reported:
+                reported.remove(edge_id)
+
+
 def _apply(
-    edges_info: LayerInfo, nodes_info: LayerInfo, body: BundleEditBatch
+    edges_info: LayerInfo,
+    nodes_info: LayerInfo,
+    body: BundleEditBatch,
+    field_config: dict[str, Any] | None = None,
 ) -> tuple[EdgeChanges, NodeChanges]:
     """Derive and write, in one transaction."""
     edges_table = edges_info.full_table_name
@@ -494,16 +615,42 @@ def _apply(
 
             candidate_nodes: list[NodeCandidate] = []
             candidate_edges: list[EdgeCandidate] = []
+            bbox_3857 = _batch_bbox_3857(written) if written else (0.0, 0.0, 0.0, 0.0)
             if written:
                 candidate_nodes, candidate_edges = writer.fetch_candidates(
                     con,
                     edges_table,
                     nodes_table,
-                    _bbox_to_4326(_batch_bbox_3857(written)),
+                    _bbox_to_4326(bbox_3857),
                     exclude_edge_ids=set(delete_ids) | set(update_ids.values()),
                     edge_columns=columns,
                     node_columns=node_columns,
                 )
+
+            batch = _Batch(
+                con=con,
+                edges_table=edges_table,
+                nodes_table=nodes_table,
+                edge_columns=columns,
+                node_columns=node_columns,
+                candidate_nodes=candidate_nodes,
+                candidate_edges=candidate_edges,
+                # Which edges hold each nearby node, so a vertex reaching one
+                # can tell a junction from a dead end. Rows being deleted are
+                # left out; rows being rewritten are not, because they still
+                # hold their nodes until the rewrite reaches them.
+                references=writer.node_references(
+                    con,
+                    edges_table,
+                    [node.node_id for node in candidate_nodes],
+                    exclude_edge_ids=delete_ids,
+                ),
+                field_config=field_config,
+                tolerance=SNAP_TOLERANCE_M
+                * _mercator_scale(_bbox_to_4326(bbox_3857)[1] if written else 0.0),
+                edges=edge_changes,
+                nodes=node_changes,
+            )
 
             # Nodes the save might orphan: the endpoints of everything it
             # removes or moves.
@@ -512,60 +659,84 @@ def _apply(
             )
 
             for created in body.create:
-                new_id = writer.mint_id()
-                source, target = _resolve_ends(
-                    con,
-                    edges_table,
-                    nodes_table,
-                    columns,
-                    node_columns,
-                    created.geometry,
-                    candidate_nodes,
-                    candidate_edges,
-                    edge_changes,
-                    node_changes,
-                )
-                validate_edge_endpoints(source, target)
-                writer.insert_edge(
-                    con,
-                    edges_table,
-                    columns,
-                    new_id,
-                    created.geometry,
-                    _fill_class_defaults(created.properties),
-                    source,
-                    target,
-                )
-                edge_changes.created.append(new_id)
+                segments, coordinates, projected = _plan(batch, created.geometry)
+                properties = _fill_class_defaults(created.properties)
+                for segment in segments:
+                    new_id = writer.mint_id()
+                    writer.insert_edge(
+                        con,
+                        edges_table,
+                        columns,
+                        new_id,
+                        _segment_geometry(coordinates, segment),
+                        properties,
+                        segment.source_node,
+                        segment.target_node,
+                        field_config,
+                    )
+                    edge_changes.created.append(new_id)
+                    batch.record(
+                        new_id,
+                        segment.source_node,
+                        segment.target_node,
+                        _segment_line(projected, segment),
+                    )
 
             for updated in body.update:
-                source, target = _resolve_ends(
-                    con,
-                    edges_table,
-                    nodes_table,
-                    columns,
-                    node_columns,
-                    updated.geometry,
-                    candidate_nodes,
-                    candidate_edges,
-                    edge_changes,
-                    node_changes,
-                )
-                validate_edge_endpoints(source, target)
+                own_id = update_ids[updated.id]
+                # The row is about to be replaced, so it stops holding its old
+                # nodes now. Without this, extending a street past its own dead
+                # end would find the node it used to finish at still occupied
+                # and break the line there, handing back two edges where the
+                # user extended one.
+                batch.forget(own_id)
+                segments, coordinates, projected = _plan(batch, updated.geometry)
+                # An update replaces the row's properties, so it needs the same
+                # defaults a create gets — otherwise saving an edge without
+                # restating its class would null it out.
+                properties = _fill_class_defaults(updated.properties)
+                # The edited row keeps the first piece, so the id the client
+                # knows survives; a vertex dragged onto a junction turns the
+                # rest into new edges.
+                head, tail = segments[0], segments[1:]
                 writer.update_edge(
                     con,
                     edges_table,
                     columns,
-                    update_ids[updated.id],
-                    updated.geometry,
-                    # An update replaces the row's properties, so it needs the
-                    # same defaults a create gets — otherwise saving an edge
-                    # without restating its class would null it out.
-                    _fill_class_defaults(updated.properties),
-                    source,
-                    target,
+                    own_id,
+                    _segment_geometry(coordinates, head),
+                    properties,
+                    head.source_node,
+                    head.target_node,
+                    field_config,
                 )
-                edge_changes.updated.append(update_ids[updated.id])
+                edge_changes.updated.append(own_id)
+                batch.record(
+                    own_id,
+                    head.source_node,
+                    head.target_node,
+                    _segment_line(projected, head),
+                )
+                for segment in tail:
+                    new_id = writer.mint_id()
+                    writer.insert_edge(
+                        con,
+                        edges_table,
+                        columns,
+                        new_id,
+                        _segment_geometry(coordinates, segment),
+                        properties,
+                        segment.source_node,
+                        segment.target_node,
+                        field_config,
+                    )
+                    edge_changes.created.append(new_id)
+                    batch.record(
+                        new_id,
+                        segment.source_node,
+                        segment.target_node,
+                        _segment_line(projected, segment),
+                    )
 
             if delete_ids:
                 writer.delete_edges_by_id(con, edges_table, delete_ids)
@@ -600,112 +771,173 @@ def _endpoints_of(con: Any, edges_table: str, edge_ids: list[str]) -> set[str]:
     return {value for row in rows for value in row if value}
 
 
-def _resolve_ends(
-    con: Any,
-    edges_table: str,
-    nodes_table: str,
-    edge_columns: list[str],
-    node_columns: list[str],
-    geometry: dict[str, Any],
-    candidate_nodes: list[NodeCandidate],
-    candidate_edges: list[EdgeCandidate],
-    edge_changes: EdgeChanges,
-    node_changes: NodeChanges,
-) -> tuple[str, str]:
-    """Node ids for an edge's two endpoints, creating or splitting as needed."""
-    projected = _to_3857(geometry)
-    coords = list(projected.coords)
-    if len(coords) < 2:
+def _plan(
+    batch: _Batch, geometry: dict[str, Any]
+) -> tuple[list[DrawnSegment], list[Any], list[Any]]:
+    """The edges one drawn line becomes, with every endpoint node resolved.
+
+    Vertices are walked in order, each resolved against the network as the ones
+    before it left it: an endpoint that split an edge has to be visible to the
+    interior vertex that lands on one of the halves, or the vertex would mint a
+    free-floating node on a half's interior.
+
+    Returns the segments with the line's 4326 and 3857 coordinates. The 4326
+    list is the drawn line with every resolved vertex moved onto its node, which
+    is what gets written; the 3857 list hands the written rows back as snap
+    targets without reprojecting them again.
+    """
+    coordinates = [list(c) for c in shape(geometry).coords]
+    projected = list(_to_3857(geometry).coords)
+    last = len(projected) - 1
+    if last < 1:
         raise ValueError("An edge needs at least two points.")
 
-    resolved: list[str] = []
-    for x, y in (coords[0], coords[-1]):
-        decision = resolve_endpoint(
-            Point(x, y), candidate_nodes, candidate_edges, SNAP_TOLERANCE_M
-        )
-        if isinstance(decision, ReuseNode):
-            resolved.append(decision.node_id)
-            continue
+    def resolve(index: int, decision: Any) -> str:
+        """Materialise one vertex's decision and move the vertex onto the node.
 
-        node_id = writer.mint_id()
-        node_x, node_y = float(x), float(y)
-        if isinstance(decision, SplitEdge):
-            writer.insert_node_on_edge(
-                con,
-                nodes_table,
-                node_columns,
-                edges_table,
-                node_id,
-                decision.edge_id,
-                decision.fraction,
+        The drawn position is only an intention: it can be up to the snap
+        tolerance away from the node it resolved to, and a split puts the node on
+        the crossed street rather than where the user clicked. Left alone, the
+        graph would say the two streets meet while the geometry showed them
+        passing within a metre of each other — the junction would be invisible
+        on the map and the length would be measured along a line that stops
+        short of it.
+        """
+        x, y = projected[index]
+        node_id = _materialise(decision, batch, (float(x), float(y)))
+        lon, lat = writer.node_position(batch.con, batch.nodes_table, node_id)
+        coordinates[index] = [lon, lat]
+        # Both lists describe the same vertex: the 4326 one is written, the 3857
+        # one is handed back as a snap target for the rest of the batch.
+        projected[index] = _TRANSFORM_TO_3857.transform(lon, lat)
+        return node_id
+
+    ends: dict[int, str] = {}
+    breaks: list[tuple[int, str]] = []
+    for index, (x, y) in enumerate(projected):
+        if index in (0, last):
+            # An end always takes the node it reaches, junction or not: the line
+            # finishes there either way.
+            ends[index] = resolve(
+                index,
+                resolve_endpoint(
+                    Point(x, y),
+                    batch.candidate_nodes,
+                    batch.candidate_edges,
+                    batch.tolerance,
+                ),
             )
-            left, right = writer.mint_id(), writer.mint_id()
-            writer.split_edge(
-                con,
-                edges_table,
-                edge_columns,
-                decision.edge_id,
-                decision.fraction,
+            continue
+        join = interior_join(
+            Point(x, y),
+            batch.candidate_nodes,
+            batch.candidate_edges,
+            batch.tolerance,
+            batch.is_junction,
+        )
+        if join is not None:
+            breaks.append((index, resolve(index, join)))
+
+    segments = segments_from_breaks(len(projected), ends[0], ends[last], breaks)
+    for segment in segments:
+        validate_edge_endpoints(segment.source_node, segment.target_node)
+    return segments, coordinates, projected
+
+
+def _segment_geometry(coordinates: list[Any], segment: DrawnSegment) -> dict[str, Any]:
+    """The drawn line between two of its vertices, as GeoJSON."""
+    return {
+        "type": "LineString",
+        "coordinates": [list(c) for c in coordinates[segment.start : segment.end + 1]],
+    }
+
+
+def _segment_line(projected: list[Any], segment: DrawnSegment) -> LineString:
+    """The same slice in metres, for handing back as a snap target."""
+    return LineString(projected[segment.start : segment.end + 1])
+
+
+def _materialise(decision: Any, batch: _Batch, fallback: tuple[float, float]) -> str:
+    """Turn one resolution into a node id, writing whatever it implies.
+
+    Shared by the drawn line's endpoints and its interior vertices: both join
+    the network the same three ways, and an interior vertex landing on a street
+    has to split it for the same reason an endpoint does — otherwise the
+    junction exists in the drawing and not in the graph.
+
+    ``fallback`` is the drawn position, used for a minted node and as the
+    candidate coordinate when a split cannot be measured.
+    """
+    if isinstance(decision, ReuseNode):
+        return decision.node_id
+
+    node_id = writer.mint_id()
+    node_x, node_y = fallback
+    if isinstance(decision, SplitEdge):
+        writer.insert_node_on_edge(
+            batch.con,
+            batch.nodes_table,
+            batch.node_columns,
+            batch.edges_table,
+            node_id,
+            decision.edge_id,
+            decision.fraction,
+        )
+        left, right = writer.mint_id(), writer.mint_id()
+        writer.split_edge(
+            batch.con,
+            batch.edges_table,
+            batch.edge_columns,
+            decision.edge_id,
+            decision.fraction,
+            left,
+            right,
+            node_id,
+            batch.field_config,
+        )
+        batch.edges.split.append(
+            EdgeSplit(original_id=decision.edge_id, halves=[left, right])
+        )
+        original = next(
+            (e for e in batch.candidate_edges if e.edge_id == decision.edge_id), None
+        )
+        batch.forget(decision.edge_id)
+        if original is not None:
+            # The halves take the original's place, so a later vertex in the
+            # same batch can split or snap to them — falling through to
+            # MintNode there would put a free-floating node on a half's
+            # interior, a non-intersection the routing graph would publish
+            # silently.
+            batch.record(
                 left,
+                original.source_node,
+                node_id,
+                substring(original.geometry, 0.0, decision.fraction, normalized=True),
+            )
+            batch.record(
                 right,
                 node_id,
+                original.target_node,
+                substring(original.geometry, decision.fraction, 1.0, normalized=True),
             )
-            edge_changes.split.append(
-                EdgeSplit(original_id=decision.edge_id, halves=[left, right])
+            # The node sits ON the split edge, not at the drawn vertex — the two
+            # differ by up to the snap tolerance, and a later vertex should
+            # measure against where the node really is.
+            node_point = original.geometry.interpolate(
+                decision.fraction, normalized=True
             )
-            # The halves take the original candidate's place, so a later
-            # endpoint in the same batch can split or snap to them — falling
-            # through to MintNode there would put a free-floating node on a
-            # half's interior, a non-intersection the routing graph would
-            # publish silently.
-            original = next(
-                (e for e in candidate_edges if e.edge_id == decision.edge_id), None
-            )
-            candidate_edges[:] = [
-                e for e in candidate_edges if e.edge_id != decision.edge_id
-            ]
-            if original is not None:
-                candidate_edges.extend(
-                    (
-                        EdgeCandidate(
-                            edge_id=left,
-                            source_node=original.source_node,
-                            target_node=node_id,
-                            geometry=substring(
-                                original.geometry,
-                                0.0,
-                                decision.fraction,
-                                normalized=True,
-                            ),
-                        ),
-                        EdgeCandidate(
-                            edge_id=right,
-                            source_node=node_id,
-                            target_node=original.target_node,
-                            geometry=substring(
-                                original.geometry,
-                                decision.fraction,
-                                1.0,
-                                normalized=True,
-                            ),
-                        ),
-                    )
-                )
-                # The node sits ON the split edge, not at the drawn endpoint —
-                # the two differ by up to the snap tolerance, and a later
-                # endpoint should measure against where the node really is.
-                node_point = original.geometry.interpolate(
-                    decision.fraction, normalized=True
-                )
-                node_x, node_y = float(node_point.x), float(node_point.y)
-        else:
-            assert isinstance(decision, MintNode)
-            writer.insert_node(
-                con, nodes_table, node_columns, node_id, decision.x, decision.y
-            )
+            node_x, node_y = float(node_point.x), float(node_point.y)
+    else:
+        assert isinstance(decision, MintNode)
+        writer.insert_node(
+            batch.con,
+            batch.nodes_table,
+            batch.node_columns,
+            node_id,
+            decision.x,
+            decision.y,
+        )
 
-        node_changes.created.append(node_id)
-        candidate_nodes.append(NodeCandidate(node_id=node_id, x=node_x, y=node_y))
-        resolved.append(node_id)
-
-    return resolved[0], resolved[1]
+    batch.nodes.created.append(node_id)
+    batch.candidate_nodes.append(NodeCandidate(node_id=node_id, x=node_x, y=node_y))
+    return node_id

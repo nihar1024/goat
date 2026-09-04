@@ -45,6 +45,8 @@ def _artifact(tmp_path: Path, data_dir: Path, bundle_id: str, kind: str) -> None
         bundle_id=bundle_id,
         kind=kind,
         suffix=".bin",
+        revision=1,
+        token="aaaaaaaa",
     )
 
 

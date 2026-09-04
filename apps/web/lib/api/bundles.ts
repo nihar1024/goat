@@ -49,7 +49,11 @@ export interface BundleDatasetMetadata {
 
 export interface BundleArtifact {
   kind: string;
-  status: string;
+  /** Where it stands: ready, building, outdated or failed. Derived server-side
+   *  from the build outcome and the revisions, so the rule lives in one place. */
+  state: "ready" | "building" | "outdated" | "failed";
+  /** What the last build attempt did — the raw fact `state` is derived from. */
+  build_status: "building" | "complete" | "failed";
   /** The bundle revision this artifact was built from; null if never built. */
   revision?: number | null;
   size?: number | null;

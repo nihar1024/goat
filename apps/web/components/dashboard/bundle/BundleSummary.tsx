@@ -97,20 +97,18 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
   // stop-to-street linkage, and "something failed" is not useful without saying
   // which — so the API reports them separately and they are shown that way.
   const artifacts = bundle.artifacts ?? [];
-  const statusLabel_ = (status: string) =>
-    i18n.exists(`common:artifact_${status}`)
-      ? t(`artifact_${status}`)
-      : status.charAt(0).toUpperCase() + status.slice(1);
+  const artifactStateLabel = (state: string) =>
+    i18n.exists(`common:artifact_${state}`)
+      ? t(`artifact_${state}`)
+      : state.charAt(0).toUpperCase() + state.slice(1);
 
-  // Offered whenever any of them is unusable, which is also the way back for a
-  // bundle whose preparation never finished or failed — including an import
-  // that died before writing any artifact row at all (failed bundle, empty
-  // artifact list), which is exactly the case this button exists to rescue.
-  const needsRebuild =
-    artifacts.some((artifact) => artifact.status !== "ready") ||
-    (artifacts.length === 0 && bundle.status === "failed");
+  // Offered whenever an artifact is unusable. A bundle with no artifacts at
+  // all is either still importing or of a type that derives none, and neither
+  // is something a rebuild fixes — an import that fails deletes its bundle
+  // rather than leaving one to rescue.
+  const needsRebuild = artifacts.some((artifact) => artifact.state !== "ready");
   // A build already running makes a second click a duplicate, not a retry.
-  const isBuilding = artifacts.some((artifact) => artifact.status === "building");
+  const isBuilding = artifacts.some((artifact) => artifact.state === "building");
 
   // Bundle-specific, so they have no aggregated-field equivalent to reuse.
   const bundleAttributes: { key: string; heading: string; value?: string; icon: ICON_NAME }[] = [
@@ -120,7 +118,7 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
       heading: i18n.exists(`common:artifact_kind.${artifact.kind}`)
         ? t(`artifact_kind.${artifact.kind}`)
         : artifact.kind,
-      value: statusLabel_(artifact.status),
+      value: artifactStateLabel(artifact.state),
       icon: ICON_NAME.STREET_NETWORK,
     })),
     {

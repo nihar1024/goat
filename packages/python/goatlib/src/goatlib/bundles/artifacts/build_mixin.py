@@ -5,11 +5,11 @@ once from a fresh source, and a rebuild builds them again after someone edited a
 member layer. Both read the same layers and write the same files, so the logic
 lives here rather than in either caller.
 
-``built_revision`` is what separates the two. A rebuild passes the bundle's
-``layers_revision`` as it was when the build started, and publishes only if that
-is still current — a save landing mid-build queues its own rebuild, so this
-one's output is already out of date. An import passes ``None``: nothing can have
-superseded a bundle that did not exist yet.
+Both record the ``layers_revision`` they built from, and publish only if it is
+still current — a save landing mid-build queues its own rebuild, so this one's
+output is already out of date. An import records it too: nothing can supersede a
+bundle that did not exist yet, but a consumer refuses an artifact that cannot say
+which layers it came from, so the provenance is not optional.
 """
 
 import logging
@@ -22,6 +22,7 @@ from goatlib.bundles.artifacts import (
     get_artifact_builder,
     store_artifact,
 )
+from goatlib.bundles.artifacts.storage import build_token, delete_artifact_file
 from goatlib.models.bundle import BundleTypeName, get_spec
 from goatlib.tools.db import ToolDatabaseService
 
@@ -130,11 +131,20 @@ class BundleArtifactBuildMixin:
                 await db.mark_bundle_artifacts_failed(bundle_id)
                 raise
 
+            # The revision the artifacts are about to claim. Read here rather
+            # than taken on trust when a caller did not supply one, so every
+            # published artifact records where it came from.
+            revision = (
+                built_revision
+                if built_revision is not None
+                else await db.get_bundle_revision(bundle_id)
+            )
             for art in built:
                 kind_value = getattr(art.kind, "value", art.kind)
                 artifact_id = await db.create_artifact(
-                    bundle_id=bundle_id, kind=kind_value, status="building"
+                    bundle_id=bundle_id, kind=kind_value, build_status="building"
                 )
+                storage_path = None
                 try:
                     # Keep the built file's extension: a PT timetable is a
                     # .bin, a street network graph is a .tar of two parquet
@@ -146,37 +156,39 @@ class BundleArtifactBuildMixin:
                         bundle_id=bundle_id,
                         kind=kind_value,
                         suffix=suffix,
+                        revision=revision,
+                        token=build_token(),
                     )
-                    if built_revision is None:
-                        await db.update_artifact_status(
-                            artifact_id=artifact_id,
-                            status="ready",
-                            storage_path=storage_path,
-                            size=art.size,
+                    current, displaced = await db.publish_artifact_if_current(
+                        artifact_id=artifact_id,
+                        bundle_id=bundle_id,
+                        built_revision=revision,
+                        storage_path=storage_path,
+                        size=art.size,
+                    )
+                    if not current:
+                        # A save landed while this built, so the rebuild that
+                        # save queued is the one that will publish. This build's
+                        # row keeps the previous artifact's path and revision —
+                        # only the attempt is recorded — and its own file goes,
+                        # since nothing points at it.
+                        published = False
+                        await db.set_artifact_build_status(
+                            artifact_id=artifact_id, status="failed"
                         )
-                    else:
-                        current = await db.publish_artifact_if_current(
-                            artifact_id=artifact_id,
-                            bundle_id=bundle_id,
-                            built_revision=built_revision,
-                            storage_path=storage_path,
-                            size=art.size,
+                        delete_artifact_file(
+                            self.settings.bundles_data_dir, storage_path
                         )
-                        if not current:
-                            # A save landed while this built. Leave it stale for
-                            # the rebuild that save queued.
-                            published = False
-                            await db.update_artifact_status(
-                                artifact_id=artifact_id, status="stale"
-                            )
-                            logger.info(
-                                "Discarding superseded %s build for bundle %s "
-                                "(built from revision %d)",
-                                kind_value,
-                                bundle_id,
-                                built_revision,
-                            )
-                            continue
+                        logger.info(
+                            "Discarding superseded %s build for bundle %s "
+                            "(built from revision %d)",
+                            kind_value,
+                            bundle_id,
+                            revision,
+                        )
+                        continue
+                    if displaced:
+                        delete_artifact_file(self.settings.bundles_data_dir, displaced)
                     logger.info(
                         "Artifact %s for bundle %s stored at %s (%d bytes)",
                         kind_value,
@@ -185,9 +197,13 @@ class BundleArtifactBuildMixin:
                         art.size,
                     )
                 except Exception:
-                    await db.update_artifact_status(
+                    await db.set_artifact_build_status(
                         artifact_id=artifact_id, status="failed"
                     )
+                    if storage_path:
+                        delete_artifact_file(
+                            self.settings.bundles_data_dir, storage_path
+                        )
                     raise
 
         return published

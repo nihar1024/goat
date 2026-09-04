@@ -41,6 +41,7 @@ from goatlib.analysis.schemas.ui import (
     ui_sections,
 )
 from goatlib.bundles.artifacts.street_network import fetch_routing_network
+from goatlib.models.bundle import BundleArtifactState
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.catchment_area import CatchmentAreaToolRunner
 from goatlib.tools.schemas import ToolInputBase, get_default_layer_name
@@ -1009,16 +1010,19 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             params.routing_mode == CatchmentAreaRoutingMode.pt
             and params.pt_network_bundle_id
         ):
-            timetable, status = self.resolve_bundle_artifact(
+            timetable, state = self.resolve_bundle_artifact(
                 params.pt_network_bundle_id, "pt_network_graph"
             )
             if not timetable:
-                if status in ("stale", "building"):
+                if state in (
+                    BundleArtifactState.outdated,
+                    BundleArtifactState.building,
+                ):
                     raise ValueError(
                         "This public-transport bundle is being updated. Try again "
                         "once it finishes."
                     )
-                if status == "failed":
+                if state is BundleArtifactState.failed:
                     raise ValueError(
                         "This public-transport bundle's last update failed. Update "
                         "it from the bundle before using it."

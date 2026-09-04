@@ -31,23 +31,88 @@ class BundleArtifactKind(str, Enum):
     street_network_graph = "street_network_graph"
 
 
-class BundleArtifactStatus(str, Enum):
-    """Build state of a derived artifact."""
+class BundleArtifactBuildStatus(str, Enum):
+    """What a derived artifact's last build attempt did.
 
-    pending = "pending"
+    Deliberately not "is this artifact usable" — that is
+    ``build_status is complete`` *and* ``revision == bundle.layers_revision``
+    *and* the file is still there, so it is derived wherever it is needed rather
+    than stored. Storing it needs a second write on every layer change, and one
+    missed write means routing on a graph that no longer matches the data with
+    nothing to detect it. There is no "never built" value: the row is created
+    when a build starts, so its absence is what says nothing has been built.
+    """
+
     building = "building"
+    complete = "complete"
+    failed = "failed"
+
+
+class BundleArtifactState(str, Enum):
+    """How an artifact stands right now.
+
+    Derived on read from ``build_status``, the two revisions and whether the
+    file is still there — never stored, so a client never reimplements the rule
+    and nothing has to remember to keep a second column in step.
+
+    Distinct from ``BundleArtifactBuildStatus``, which records only what the
+    last build attempt did: ``complete`` says a build finished, not that its
+    output still matches the layers.
+    """
+
     ready = "ready"
-    stale = "stale"
+    building = "building"
+    outdated = "outdated"
     failed = "failed"
 
 
 class BundleStatus(str, Enum):
-    """Processing lifecycle of a bundle (e.g. during import)."""
+    """Whether a bundle's import has finished.
 
-    pending = "pending"
+    About the import alone — not whether the bundle is usable. A shell row is
+    committed before the import job starts (it is the foreign key its member
+    layers and dependencies point at, and the UI has to show something while
+    the job runs), so there is a window where the bundle exists and holds
+    nothing. Usability is per artifact, and derived; see
+    ``BundleArtifactState``.
+
+    There is no failed state: an import that fails deletes its own bundle —
+    nothing can complete a half-ingested one — so the job carries the failure.
+    """
+
     processing = "processing"
     ready = "ready"
-    failed = "failed"
+
+
+def artifact_state(
+    build_status: "str | BundleArtifactBuildStatus | None",
+    revision: int | None,
+    layers_revision: int,
+    storage_path: str | None,
+) -> BundleArtifactState:
+    """Where an artifact stands, from what its last build did and what it left.
+
+    One definition, used by the read DTO and by the consumer that decides
+    whether a tool may route on the artifact, so the two cannot disagree.
+
+    ``ready`` is the conjunction of everything that has to hold — a build that
+    finished, from the revision the layers are still at, with a file to point
+    at — so a caller has one thing to check rather than three.
+    """
+    try:
+        build = BundleArtifactBuildStatus(build_status)
+    except ValueError:
+        # A value this release does not know, from a newer one. Not something
+        # to route on.
+        return BundleArtifactState.failed
+
+    if build is BundleArtifactBuildStatus.building:
+        return BundleArtifactState.building
+    if build is not BundleArtifactBuildStatus.complete or not storage_path:
+        return BundleArtifactState.failed
+    if revision is None or revision != layers_revision:
+        return BundleArtifactState.outdated
+    return BundleArtifactState.ready
 
 
 # The street-network edges layer's `class` domain: the OSM `highway` taxonomy,
@@ -96,6 +161,11 @@ class RoleSpec(BaseModel):
     # Whether a user may edit this member layer's features. False until someone
     # has decided what saving it means for the bundle's derived artifacts.
     editable: bool = False
+    # Computed columns to create on the member layer at import: column name ->
+    # computed kind (see goatlib.computed_columns). The column is filled by the
+    # kind's own SQL, so the value cannot drift from what a later recompute
+    # produces, and the editor maintains it on every geometry write.
+    computed_columns: Dict[str, str] = {}
     description: Optional[str] = None
 
 
@@ -194,6 +264,9 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 # Nodes are maintained by the editor when edges are saved, so
                 # only the edges layer is offered for editing.
                 editable=True,
+                # Length is derived from the geometry, so it is never stored by
+                # the importer and never edited by hand.
+                computed_columns={"length_m": "length"},
                 description=(
                     "Routable street segments, split so each has exactly two "
                     "connectors and no linear references."

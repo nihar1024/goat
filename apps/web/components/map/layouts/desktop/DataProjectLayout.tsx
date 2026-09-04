@@ -102,9 +102,13 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
 
   const activeRight = useAppSelector((state) => state.map.activeRightPanel);
   const featureEditorActive = useAppSelector((state) => state.featureEditor.activeLayerId);
-  const featureEditorMode = useAppSelector((state) => state.featureEditor.mode);
   const featureEditorActiveFeature = useAppSelector((state) => state.featureEditor.activeFeatureId);
-  const showFeatureEditPanel = featureEditorActive && (featureEditorMode === "draw" || !!featureEditorActiveFeature);
+  // Only when there is a feature to edit. Draw mode alone is not enough: with no
+  // active feature every field renders empty, typing is a no-op and Done is
+  // disabled, so the panel would sit there dead — before the first feature is
+  // drawn, and again after Done returns to draw mode for the next one. Draw
+  // mode has its own indicator.
+  const showFeatureEditPanel = !!featureEditorActive && !!featureEditorActiveFeature;
   // Panel height is read via CSS variable --data-panel-height for real-time updates
   const isDataPanelOpen = useAppSelector((state) => state.map.isDataPanelOpen);
   const mapMode = useAppSelector((state) => state.map.mapMode);

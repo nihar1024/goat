@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from goatlib.models.bundle import (
     BundleStatus,
-    BundleTypeName,
 )
 from goatlib.tools.style import get_default_style
 
@@ -254,38 +253,6 @@ class ToolDatabaseService:
         )
         return properties
 
-    async def create_bundle(
-        self: Self,
-        bundle_id: str,
-        user_id: str,
-        folder_id: str,
-        name: str,
-        bundle_type: "BundleTypeName | str",
-        description: str | None = None,
-        properties: dict[str, Any] | None = None,
-    ) -> None:
-        """Create a bundle record in customer.bundle."""
-        type_value = getattr(bundle_type, "value", bundle_type)
-        await self.pool.execute(
-            f"""
-            INSERT INTO {self.schema}.bundle (
-                id, user_id, folder_id, name, description,
-                bundle_type, properties, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
-            """,
-            uuid_module.UUID(bundle_id),
-            uuid_module.UUID(user_id),
-            uuid_module.UUID(folder_id),
-            name,
-            description,
-            type_value,
-            json.dumps(properties) if properties else None,
-        )
-        logger.info(
-            f"Created bundle: {bundle_id} ({name}) "
-            f"type={type_value} in folder {folder_id}"
-        )
-
     async def get_bundle_name(self: Self, bundle_id: str) -> str | None:
         """Return the bundle's display name (customer.bundle.name)."""
         row = await self.pool.fetchrow(
@@ -293,6 +260,20 @@ class ToolDatabaseService:
             uuid_module.UUID(bundle_id),
         )
         return row["name"] if row else None
+
+    async def delete_bundle(self: Self, bundle_id: str) -> None:
+        """Remove a bundle row. Its artifact rows go with it (FK cascade).
+
+        Used when an import fails: the layers it managed to write are removed
+        first, so what is left is a bundle that holds nothing and can never be
+        completed — there is no retry that could fill it in. The Windmill job
+        carries the failure, so nothing is lost by removing the row.
+        """
+        await self.pool.execute(
+            f"DELETE FROM {self.schema}.bundle WHERE id = $1",
+            uuid_module.UUID(bundle_id),
+        )
+        logger.info(f"Deleted bundle {bundle_id}")
 
     async def update_package_status(
         self: Self,
@@ -358,24 +339,30 @@ class ToolDatabaseService:
         self: Self,
         bundle_id: str,
         kind: str,
-        status: str = "building",
+        build_status: str = "building",
         job_id: str | None = None,
     ) -> str:
         """Create or reclaim the bundle_artifact row for (bundle_id, kind).
 
         Upserts against the (bundle_id, kind) unique constraint: a rebuild or a
         retried import takes over the existing row instead of dying on it.
+
+        Only ``build_status`` is touched. ``revision`` and ``storage_path`` are
+        left as they were, so a rebuild that fails or is superseded leaves the
+        previous artifact still pointing at its own file and its own revision —
+        which is what keeps a working graph usable for the whole build rather
+        than taking it offline the moment a rebuild starts.
         Returns the row id."""
         kind_value = getattr(kind, "value", kind)
-        status_value = getattr(status, "value", status)
+        status_value = getattr(build_status, "value", build_status)
         row = await self.pool.fetchrow(
             f"""
             INSERT INTO {self.schema}.bundle_artifact (
-                bundle_id, kind, status, job_id, created_at, updated_at
+                bundle_id, kind, build_status, job_id, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, NOW(), NOW())
             ON CONFLICT (bundle_id, kind) DO UPDATE SET
-                status = EXCLUDED.status,
+                build_status = EXCLUDED.build_status,
                 job_id = EXCLUDED.job_id,
                 updated_at = NOW()
             RETURNING id
@@ -386,64 +373,83 @@ class ToolDatabaseService:
             uuid_module.UUID(job_id) if job_id else None,
         )
         logger.info(
-            f"Created artifact {row['id']} ({kind_value}) for bundle {bundle_id}"
+            f"Artifact {row['id']} ({kind_value}) for bundle {bundle_id}: "
+            f"{status_value}"
         )
         return str(row["id"])
 
-    async def update_artifact_status(
-        self: Self,
-        artifact_id: str,
-        status: str,
-        storage_path: str | None = None,
-        size: int | None = None,
+    async def set_artifact_build_status(
+        self: Self, artifact_id: str, status: str
     ) -> None:
-        """Update an artifact's build status and (on success) where it landed."""
+        """Record what an artifact's build attempt did.
+
+        Only the outcome: where the file landed and which revision it came from
+        are written by ``publish_artifact_if_current``, and only for the build
+        that won. A failed or superseded attempt must not touch them, or it
+        would take the previous good artifact with it.
+        """
         status_value = getattr(status, "value", status)
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.bundle_artifact
-            SET status = $2,
-                storage_path = COALESCE($3, storage_path),
-                size = COALESCE($4, size),
-                updated_at = NOW()
+            SET build_status = $2, updated_at = NOW()
             WHERE id = $1
             """,
             uuid_module.UUID(artifact_id),
             status_value,
-            storage_path,
-            size,
         )
-        logger.info(f"Artifact {artifact_id} status -> {status_value}")
+        logger.info(f"Artifact {artifact_id} build -> {status_value}")
 
     async def mark_bundle_artifacts_failed(self: Self, bundle_id: str) -> None:
         """Mark every artifact row of a bundle failed.
 
         For a build that dies before reaching any specific artifact row (the
         export or the builder itself raised): without this the rows stay
-        'stale'/'building' and consumers keep promising an update that is not
-        running, instead of saying the update failed."""
+        'building' and consumers keep promising an update that is not running,
+        instead of saying the update failed."""
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.bundle_artifact
-            SET status = 'failed', updated_at = NOW()
+            SET build_status = 'failed', updated_at = NOW()
             WHERE bundle_id = $1
             """,
             uuid_module.UUID(bundle_id),
         )
 
+    async def set_layer_field_config(
+        self: Self, layer_id: str, field_config: "dict[str, Any]"
+    ) -> None:
+        """Replace a layer's field_config JSONB.
+
+        The same blob geoapi's column endpoints maintain — written here so an
+        importer can declare a computed column at creation time, which those
+        endpoints cannot do (they only ever edit a layer that already exists).
+        """
+        await self.pool.execute(
+            f"UPDATE {self.schema}.layer SET field_config = $2::jsonb WHERE id = $1",
+            uuid_module.UUID(layer_id),
+            json.dumps(field_config),
+        )
+
     async def get_bundle_artifact(
         self: Self, bundle_id: str, kind: str
     ) -> "dict | None":
-        """Stored path and status of a bundle's artifact of the given kind.
+        """Stored path, status and provenance of a bundle's artifact of a kind.
 
-        Returns the row whatever its status, so a caller can tell "being
-        rebuilt after an edit" from "never built".
+        ``layers_revision`` comes back alongside the artifact's own ``revision``
+        so a caller can tell whether the file still matches the layers. That
+        comparison is the real answer; the stored status only records what the
+        last build attempt did. Reading both means a layer write whose
+        stale-marking never landed cannot leave a tool routing on a graph that
+        no longer matches the data.
         """
         kind_value = getattr(kind, "value", kind)
         row = await self.pool.fetchrow(
             f"""
-            SELECT storage_path, status FROM {self.schema}.bundle_artifact
-            WHERE bundle_id = $1 AND kind = $2
+            SELECT a.storage_path, a.build_status, a.revision, b.layers_revision
+            FROM {self.schema}.bundle_artifact a
+            JOIN {self.schema}.bundle b ON b.id = a.bundle_id
+            WHERE a.bundle_id = $1 AND a.kind = $2
             LIMIT 1
             """,
             uuid_module.UUID(bundle_id),
@@ -496,23 +502,41 @@ class ToolDatabaseService:
         built_revision: int,
         storage_path: str,
         size: int,
-    ) -> bool:
+    ) -> "tuple[bool, str | None]":
         """Mark an artifact ready, unless the layers have moved on since.
 
         The revision comparison sits in the WHERE clause, so there is no window
         between checking and writing for a concurrent save to slip through.
+
+        Returns (published, displaced_path): the path this build replaced, so
+        the caller can remove a file nothing points at any more. Only the build
+        that wins the comparison gets one, so two concurrent rebuilds cannot
+        both decide to delete the same file.
         """
-        result = await self.pool.execute(
+        row = await self.pool.fetchrow(
             f"""
-            UPDATE {self.schema}.bundle_artifact a
-            SET status = 'ready',
-                storage_path = $3,
-                size = $4,
-                revision = $5,
-                updated_at = NOW()
-            FROM {self.schema}.bundle b
-            WHERE a.id = $1 AND b.id = $2 AND a.bundle_id = b.id
-              AND b.layers_revision = $5
+            WITH displaced AS (
+                -- No FOR UPDATE: every CTE and the update share one snapshot,
+                -- so this reads the path being replaced. A locking clause here
+                -- would find the row already updated by this same command and
+                -- return nothing, so the displaced file would never be removed.
+                SELECT storage_path FROM {self.schema}.bundle_artifact
+                WHERE id = $1
+            ), current AS (
+                UPDATE {self.schema}.bundle_artifact a
+                SET build_status = 'complete',
+                    storage_path = $3,
+                    size = $4,
+                    revision = $5,
+                    updated_at = NOW()
+                FROM {self.schema}.bundle b
+                WHERE a.id = $1 AND b.id = $2 AND a.bundle_id = b.id
+                  AND b.layers_revision = $5
+                RETURNING a.id
+            )
+            SELECT
+                EXISTS (SELECT 1 FROM current) AS published,
+                (SELECT storage_path FROM displaced) AS displaced_path
             """,
             uuid_module.UUID(artifact_id),
             uuid_module.UUID(bundle_id),
@@ -520,7 +544,10 @@ class ToolDatabaseService:
             size,
             built_revision,
         )
-        return str(result).endswith("1")
+        if row is None or not row["published"]:
+            return False, None
+        displaced = row["displaced_path"]
+        return True, (displaced if displaced != storage_path else None)
 
     async def list_bundle_layers(self: Self, bundle_id: str) -> "list[dict]":
         """Role and layer id of each member layer of a bundle."""

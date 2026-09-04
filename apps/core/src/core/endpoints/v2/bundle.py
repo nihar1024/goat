@@ -8,6 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from goatlib.bundles.importers import get_importer, infer_bundle_type
 from goatlib.models.bundle import (
     BundleStatus,
+    artifact_state,
     get_spec,
 )
 from pydantic import UUID4
@@ -432,8 +433,10 @@ async def import_bundle(
             access_token=access_token,
         )
     except Exception:
-        # The shell is committed; mark it failed so it isn't stuck "processing".
-        bundle.status = BundleStatus.failed
+        # The shell is committed but nothing ran, so there is nothing to keep:
+        # an import that never started cannot be resumed, and a bundle stuck at
+        # "processing" offers no action that would fix it.
+        await async_session.delete(bundle)
         await async_session.commit()
         raise
 
@@ -537,7 +540,13 @@ async def read_bundle(
                 # Loaded values may be the enum or the raw string, depending on
                 # whether SQLModel coerced the column.
                 kind=getattr(a.kind, "value", a.kind),
-                status=getattr(a.status, "value", a.status),
+                build_status=getattr(a.build_status, "value", a.build_status),
+                state=artifact_state(
+                    getattr(a.build_status, "value", a.build_status),
+                    a.revision,
+                    bundle.layers_revision,
+                    a.storage_path,
+                ),
                 revision=a.revision,
                 size=a.size,
                 updated_at=a.updated_at,

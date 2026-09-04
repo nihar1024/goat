@@ -39,7 +39,12 @@ from typing import Dict, List, Protocol, Tuple
 import duckdb
 
 from goatlib.bundles.artifacts.base import ArtifactBuilder, BuiltArtifact
-from goatlib.models.bundle import ROUTING_CLASSES, BundleArtifactKind, BundleTypeName
+from goatlib.models.bundle import (
+    ROUTING_CLASSES,
+    BundleArtifactKind,
+    BundleArtifactState,
+    BundleTypeName,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +152,7 @@ class RoutingArtifactSource(Protocol):
 
     def resolve_bundle_artifact(
         self, bundle_id: str, kind: str
-    ) -> Tuple[str | None, str | None]: ...
+    ) -> Tuple[str | None, BundleArtifactState | None]: ...
 
 
 def unpack_routing_network(
@@ -185,28 +190,31 @@ def fetch_routing_network(
     Returns the ``(edges, nodes)`` paths to hand to the analysis params, so a
     consumer needs one call and no knowledge of the artifact's packaging.
     """
-    archive, status = source.resolve_bundle_artifact(
+    archive, state = source.resolve_bundle_artifact(
         bundle_id, BundleArtifactKind.street_network_graph.value
     )
     if not archive:
-        # The status separates "not ready yet" from "was ready until someone
-        # edited it", which are different things to tell a user.
-        if status == "stale":
-            raise ValueError(
+        # The state separates "not ready yet" from "was ready until someone
+        # edited it", which are different things to tell a user. None means no
+        # build has been attempted.
+        refusal = {
+            BundleArtifactState.outdated: (
                 "This street network is being updated after an edit. Try again "
                 "once the update finishes."
-            )
-        if status == "building":
-            raise ValueError(
+            ),
+            BundleArtifactState.building: (
                 "This street network is still being prepared. Try again shortly."
-            )
-        if status == "failed":
-            raise ValueError(
+            ),
+            BundleArtifactState.failed: (
                 "This street network's last update failed. Update it from the "
                 "bundle before using it."
-            )
+            ),
+        }
         raise ValueError(
-            "The selected street network bundle is not ready to route on yet."
+            refusal.get(
+                state,
+                "The selected street network bundle is not ready to route on yet.",
+            )
         )
     return unpack_routing_network(archive, dest_dir)
 
@@ -233,6 +241,33 @@ def _transform(
         CREATE TABLE edge_src AS
         SELECT * FROM read_parquet('{edges_layer}')
     """)
+
+    # `length_m` is read from the layer rather than derived here, so its absence
+    # has to be caught before the build: the engine reads a zero-length edge as
+    # free to traverse, which would silently distort every route through it.
+    # Checked here rather than trusted because an edges layer imported before
+    # the column existed simply has not got one.
+    edge_columns = {
+        row[0]
+        for row in con.execute("SELECT column_name FROM (DESCRIBE edge_src)").fetchall()
+    }
+    if "length_m" not in edge_columns:
+        raise ValueError(
+            "The edges layer has no 'length_m' column, so edge costs cannot be "
+            "built. It is a computed column added at import; re-import this "
+            "street network bundle to produce it."
+        )
+    missing = con.execute(
+        "SELECT count(*) FROM edge_src WHERE length_m IS NULL"
+    ).fetchone()
+    if missing and missing[0]:
+        raise ValueError(
+            f"{missing[0]} edge(s) have no 'length_m' value. The column is "
+            "computed from the geometry on import and on every edit, so a null "
+            "means it was never filled — re-import or edit the layer to "
+            "recompute it."
+        )
+
     con.execute(f"COPY ({_edge_query()}) TO '{edges_out}' (FORMAT PARQUET)")
 
     edge_count = con.execute(
@@ -294,10 +329,6 @@ def _edge_query() -> str:
             SELECT
                 e.*,
                 ST_Transform(e.geometry, 'EPSG:4326', 'EPSG:3857', always_xy := true) AS geom_3857,
-                -- ST_Length_Spheroid reads coordinates as (latitude, longitude),
-                -- so unflipped input inflates an east-west length by ~50% at
-                -- Augsburg's latitude. Verified against pyproj.
-                ST_Length_Spheroid(ST_FlipCoordinates(e.geometry))::DOUBLE AS length_m,
                 CASE WHEN e."class" IN ({class_list})
                      THEN e."class" ELSE 'unknown' END AS routing_class,
                 CASE {surface_case} ELSE {DEFAULT_SURFACE_IMPEDANCE} END AS surface_imp
@@ -307,7 +338,11 @@ def _edge_query() -> str:
             row_number() OVER (ORDER BY p.id)::BIGINT AS id,
             s.int_id::BIGINT AS source,
             t.int_id::BIGINT AS target,
-            p.length_m,
+            -- The edges layer's own computed column, not derived here: one
+            -- formula, in `goatlib.computed_columns`, so the length a user sees
+            -- and the length the engine routes on cannot disagree. Cast because
+            -- the layer stores FLOAT and the loader reinterpret_casts DOUBLE.
+            p.length_m::DOUBLE AS length_m,
             ST_Length(p.geom_3857)::DOUBLE AS length_3857,
             p.routing_class::VARCHAR AS class_,
             -- No DEM in an upload, so uploaded networks route as though flat.

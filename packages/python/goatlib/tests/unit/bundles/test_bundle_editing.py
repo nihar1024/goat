@@ -96,22 +96,22 @@ async def test_artifact_lookup_returns_status_for_a_non_ready_row():
     assert "status = 'ready'" not in svc.pool.calls[0][0]
 
 
-@pytest.mark.parametrize(
-    ("result", "published"), [("UPDATE 1", True), ("UPDATE 0", False)]
-)
-async def test_publish_is_guarded_by_the_revision_it_built_from(result, published):
-    """A build overtaken by a later save must not publish its output."""
-    svc = _service(FakePool(execute_result=result))
-    assert (
-        await svc.publish_artifact_if_current(
-            artifact_id=ARTIFACT,
-            bundle_id=BUNDLE,
-            built_revision=7,
-            storage_path=f"{BUNDLE}/street_network_graph.tar",
-            size=123,
-        )
-        is published
+@pytest.mark.parametrize("published", [True, False])
+async def test_publish_is_guarded_by_the_revision_it_built_from(published):
+    """A build overtaken by a later save must not publish its output, and only
+    the build that did publish may remove the file it displaced."""
+    svc = _service(
+        FakePool([{"published": published, "displaced_path": f"{BUNDLE}/old.tar"}])
     )
+    current, displaced = await svc.publish_artifact_if_current(
+        artifact_id=ARTIFACT,
+        bundle_id=BUNDLE,
+        built_revision=7,
+        storage_path=f"{BUNDLE}/street_network_graph-r7-abc.tar",
+        size=123,
+    )
+    assert current is published
+    assert displaced == (f"{BUNDLE}/old.tar" if published else None)
     # The comparison lives in the WHERE clause, so there is no window between
     # checking and writing.
     query = svc.pool.calls[0][0]

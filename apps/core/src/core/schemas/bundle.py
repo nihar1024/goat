@@ -2,6 +2,10 @@ from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
+from goatlib.models.bundle import (
+    BundleArtifactBuildStatus,
+    BundleArtifactState,
+)
 from pydantic import BaseModel, Field
 
 from core.db.models.bundle_type import BundleTypeName
@@ -79,7 +83,13 @@ class BundleArtifactSummary(BaseModel):
     """
 
     kind: str
-    status: str
+    # Where the artifact stands. Derived here from `build_status`, the revisions
+    # and whether the file is there — not stored — so a client never has to know
+    # the rule and cannot disagree with the tools that decide whether they may
+    # route on it.
+    state: BundleArtifactState
+    # What the last build attempt did — the raw fact `state` is derived from.
+    build_status: BundleArtifactBuildStatus
     # The bundle's layers_revision this artifact was built from, so a client can
     # tell how far behind it is. Null for an artifact that never built.
     revision: int | None = None

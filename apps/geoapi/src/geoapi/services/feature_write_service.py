@@ -19,6 +19,7 @@ from geoapi.dependencies import LayerInfo
 from geoapi.ducklake_write import ducklake_write_manager
 from geoapi.models.write import COLUMN_TYPE_MAP
 from geoapi.services.computed_columns import (
+    locked_column_names,
     parse_computed_columns,
     select_recompute_specs,
 )
@@ -114,7 +115,10 @@ class FeatureWriteService:
             field_config or {},
             geom_column=geometry_column or "geometry",
         )
-        computed_names = {s.name for s in specs}
+        # Both are maintained by something other than the caller, so a value
+        # sent for either is dropped rather than written. Clients round-trip
+        # whole features, so this is ordinary, not a malformed request.
+        uneditable = {s.name for s in specs} | locked_column_names(field_config)
 
         columns: list[str] = []
         placeholders: list[str] = []
@@ -138,7 +142,7 @@ class FeatureWriteService:
             if (
                 col_name in column_names
                 and col_name not in PROTECTED_COLUMNS
-                and col_name not in computed_names
+                and col_name not in uneditable
             ):
                 columns.append(f'"{col_name}"')
                 placeholders.append("?")
@@ -193,7 +197,10 @@ class FeatureWriteService:
             field_config or {},
             geom_column=geometry_column or "geometry",
         )
-        computed_names = {s.name for s in specs}
+        # Both are maintained by something other than the caller, so a value
+        # sent for either is dropped rather than written. Clients round-trip
+        # whole features, so this is ordinary, not a malformed request.
+        uneditable = {s.name for s in specs} | locked_column_names(field_config)
 
         with ducklake_write_manager.connection() as con:
             for feature_data in features:
@@ -220,7 +227,7 @@ class FeatureWriteService:
                     if (
                         col_name in column_names
                         and col_name not in PROTECTED_COLUMNS
-                        and col_name not in computed_names
+                        and col_name not in uneditable
                     ):
                         columns.append(f'"{col_name}"')
                         placeholders.append("?")
@@ -268,14 +275,15 @@ class FeatureWriteService:
         table = layer_info.full_table_name
 
         specs = parse_computed_columns(field_config or {})
-        computed_names = {s.name for s in specs}
+        # Both are maintained by something other than the caller, so a value
+        # sent for either is dropped rather than written. Clients round-trip
+        # whole features, so this is ordinary, not a malformed request.
+        uneditable = {s.name for s in specs} | locked_column_names(field_config)
 
         safe_props = {
             k: v
             for k, v in properties.items()
-            if k in column_names
-            and k not in PROTECTED_COLUMNS
-            and k not in computed_names
+            if k in column_names and k not in PROTECTED_COLUMNS and k not in uneditable
         }
 
         set_clauses: list[str] = []
@@ -334,7 +342,10 @@ class FeatureWriteService:
             field_config or {},
             geom_column=geometry_column or "geometry",
         )
-        computed_names = {s.name for s in specs}
+        # Both are maintained by something other than the caller, so a value
+        # sent for either is dropped rather than written. Clients round-trip
+        # whole features, so this is ordinary, not a malformed request.
+        uneditable = {s.name for s in specs} | locked_column_names(field_config)
 
         set_clauses: list[str] = []
         values: list[Any] = []
@@ -349,7 +360,7 @@ class FeatureWriteService:
             if (
                 col_name in column_names
                 and col_name not in PROTECTED_COLUMNS
-                and col_name not in computed_names
+                and col_name not in uneditable
             ):
                 set_clauses.append(f'"{col_name}" = ?')
                 values.append(col_value)

@@ -9,6 +9,7 @@ interface PseudoField {
   type: "string" | "number" | "object";
   kind?: string;
   is_computed?: boolean;
+  is_locked?: boolean;
   display_config?: Record<string, unknown>;
 }
 
@@ -54,6 +55,7 @@ const useLayerFields = (
           kind?: string;
           format?: string;
           is_computed?: boolean;
+          is_locked?: boolean;
           display_config?: Record<string, unknown>;
           formula?: string;
           output_kind?: string;
@@ -63,6 +65,7 @@ const useLayerFields = (
           type: normalizeType(v),
           kind: v.kind,
           is_computed: v.is_computed ?? false,
+          is_locked: v.is_locked ?? false,
           display_config: v.display_config ?? {},
           formula: v.formula,
           output_kind: v.output_kind,

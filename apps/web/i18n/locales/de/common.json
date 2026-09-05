@@ -762,6 +762,8 @@
   "field_type": "Feldtyp",
   "computed_read_only": "Berechnet (schreibgeschützt)",
   "computed_on_save": "Beim Speichern berechnet",
+  "set_on_save": "Wird beim Speichern gesetzt",
+  "field_locked_tooltip": "Wird automatisch gepflegt und kann nicht bearbeitet werden",
   "fields": "Felder",
   "fields_saved": "Felder gespeichert",
   "fields_to_match": "Übereinstimmende Felder",

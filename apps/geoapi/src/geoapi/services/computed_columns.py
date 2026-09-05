@@ -81,6 +81,22 @@ def parse_computed_columns(
     return specs
 
 
+def locked_column_names(field_config: dict[str, Any] | None) -> set[str]:
+    """Columns whose owner maintains them, so no write may set them.
+
+    Separate from a computed column, which this service also excludes from
+    writes but can regenerate from its own formula. A locked column's value
+    comes from somewhere the layer cannot express — a street network's edge
+    endpoints are resolved against its nodes layer by the bundle editor — so
+    there is nothing to recompute here, only something to refuse to overwrite.
+    """
+    return {
+        name
+        for name, entry in (field_config or {}).items()
+        if isinstance(entry, dict) and entry.get("is_locked")
+    }
+
+
 def select_recompute_specs(
     specs: list[ComputedColumnSpec],
     changed_source_cols: set[str],

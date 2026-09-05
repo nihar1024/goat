@@ -34,6 +34,7 @@ from geoapi.routers.metadata import (
 from geoapi.services.computed_columns import (
     DEPENDS_ON_ANY,
     ComputedColumnSpec,
+    locked_column_names,
     parse_computed_columns,
     select_recompute_specs,
 )
@@ -588,3 +589,68 @@ class TestFormulaColumns:
         assert row is not None
         assert row[0] == "Renamed"
         assert row[1] == 999, "score must not recompute when no dependency changed"
+
+
+# ---------------------------------------------------------------------------
+# Locked columns
+# ---------------------------------------------------------------------------
+
+
+def test_a_locked_column_is_reported_and_refused() -> None:
+    """Locked is not computed: there is no formula to recompute, only a value
+    whose owner maintains it, so a write must leave it alone."""
+    con, layer_info = _setup_db()
+    try:
+        con.execute(
+            "INSERT INTO lake.test_schema.features "
+            "VALUES (ST_Point(0, 0), 'kept', 1.0, NULL)"
+        )
+        field_config: dict[str, Any] = {"name": {"is_locked": True}}
+
+        assert locked_column_names(field_config) == {"name"}
+        # A locked column declares no computed kind, so nothing recomputes it.
+        assert parse_computed_columns(field_config) == []
+
+        properties = {"name": {"type": "string"}, "area_m2": {"type": "number"}}
+        _apply_field_config_to_properties(properties, field_config)
+        assert properties["name"]["is_locked"] is True
+        assert properties["name"]["is_computed"] is False
+        assert properties["area_m2"]["is_locked"] is False
+
+        # A client round-trips the whole feature, so the locked value comes back
+        # with the edited ones: it is dropped, the rest is written.
+        with patch(
+            "geoapi.services.feature_write_service.ducklake_write_manager",
+            _FakeManager(con),
+        ):
+            FeatureWriteService().update_feature_properties(
+                layer_info=layer_info,
+                feature_id="1",
+                properties={"name": "overwritten", "area_m2": 2.0},
+                column_names=["geometry", "name", "area_m2", "bbox"],
+                field_config=field_config,
+            )
+        assert con.execute(
+            "SELECT name, area_m2 FROM lake.test_schema.features"
+        ).fetchone() == ("kept", 2.0)
+
+        # Nothing but locked columns leaves nothing to write, which is an error
+        # rather than a silent no-op — the same as for computed columns.
+        with patch(
+            "geoapi.services.feature_write_service.ducklake_write_manager",
+            _FakeManager(con),
+        ):
+            try:
+                FeatureWriteService().update_feature_properties(
+                    layer_info=layer_info,
+                    feature_id="1",
+                    properties={"name": "overwritten"},
+                    column_names=["geometry", "name", "area_m2", "bbox"],
+                    field_config=field_config,
+                )
+            except ValueError as e:
+                assert "No valid properties" in str(e)
+            else:
+                raise AssertionError("a locked-only update should not be accepted")
+    finally:
+        con.close()

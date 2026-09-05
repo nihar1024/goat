@@ -129,6 +129,10 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
               <Stack sx={{ pt: 2, px: 2 }} direction="column" spacing={2} minWidth="300px">
                 {filteredLayerFields.map((field) => {
                   const isComputed = field.is_computed === true;
+                  // Maintained by whatever owns the layer, so not offered here
+                  // either — see FeatureEditPanel.
+                  const isLocked = field.is_locked === true;
+                  const isReadOnly = isComputed || isLocked;
                   let displayValue = "";
                   if (isComputed) {
                     // Format the computed value via the shared formatter so the
@@ -143,6 +147,14 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                     } else if (editMode === EditorModes.DRAW) {
                       displayValue = t("computed_on_save");
                     }
+                  } else if (isLocked) {
+                    const raw = featureProperties[field.name];
+                    displayValue =
+                      raw !== null && raw !== undefined && raw !== ""
+                        ? String(raw)
+                        : editMode === EditorModes.DRAW
+                          ? t("set_on_save")
+                          : "";
                   } else {
                     const raw = featureProperties[field.name];
                     displayValue = raw !== null && raw !== undefined && raw !== "" ? String(raw) : "";
@@ -150,7 +162,7 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
 
                   return (
                     <Stack key={field.name} direction="row" spacing={2} alignItems="center">
-                      {!isComputed && field.type === "date" && (
+                      {!isReadOnly && field.type === "date" && (
                         <TemporalPicker
                           kind="datetime"
                           label={field.name}
@@ -160,7 +172,7 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                           }}
                         />
                       )}
-                      {!isComputed && field.type === "boolean" && (
+                      {!isReadOnly && field.type === "boolean" && (
                         <Selector
                           label={field.name}
                           selectedItems={BOOLEAN_SELECT_ITEMS.find(
@@ -176,12 +188,14 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                           items={[...BOOLEAN_SELECT_ITEMS]}
                         />
                       )}
-                      {(field.type === "string" || field.type === "number" || (isComputed && (field.type === "date" || field.type === "boolean"))) && (
+                      {(field.type === "string" || field.type === "number" || (isReadOnly && (field.type === "date" || field.type === "boolean"))) && (
                         <TextFieldInput
-                          type={isComputed || field.type !== "number" ? "text" : "number"}
+                          type={isReadOnly || field.type !== "number" ? "text" : "number"}
                           label={field.name}
                           clearable={false}
-                          disabled={isComputed}
+                          disabled={isReadOnly}
+                          locked={isLocked}
+                          tooltip={isLocked ? t("field_locked_tooltip") : undefined}
                           value={displayValue}
                           onChange={(value: string) => {
                             if (isComputed) return;

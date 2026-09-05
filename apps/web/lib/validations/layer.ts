@@ -61,6 +61,7 @@ const layerFieldType = z.object({
   // D2: computed-field metadata exposed by the queryables endpoint
   kind: z.string().optional(),
   is_computed: z.boolean().optional(),
+  is_locked: z.boolean().optional(),
   display_config: z.record(z.string(), z.unknown()).optional(),
 });
 

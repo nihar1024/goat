@@ -2,6 +2,8 @@ import ClearIcon from "@mui/icons-material/Clear";
 import { FormControl, IconButton, InputAdornment, OutlinedInput, useTheme } from "@mui/material";
 import React, { useState } from "react";
 
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
 import FormLabelHelper from "@/components/common/FormLabelHelper";
 
 type TextFieldInputProps = {
@@ -13,6 +15,10 @@ type TextFieldInputProps = {
   onFocus?: () => void;
   type?: "text" | "number" | "date";
   clearable?: boolean;
+  /** Something other than the user maintains this value. Shows a lock rather
+   *  than leaving the field looking merely greyed out, so it reads as "not
+   *  yours to set" instead of "temporarily unavailable". */
+  locked?: boolean;
   placeholder?: string;
   multiline?: boolean;
   rows?: number;
@@ -27,6 +33,7 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
   onFocus,
   type,
   placeholder = "",
+  locked,
   clearable = true,
   multiline = false,
   rows = 2,
@@ -68,12 +75,22 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
           },
         }}
         endAdornment={
-          !disabled && !!value && clearable && (
+          locked ? (
+            <InputAdornment position="end" sx={{ mr: 2 }}>
+              <Icon
+                iconName={ICON_NAME.LOCK}
+                htmlColor={theme.palette.text.disabled}
+                style={{ fontSize: "14px" }}
+              />
+            </InputAdornment>
+          ) : (
+            !disabled && !!value && clearable && (
             <InputAdornment position="end" sx={{ mr: 2 }}>
               <IconButton size="small" aria-label="clear input" onClick={() => onChange("")} edge="end">
                 <ClearIcon />
               </IconButton>
             </InputAdornment>
+            )
           )
         }
       />

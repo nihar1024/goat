@@ -57,7 +57,8 @@ def _apply_field_config_to_properties(
     properties: dict[str, dict[str, Any]],
     field_config: dict[str, Any],
 ) -> None:
-    """Augment each property entry with kind, is_computed, and display_config.
+    """Augment each property entry with kind, is_computed, is_locked and
+    display_config.
 
     Mutates *properties* in-place. Skips geometry entries (those that have
     a ``$ref`` key instead of a ``type`` key).
@@ -71,6 +72,11 @@ def _apply_field_config_to_properties(
         json_format = prop.get("format")
         prop["kind"] = entry.get("kind") or _kind_from_json_type(json_type, json_format)
         prop["is_computed"] = entry.get("is_computed", False)
+        # Maintained by whatever owns the layer — a bundle, typically — so no
+        # editor may offer it. Separate from is_computed: a locked column's
+        # value comes from somewhere the layer cannot express, so there is no
+        # formula to show and nothing to recompute on demand.
+        prop["is_locked"] = entry.get("is_locked", False)
         prop["display_config"] = entry.get("display_config", {})
         if entry.get("kind") == "formula":
             # The expression (for the editor) and the result kind (drives

@@ -166,6 +166,18 @@ class RoleSpec(BaseModel):
     # kind's own SQL, so the value cannot drift from what a later recompute
     # produces, and the editor maintains it on every geometry write.
     computed_columns: Dict[str, str] = {}
+    # Columns the member layer exposes but nobody may type into: the bundle
+    # maintains them, and a value entered by hand would be overwritten by the
+    # next save at best and quietly wrong until then at worst.
+    #
+    # Overlaps `computed_columns` rather than excluding it — the two answer
+    # different questions. Computed says where a value comes from (a formula the
+    # layer records, so it can be regenerated on demand); locked says who owns
+    # it. A column can be both: an edge's length is computed from its geometry
+    # *and* maintained by the bundle. One that is only locked has no formula to
+    # show, because its value comes from somewhere the layer cannot express —
+    # the editor resolves an edge's endpoints against the nodes layer.
+    locked_columns: Tuple[str, ...] = ()
     description: Optional[str] = None
 
 
@@ -267,6 +279,11 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 # Length is derived from the geometry, so it is never stored by
                 # the importer and never edited by hand.
                 computed_columns={"length_m": "length"},
+                # All three are rewritten by the editor on every save: the
+                # endpoints are resolved against the nodes layer — snapping to a
+                # node, splitting an edge or minting one — and the length is
+                # remeasured from the geometry that results.
+                locked_columns=("source_node", "target_node", "length_m"),
                 description=(
                     "Routable street segments, split so each has exactly two "
                     "connectors and no linear references."

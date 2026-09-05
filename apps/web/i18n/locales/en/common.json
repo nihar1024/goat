@@ -2373,6 +2373,8 @@
   "field_type": "Field type",
   "computed_read_only": "Computed (read-only)",
   "computed_on_save": "Computed on save",
+  "set_on_save": "Set on save",
+  "field_locked_tooltip": "Maintained automatically and cannot be edited",
   "layer_name": "Layer name",
   "geometry_type": "Geometry type",
   "creating_layer": "Creating layer...",

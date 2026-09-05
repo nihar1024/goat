@@ -214,6 +214,14 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                                 "display_config": {},
                             }
 
+                    # Columns the bundle maintains and nobody may type into. No
+                    # column is added or filled for these: they already exist,
+                    # written by the importer and rewritten by the editor. Only
+                    # the flag the clients read is recorded.
+                    for column in role_spec.locked_columns if role_spec else ():
+                        entry = field_config.setdefault(column, {"display_config": {}})
+                        entry["is_locked"] = True
+
                     layer_name = (
                         f"{bundle_name} {extracted.name}"
                         if bundle_name

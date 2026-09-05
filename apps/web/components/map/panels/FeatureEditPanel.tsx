@@ -180,6 +180,11 @@ const FeatureEditPanel: React.FC = () => {
         <Stack spacing={2}>
           {filteredFields.map((field) => {
             const isComputed = field.is_computed === true;
+            // Maintained by whatever owns the layer — for a street network's
+            // edges, the editor resolves the endpoints against the nodes layer
+            // on every save, so a typed value would be replaced without notice.
+            const isLocked = field.is_locked === true;
+            const isReadOnly = isComputed || isLocked;
             let displayValue = "";
             if (isComputed) {
               const raw = feature?.properties[field.name];
@@ -192,6 +197,14 @@ const FeatureEditPanel: React.FC = () => {
               } else if (mode === "draw") {
                 displayValue = t("computed_on_save");
               }
+            } else if (isLocked) {
+              const raw = feature?.properties[field.name];
+              displayValue =
+                raw != null && raw !== ""
+                  ? String(raw)
+                  : mode === "draw"
+                    ? t("set_on_save")
+                    : "";
             } else {
               displayValue =
                 feature?.properties[field.name] != null
@@ -199,7 +212,7 @@ const FeatureEditPanel: React.FC = () => {
                   : "";
             }
 
-            if (!isComputed && field.type === "date") {
+            if (!isReadOnly && field.type === "date") {
               return (
                 <TemporalPicker
                   key={field.name}
@@ -211,7 +224,7 @@ const FeatureEditPanel: React.FC = () => {
               );
             }
 
-            if (!isComputed && field.type === "boolean") {
+            if (!isReadOnly && field.type === "boolean") {
               const current = booleanToSelectValue(feature?.properties[field.name]);
               return (
                 <Selector
@@ -231,18 +244,20 @@ const FeatureEditPanel: React.FC = () => {
               <TextFieldInput
                 key={field.name}
                 label={field.name}
-                type={isComputed || field.type !== "number" ? "text" : "number"}
+                type={isReadOnly || field.type !== "number" ? "text" : "number"}
                 placeholder={
-                  isComputed
+                  isReadOnly
                     ? ""
                     : field.type === "number"
                       ? t("enter_a_number")
                       : t("enter_text")
                 }
                 value={displayValue}
-                disabled={isComputed}
+                disabled={isReadOnly}
+                locked={isLocked}
+                tooltip={isLocked ? t("field_locked_tooltip") : undefined}
                 onChange={(value) => {
-                  if (isComputed) return;
+                  if (isReadOnly) return;
                   handlePropertyChange(field.name, value);
                 }}
                 clearable={false}

@@ -345,7 +345,11 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
             : prop.type === "boolean"
               ? "boolean"
               : "string";
-      const isComputed = !!(prop as { is_computed?: boolean }).is_computed;
+      // Locked columns are maintained by whatever owns the layer, so the grid
+      // treats them exactly as it treats computed ones: shown, never edited.
+      const isComputed =
+        !!(prop as { is_computed?: boolean }).is_computed ||
+        !!(prop as { is_locked?: boolean }).is_locked;
       const displayConfig = ((prop as { display_config?: Record<string, unknown> }).display_config) ?? {};
       // The header icon shows the declared kind (a formula column keeps the
       // formula icon), while `kind` drives value formatting and editing.

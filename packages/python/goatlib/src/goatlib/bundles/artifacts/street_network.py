@@ -34,11 +34,15 @@ import logging
 import os
 import tarfile
 from pathlib import Path
-from typing import Dict, List, Protocol, Tuple
+from typing import Dict, List, Tuple
 
 import duckdb
 
-from goatlib.bundles.artifacts.base import ArtifactBuilder, BuiltArtifact
+from goatlib.bundles.artifacts.base import (
+    ArtifactBuilder,
+    ArtifactSource,
+    BuiltArtifact,
+)
 from goatlib.models.bundle import (
     ROUTING_CLASSES,
     BundleArtifactKind,
@@ -142,19 +146,6 @@ class StreetNetworkArtifactBuilder(ArtifactBuilder):
         ]
 
 
-class RoutingArtifactSource(Protocol):
-    """The one capability ``fetch_routing_network`` needs of a tool runner.
-
-    A Protocol rather than ``BaseToolRunner`` keeps the dependency pointing from
-    tools to bundles: ``bundles.runner`` already imports ``tools``, so importing
-    it back would close a cycle.
-    """
-
-    def resolve_bundle_artifact(
-        self, bundle_id: str, kind: str
-    ) -> Tuple[str | None, BundleArtifactState | None]: ...
-
-
 def unpack_routing_network(
     archive: str | Path, dest_dir: str | Path
 ) -> Tuple[str, str]:
@@ -183,7 +174,7 @@ def unpack_routing_network(
 
 
 def fetch_routing_network(
-    source: RoutingArtifactSource, bundle_id: str, dest_dir: str | Path
+    source: ArtifactSource, bundle_id: str, dest_dir: str | Path
 ) -> Tuple[str, str]:
     """Fetch and unpack a bundle's routing graph for any tool that routes.
 

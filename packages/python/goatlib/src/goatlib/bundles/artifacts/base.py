@@ -8,11 +8,28 @@ runner stores them (S3 + ``bundle_artifact`` rows). Builders never touch the DB.
 """
 
 from abc import ABC
-from typing import Dict, List
+from typing import Dict, List, Protocol, Tuple
 
 from pydantic import BaseModel
 
-from goatlib.models.bundle import BundleArtifactKind, BundleTypeName
+from goatlib.models.bundle import (
+    BundleArtifactKind,
+    BundleArtifactState,
+    BundleTypeName,
+)
+
+
+class ArtifactSource(Protocol):
+    """The one capability the ``fetch_*`` helpers need of a tool runner.
+
+    A Protocol rather than ``BaseToolRunner`` keeps the dependency pointing from
+    tools to bundles: ``bundles.runner`` already imports ``tools``, so importing
+    it back would close a cycle.
+    """
+
+    def resolve_bundle_artifact(
+        self, bundle_id: str, kind: str
+    ) -> Tuple[str | None, BundleArtifactState | None]: ...
 
 
 class ArtifactBuilderUnavailableError(Exception):

@@ -16,9 +16,14 @@ from typing import List, Tuple
 from goatlib.bundles.artifacts.base import (
     ArtifactBuilder,
     ArtifactBuilderUnavailableError,
+    ArtifactSource,
     BuiltArtifact,
 )
-from goatlib.models.bundle import BundleArtifactKind, BundleTypeName
+from goatlib.models.bundle import (
+    BundleArtifactKind,
+    BundleArtifactState,
+    BundleTypeName,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +98,41 @@ class GtfsArtifactBuilder(ArtifactBuilder):
                 logger.warning("Invalid GTFS service dates (%s..%s): %s", lo, hi, e)
 
         return date.today().isoformat(), _MAX_DAYS
+
+
+def fetch_pt_timetable(source: ArtifactSource, bundle_id: str) -> str:
+    """Path to a PT bundle's timetable, for any tool that routes on transit.
+
+    The counterpart of ``fetch_routing_network``: one call, and the caller needs
+    no knowledge of the artifact's packaging. A timetable is a single ``.bin``,
+    so unlike a street graph there is nothing to unpack — the path is the stored
+    file on the data volume and must be treated as read-only.
+    """
+    timetable, state = source.resolve_bundle_artifact(
+        bundle_id, BundleArtifactKind.pt_network_graph.value
+    )
+    if not timetable:
+        # The state separates "not ready yet" from "was ready until the feed was
+        # replaced", which are different things to tell a user. None means no
+        # build has been attempted.
+        refusal = {
+            BundleArtifactState.outdated: (
+                "This public-transport bundle is being updated. Try again once "
+                "it finishes."
+            ),
+            BundleArtifactState.building: (
+                "This public-transport network is still being prepared. Try "
+                "again shortly."
+            ),
+            BundleArtifactState.failed: (
+                "This public-transport bundle's last update failed. Update it "
+                "from the bundle before using it."
+            ),
+        }
+        raise ValueError(
+            refusal.get(
+                state,
+                "The selected public-transport bundle is not ready to route on " "yet.",
+            )
+        )
+    return timetable

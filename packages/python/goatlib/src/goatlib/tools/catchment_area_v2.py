@@ -40,8 +40,8 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
+from goatlib.bundles.artifacts.gtfs import fetch_pt_timetable
 from goatlib.bundles.artifacts.street_network import fetch_routing_network
-from goatlib.models.bundle import BundleArtifactState
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.catchment_area import CatchmentAreaToolRunner
 from goatlib.tools.schemas import ToolInputBase, get_default_layer_name
@@ -1005,33 +1005,14 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
             output_path=str(output_path),
         )
 
-        # A selected PT bundle's routing graph overrides the global network.
+        # A selected PT bundle's timetable overrides the global network.
         if (
             params.routing_mode == CatchmentAreaRoutingMode.pt
             and params.pt_network_bundle_id
         ):
-            timetable, state = self.resolve_bundle_artifact(
-                params.pt_network_bundle_id, "pt_network_graph"
+            analysis_params.timetable_path = fetch_pt_timetable(
+                self, params.pt_network_bundle_id
             )
-            if not timetable:
-                if state in (
-                    BundleArtifactState.outdated,
-                    BundleArtifactState.building,
-                ):
-                    raise ValueError(
-                        "This public-transport bundle is being updated. Try again "
-                        "once it finishes."
-                    )
-                if state is BundleArtifactState.failed:
-                    raise ValueError(
-                        "This public-transport bundle's last update failed. Update "
-                        "it from the bundle before using it."
-                    )
-                raise ValueError(
-                    "The selected public-transport bundle is not ready to route "
-                    "on yet."
-                )
-            analysis_params.timetable_path = timetable
 
         # Likewise for a street network bundle.
         if params.street_network_bundle_id:

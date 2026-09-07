@@ -10,7 +10,7 @@ bundles it depends on. Core projects these specs into the
 from enum import Enum
 from typing import Any, Dict, Literal, Optional, Tuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 GeometryKind = Literal["point", "line", "polygon", "none"]
 
@@ -178,7 +178,31 @@ class RoleSpec(BaseModel):
     # show, because its value comes from somewhere the layer cannot express —
     # the editor resolves an edge's endpoints against the nodes layer.
     locked_columns: Tuple[str, ...] = ()
+    # Columns whose value must come from a fixed vocabulary: column name -> the
+    # values a write may set. Declared here and written into the member layer's
+    # field_config at import, so the constraint travels with the layer rather
+    # than living in whatever code happens to write it — an editor offers a
+    # dropdown and the write path refuses anything else, both from the same
+    # source.
+    allowed_values: Dict[str, Tuple[str, ...]] = {}
+    # What a newly created feature gets for a column the user did not fill in:
+    # column name -> value. Seeded into the editor so the user sees what will be
+    # stored, and applied again by the write path so an API caller gets the same
+    # thing. Validated against `allowed_values` below — a default nobody may
+    # choose would be written and then rejected on the next edit.
+    default_values: Dict[str, Any] = {}
     description: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _defaults_are_choosable(self) -> "RoleSpec":
+        for column, value in self.default_values.items():
+            vocabulary = self.allowed_values.get(column)
+            if vocabulary and value not in vocabulary:
+                raise ValueError(
+                    f"{self.key}: default {value!r} for '{column}' is not one of "
+                    f"its allowed values"
+                )
+        return self
 
 
 class DependencySpec(BaseModel):
@@ -284,6 +308,14 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 # node, splitting an edge or minting one — and the length is
                 # remeasured from the geometry that results.
                 locked_columns=("source_node", "target_node", "length_m"),
+                # The vocabulary the routing engine understands. Anything
+                # outside it is mapped to "unknown" by the artifact build, so a
+                # free-typed value would quietly change how the street routes.
+                allowed_values={"class": tuple(sorted(ROUTING_CLASSES))},
+                # Classifying a street is a judgement the user can make later,
+                # and the engine has a meaning for "unknown", so a drawn edge
+                # gets one rather than failing to save.
+                default_values={"class": "unknown"},
                 description=(
                     "Routable street segments, split so each has exactly two "
                     "connectors and no linear references."

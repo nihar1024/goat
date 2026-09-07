@@ -3,11 +3,9 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
-  addPendingFeature,
   commitFeature,
   markForDeletion,
   pushSnapshot,
-  setMode,
   removePendingFeature,
   updatePendingGeometry,
   updatePendingProperties,
@@ -16,6 +14,11 @@ import { useDraw } from "@/lib/providers/DrawProvider";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import useLayerFields from "@/hooks/map/CommonHooks";
 
+import {
+  hasVocabulary,
+  selectedVocabularyItem,
+  vocabularyItems,
+} from "@/lib/utils/allowedValues";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import type { FieldKind } from "@/lib/validations/layer";
 import { resolveDisplayKind } from "@/lib/validations/layer";
@@ -57,27 +60,6 @@ const FeatureEditPanel: React.FC = () => {
   const filteredFields = layerFields.filter(
     (f) => f.type === "string" || f.type === "number" || f.type === "date" || f.type === "boolean"
   );
-
-  // In draw mode, eagerly create a pending feature so user can fill attributes before drawing
-  const createdForDrawRef = useRef(false);
-  useEffect(() => {
-    if (mode === "draw" && activeLayerId && !activeFeatureId && !createdForDrawRef.current) {
-      createdForDrawRef.current = true;
-      dispatch(
-        addPendingFeature({
-          id: crypto.randomUUID(),
-          drawFeatureId: null,
-          geometry: null,
-          properties: {},
-          committed: false,
-          action: "create",
-        })
-      );
-    }
-    if (mode !== "draw") {
-      createdForDrawRef.current = false;
-    }
-  }, [mode, activeLayerId, activeFeatureId, dispatch]);
 
   // Track which fields have had a snapshot pushed (reset on feature change)
   const snapshotPushedFieldsRef = useRef<Set<string>>(new Set());
@@ -142,11 +124,10 @@ const FeatureEditPanel: React.FC = () => {
       drawControl.delete(feature.drawFeatureId);
     }
     pushHistory();
+    // Committing clears the selection, which is what re-arms drawing: the mode
+    // is left alone, so finishing one feature leaves the user ready for the
+    // next without picking the tool up again.
     dispatch(commitFeature(activeFeatureId));
-    // Return to draw mode only if this was a new feature, otherwise stay in select
-    if (feature.action === "create") {
-      dispatch(setMode("draw"));
-    }
   };
 
   const handleCancel = () => {
@@ -156,7 +137,8 @@ const FeatureEditPanel: React.FC = () => {
       }
       dispatch(removePendingFeature(activeFeatureId));
     }
-    dispatch(setMode("select"));
+    // The mode is the user's choice, not this button's: discarding a shape
+    // while drawing leaves them drawing.
   };
 
   const handleDelete = () => {
@@ -185,6 +167,10 @@ const FeatureEditPanel: React.FC = () => {
             // on every save, so a typed value would be replaced without notice.
             const isLocked = field.is_locked === true;
             const isReadOnly = isComputed || isLocked;
+            // A constrained column is picked from, not typed into — unless
+            // something else already maintains it, in which case it is not
+            // offered at all.
+            const isVocabulary = !isReadOnly && hasVocabulary(field);
             let displayValue = "";
             if (isComputed) {
               const raw = feature?.properties[field.name];
@@ -210,6 +196,26 @@ const FeatureEditPanel: React.FC = () => {
                 feature?.properties[field.name] != null
                   ? String(feature.properties[field.name])
                   : "";
+            }
+
+            if (isVocabulary) {
+              const items = vocabularyItems(field, feature?.properties[field.name]);
+              return (
+                <Selector
+                  key={field.name}
+                  label={field.name}
+                  enableSearch={items.length > 8}
+                  selectedItems={selectedVocabularyItem(
+                    items,
+                    feature?.properties[field.name]
+                  )}
+                  setSelectedItems={(item) => {
+                    const value = Array.isArray(item) ? item[0]?.value : item?.value;
+                    handlePropertyChange(field.name, String(value ?? ""));
+                  }}
+                  items={items}
+                />
+              );
             }
 
             if (!isReadOnly && field.type === "date") {
@@ -279,7 +285,10 @@ const FeatureEditPanel: React.FC = () => {
             </Button>
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {!hasGeometry ? t("draw_geometry_first") : ""}
+              {/* A table layer has no geometry to draw, and its rows are
+                  saveable as soon as they are created — the empty caption
+                  stays so the Done button keeps its place in the row. */}
+              {!isTableLayer && !hasGeometry ? t("draw_geometry_first") : ""}
             </Typography>
           )}
           <Button

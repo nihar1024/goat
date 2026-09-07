@@ -37,7 +37,11 @@ from geoapi.models import (
     FeatureWriteResponse,
 )
 from geoapi.routers.tiles import bump_layer_version
-from geoapi.services.computed_columns import fetch_field_config, write_field_config
+from geoapi.services.computed_columns import (
+    coerce_allowed_values,
+    fetch_field_config,
+    write_field_config,
+)
 from geoapi.services.feature_write_service import feature_write_service
 from geoapi.services.layer_service import LayerMetadata, _metadata_cache, layer_service
 from geoapi.services.tile_service import tile_service
@@ -646,6 +650,22 @@ async def add_column(
             if body.kind == "formula":
                 entry["formula"] = body.formula
                 entry["output_kind"] = output_kind
+            if body.allowed_values:
+                entry["allowed_values"] = coerce_allowed_values(
+                    body.kind, body.allowed_values
+                )
+                entry["allow_other"] = body.allow_other
+            if body.default_value is not None:
+                # Two stores, one authority. The ALTER TABLE above set a DuckDB
+                # column DEFAULT, which backfilled existing rows and would also
+                # cover an INSERT that omitted the column — but nothing relies
+                # on that: `apply_defaults` fills the column explicitly before
+                # every write, and only this entry is read to do so, or to show
+                # the user what they are about to get. So `field_config` is the
+                # default of record; the DDL default is a leftover of creating
+                # the column and is deliberately not kept in step by
+                # `update_column`, which is why that endpoint touches only this.
+                entry["default_value"] = body.default_value
             async with pool.acquire() as conn:
                 conn = cast("asyncpg.Connection[asyncpg.Record]", conn)
                 current = await fetch_field_config(conn, UUID(layer_info.layer_id))
@@ -679,10 +699,20 @@ async def update_column(
     metadata = await _get_authorized_metadata(layer_info, user_id)
 
     try:
-        if not body.new_name and body.display_config is None and body.formula is None:
+        if (
+            not body.new_name
+            and body.display_config is None
+            and body.formula is None
+            and body.allowed_values is None
+            and body.allow_other is None
+            and body.default_value is None
+        ):
             raise HTTPException(
                 status_code=400,
-                detail="No update specified (provide new_name, display_config and/or formula)",
+                detail=(
+                    "No update specified (provide new_name, display_config, "
+                    "formula, allowed_values and/or default_value)"
+                ),
             )
 
         # Formula edit: validate, re-infer the result type, and recompute the
@@ -808,6 +838,36 @@ async def update_column(
                         ).model_dump()
                     except (ValueError, ValidationError) as e:
                         raise HTTPException(status_code=400, detail=str(e)) from e
+
+                if body.default_value is not None:
+                    # Only what future features get. Rewriting rows that already
+                    # hold a value is not what changing a default means, and the
+                    # column's DDL default is left alone for the same reason —
+                    # `field_config` is the default of record (see add_column).
+                    entry["default_value"] = (
+                        None if body.default_value == "" else body.default_value
+                    )
+                    if entry["default_value"] is None:
+                        entry.pop("default_value", None)
+
+                if body.allowed_values is not None:
+                    # An empty list removes the vocabulary, leaving the column
+                    # free text again. Values already stored outside the new
+                    # list are left alone: the constraint governs what may be
+                    # written from now on, and rewriting a column's data is not
+                    # what editing its definition means.
+                    if body.allowed_values:
+                        # Against the column's own kind, which the entry knows
+                        # even though the request does not.
+                        entry["allowed_values"] = coerce_allowed_values(
+                            entry.get("kind"), body.allowed_values
+                        )
+                        entry["allow_other"] = bool(body.allow_other)
+                    else:
+                        entry.pop("allowed_values", None)
+                        entry.pop("allow_other", None)
+                elif body.allow_other is not None and entry.get("allowed_values"):
+                    entry["allow_other"] = body.allow_other
 
                 if entry:
                     current[key] = entry

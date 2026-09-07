@@ -97,6 +97,106 @@ def locked_column_names(field_config: dict[str, Any] | None) -> set[str]:
     }
 
 
+def allowed_value_columns(
+    field_config: dict[str, Any] | None,
+) -> dict[str, list[Any]]:
+    """Columns constrained to a vocabulary -> the values a write may set.
+
+    Only columns that actually enforce one: an entry with ``allow_other`` true
+    still carries its list, because an editor should offer it as suggestions,
+    but a write is not refused for going outside it.
+    """
+    constrained: dict[str, list[Any]] = {}
+    for name, entry in (field_config or {}).items():
+        if not isinstance(entry, dict) or entry.get("allow_other"):
+            continue
+        values = entry.get("allowed_values")
+        if isinstance(values, list) and values:
+            constrained[name] = values
+    return constrained
+
+
+def coerce_allowed_values(kind: str | None, values: list[Any]) -> list[Any]:
+    """The vocabulary as the column's own type, or a ValueError naming the culprit.
+
+    A number column holding the string "30" would never match the 30 a write
+    sends, so the dropdown would offer a value that then fails validation. The
+    list is coerced once, here, rather than compared loosely everywhere.
+    """
+    if kind not in ("number", "integer"):
+        return [str(v) for v in values]
+    coerced: list[Any] = []
+    for value in values:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"'{value}' is not a number, so it cannot be an allowed value "
+                "for a number column."
+            ) from None
+        coerced.append(int(number) if number.is_integer() else number)
+    return coerced
+
+
+def column_defaults(field_config: dict[str, Any] | None) -> dict[str, Any]:
+    """Columns that supply a value when a new feature leaves them blank."""
+    return {
+        name: entry["default_value"]
+        for name, entry in (field_config or {}).items()
+        if isinstance(entry, dict) and entry.get("default_value") is not None
+    }
+
+
+def apply_defaults(
+    field_config: dict[str, Any] | None, properties: dict[str, Any]
+) -> dict[str, Any]:
+    """Fill in what a new feature did not state. Returns a new dict.
+
+    Creation only. An update that omits a column means "leave it alone", so
+    applying defaults there would silently reset columns the caller never
+    mentioned.
+
+    An explicit null is left as null: clearing a column is a choice, and a
+    default that overrode it could not be cleared at all.
+
+    This is the only thing that applies a default. A column created with one
+    also carries a DuckDB ``DEFAULT``, which would cover an INSERT that omitted
+    it, but every write goes through here and names the column explicitly — so
+    the ``field_config`` entry is the default of record and the DDL default is
+    never consulted.
+    """
+    filled = dict(properties)
+    for name, value in column_defaults(field_config).items():
+        if name not in filled:
+            filled[name] = value
+    return filled
+
+
+def validate_allowed_values(
+    field_config: dict[str, Any] | None, properties: dict[str, Any]
+) -> None:
+    """Refuse a write that sets a constrained column to something else.
+
+    Refused rather than dropped, which is how a computed or locked column is
+    handled: those the caller was never invited to set, so ignoring the value is
+    right. Here the caller *is* invited to set it and got it wrong, and silently
+    keeping the old value would look like a successful edit.
+
+    A null clears the column, which is not a vocabulary violation — a column
+    with no value is a different thing from one holding a value nobody allows.
+    """
+    constrained = allowed_value_columns(field_config)
+    for name, value in properties.items():
+        if value is None or name not in constrained:
+            continue
+        if value not in constrained[name]:
+            allowed = ", ".join(str(v) for v in constrained[name])
+            raise ValueError(
+                f"'{value}' is not an accepted value for '{name}'. "
+                f"Accepted: {allowed}."
+            )
+
+
 def select_recompute_specs(
     specs: list[ComputedColumnSpec],
     changed_source_cols: set[str],

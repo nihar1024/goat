@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
-import { COLLECTIONS_API_BASE_URL, addColumn, deleteColumn, renameColumn, updateColumnDisplayConfig, updateColumnFormula, useDataset, useLayerQueryables } from "@/lib/api/layers";
+import { COLLECTIONS_API_BASE_URL, addColumn, deleteColumn, renameColumn, updateColumnAllowedValues, updateColumnDisplayConfig, updateColumnFormula, useDataset, useLayerQueryables } from "@/lib/api/layers";
 import type { FieldDefinition, FieldKind } from "@/lib/validations/layer";
 import { mutate as globalMutate } from "swr";
 
@@ -96,6 +96,8 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
           kind?: FieldKind;
           is_computed?: boolean;
           display_config?: Record<string, unknown>;
+          allowed_values?: (string | number)[];
+          allow_other?: boolean;
           type?: string;
           formula?: string;
           output_kind?: string;
@@ -106,6 +108,8 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
           kind: s.kind ?? (s.type === "number" || s.type === "integer" ? "number" : "string"),
           is_computed: s.is_computed ?? false,
           display_config: s.display_config ?? {},
+          allowed_values: s.allowed_values,
+          allow_other: s.allow_other ?? false,
           formula: s.formula,
           output_kind: s.output_kind,
         };
@@ -201,6 +205,9 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
             name: field.name,
             kind: field.kind,
             display_config: field.display_config ?? {},
+            ...(field.allowed_values?.length
+              ? { allowed_values: field.allowed_values, allow_other: !!field.allow_other }
+              : {}),
             ...(field.kind === "formula" ? { formula: field.formula } : {}),
           });
         } else {
@@ -217,6 +224,19 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
             field.formula !== orig.formula
           ) {
             await updateColumnFormula(layerId, field.name, field.formula);
+          }
+          // Persist vocabulary edits on existing fields. An emptied list is
+          // sent as [] so the backend removes the constraint rather than
+          // leaving the old one in place.
+          const origValues = JSON.stringify(orig?.allowed_values ?? []);
+          const nextValues = JSON.stringify(field.allowed_values ?? []);
+          if (origValues !== nextValues || !!orig?.allow_other !== !!field.allow_other) {
+            await updateColumnAllowedValues(
+              layerId,
+              field.name,
+              field.allowed_values ?? [],
+              !!field.allow_other
+            );
           }
           // Persist display_config edits on existing fields
           const origConfig = JSON.stringify(orig?.display_config ?? {});
@@ -251,6 +271,11 @@ const EditFieldsModal: React.FC<EditFieldsModalProps> = ({
       if (!orig) return true; // new field
       if (orig.name !== f.name) return true;
       if ((orig.formula ?? "") !== (f.formula ?? "")) return true;
+      if (
+        JSON.stringify(orig.allowed_values ?? []) !== JSON.stringify(f.allowed_values ?? []) ||
+        !!orig.allow_other !== !!f.allow_other
+      )
+        return true;
       return (
         JSON.stringify(orig.display_config ?? {}) !==
         JSON.stringify(f.display_config ?? {})

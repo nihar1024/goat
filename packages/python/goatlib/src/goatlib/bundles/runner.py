@@ -222,6 +222,21 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                         entry = field_config.setdefault(column, {"display_config": {}})
                         entry["is_locked"] = True
 
+                    # Columns whose value must come from a fixed vocabulary. The
+                    # list travels with the layer so an editor and the write path
+                    # read the same constraint.
+                    vocabularies = role_spec.allowed_values if role_spec else {}
+                    for column, values in vocabularies.items():
+                        entry = field_config.setdefault(column, {"display_config": {}})
+                        entry["allowed_values"] = list(values)
+                        entry["allow_other"] = False
+
+                    # What a newly drawn feature gets for a column left blank.
+                    defaults = role_spec.default_values if role_spec else {}
+                    for column, value in defaults.items():
+                        entry = field_config.setdefault(column, {"display_config": {}})
+                        entry["default_value"] = value
+
                     layer_name = (
                         f"{bundle_name} {extracted.name}"
                         if bundle_name

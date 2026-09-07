@@ -10,6 +10,9 @@ interface PseudoField {
   kind?: string;
   is_computed?: boolean;
   is_locked?: boolean;
+  allowed_values?: (string | number)[];
+  allow_other?: boolean;
+  default_value?: string | number | boolean | null;
   display_config?: Record<string, unknown>;
 }
 
@@ -56,6 +59,9 @@ const useLayerFields = (
           format?: string;
           is_computed?: boolean;
           is_locked?: boolean;
+          allowed_values?: (string | number)[];
+          allow_other?: boolean;
+          default_value?: string | number | boolean | null;
           display_config?: Record<string, unknown>;
           formula?: string;
           output_kind?: string;
@@ -66,6 +72,9 @@ const useLayerFields = (
           kind: v.kind,
           is_computed: v.is_computed ?? false,
           is_locked: v.is_locked ?? false,
+          allowed_values: v.allowed_values,
+          allow_other: v.allow_other ?? false,
+          default_value: v.default_value,
           display_config: v.display_config ?? {},
           formula: v.formula,
           output_kind: v.output_kind,

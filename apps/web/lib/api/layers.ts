@@ -688,6 +688,28 @@ export const renameColumn = async (
   return response.json();
 };
 
+export const updateColumnAllowedValues = async (
+  layerId: string,
+  columnName: string,
+  allowedValues: (string | number)[],
+  allowOther: boolean,
+) => {
+  const response = await apiRequestAuth(
+    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      // An empty list removes the vocabulary, leaving the column free text.
+      body: JSON.stringify({ allowed_values: allowedValues, allow_other: allowOther }),
+    }
+  );
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to update allowed values");
+  }
+  return await response.json();
+};
+
 export const updateColumnDisplayConfig = async (
   layerId: string,
   columnName: string,

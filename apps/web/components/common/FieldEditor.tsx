@@ -6,8 +6,10 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { DragIndicator as DragIndicatorIcon } from "@mui/icons-material";
 import {
+  Autocomplete,
   Box,
   Button,
+  Chip,
   FormControlLabel,
   IconButton,
   Input,
@@ -15,6 +17,7 @@ import {
   Select,
   Stack,
   Switch,
+  TextField,
   Typography,
   alpha,
   useTheme,
@@ -30,6 +33,8 @@ const FormulaBuilder = dynamic(() => import("@/components/modals/FormulaBuilder"
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import type { FieldDefinition, FieldKind } from "@/lib/validations/layer";
 import { ALLOWED_KINDS_BY_GEOM_TYPE, COMPUTED_KINDS, RESERVED_FIELD_NAMES } from "@/lib/validations/layer";
+
+import FormLabelHelper from "@/components/common/FormLabelHelper";
 
 import type { SelectorItem } from "@/types/map/common";
 
@@ -245,6 +250,86 @@ const SortableFieldRow = ({
 
 // --- Main FieldEditor ---
 
+/**
+ * The vocabulary editor for a column.
+ *
+ * Matches the chips input the tool forms use (`toolbox/generic/inputs/
+ * ChipsInput`): a value is committed on Enter *or* on blur, so typing one and
+ * clicking away does not silently discard it. That component is bound to the
+ * OGC-processes form model and is numbers-only, so the interaction is mirrored
+ * here rather than shared.
+ */
+const AllowedValuesInput = ({
+  values,
+  onChange,
+  label,
+  placeholder,
+  helperText,
+  numeric,
+  invalidMessage,
+}: {
+  values: (string | number)[];
+  onChange: (values: (string | number)[]) => void;
+  label: string;
+  placeholder: string;
+  helperText: string;
+  numeric: boolean;
+  invalidMessage: string;
+}) => {
+  const [inputValue, setInputValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const commit = (next: (string | number)[]) => {
+    // Trimmed and de-duplicated: a stray duplicate or a trailing space would
+    // look identical in the dropdown while never matching what is stored.
+    const cleaned = next.map((v) => String(v).trim()).filter(Boolean);
+    // A number column holding the string "30" would never match the 30 a write
+    // sends, so the value is stored as the column's own type — and a value that
+    // cannot be one is refused rather than dropped without a word.
+    const rejected = numeric ? cleaned.filter((v) => !Number.isFinite(Number(v))) : [];
+    setError(rejected.length > 0 ? invalidMessage : null);
+    const kept = cleaned
+      .filter((v) => !rejected.includes(v))
+      .map((v) => (numeric ? Number(v) : v));
+    onChange(Array.from(new Set(kept)));
+    setInputValue("");
+  };
+
+  return (
+    <Stack>
+      <FormLabelHelper label={label} color="inherit" />
+      <Autocomplete
+        multiple
+        freeSolo
+        size="small"
+        options={[] as string[]}
+        value={values.map(String)}
+        inputValue={inputValue}
+        onInputChange={(_event, next) => setInputValue(next)}
+        onChange={(_event, next) => commit(next as string[])}
+        inputMode={numeric ? "numeric" : "text"}
+        onBlur={() => {
+          if (inputValue.trim()) commit([...values, inputValue]);
+        }}
+        renderTags={(tagValues, getTagProps) =>
+          tagValues.map((option, index) => {
+            const { key, ...tagProps } = getTagProps({ index });
+            return <Chip key={key} size="small" label={option} {...tagProps} />;
+          })
+        }
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            error={!!error}
+            placeholder={placeholder}
+            helperText={error ?? helperText}
+          />
+        )}
+      />
+    </Stack>
+  );
+};
+
 const FieldEditor: React.FC<FieldEditorProps> = ({
   fields,
   onChange,
@@ -401,9 +486,45 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
     onChange(fields.map((f) => (f.id === id ? { ...f, name: newName } : f)));
   };
 
+  const handleAllowedValuesChange = (id: string, values: (string | number)[]) => {
+    // Already trimmed, de-duplicated and typed by the input.
+    onChange(
+      fields.map((f) =>
+        f.id === id
+          ? { ...f, allowed_values: values.length > 0 ? values : undefined }
+          : f
+      )
+    );
+  };
+
+  const handleAllowOtherChange = (id: string, allowOther: boolean) => {
+    onChange(fields.map((f) => (f.id === id ? { ...f, allow_other: allowOther } : f)));
+  };
+
   const handleTypeChange = (id: string, item: SelectorItem | SelectorItem[] | undefined) => {
     if (!item || Array.isArray(item)) return;
-    onChange(fields.map((f) => (f.id === id ? { ...f, kind: item.value as FieldKind } : f)));
+    const kind = item.value as FieldKind;
+    onChange(
+      fields.map((f) => {
+        if (f.id !== id) return f;
+        // A vocabulary belongs to the type it was written for. Values that
+        // still fit the new one are kept — "30" is a fine number — and the
+        // rest go, rather than being stored as something that can never match
+        // what a write sends. Only these two kinds carry one at all.
+        const allowed =
+          kind === "number"
+            ? f.allowed_values?.map(Number).filter((v) => Number.isFinite(v))
+            : kind === "string"
+              ? f.allowed_values?.map(String)
+              : undefined;
+        return {
+          ...f,
+          kind,
+          allowed_values: allowed?.length ? allowed : undefined,
+          allow_other: allowed?.length ? f.allow_other : undefined,
+        };
+      })
+    );
   };
 
   const handleDisplayConfigChange = (
@@ -564,6 +685,39 @@ const FieldEditor: React.FC<FieldEditorProps> = ({
                   items={fieldTypeItems}
                   disabled={lockedFieldIds?.has(selectedField.id)}
                 />
+
+                {(selectedField.kind === "string" || selectedField.kind === "number") && (
+                  <Stack spacing={1}>
+                    <AllowedValuesInput
+                      key={selectedField.id}
+                      label={t("allowed_values")}
+                      placeholder={t("type_value_enter")}
+                      helperText={t("allowed_values_help")}
+                      numeric={selectedField.kind === "number"}
+                      invalidMessage={t("allowed_values_must_be_numbers")}
+                      values={selectedField.allowed_values ?? []}
+                      onChange={(values) =>
+                        handleAllowedValuesChange(selectedField.id, values)
+                      }
+                    />
+                    {(selectedField.allowed_values?.length ?? 0) > 0 && (
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            size="small"
+                            checked={!!selectedField.allow_other}
+                            onChange={(e) =>
+                              handleAllowOtherChange(selectedField.id, e.target.checked)
+                            }
+                          />
+                        }
+                        label={
+                          <Typography variant="caption">{t("allow_other_values")}</Typography>
+                        }
+                      />
+                    )}
+                  </Stack>
+                )}
 
                 {isFormula && (
                   <Stack spacing={1}>

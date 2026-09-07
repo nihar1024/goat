@@ -59,6 +59,7 @@ import {
 } from "@/lib/api/layers";
 import type { FieldKind } from "@/lib/validations/layer";
 import { BOOLEAN_SELECT_ITEMS, parseBooleanInput } from "@/lib/utils/fieldInput";
+import { vocabularyItems } from "@/lib/utils/allowedValues";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import FieldKindIcon, { fieldIndicatorKind } from "@/components/common/FieldKindIcon";
 import { COLUMN_MENU_DIVIDER_SX, COLUMN_MENU_PAPER_SX } from "@/components/common/columnMenuStyles";
@@ -322,7 +323,14 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
   const columnMeta = useMemo(() => {
     const meta: Record<
       string,
-      { kind: FieldKind; iconKind: FieldKind; isComputed: boolean; displayConfig: Record<string, unknown> }
+      {
+        kind: FieldKind;
+        iconKind: FieldKind;
+        isComputed: boolean;
+        allowedValues?: (string | number)[];
+        defaultValue?: unknown;
+        displayConfig: Record<string, unknown>;
+      }
     > = {};
     if (!queryables?.properties) return meta;
     for (const [fieldName, prop] of Object.entries(queryables.properties)) {
@@ -354,7 +362,18 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
       // The header icon shows the declared kind (a formula column keeps the
       // formula icon), while `kind` drives value formatting and editing.
       const iconKind: FieldKind = declaredKind === "formula" ? "formula" : kind;
-      meta[fieldName] = { kind, iconKind, isComputed, displayConfig };
+      // A constrained column is picked from rather than typed into, so the
+      // cell editor becomes a select — the same one booleans already use.
+      const allowedValues = (prop as { allowed_values?: (string | number)[] }).allowed_values;
+      const defaultValue = (prop as { default_value?: unknown }).default_value;
+      meta[fieldName] = {
+        kind,
+        iconKind,
+        isComputed,
+        allowedValues,
+        defaultValue,
+        displayConfig,
+      };
     }
     return meta;
   }, [queryables]);
@@ -1296,6 +1315,7 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                       const isComputed = meta?.isComputed ?? false;
                       const fieldKind = meta?.kind ?? (field.type === "number" ? "number" : "string");
                       const fieldDisplayConfig = meta?.displayConfig ?? {};
+                      const vocabulary = meta?.allowedValues;
 
                       // Format value using formatFieldValue when the column has a non-trivial kind or display_config
                       const hasNonDefaultDisplay =
@@ -1380,7 +1400,43 @@ const EditableDataTable: React.FC<EditableDataTableProps> = ({
                             handleCellClick(rowId, field.name, originalValue);
                           }}>
                           {isEditing ? (
-                            fieldKind === "boolean" ? (
+                            vocabulary?.length ? (
+                              <TextField
+                                select
+                                autoFocus
+                                fullWidth
+                                size="small"
+                                value={editValue ?? ""}
+                                onChange={(e) => commitCellEdit(e.target.value)}
+                                onBlur={handleCellBlur}
+                                variant="outlined"
+                                SelectProps={{ defaultOpen: true, displayEmpty: true }}
+                                sx={{
+                                  "& .MuiInputBase-root": {
+                                    fontSize: "0.875rem",
+                                    borderRadius: 0,
+                                  },
+                                  "& .MuiInputBase-input": {
+                                    py: "6px",
+                                    px: "16px",
+                                  },
+                                  "& .MuiOutlinedInput-notchedOutline": {
+                                    border: "none",
+                                  },
+                                }}>
+                                {vocabularyItems(
+                                  {
+                                    allowed_values: vocabulary,
+                                    default_value: meta?.defaultValue,
+                                  },
+                                  originalValue
+                                ).map((item) => (
+                                  <MenuItem key={String(item.value)} value={String(item.value)}>
+                                    {item.label}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                            ) : fieldKind === "boolean" ? (
                               <TextField
                                 select
                                 autoFocus

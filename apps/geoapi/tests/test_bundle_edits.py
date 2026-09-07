@@ -42,6 +42,24 @@ def _allow_edit():
         yield
 
 
+def _edges_field_config():
+    """The edges layer's field_config as the import writes it.
+
+    Built from the spec so the two cannot drift: the endpoint reads the layer's
+    copy, which is what a real bundle carries.
+    """
+    from goatlib.models.bundle import BundleTypeName, get_spec
+
+    role = get_spec(BundleTypeName.street_network).role("edges")
+    config: dict = {}
+    for column, values in role.allowed_values.items():
+        config.setdefault(column, {})["allowed_values"] = list(values)
+        config[column]["allow_other"] = False
+    for column, value in role.default_values.items():
+        config.setdefault(column, {})["default_value"] = value
+    return config
+
+
 def _member(role="edges", user_id="owner-a"):
     return {
         "bundle_id": BUNDLE,
@@ -121,6 +139,10 @@ def _post(
             AsyncMock(return_value={"layer_id": LAYER, "user_id": nodes_owner}),
         ),
         patch("geoapi.routers.bundle_edits.get_layer_info_sync"),
+        patch(
+            "geoapi.routers.bundle_edits._load_field_config",
+            AsyncMock(return_value=_edges_field_config()),
+        ),
         patch(
             "geoapi.routers.bundle_edits._invalidate_caches_and_pmtiles",
             AsyncMock(return_value=None),
@@ -237,18 +259,25 @@ def test_class_and_speed_defaults():
     """An unclassified edge must still be routable, and a footway must not be
     drivable: the build coalesces a null speed to 0, which the engine reads as
     impassable."""
-    from goatlib.models.bundle import CLASS_DEFAULT_MAXSPEED, ROUTING_CLASSES
+    from goatlib.models.bundle import CLASS_DEFAULT_MAXSPEED
 
-    from geoapi.routers.bundle_edits import DEFAULT_EDGE_CLASS, _fill_class_defaults
+    from geoapi.routers.bundle_edits import _fill_class_defaults
 
-    assert DEFAULT_EDGE_CLASS in ROUTING_CLASSES
-    filled = _fill_class_defaults({})
-    assert filled["class"] == DEFAULT_EDGE_CLASS
-    assert (
-        filled["speed_limit_kph_forward"] == CLASS_DEFAULT_MAXSPEED[DEFAULT_EDGE_CLASS]
-    )
+    # The default travels on the layer's field_config, the same place the
+    # editor read it from to preselect it.
+    config = _edges_field_config()
+    edge_class = config["class"]["default_value"]
+    assert edge_class in config["class"]["allowed_values"]
 
-    stated = _fill_class_defaults({"class": "footway"})
+    filled = _fill_class_defaults({}, config)
+    assert filled["class"] == edge_class
+    assert filled["speed_limit_kph_forward"] == CLASS_DEFAULT_MAXSPEED[edge_class]
+
+    # A cleared class falls back to the default rather than saving as blank.
+    assert _fill_class_defaults({"class": ""}, config)["class"] == edge_class
+
+    # A stated class wins, and its speeds follow from it rather than the default.
+    stated = _fill_class_defaults({"class": "footway"}, config)
     assert stated["class"] == "footway"
     assert "speed_limit_kph_forward" not in stated
 

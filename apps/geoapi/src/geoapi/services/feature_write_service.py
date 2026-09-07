@@ -19,9 +19,11 @@ from geoapi.dependencies import LayerInfo
 from geoapi.ducklake_write import ducklake_write_manager
 from geoapi.models.write import COLUMN_TYPE_MAP
 from geoapi.services.computed_columns import (
+    apply_defaults,
     locked_column_names,
     parse_computed_columns,
     select_recompute_specs,
+    validate_allowed_values,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +121,9 @@ class FeatureWriteService:
         # sent for either is dropped rather than written. Clients round-trip
         # whole features, so this is ordinary, not a malformed request.
         uneditable = {s.name for s in specs} | locked_column_names(field_config)
+        # A new feature gets the column's default for anything it left blank.
+        properties = apply_defaults(field_config, properties)
+        validate_allowed_values(field_config, properties)
 
         columns: list[str] = []
         placeholders: list[str] = []
@@ -205,7 +210,10 @@ class FeatureWriteService:
         with ducklake_write_manager.connection() as con:
             for feature_data in features:
                 geometry = feature_data.get("geometry")
-                properties = feature_data.get("properties", {})
+                properties = apply_defaults(
+                    field_config, feature_data.get("properties", {})
+                )
+                validate_allowed_values(field_config, properties)
 
                 columns: list[str] = []
                 placeholders: list[str] = []
@@ -279,6 +287,7 @@ class FeatureWriteService:
         # sent for either is dropped rather than written. Clients round-trip
         # whole features, so this is ordinary, not a malformed request.
         uneditable = {s.name for s in specs} | locked_column_names(field_config)
+        validate_allowed_values(field_config, properties)
 
         safe_props = {
             k: v
@@ -346,6 +355,7 @@ class FeatureWriteService:
         # sent for either is dropped rather than written. Clients round-trip
         # whole features, so this is ordinary, not a malformed request.
         uneditable = {s.name for s in specs} | locked_column_names(field_config)
+        validate_allowed_values(field_config, properties)
 
         set_clauses: list[str] = []
         values: list[Any] = []

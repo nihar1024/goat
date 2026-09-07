@@ -34,9 +34,13 @@ from geoapi.routers.metadata import (
 from geoapi.services.computed_columns import (
     DEPENDS_ON_ANY,
     ComputedColumnSpec,
+    allowed_value_columns,
+    apply_defaults,
+    coerce_allowed_values,
     locked_column_names,
     parse_computed_columns,
     select_recompute_specs,
+    validate_allowed_values,
 )
 from geoapi.services.feature_write_service import FeatureWriteService
 
@@ -654,3 +658,97 @@ def test_a_locked_column_is_reported_and_refused() -> None:
                 raise AssertionError("a locked-only update should not be accepted")
     finally:
         con.close()
+
+
+# ---------------------------------------------------------------------------
+# Constrained columns
+# ---------------------------------------------------------------------------
+
+
+def test_a_constrained_column_refuses_a_value_outside_its_vocabulary() -> None:
+    """Refused, not dropped: unlike a computed or locked column, the caller was
+    invited to set this one and got it wrong, so silently keeping the old value
+    would look like a successful edit."""
+    con, layer_info = _setup_db()
+    try:
+        con.execute(
+            "INSERT INTO lake.test_schema.features "
+            "VALUES (ST_Point(0, 0), 'asphalt', NULL, NULL)"
+        )
+        field_config: dict[str, Any] = {
+            "name": {"allowed_values": ["asphalt", "gravel"], "allow_other": False}
+        }
+        assert allowed_value_columns(field_config) == {"name": ["asphalt", "gravel"]}
+
+        properties = {"name": {"type": "string"}}
+        _apply_field_config_to_properties(properties, field_config)
+        assert properties["name"]["allowed_values"] == ["asphalt", "gravel"]
+        assert properties["name"]["allow_other"] is False
+
+        # Clearing is not a vocabulary violation: no value is a different thing
+        # from a value nobody allows.
+        validate_allowed_values(field_config, {"name": None})
+
+        with _fails_with("not an accepted value"):
+            with patch(
+                "geoapi.services.feature_write_service.ducklake_write_manager",
+                _FakeManager(con),
+            ):
+                FeatureWriteService().update_feature_properties(
+                    layer_info=layer_info,
+                    feature_id="1",
+                    properties={"name": "moon dust"},
+                    column_names=["geometry", "name", "area_m2", "bbox"],
+                    field_config=field_config,
+                )
+        assert (
+            con.execute("SELECT name FROM lake.test_schema.features").fetchone()[0]
+            == "asphalt"
+        )
+
+        # allow_other turns the list into suggestions the editor offers.
+        field_config["name"]["allow_other"] = True
+        assert allowed_value_columns(field_config) == {}
+        validate_allowed_values(field_config, {"name": "moon dust"})
+    finally:
+        con.close()
+
+
+def test_a_default_fills_a_blank_on_creation_only() -> None:
+    """Applied on create so a new feature carries the value the editor showed;
+    not on update, where an omitted column means "leave it alone"."""
+    field_config: dict[str, Any] = {"name": {"default_value": "unknown"}}
+
+    assert apply_defaults(field_config, {"area_m2": 1.0}) == {
+        "area_m2": 1.0,
+        "name": "unknown",
+    }
+    # A stated value wins, and an explicit null is a choice the default must
+    # not override — otherwise the column could never be cleared.
+    assert apply_defaults(field_config, {"name": "stated"})["name"] == "stated"
+    assert apply_defaults(field_config, {"name": None})["name"] is None
+
+
+def test_a_vocabulary_is_stored_as_the_column_type() -> None:
+    """A number column holding the string "30" would never match the 30 a write
+    sends, so the dropdown would offer a value that then fails validation."""
+    assert coerce_allowed_values("number", ["30", 50, 7.5]) == [30, 50, 7.5]
+    assert coerce_allowed_values("string", ["a", 3]) == ["a", "3"]
+
+    with _fails_with("is not a number"):
+        coerce_allowed_values("number", ["fast"])
+
+    numeric = {"speed": {"kind": "number", "allowed_values": [30, 50]}}
+    validate_allowed_values(numeric, {"speed": 30})
+    with _fails_with("not an accepted value"):
+        validate_allowed_values(numeric, {"speed": "30"})
+
+
+@contextmanager
+def _fails_with(fragment: str) -> Generator[None, None, None]:
+    try:
+        yield
+    except ValueError as e:
+        assert fragment in str(e), str(e)
+    else:
+        raise AssertionError(f"expected a refusal mentioning {fragment!r}")

@@ -11,6 +11,11 @@ import { EditorModes } from "@/types/map/popover";
 
 import useLayerFields from "@/hooks/map/CommonHooks";
 
+import {
+  hasVocabulary,
+  selectedVocabularyItem,
+  vocabularyItems,
+} from "@/lib/utils/allowedValues";
 import { formatFieldValue } from "@/lib/utils/formatFieldValue";
 import type { FieldKind } from "@/lib/validations/layer";
 import { resolveDisplayKind } from "@/lib/validations/layer";
@@ -133,6 +138,7 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                   // either — see FeatureEditPanel.
                   const isLocked = field.is_locked === true;
                   const isReadOnly = isComputed || isLocked;
+                  const isVocabulary = !isReadOnly && hasVocabulary(field);
                   let displayValue = "";
                   if (isComputed) {
                     // Format the computed value via the shared formatter so the
@@ -162,7 +168,29 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
 
                   return (
                     <Stack key={field.name} direction="row" spacing={2} alignItems="center">
-                      {!isReadOnly && field.type === "date" && (
+                      {isVocabulary &&
+                        (() => {
+                          const items = vocabularyItems(field, featureProperties[field.name]);
+                          return (
+                            <Selector
+                              label={field.name}
+                              enableSearch={items.length > 8}
+                              selectedItems={selectedVocabularyItem(
+                                items,
+                                featureProperties[field.name]
+                              )}
+                              setSelectedItems={(item) => {
+                                const value = Array.isArray(item) ? item[0]?.value : item?.value;
+                                setFeatureProperties((prev) => ({
+                                  ...prev,
+                                  [field.name]: value === "" || value === undefined ? null : value,
+                                }));
+                              }}
+                              items={items}
+                            />
+                          );
+                        })()}
+                      {!isVocabulary && !isReadOnly && field.type === "date" && (
                         <TemporalPicker
                           kind="datetime"
                           label={field.name}
@@ -172,7 +200,7 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                           }}
                         />
                       )}
-                      {!isReadOnly && field.type === "boolean" && (
+                      {!isVocabulary && !isReadOnly && field.type === "boolean" && (
                         <Selector
                           label={field.name}
                           selectedItems={BOOLEAN_SELECT_ITEMS.find(
@@ -188,7 +216,10 @@ const MapPopoverEditor: React.FC<MapPopoverEditorProps> = ({
                           items={[...BOOLEAN_SELECT_ITEMS]}
                         />
                       )}
-                      {(field.type === "string" || field.type === "number" || (isReadOnly && (field.type === "date" || field.type === "boolean"))) && (
+                      {!isVocabulary &&
+                        (field.type === "string" ||
+                          field.type === "number" ||
+                          (isReadOnly && (field.type === "date" || field.type === "boolean"))) && (
                         <TextFieldInput
                           type={isReadOnly || field.type !== "number" ? "text" : "number"}
                           label={field.name}

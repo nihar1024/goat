@@ -62,6 +62,9 @@ const layerFieldType = z.object({
   kind: z.string().optional(),
   is_computed: z.boolean().optional(),
   is_locked: z.boolean().optional(),
+  allowed_values: z.array(z.union([z.string(), z.number()])).optional(),
+  allow_other: z.boolean().optional(),
+  default_value: z.union([z.string(), z.number(), z.boolean()]).nullish(),
   display_config: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -833,6 +836,10 @@ export const fieldDefinitionSchema = z.object({
   kind: fieldKindSchema,
   is_computed: z.boolean().default(false),
   display_config: z.record(z.string(), z.unknown()).default({}),
+  // A fixed vocabulary for the column: editors offer these instead of a free
+  // text box, and a write outside the list is refused unless allow_other.
+  allowed_values: z.array(z.union([z.string(), z.number()])).optional(),
+  allow_other: z.boolean().optional(),
   // Formula fields only: the SQL expression and its inferred result kind
   formula: z.string().optional(),
   output_kind: z.string().optional(),

@@ -35,7 +35,6 @@ from goatlib.bundles.topology import (
 )
 from goatlib.models.bundle import (
     CLASS_DEFAULT_MAXSPEED,
-    ROUTING_CLASSES,
     BundleTypeName,
     get_spec,
 )
@@ -55,6 +54,10 @@ from geoapi.routers.features_write import (
     get_write_authorized_metadata,
 )
 from geoapi.services import bundle_edit_service as writer
+from geoapi.services.computed_columns import (
+    apply_defaults,
+    validate_allowed_values,
+)
 from geoapi.services.layer_service import layer_service
 
 logger = logging.getLogger(__name__)
@@ -70,11 +73,6 @@ UserIdDep = Annotated[UUID, Depends(get_user_id)]
 # scaled per edit or the tolerance quietly tightens with latitude: 0.67 m at
 # Munich, 0.50 m at 60 degrees. See `_mercator_scale`.
 SNAP_TOLERANCE_M = 1.0
-
-# What a drawn edge is when nobody said. The artifact build already maps any
-# class it does not recognise to this, and it carries a drivable default speed,
-# so an edit never fails for want of a classification.
-DEFAULT_EDGE_CLASS = "unknown"
 
 # How far beyond the edit's own extent to look for snap candidates, in ground
 # metres. Overshooting costs a few extra rows; undershooting would hide a node
@@ -346,20 +344,27 @@ def _batch_bbox_3857(
     return (xmin - pad, ymin - pad, xmax + pad, ymax + pad)
 
 
-def _fill_class_defaults(properties: dict[str, Any]) -> dict[str, Any]:
-    """Give a drawn edge a class, and the speeds that class implies.
+def _fill_class_defaults(
+    properties: dict[str, Any], field_config: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Give a drawn edge the layer's defaults, and the speeds its class implies.
 
-    An unclassified edge defaults to ``unknown`` rather than failing the save:
-    classifying a street is a judgement the user can make later, and the routing
-    engine already has a meaning for it.
+    The plain defaults come from ``field_config`` through the same
+    ``apply_defaults`` the per-feature endpoints use — an unclassified edge gets
+    its ``class`` there, because classifying a street is a judgement the user
+    can make later and the engine has a meaning for "unknown".
 
-    Speeds matter more than they look. The artifact build coalesces a null speed
+    The speeds cannot come from there: they follow from whichever class ended up
+    on the edge, so they are derived rather than declared.
+
+    They matter more than they look. The artifact build coalesces a null speed
     to 0 and the engine treats maxspeed <= 0 as impassable, so an edge saved
     without them would be walkable but invisible to car routing.
     """
-    filled = dict(properties)
-    if not filled.get("class"):
-        filled["class"] = DEFAULT_EDGE_CLASS
+    # A blank is the same as an absent column here: the editor sends "" for a
+    # field the user cleared, and an edge still needs a class.
+    stated = {k: v for k, v in properties.items() if v not in (None, "")}
+    filled = {**properties, **apply_defaults(field_config, stated)}
     default = CLASS_DEFAULT_MAXSPEED.get(filled.get("class"))
     for column in ("speed_limit_kph_forward", "speed_limit_kph_backward"):
         if filled.get(column) is None and default is not None:
@@ -422,22 +427,6 @@ async def apply_bundle_edits(
     for edit in (*body.create, *body.update):
         _validate_line(edit.geometry)
 
-    # An absent class is filled in below; one the engine does not know is not,
-    # because the build would silently map it to a drivable road rather than
-    # report the mistake.
-    stated_classes = [e.properties.get("class") for e in body.create] + [
-        e.properties.get("class") for e in body.update
-    ]
-    for stated in stated_classes:
-        if stated and stated not in ROUTING_CLASSES:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"'{stated}' is not a street class the router knows. "
-                    f"Accepted: {', '.join(sorted(ROUTING_CLASSES))}."
-                ),
-            )
-
     nodes_member = await member_layer_of_role(bundle_id, "nodes")
     if nodes_member is None:
         raise HTTPException(
@@ -474,7 +463,15 @@ async def apply_bundle_edits(
     try:
         # The computed columns the layer declares; the writer refreshes them
         # after every geometry write, the way the per-feature endpoints do.
+        # The layer's own field_config, exactly as the per-feature endpoints
+        # read it: the role's vocabularies and defaults are written into it at
+        # import, so this is the same constraint the editor was offering.
+        # An absent value is filled from it below; one outside a vocabulary is
+        # refused, because the artifact build maps an unknown street class to a
+        # drivable road rather than reporting the mistake.
         field_config = await _load_field_config(layer_info)
+        for edit in (*body.create, *body.update):
+            validate_allowed_values(field_config, edit.properties)
         changes = await loop.run_in_executor(
             None, _apply, layer_info, nodes_info, body, field_config
         )
@@ -660,7 +657,9 @@ def _apply(
 
             for created in body.create:
                 segments, coordinates, projected = _plan(batch, created.geometry)
-                properties = _fill_class_defaults(created.properties)
+                properties = _fill_class_defaults(
+                    created.properties, batch.field_config
+                )
                 for segment in segments:
                     new_id = writer.mint_id()
                     writer.insert_edge(
@@ -694,7 +693,9 @@ def _apply(
                 # An update replaces the row's properties, so it needs the same
                 # defaults a create gets — otherwise saving an edge without
                 # restating its class would null it out.
-                properties = _fill_class_defaults(updated.properties)
+                properties = _fill_class_defaults(
+                    updated.properties, batch.field_config
+                )
                 # The edited row keeps the first piece, so the id the client
                 # knows survives; a vertex dragged onto a junction turns the
                 # rest into new edges.

@@ -23,13 +23,14 @@ import {
   setActiveFeature,
   setDrawFeatureId,
   setIsSaving,
-  setMode,
   stopEditing,
   undo,
   updatePendingGeometry,
 } from "@/lib/store/featureEditor/slice";
 import { setIsMapGetInfoActive, setMapCursor, setPopupInfo } from "@/lib/store/map/slice";
+import { defaultProperties } from "@/lib/utils/allowedValues";
 import { useDraw } from "@/lib/providers/DrawProvider";
+import useLayerFields from "@/hooks/map/CommonHooks";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import type { FeatureLayerPointProperties } from "@/lib/validations/layer";
 import { getMapboxStyleMarker } from "@/lib/transformers/layer";
@@ -58,6 +59,13 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   pendingFeaturesRef.current = pendingFeatures;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  // Compared against `mode` inside the sync effect, so entering draw mode is
+  // distinguishable from a re-run while already in it.
+  const previousModeRef = useRef(mode);
+  // Read inside the draw callbacks, which are registered once against the map.
+  const { layerFields } = useLayerFields(activeLayerId || "");
+  const layerFieldsRef = useRef(layerFields);
+  layerFieldsRef.current = layerFields;
 
   // Flag to skip mode sync after undo/redo (drawControl is already restored)
   const skipModeSyncRef = useRef(false);
@@ -172,6 +180,28 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   }, [geometryType]);
 
   // Sync draw mode with Redux state
+  // Put whatever is selected into MapboxDraw's editing mode for its geometry.
+  const selectForEditing = useCallback(
+    (drawId: string) => {
+      if (!drawControl?.get(drawId)) return;
+      try {
+        if (geometryType === "point") {
+          // Points drag in simple_select; direct_select is for vertices.
+          drawControl.changeMode(MapboxDraw.constants.modes.SIMPLE_SELECT, {
+            featureIds: [drawId],
+          });
+        } else {
+          drawControl.changeMode(MapboxDraw.constants.modes.DIRECT_SELECT, {
+            featureId: drawId,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [drawControl, geometryType]
+  );
+
   useEffect(() => {
     if (!drawControl || !activeLayerId) return;
 
@@ -185,69 +215,86 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     dispatch(setIsMapGetInfoActive(false));
     dispatch(setPopupInfo(undefined));
 
+    // A mode is sticky: it changes when the user changes it, not when a shape
+    // is finished. So the selection a mode change leaves behind is dealt with
+    // on *entering* draw mode — not on every run while drawing, which would
+    // tear down the shape that was only just created.
+    const enteringDraw = mode === "draw" && previousModeRef.current !== "draw";
+    previousModeRef.current = mode;
+
     const currentPending = pendingFeaturesRef.current;
     const activeFeature = activeFeatureId ? currentPending[activeFeatureId] : null;
-    if (mode === "draw") {
-      // Deselect active feature before entering draw mode
-      if (activeFeature?.drawFeatureId && activeFeatureId) {
-        // Sync geometry before removing
-        const drawFeat = drawControl.get(activeFeature.drawFeatureId);
-        if (drawFeat?.geometry) {
-          dispatch(updatePendingGeometry({ id: activeFeatureId, geometry: drawFeat.geometry }));
-        }
-        drawControl.delete(activeFeature.drawFeatureId);
 
-        if (activeFeature.committed) {
-          dispatch(setDrawFeatureId({ id: activeFeatureId, drawFeatureId: null }));
-          dispatch(setActiveFeature(null));
-        } else if (activeFeature.action === "update") {
-          // Auto-commit existing feature if changed
-          const geomChanged = JSON.stringify(activeFeature.geometry) !== JSON.stringify(activeFeature.originalGeometry);
-          const filterInternal = (props: Record<string, unknown>) => {
-            const f = { ...props }; delete f._fillColor; delete f._fillOpacity; return f;
-          };
-          const propsChanged = JSON.stringify(filterInternal(activeFeature.properties)) !== JSON.stringify(filterInternal(activeFeature.originalProperties || {}));
-          if (geomChanged || propsChanged) {
-            dispatch(commitFeature(activeFeatureId));
-          } else {
-            dispatch(removePendingFeature(activeFeatureId));
-          }
+    if (mode === "draw" && enteringDraw && activeFeature?.drawFeatureId && activeFeatureId) {
+      // Sync geometry before removing
+      const drawFeat = drawControl.get(activeFeature.drawFeatureId);
+      if (drawFeat?.geometry) {
+        dispatch(updatePendingGeometry({ id: activeFeatureId, geometry: drawFeat.geometry }));
+      }
+      drawControl.delete(activeFeature.drawFeatureId);
+
+      if (activeFeature.committed) {
+        dispatch(setDrawFeatureId({ id: activeFeatureId, drawFeatureId: null }));
+        dispatch(setActiveFeature(null));
+      } else if (activeFeature.action === "update") {
+        // Auto-commit existing feature if changed
+        const geomChanged = JSON.stringify(activeFeature.geometry) !== JSON.stringify(activeFeature.originalGeometry);
+        const filterInternal = (props: Record<string, unknown>) => {
+          const f = { ...props }; delete f._fillColor; delete f._fillOpacity; return f;
+        };
+        const propsChanged = JSON.stringify(filterInternal(activeFeature.properties)) !== JSON.stringify(filterInternal(activeFeature.originalProperties || {}));
+        if (geomChanged || propsChanged) {
+          dispatch(commitFeature(activeFeatureId));
         } else {
           dispatch(removePendingFeature(activeFeatureId));
         }
+      } else {
+        dispatch(removePendingFeature(activeFeatureId));
       }
-      // Only activate MapboxDraw for geospatial layers
+      // The dispatches above clear the selection, which re-runs this effect and
+      // arms drawing below.
+      return;
+    }
+
+    if (activeFeature?.drawFeatureId) {
+      // Something is selected — in draw mode that is the shape just finished,
+      // whose vertices stay adjustable while its attributes are filled in.
+      // Drawing is re-armed when it is committed and the selection clears.
+      selectForEditing(activeFeature.drawFeatureId);
+      dispatch(setMapCursor(undefined));
+      return;
+    }
+
+    if (mode === "draw") {
+      // Only geospatial layers have anything to draw.
       if (geometryType) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         drawControl.changeMode(getDrawMode() as any);
         dispatch(setMapCursor("crosshair"));
       }
-    } else if (activeFeature?.drawFeatureId) {
-      // Feature is being edited in MapboxDraw
-      const drawId = activeFeature.drawFeatureId;
-      if (drawControl.get(drawId)) {
-        try {
-          if (geometryType === "point") {
-            // Points use simple_select for dragging (direct_select is for vertex editing)
-            drawControl.changeMode(MapboxDraw.constants.modes.SIMPLE_SELECT, {
-              featureIds: [drawId],
-            });
-          } else {
-            drawControl.changeMode(MapboxDraw.constants.modes.DIRECT_SELECT, {
-              featureId: drawId,
-            });
-          }
-        } catch {
-          // ignore
-        }
-      }
-      dispatch(setMapCursor(undefined));
-    } else {
-      // Select mode — clean up any in-progress drawing and reset
-      drawControl?.deleteAll();
-      dispatch(setMapCursor(undefined));
+      return;
     }
-  }, [mode, activeLayerId, activeFeatureId, drawControl, dispatch, getDrawMode]);
+
+    // Select mode with nothing selected. Half-drawn shapes are discarded, but
+    // a finished one waiting to be committed is not: it is the user's work, and
+    // it only lives in MapboxDraw until it is saved.
+    const hasUncommittedGeometry = Object.values(currentPending).some(
+      (f) => !f.committed && f.drawFeatureId
+    );
+    if (!hasUncommittedGeometry) {
+      drawControl.deleteAll();
+    }
+    dispatch(setMapCursor(undefined));
+  }, [
+    mode,
+    activeLayerId,
+    activeFeatureId,
+    drawControl,
+    dispatch,
+    getDrawMode,
+    geometryType,
+    selectForEditing,
+  ]);
 
   // Handle draw.create event — capture drawn geometry as a pending feature
   const handleFeatureCreate = useCallback(
@@ -309,16 +356,14 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
             id: featureId,
             drawFeatureId: drawId,
             geometry: drawnFeature.geometry,
-            properties: {},
+            // Seeded from the layer's defaults so the user sees what will be
+            // stored, rather than an empty field that fills itself in on save.
+            properties: defaultProperties(layerFieldsRef.current),
             committed: false,
             action: "create",
           })
         );
       }
-
-      // Switch to select so "Done" → "draw" is an actual state change
-      dispatch(setMode("select"));
-      dispatch(setMapCursor(undefined));
 
     },
     [drawControl, dispatch, pushHistory, snapDrawnLine, showIndicator]
@@ -745,6 +790,26 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     },
     [mutateProjectLayers],
   );
+
+  // A table layer has no geometry to draw, so arming "draw" *is* adding the
+  // row — there is no later draw event to create the pending feature. A
+  // geospatial layer creates its own when the shape is finished, so this must
+  // not fire for one, or an empty feature would appear before anything is
+  // drawn.
+  const isTableLayer = !geometryType;
+  useEffect(() => {
+    if (mode !== "draw" || !activeLayerId || !isTableLayer || activeFeatureId) return;
+    dispatch(
+      addPendingFeature({
+        id: crypto.randomUUID(),
+        drawFeatureId: null,
+        geometry: null,
+        properties: defaultProperties(layerFieldsRef.current),
+        committed: false,
+        action: "create",
+      })
+    );
+  }, [mode, activeLayerId, activeFeatureId, isTableLayer, dispatch]);
 
   // --- Save handler ---
   const handleSave = useCallback(async () => {

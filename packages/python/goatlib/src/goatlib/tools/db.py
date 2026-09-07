@@ -19,7 +19,9 @@ import asyncpg
 from pydantic import BaseModel, Field, model_validator
 
 from goatlib.models.bundle import (
+    BundleArtifactBuildStatus,
     BundleStatus,
+    BundleTypeName,
 )
 from goatlib.tools.style import get_default_style
 
@@ -261,6 +263,41 @@ class ToolDatabaseService:
         )
         return row["name"] if row else None
 
+    async def create_bundle(
+        self: Self,
+        bundle_id: str,
+        user_id: str,
+        folder_id: str,
+        name: str,
+        bundle_type: "BundleTypeName | str",
+        status: "BundleStatus | str" = BundleStatus.processing,
+        description: str | None = None,
+        dataset_metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Create a bundle record in customer.bundle.
+
+        ``status`` is explicit rather than left to the column default: a bundle
+        that exists but has not been filled in is ``processing``, and a caller
+        that forgot to say so would publish an empty one as ready.
+        """
+        await self.pool.execute(
+            f"""
+            INSERT INTO {self.schema}.bundle (
+                id, user_id, folder_id, name, description,
+                bundle_type, status, dataset_metadata, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW(), NOW())
+            """,
+            uuid_module.UUID(bundle_id),
+            uuid_module.UUID(user_id),
+            uuid_module.UUID(folder_id),
+            name,
+            description,
+            getattr(bundle_type, "value", bundle_type),
+            getattr(status, "value", status),
+            json.dumps(dataset_metadata) if dataset_metadata else None,
+        )
+        logger.info(f"Created bundle {bundle_id} ({bundle_type})")
+
     async def delete_bundle(self: Self, bundle_id: str) -> None:
         """Remove a bundle row. Its artifact rows go with it (FK cascade).
 
@@ -275,7 +312,7 @@ class ToolDatabaseService:
         )
         logger.info(f"Deleted bundle {bundle_id}")
 
-    async def update_package_status(
+    async def update_bundle_status(
         self: Self,
         bundle_id: str,
         status: "BundleStatus | str",
@@ -293,7 +330,7 @@ class ToolDatabaseService:
         )
         logger.info(f"Bundle {bundle_id} status -> {status_value}")
 
-    async def update_package_metadata(
+    async def update_bundle_metadata(
         self: Self,
         bundle_id: str,
         metadata: dict,
@@ -339,7 +376,7 @@ class ToolDatabaseService:
         self: Self,
         bundle_id: str,
         kind: str,
-        build_status: str = "building",
+        build_status: BundleArtifactBuildStatus = BundleArtifactBuildStatus.building,
         job_id: str | None = None,
     ) -> str:
         """Create or reclaim the bundle_artifact row for (bundle_id, kind).
@@ -354,7 +391,7 @@ class ToolDatabaseService:
         than taking it offline the moment a rebuild starts.
         Returns the row id."""
         kind_value = getattr(kind, "value", kind)
-        status_value = getattr(build_status, "value", build_status)
+        status_value = build_status.value
         row = await self.pool.fetchrow(
             f"""
             INSERT INTO {self.schema}.bundle_artifact (
@@ -379,7 +416,7 @@ class ToolDatabaseService:
         return str(row["id"])
 
     async def set_artifact_build_status(
-        self: Self, artifact_id: str, status: str
+        self: Self, artifact_id: str, status: BundleArtifactBuildStatus
     ) -> None:
         """Record what an artifact's build attempt did.
 
@@ -388,7 +425,7 @@ class ToolDatabaseService:
         that won. A failed or superseded attempt must not touch them, or it
         would take the previous good artifact with it.
         """
-        status_value = getattr(status, "value", status)
+        status_value = status.value
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.bundle_artifact
@@ -410,10 +447,11 @@ class ToolDatabaseService:
         await self.pool.execute(
             f"""
             UPDATE {self.schema}.bundle_artifact
-            SET build_status = 'failed', updated_at = NOW()
+            SET build_status = $2, updated_at = NOW()
             WHERE bundle_id = $1
             """,
             uuid_module.UUID(bundle_id),
+            BundleArtifactBuildStatus.failed.value,
         )
 
     async def set_layer_field_config(
@@ -524,7 +562,7 @@ class ToolDatabaseService:
                 WHERE id = $1
             ), current AS (
                 UPDATE {self.schema}.bundle_artifact a
-                SET build_status = 'complete',
+                SET build_status = $6,
                     storage_path = $3,
                     size = $4,
                     revision = $5,
@@ -543,6 +581,7 @@ class ToolDatabaseService:
             storage_path,
             size,
             built_revision,
+            BundleArtifactBuildStatus.complete.value,
         )
         if row is None or not row["published"]:
             return False, None
@@ -560,7 +599,7 @@ class ToolDatabaseService:
         )
         return [dict(r) for r in rows]
 
-    async def add_layer_to_package(
+    async def add_layer_to_bundle(
         self: Self,
         bundle_id: str,
         layer_id: str,

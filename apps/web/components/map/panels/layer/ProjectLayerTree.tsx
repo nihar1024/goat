@@ -39,7 +39,7 @@ import { MAX_EDITABLE_LAYER_SIZE } from "@/lib/constants";
 import useStartEditingGuard from "@/hooks/map/useStartEditingGuard";
 import { useBundleMemberGates } from "@/hooks/map/useBundleMemberGates";
 import { emitInteractionEvent } from "@/lib/store/interaction/slice";
-import { setSelectedLayers } from "@/lib/store/layer/slice";
+import { setSelectedBundle, setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel, setDataPanelLayerId, setIsDataPanelOpen } from "@/lib/store/map/slice";
 import { rgbToHex } from "@/lib/utils/helpers";
 import { isBundleMemberLayer, isEditableBundleMember } from "@/lib/utils/bundleEditable";
@@ -732,7 +732,14 @@ export const ProjectLayerTree = ({
       const clickedItem = items.find((i) => i.id === compositeIds[0]);
       if (clickedItem?.data?.type === "group") {
         dispatch(emitInteractionEvent({ type: "group_activated", sourceId: realIds[0] }));
-        // Groups should not be selected or open panels — only emit the interaction event
+        // A bundle-backed group stands for the bundle itself, which has its own
+        // metadata and can be filtered as a whole — so it opens a panel where a
+        // plain group has nothing to show.
+        const bundleId = clickedItem.data.bundle_id;
+        if (isEditMode && bundleId) {
+          dispatch(setSelectedBundle(bundleId));
+          dispatch(setActiveRightPanel(MapSidebarItemID.PROPERTIES));
+        }
         return;
       }
     }
@@ -772,6 +779,7 @@ export const ProjectLayerTree = ({
         }
       }
     } else {
+      dispatch(setSelectedBundle(null));
       dispatch(setActiveRightPanel(undefined));
     }
   };
@@ -1129,7 +1137,11 @@ export const ProjectLayerTree = ({
             />
           ),
           isVisible: nodeVisibility,
-          isSelectable: false,
+          // A plain group is only a container, so selecting it would open a
+          // panel with nothing in it. A bundle-backed group stands for the
+          // bundle, which has metadata of its own and can be filtered as a
+          // whole.
+          isSelectable: !!item.isBundleGroup,
           labelInfo: legendCaption,
         };
       }

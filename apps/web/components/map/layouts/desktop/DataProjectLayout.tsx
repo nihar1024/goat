@@ -42,6 +42,7 @@ import { Zoom } from "@/components/map/controls/Zoom";
 import { MeasureButton, MeasureResultsPanel } from "@/components/map/controls/measure";
 import SearchControl from "@/components/map/controls/search/SearchControl";
 import { useEditorSearchLayers } from "@/components/map/controls/search/editorSearchLayers";
+import BundleSettingsPanel from "@/components/map/panels/bundle/BundleSettingsPanel";
 import LayerSettingsPanel from "@/components/map/panels/layer/LayerSettingsPanel";
 import { MapFixedPopupSlot } from "@/components/map/popover/MapFixedPopupSlot";
 import { ProjectLayerTree } from "@/components/map/panels/layer/ProjectLayerTree";
@@ -102,6 +103,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
 
   const activeRight = useAppSelector((state) => state.map.activeRightPanel);
   const featureEditorActive = useAppSelector((state) => state.featureEditor.activeLayerId);
+  const selectedBundleId = useAppSelector((state) => state.layers.selectedBundleId);
   const featureEditorActiveFeature = useAppSelector((state) => state.featureEditor.activeFeatureId);
   // Only when there is a feature to edit. Draw mode alone is not enough: with no
   // active feature every field renders empty, typing is a no-op and Done is
@@ -248,6 +250,10 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
     // Check for ANY layer configuration panel ID
     const layerSettingsIds = [MapSidebarItemID.PROPERTIES, MapSidebarItemID.FILTER, MapSidebarItemID.STYLE];
 
+    // A bundle is selected instead of a layer: same panel slot, its own panel.
+    if (activeRight && layerSettingsIds.includes(activeRight) && selectedBundleId) {
+      return <BundleSettingsPanel projectId={projectId} />;
+    }
     if (activeRight && layerSettingsIds.includes(activeRight)) {
       // Return the new panel component
       return <LayerSettingsPanel projectId={projectId} projectLayers={projectLayers || []} />;
@@ -255,7 +261,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
 
     // B. STANDARD TOOLS
     return rightSidebar.topItems?.find((item) => item.id === activeRight)?.component;
-  }, [activeRight, rightSidebar.topItems, projectId, projectLayers]);
+  }, [activeRight, rightSidebar.topItems, projectId, projectLayers, selectedBundleId]);
 
   // --- INTERACTION LOGIC ---
 
@@ -276,11 +282,18 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
       projectLayers.some((layer) => layer.id === selectedId)
     );
 
-    if (layerSettingsIds.includes(activeRight as MapSidebarItemID) && (!hasSelectedLayers || !hasValidSelectedLayer)) {
+    // A bundle occupies the same panel slot but is selected as a group, so it
+    // has no entry in selectedLayerIds — without this it would be treated as
+    // "nothing selected" and the panel closed the instant it opened.
+    if (
+      layerSettingsIds.includes(activeRight as MapSidebarItemID) &&
+      !selectedBundleId &&
+      (!hasSelectedLayers || !hasValidSelectedLayer)
+    ) {
       dispatch(setSelectedLayers([]));
       dispatch(setActiveRightPanel(undefined));
     }
-  }, [activeRight, selectedLayerIds, projectLayers, dispatch]);
+  }, [activeRight, selectedLayerIds, projectLayers, selectedBundleId, dispatch]);
 
   // Width occupied by the right-side stack (measure results, feature
   // editor panel, active right component). Used to size the fixed-popup

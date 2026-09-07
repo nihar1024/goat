@@ -6,18 +6,15 @@ import { toast } from "react-toastify";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import { rebuildBundleArtifact } from "@/lib/api/bundleEdits";
-import { setRunningJobIds } from "@/lib/store/jobs/slice";
-
-import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
-
 import { useDateFnsLocale } from "@/i18n/utils";
 
+import { rebuildBundleArtifact } from "@/lib/api/bundleEdits";
 import type { BundleDependency, BundleRead } from "@/lib/api/bundles";
+import { METADATA_HEADER_ICONS } from "@/lib/constants/metadataIcons";
+import { setRunningJobIds } from "@/lib/store/jobs/slice";
 
 import { useGetMetadataValueTranslation } from "@/hooks/map/DatasetHooks";
-
-import { METADATA_HEADER_ICONS } from "@/lib/constants/metadataIcons";
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 const ContainerWrapper = styled("div")({
   containerType: "inline-size",
@@ -67,9 +64,17 @@ type MetadataField =
 interface BundleSummaryProps {
   bundle: BundleRead;
   dependencies?: BundleDependency[];
+  /** Drop the long provenance list and keep only the aggregated fields,
+   *  status and artifact state — what fits a bundle's metadata tab in the
+   *  map, where vertical space is scarce. */
+  hideMetadataSection?: boolean;
 }
 
-const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) => {
+const BundleSummary: React.FC<BundleSummaryProps> = ({
+  bundle,
+  dependencies,
+  hideMetadataSection = false,
+}) => {
   const theme = useTheme();
   const [isRebuilding, setIsRebuilding] = useState(false);
   const dispatch = useAppDispatch();
@@ -147,66 +152,67 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
   return (
     <ContainerWrapper>
       <LayoutContainer>
-        <MetadataSection>
-          <Stack spacing={4} sx={{ width: "100%" }}>
-            {metadataFields.map(({ field, heading, type }) => {
-              // Description is the bundle's own column; the rest live in the
-              // provenance document.
-              const value =
-                field === "description" ? bundle.description : bundle.dataset_metadata?.[field];
-              return (
-                <Stack key={field} spacing={1}>
-                  <Typography variant="caption">{heading}</Typography>
-                  <Divider />
-                  {!value && (
-                    <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                      {t(`metadata.no_metadata_available.${field}`)}
-                    </Typography>
-                  )}
-                  {!!value && type === "email" && (
-                    <Link href={`mailto:${value}`} target="_blank" rel="noopener noreferrer">
-                      {String(value)}
-                    </Link>
-                  )}
-                  {!!value && type === "url" && (
-                    <Link href={String(value)} target="_blank" rel="noopener noreferrer">
-                      {String(value)}
-                    </Link>
-                  )}
-                  {!!value && type === "text" && <Typography variant="body2">{String(value)}</Typography>}
-                </Stack>
-              );
-            })}
-
-            {!!dependencies?.length && (
-              <Stack spacing={1}>
-                <Typography variant="caption">{t("bundle_dependencies")}</Typography>
-                <Divider />
-                {dependencies.map((dependency) => (
-                  <Stack
-                    key={`${dependency.dependency_kind}-${dependency.depends_on_bundle_id}`}
-                    direction="row"
-                    spacing={2}
-                    alignItems="center">
-                    <Icon
-                      iconName={ICON_NAME.LINK}
-                      style={{ fontSize: 14 }}
-                      htmlColor={theme.palette.text.secondary}
-                    />
-                    <Link href={`/bundles/${dependency.depends_on_bundle_id}`} variant="body2">
-                      {dependency.depends_on_name}
-                    </Link>
-                    <Typography variant="caption" color="text.secondary">
-                      {i18n.exists(`common:${dependency.depends_on_type}`)
-                        ? t(dependency.depends_on_type)
-                        : dependency.depends_on_type}
-                    </Typography>
+        {!hideMetadataSection && (
+          <MetadataSection>
+            <Stack spacing={4} sx={{ width: "100%" }}>
+              {metadataFields.map(({ field, heading, type }) => {
+                // Description is the bundle's own column; the rest live in the
+                // provenance document.
+                const value = field === "description" ? bundle.description : bundle.dataset_metadata?.[field];
+                return (
+                  <Stack key={field} spacing={1}>
+                    <Typography variant="caption">{heading}</Typography>
+                    <Divider />
+                    {!value && (
+                      <Typography variant="body2" sx={{ fontStyle: "italic" }}>
+                        {t(`metadata.no_metadata_available.${field}`)}
+                      </Typography>
+                    )}
+                    {!!value && type === "email" && (
+                      <Link href={`mailto:${value}`} target="_blank" rel="noopener noreferrer">
+                        {String(value)}
+                      </Link>
+                    )}
+                    {!!value && type === "url" && (
+                      <Link href={String(value)} target="_blank" rel="noopener noreferrer">
+                        {String(value)}
+                      </Link>
+                    )}
+                    {!!value && type === "text" && <Typography variant="body2">{String(value)}</Typography>}
                   </Stack>
-                ))}
-              </Stack>
-            )}
-          </Stack>
-        </MetadataSection>
+                );
+              })}
+
+              {!!dependencies?.length && (
+                <Stack spacing={1}>
+                  <Typography variant="caption">{t("bundle_dependencies")}</Typography>
+                  <Divider />
+                  {dependencies.map((dependency) => (
+                    <Stack
+                      key={`${dependency.dependency_kind}-${dependency.depends_on_bundle_id}`}
+                      direction="row"
+                      spacing={2}
+                      alignItems="center">
+                      <Icon
+                        iconName={ICON_NAME.LINK}
+                        style={{ fontSize: 14 }}
+                        htmlColor={theme.palette.text.secondary}
+                      />
+                      <Link href={`/bundles/${dependency.depends_on_bundle_id}`} variant="body2">
+                        {dependency.depends_on_name}
+                      </Link>
+                      <Typography variant="caption" color="text.secondary">
+                        {i18n.exists(`common:${dependency.depends_on_type}`)
+                          ? t(dependency.depends_on_type)
+                          : dependency.depends_on_type}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </MetadataSection>
+        )}
 
         <MainContentSection>
           <Stack spacing={2}>
@@ -226,9 +232,7 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({ bundle, dependencies }) =
                   <Typography variant="body2" fontWeight="bold" noWrap>
                     {getMetadataValueTranslation(
                       key,
-                      key === "type"
-                        ? bundle.bundle_type
-                        : (bundle.dataset_metadata?.[key] ?? "")
+                      key === "type" ? bundle.bundle_type : (bundle.dataset_metadata?.[key] ?? "")
                     )}
                   </Typography>
                 </div>

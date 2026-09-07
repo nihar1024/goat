@@ -23,7 +23,11 @@ from goatlib.bundles.artifacts import (
     store_artifact,
 )
 from goatlib.bundles.artifacts.storage import build_token, delete_artifact_file
-from goatlib.models.bundle import BundleTypeName, get_spec
+from goatlib.models.bundle import (
+    BundleArtifactBuildStatus,
+    BundleTypeName,
+    get_spec,
+)
 from goatlib.tools.db import ToolDatabaseService
 
 logger = logging.getLogger(__name__)
@@ -142,7 +146,9 @@ class BundleArtifactBuildMixin:
             for art in built:
                 kind_value = getattr(art.kind, "value", art.kind)
                 artifact_id = await db.create_artifact(
-                    bundle_id=bundle_id, kind=kind_value, build_status="building"
+                    bundle_id=bundle_id,
+                    kind=kind_value,
+                    build_status=BundleArtifactBuildStatus.building,
                 )
                 storage_path = None
                 try:
@@ -174,7 +180,8 @@ class BundleArtifactBuildMixin:
                         # since nothing points at it.
                         published = False
                         await db.set_artifact_build_status(
-                            artifact_id=artifact_id, status="failed"
+                            artifact_id=artifact_id,
+                            status=BundleArtifactBuildStatus.failed,
                         )
                         delete_artifact_file(
                             self.settings.bundles_data_dir, storage_path
@@ -198,7 +205,8 @@ class BundleArtifactBuildMixin:
                     )
                 except Exception:
                     await db.set_artifact_build_status(
-                        artifact_id=artifact_id, status="failed"
+                        artifact_id=artifact_id,
+                        status=BundleArtifactBuildStatus.failed,
                     )
                     if storage_path:
                         delete_artifact_file(

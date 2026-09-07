@@ -71,13 +71,13 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
 
     Subclasses ``BaseToolRunner`` to reuse its ingest primitives
     (``_ingest_to_ducklake`` etc.), but drives them directly from
-    ``ingest_into_package`` — the single-output ``run()``/``process()``
+    ``ingest_into_bundle`` — the single-output ``run()``/``process()``
     lifecycle is not used.
     """
 
     def process(self, params: Any, temp_dir: Path) -> "tuple[Path, DatasetMetadata]":
         raise NotImplementedError(
-            "BundleImportRunner uses ingest_into_package(), not the "
+            "BundleImportRunner uses ingest_into_bundle(), not the "
             "single-output run()/process() lifecycle."
         )
 
@@ -258,7 +258,7 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                     )
                     if field_config:
                         await db.set_layer_field_config(layer_id, field_config)
-                    await db.add_layer_to_package(
+                    await db.add_layer_to_bundle(
                         bundle_id=bundle_id, layer_id=layer_id, role=extracted.role
                     )
 
@@ -327,7 +327,7 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
             len(imported),
         )
 
-    async def ingest_into_package(
+    async def ingest_into_bundle(
         self,
         *,
         bundle_id: str,
@@ -363,7 +363,7 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                     folder_id=folder_id,
                     bundle_id=bundle_id,
                 )
-                await db.update_package_metadata(
+                await db.update_bundle_metadata(
                     bundle_id=bundle_id,
                     metadata=get_importer(bundle_type)
                     .extract_metadata(source_path)
@@ -391,7 +391,7 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                 delete_bundle_artifacts(self.settings.bundles_data_dir, str(bundle_id))
                 await db.delete_bundle(bundle_id)
                 raise
-            await db.update_package_status(
+            await db.update_bundle_status(
                 bundle_id=bundle_id, status=BundleStatus.ready
             )
             # Add to the originating project (best-effort: the bundle is a valid,

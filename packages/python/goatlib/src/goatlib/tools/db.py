@@ -517,6 +517,25 @@ class ToolDatabaseService:
             raise ValueError(f"Bundle {bundle_id} not found")
         return dict(row)
 
+    async def get_bundle_dependency(
+        self: Self, bundle_id: str, kind: str
+    ) -> "str | None":
+        """The bundle this one depends on for ``kind``, or None if unlinked.
+
+        A GTFS bundle's linkage is computed against the street network it names
+        here, so the build has to resolve the link before it can start.
+        """
+        row = await self.pool.fetchrow(
+            f"""
+            SELECT depends_on_bundle_id
+            FROM {self.schema}.bundle_dependency
+            WHERE bundle_id = $1 AND dependency_kind = $2
+            """,
+            uuid_module.UUID(bundle_id),
+            kind,
+        )
+        return str(row["depends_on_bundle_id"]) if row else None
+
     async def get_bundle_revision(self: Self, bundle_id: str) -> int:
         """Current layers_revision of a bundle."""
         row = await self.pool.fetchrow(

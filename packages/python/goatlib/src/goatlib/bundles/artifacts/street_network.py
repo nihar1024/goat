@@ -187,7 +187,7 @@ def fetch_routing_network(
         # The state separates "not ready yet" from "was ready until someone
         # edited it", which are different things to tell a user. None means no
         # build has been attempted.
-        refusal = {
+        refusal: Dict[BundleArtifactState | None, str] = {
             BundleArtifactState.outdated: (
                 "This street network is being updated after an edit. Try again "
                 "once the update finishes."

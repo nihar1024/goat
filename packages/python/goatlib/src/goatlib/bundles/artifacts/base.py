@@ -8,9 +8,9 @@ runner stores them (S3 + ``bundle_artifact`` rows). Builders never touch the DB.
 """
 
 from abc import ABC
-from typing import Dict, List, Protocol, Tuple
+from typing import Any, Dict, List, Protocol, Tuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from goatlib.models.bundle import (
     BundleArtifactKind,
@@ -40,11 +40,30 @@ class ArtifactBuilderUnavailableError(Exception):
 
 
 class BuiltArtifact(BaseModel):
-    """A produced artifact file, ready to be stored by the runner."""
+    """The outcome for one artifact kind: a file to store, or why there is none.
+
+    A builder that produces several kinds reports each separately, so one of
+    them failing does not discard the others. A GTFS bundle's timetable comes
+    from the feed and its linkage additionally needs a street network — the
+    timetable is still worth keeping when only the second input is missing.
+    """
 
     kind: BundleArtifactKind
-    local_path: str
-    size: int
+    local_path: str | None = None
+    size: int = 0
+    #: Why this kind was not produced, in words a user can act on. Recorded
+    #: against the artifact so the bundle reports it as failed rather than as
+    #: never attempted.
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _built_or_failed(self) -> "BuiltArtifact":
+        if bool(self.local_path) == bool(self.error):
+            raise ValueError(
+                "a BuiltArtifact carries either a local_path or an error, "
+                "never both and never neither"
+            )
+        return self
 
 
 class ArtifactBuilder(ABC):
@@ -67,8 +86,26 @@ class ArtifactBuilder(ABC):
         """
         return get_spec(self.bundle_type).artifacts_build_from_layers
 
-    def build(self, *, source_path: str, workdir: str) -> List[BuiltArtifact]:
+    def build(
+        self,
+        *,
+        source_path: str,
+        workdir: str,
+        dependencies: Dict[str, Any] | None = None,
+        options: Dict[str, Any] | None = None,
+    ) -> List[BuiltArtifact]:
         """Build the artifacts from ``source_path`` into ``workdir``.
+
+        ``dependencies`` carries what the bundle's *other* bundles contribute,
+        keyed by dependency kind as the spec names it — a GTFS bundle's
+        ``street_network`` entry holds the edge and node paths its linkage is
+        computed against. Resolved by the caller, which owns the database and
+        the artifact store; absent when a dependency is unlinked or its own
+        artifact is not usable.
+
+        ``options`` is per-build tuning a caller may pass through (which
+        access/egress modes to compute, say). A builder ignores what it does
+        not recognise.
 
         Raises ``ArtifactBuilderUnavailableError`` if the toolchain is missing.
         """

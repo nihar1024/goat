@@ -676,7 +676,8 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             field_order=29,
             label_key="street_network_bundle_id",
             widget="bundle-selector",
-            # PT legs route on the global network, so this is for street modes.
+            # A PT run takes its timetable from pt_network_bundle_id instead,
+            # so this selector is for street modes.
             visible_when={
                 "$and": [
                     {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},

@@ -99,7 +99,6 @@ DEFAULT_SURFACE_IMPEDANCE = 0.0
 class StreetNetworkArtifactBuilder(ArtifactBuilder):
     bundle_type = BundleTypeName.street_network
     produces = (BundleArtifactKind.street_network_graph,)
-    builds_from_layers = True
 
     def build_from_layers(
         self, *, layer_paths: Dict[str, str], workdir: str

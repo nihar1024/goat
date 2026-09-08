@@ -227,6 +227,11 @@ class BundleTypeSpec(BaseModel):
     description: str
     roles: Tuple[RoleSpec, ...]
     artifacts: Tuple[BundleArtifactKind, ...] = ()
+    # Whether the artifacts are built from the member layers rather than from
+    # the uploaded source. Declared here rather than on the builder so a
+    # consumer can ask without importing one — the API answers it per bundle,
+    # and a builder brings the routing and DuckDB stack with it.
+    artifacts_build_from_layers: bool = False
     dependencies: Tuple[DependencySpec, ...] = ()
 
     def role(self, key: str) -> Optional[RoleSpec]:
@@ -261,6 +266,7 @@ class BundleTypeSpec(BaseModel):
                 for r in self.roles
             ],
             "artifacts": [k.value for k in self.artifacts],
+            "artifacts_build_from_layers": self.artifacts_build_from_layers,
             "dependencies": [
                 {
                     "kind": d.kind,
@@ -334,6 +340,7 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
             ),
         ),
         artifacts=(BundleArtifactKind.street_network_graph,),
+        artifacts_build_from_layers=True,
     ),
     BundleTypeName.pt_network_gtfs: BundleTypeSpec(
         type=BundleTypeName.pt_network_gtfs,
@@ -375,3 +382,18 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
 def get_spec(type_: "BundleTypeName | str") -> BundleTypeSpec:
     """Return the spec for a type name (raises KeyError/ValueError if unknown)."""
     return SPECS[BundleTypeName(type_)]
+
+
+def artifacts_from_layers(type_: "BundleTypeName | str") -> bool:
+    """Whether this type's artifacts can be produced from its member layers.
+
+    What both a filtered copy and an in-place rebuild need: a GTFS bundle's
+    timetable is built from the uploaded feed, which is not kept, so neither
+    operation has anything to build from. A type that derives no artifacts at
+    all trivially qualifies — there is nothing to produce.
+
+    One definition, shared by the tools that refuse the job and the API that
+    tells the client not to offer it.
+    """
+    spec = get_spec(type_)
+    return not spec.artifacts or spec.artifacts_build_from_layers

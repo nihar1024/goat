@@ -1,16 +1,16 @@
+import logging
 from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
-from goatlib.models.bundle import (
-    BundleArtifactBuildStatus,
-    BundleArtifactState,
-)
-from pydantic import BaseModel, Field
+from goatlib.models.bundle import BundleArtifactState
+from pydantic import BaseModel, Field, field_validator
 
 from core.db.models.bundle_type import BundleTypeName
 from core.schemas.layer import ThumbnailUrlMixin
 from core.schemas.metadata import DatasetProvenance
+
+logger = logging.getLogger(__name__)
 
 
 class BundleBase(BaseModel):
@@ -89,7 +89,11 @@ class BundleArtifactSummary(BaseModel):
     # route on it.
     state: BundleArtifactState
     # What the last build attempt did — the raw fact `state` is derived from.
-    build_status: BundleArtifactBuildStatus
+    # Reported as written, not as an enum: the column is text, and
+    # `artifact_state` deliberately treats a value this release does not know
+    # as unroutable rather than an error. Validating it here would undo that
+    # and fail the whole read instead.
+    build_status: str
     # The bundle's layers_revision this artifact was built from, so a client can
     # tell how far behind it is. Null for an artifact that never built.
     revision: int | None = None
@@ -98,6 +102,17 @@ class BundleArtifactSummary(BaseModel):
 
 
 class BundleRead(BundleBase, ThumbnailUrlMixin):
+    # Unbounded, unlike the create/update schemas: the columns are `text`, so a
+    # row longer than the input bound can exist, and refusing to serialise it
+    # would fail every bundle in the listing rather than just its own. See
+    # tests/unit/test_read_models_accept_stored_data.py.
+    name: str = Field(..., description="Bundle name")
+    description: str | None = Field(None, description="Bundle description")
+    # The stored value, not the enum — as `BundleByLayerResponse` already
+    # reports it. `customer.bundle_type` is the FK authority and is migrated
+    # ahead of the code that ships the matching member, so validating it here
+    # would take every bundle listing down for the length of a rolling deploy.
+    bundle_type: str = Field(..., description="Bundle type")
     id: UUID = Field(..., description="Bundle ID")
     user_id: UUID = Field(..., description="Bundle owner ID")
     folder_id: UUID = Field(..., description="Folder the bundle lives in")
@@ -108,11 +123,48 @@ class BundleRead(BundleBase, ThumbnailUrlMixin):
     thumbnail_url: Optional[str] = Field(
         None, description="Thumbnail URL", validate_default=True
     )
-    dataset_metadata: DatasetProvenance | None = Field(
-        None, description="Dataset-level provenance"
+    # The stored document as it is, not `DatasetProvenance`. That model is the
+    # *input* contract — `max_length`, `EmailStr`, an ISO-country rule — and
+    # the column has no equivalent, so validating a read against it lets one
+    # row fail every bundle in the listing. `BundleUpdate` still validates
+    # everything authored through the API; shape is documented there.
+    dataset_metadata: Dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Dataset-level provenance as stored: the DatasetProvenance fields "
+            "the importer and the owner have filled in, sparsely"
+        ),
     )
+
+    @field_validator("dataset_metadata", mode="before")
+    @classmethod
+    def _drop_non_document_provenance(cls, value: Any) -> Any:
+        """Report a stored value that is not a document as no provenance.
+
+        The one shape the field cannot carry. Values inside it are passed
+        through untouched — a listing builds one DTO per bundle, so anything
+        stricter would let a single malformed row fail every bundle the caller
+        asked for. A bundle whose provenance reads oddly is recoverable; a
+        listing that 500s is not.
+        """
+        if value is not None and not isinstance(value, dict):
+            if isinstance(value, DatasetProvenance):
+                return value.model_dump()
+            logger.warning("Ignoring non-document dataset_metadata: %r", value)
+            return None
+        return value
+
     owned_by: Dict[str, Any] | None = Field(
         None, description="Owner info ({id, firstname, lastname, avatar}) for tiles"
+    )
+    artifacts_from_layers: bool = Field(
+        False,
+        description=(
+            "Whether the artifacts are built from the member layers rather "
+            "than from the uploaded source. Gates the operations that need to "
+            "produce artifacts from layers — a filtered copy, an in-place "
+            "rebuild — which a GTFS bundle cannot do: its feed is not kept"
+        ),
     )
     artifacts: list["BundleArtifactSummary"] = Field(
         default_factory=list,

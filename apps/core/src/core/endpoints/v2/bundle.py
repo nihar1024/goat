@@ -11,7 +11,9 @@ from goatlib.bundles.importers import get_importer, infer_bundle_type
 from goatlib.models.bundle import (
     BundleArtifactBuildStatus,
     BundleStatus,
+    BundleTypeName,
     artifact_state,
+    artifacts_from_layers,
     get_spec,
 )
 from pydantic import UUID4
@@ -293,6 +295,19 @@ async def _artifacts_by_bundle(
     return grouped
 
 
+def _from_layers(bundle_type: str) -> bool:
+    """Whether a type's artifacts are built from its member layers.
+
+    What makes both a filtered copy and an in-place rebuild possible: a type
+    built from the uploaded source has nothing to build from once the import's
+    temporary download is gone. Unknown types answer False — a read must not
+    fail on a type the database holds and this release does not know.
+    """
+    if bundle_type not in {t.value for t in BundleTypeName}:
+        return False
+    return artifacts_from_layers(bundle_type)
+
+
 def _bundle_read(
     bundle: Bundle,
     *,
@@ -310,6 +325,7 @@ def _bundle_read(
     return BundleRead(
         **bundle.model_dump(),
         owned_by=owned_by,
+        artifacts_from_layers=_from_layers(bundle.bundle_type),
         artifacts=[
             BundleArtifactSummary(
                 # Loaded values may be the enum or the raw string, depending on

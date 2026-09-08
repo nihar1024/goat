@@ -26,6 +26,11 @@ export interface BundleRead {
   status: string;
   /** The bundle's derived artifacts and their build state. */
   artifacts?: BundleArtifact[];
+  /** Whether the artifacts are built from the member layers. Gates filtering
+   *  and rebuilding, both of which have to produce artifacts from layers —
+   *  false for GTFS, whose feed is not kept. Resolved from the bundle type's
+   *  spec server-side, so it flips on its own when a type gains support. */
+  artifacts_from_layers?: boolean;
   description?: string | null;
   thumbnail_url?: string;
   created_at?: string;

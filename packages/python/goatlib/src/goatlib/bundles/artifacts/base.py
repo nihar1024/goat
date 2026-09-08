@@ -16,6 +16,7 @@ from goatlib.models.bundle import (
     BundleArtifactKind,
     BundleArtifactState,
     BundleTypeName,
+    get_spec,
 )
 
 
@@ -53,11 +54,18 @@ class ArtifactBuilder(ABC):
     # The artifact kinds this builder currently produces (may be a subset of the
     # type spec's declared artifacts while others are still unimplemented).
     produces: tuple[BundleArtifactKind, ...] = ()
-    # True when the build reads the bundle's member layers instead of the
-    # uploaded source. Layers are the source of truth for types whose members can
-    # be edited, so their artifact must be rebuildable from the edited layer
-    # rather than from the original upload.
-    builds_from_layers: bool = False
+
+    @property
+    def builds_from_layers(self) -> bool:
+        """True when the build reads the bundle's member layers instead of the
+        uploaded source.
+
+        Read from the type spec rather than declared per builder: the API has to
+        answer the same question (to know whether a filtered copy is possible)
+        and cannot import a builder to ask — one of them pulls in DuckDB and the
+        routing extension.
+        """
+        return get_spec(self.bundle_type).artifacts_build_from_layers
 
     def build(self, *, source_path: str, workdir: str) -> List[BuiltArtifact]:
         """Build the artifacts from ``source_path`` into ``workdir``.

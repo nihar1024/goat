@@ -80,7 +80,10 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
     )
     dataset_metadata: Dict[str, Any] | None = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        # none_as_null: without it None is stored as JSON null rather than SQL
+        # NULL, and a JSON null is not an object — the importers' provenance
+        # merge then concatenates onto a non-object and yields an array.
+        sa_column=Column(JSONB(none_as_null=True), nullable=True),
         description=(
             "Dataset-level provenance: what the source states about itself "
             "(importers write it) plus what the owner authors"

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from goatlib.models.bundle import (
-    BundleArtifactKind,
     BundleArtifactBuildStatus,
+    BundleArtifactKind,
 )
 from pydantic import field_serializer
 from sqlalchemy import BigInteger, ForeignKey, Integer, Text

@@ -6,7 +6,8 @@
  * *group* in the tree and so cannot be addressed by `selectedLayerIds`.
  *
  * Two tabs, not three: a bundle has no style of its own, since its member
- * layers are styled individually.
+ * layers are styled individually. And one tab where the type cannot be
+ * filtered — see `canFilter`.
  */
 import { Box, Stack, Tab, Tabs, Typography } from "@mui/material";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -48,12 +49,21 @@ const BundleSettingsPanel = ({ projectId }: { projectId: string }) => {
     [members]
   );
 
+  // Not every type can be filtered: the filter produces a *copy* whose
+  // artifacts are rebuilt from the clipped layers, which a GTFS bundle cannot
+  // do — its feed is not kept. The flag comes from the type's spec, so this
+  // gate opens on its own once PT filtering is supported. Metadata is then the
+  // only tab, and a one-tab strip is noise, so it goes too.
+  const canFilter = !!bundle?.artifacts_from_layers;
+
   const [activeTab, setActiveTab] = useState(
     activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB
   );
   useEffect(() => {
-    setActiveTab(activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB);
-  }, [activeRightPanel]);
+    setActiveTab(
+      canFilter && activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB
+    );
+  }, [activeRightPanel, canFilter]);
 
   const visitedTabsRef = useRef(new Set<number>());
   visitedTabsRef.current.add(activeTab);
@@ -78,32 +88,36 @@ const BundleSettingsPanel = ({ projectId }: { projectId: string }) => {
     if (!bundle) return null;
     return (
       <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-          <Tabs
-            value={activeTab}
-            onChange={(_, v) => handleTabChange(v)}
-            variant="fullWidth"
-            aria-label="Bundle Settings Tabs">
-            <Tab label={t("filter")} />
-            <Tab label={t("metadata.title")} />
-          </Tabs>
-        </Box>
-        <Box sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
-          <Box role="tabpanel" hidden={activeTab !== FILTER_TAB} sx={{ height: "100%" }}>
-            {isTabLive(FILTER_TAB) &&
-              (memberLayerId ? (
-                <BundleFilter
-                  key={bundle.id}
-                  bundle={bundle}
-                  projectId={projectId}
-                  memberLayerId={memberLayerId}
-                />
-              ) : (
-                <Typography variant="body2" sx={{ p: 3, fontStyle: "italic" }}>
-                  {t("filter_bundle_no_geometry")}
-                </Typography>
-              ))}
+        {canFilter && (
+          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+            <Tabs
+              value={activeTab}
+              onChange={(_, v) => handleTabChange(v)}
+              variant="fullWidth"
+              aria-label="Bundle Settings Tabs">
+              <Tab label={t("filter")} />
+              <Tab label={t("metadata.title")} />
+            </Tabs>
           </Box>
+        )}
+        <Box sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
+          {canFilter && (
+            <Box role="tabpanel" hidden={activeTab !== FILTER_TAB} sx={{ height: "100%" }}>
+              {isTabLive(FILTER_TAB) &&
+                (memberLayerId ? (
+                  <BundleFilter
+                    key={bundle.id}
+                    bundle={bundle}
+                    projectId={projectId}
+                    memberLayerId={memberLayerId}
+                  />
+                ) : (
+                  <Typography variant="body2" sx={{ p: 3, fontStyle: "italic" }}>
+                    {t("filter_bundle_no_geometry")}
+                  </Typography>
+                ))}
+            </Box>
+          )}
           <Box role="tabpanel" hidden={activeTab !== METADATA_TAB} sx={{ height: "100%" }}>
             {/* The aggregated fields, status and artifact state — the same
                 at-a-glance set the bundle's own page leads with. The long

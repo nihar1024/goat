@@ -83,3 +83,36 @@ def test_artifact_state_is_derived_not_stored(
         artifact_state(build_status, revision, layers_revision, storage_path).value
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("bundle_type", "from_layers"),
+    [
+        (BundleTypeName.street_network, True),
+        # The timetable is built from the uploaded feed, which is not kept.
+        (BundleTypeName.pt_network_gtfs, False),
+    ],
+)
+def test_filter_and_rebuild_follow_one_rule(bundle_type, from_layers) -> None:
+    """Filtering and rebuilding both need artifacts built from the layers.
+
+    Two tools refuse on it, the builder exposes it, and the API reports it to
+    gate the UI — so the point is that all of them read the one spec rather
+    than each deciding for itself.
+    """
+    from goatlib.bundles.artifacts import get_artifact_builder
+    from goatlib.models.bundle import artifacts_from_layers
+
+    assert artifacts_from_layers(bundle_type) is from_layers
+    assert get_artifact_builder(bundle_type).builds_from_layers is from_layers
+
+    reported = BundleRead(
+        id=LAYER,
+        user_id=LAYER,
+        folder_id=LAYER,
+        name="b",
+        bundle_type=bundle_type.value,
+        status="ready",
+        artifacts_from_layers=artifacts_from_layers(bundle_type),
+    )
+    assert reported.artifacts_from_layers is from_layers

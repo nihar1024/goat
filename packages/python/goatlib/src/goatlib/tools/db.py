@@ -341,6 +341,11 @@ class ToolDatabaseService:
         silent about keeps whatever the owner authored — the same guarantee as
         before, now expressed by the JSONB concatenation rather than by
         assembling one assignment per column.
+
+        Anything stored that is not an object is merged onto as if absent:
+        concatenating onto a JSON scalar produces an array, which no longer
+        validates as provenance and takes the bundle's read endpoint down with
+        it.
         """
         allowed = (
             "lineage",
@@ -364,7 +369,11 @@ class ToolDatabaseService:
             f"""
             UPDATE {self.schema}.bundle
             SET dataset_metadata =
-                    COALESCE(dataset_metadata, '{{}}'::jsonb) || $2::jsonb,
+                    CASE
+                        WHEN jsonb_typeof(dataset_metadata) = 'object'
+                        THEN dataset_metadata
+                        ELSE '{{}}'::jsonb
+                    END || $2::jsonb,
                 updated_at = NOW()
             WHERE id = $1
             """,

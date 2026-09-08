@@ -31,9 +31,13 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
-from goatlib.bundles.artifacts import get_artifact_builder
 from goatlib.bundles.runner import BundleImportRunner, ImportedLayer
-from goatlib.models.bundle import BundleStatus, BundleTypeName, get_spec
+from goatlib.models.bundle import (
+    BundleStatus,
+    BundleTypeName,
+    artifacts_from_layers,
+    get_spec,
+)
 from goatlib.models.io import DatasetMetadata
 from goatlib.storage.query_builder import build_cql_filter
 from goatlib.tools.db import ToolDatabaseService, normalize_geometry_type
@@ -159,8 +163,7 @@ class BundleCreateFilteredRunner(BundleImportRunner):
                 "to filter."
             )
 
-        builder = get_artifact_builder(bundle_type)
-        if builder is not None and not builder.builds_from_layers:
+        if not artifacts_from_layers(bundle_type):
             raise ValueError(
                 f"A '{bundle_type.value}' bundle's artifacts are built from the "
                 "uploaded source, which is not kept, so a filtered copy could "

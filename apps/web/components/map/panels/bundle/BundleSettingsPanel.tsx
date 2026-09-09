@@ -52,9 +52,19 @@ const BundleSettingsPanel = ({ projectId }: { projectId: string }) => {
   // Not every type can be filtered: the filter produces a *copy* whose
   // artifacts are rebuilt from the clipped layers, which a GTFS bundle cannot
   // do — its feed is not kept. The flag comes from the type's spec, so this
-  // gate opens on its own once PT filtering is supported. Metadata is then the
-  // only tab, and a one-tab strip is noise, so it goes too.
+  // gate opens on its own once PT filtering is supported.
   const canFilter = !!bundle?.artifacts_from_layers;
+
+  // The strip stays even when Metadata is the only tab: every other panel in
+  // this slot is tabbed, and a bundle that dropped the header would read as a
+  // different kind of panel rather than as the same one with less in it.
+  // `activeTab` stays the tab's identity, so the strip's index is derived and
+  // the panels below keep addressing themselves by name.
+  const tabs = canFilter ? [FILTER_TAB, METADATA_TAB] : [METADATA_TAB];
+  const tabLabel: Record<number, string> = {
+    [FILTER_TAB]: t("filter"),
+    [METADATA_TAB]: t("metadata.title"),
+  };
 
   const [activeTab, setActiveTab] = useState(
     activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB
@@ -88,18 +98,17 @@ const BundleSettingsPanel = ({ projectId }: { projectId: string }) => {
     if (!bundle) return null;
     return (
       <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        {canFilter && (
-          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-            <Tabs
-              value={activeTab}
-              onChange={(_, v) => handleTabChange(v)}
-              variant="fullWidth"
-              aria-label="Bundle Settings Tabs">
-              <Tab label={t("filter")} />
-              <Tab label={t("metadata.title")} />
-            </Tabs>
-          </Box>
-        )}
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Tabs
+            value={Math.max(tabs.indexOf(activeTab), 0)}
+            onChange={(_, index) => handleTabChange(tabs[index])}
+            variant="fullWidth"
+            aria-label="Bundle Settings Tabs">
+            {tabs.map((tab) => (
+              <Tab key={tab} label={tabLabel[tab]} />
+            ))}
+          </Tabs>
+        </Box>
         <Box sx={{ flexGrow: 1, overflowY: "auto", p: 0 }}>
           {canFilter && (
             <Box role="tabpanel" hidden={activeTab !== FILTER_TAB} sx={{ height: "100%" }}>

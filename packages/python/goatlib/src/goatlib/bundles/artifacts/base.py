@@ -39,13 +39,24 @@ class ArtifactBuilderUnavailableError(Exception):
     binding yet). The import still completes; the artifact is skipped."""
 
 
+class ArtifactBuildFailedError(Exception):
+    """One or more of a bundle type's artifacts could not be built.
+
+    Raised after every artifact's outcome has been recorded, so the bundle says
+    which kind failed and why — and then the job fails. A bundle missing an
+    artifact its type declares is not a usable bundle: the tools that need it
+    would refuse, and an import that reported success would leave someone to
+    discover that for themselves.
+    """
+
+
 class BuiltArtifact(BaseModel):
     """The outcome for one artifact kind: a file to store, or why there is none.
 
-    A builder that produces several kinds reports each separately, so one of
-    them failing does not discard the others. A GTFS bundle's timetable comes
-    from the feed and its linkage additionally needs a street network — the
-    timetable is still worth keeping when only the second input is missing.
+    A builder that produces several kinds reports each separately, so a build
+    that fails can say which kind failed and why rather than only that
+    something did. The build still fails as a whole — see
+    ``ArtifactBuildFailedError``.
     """
 
     kind: BundleArtifactKind

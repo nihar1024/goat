@@ -1,10 +1,10 @@
 """Bundle type specifications.
 
-Code is the source of truth for the set of bundle types, the member
-layer roles each one expects, the derived artifacts it produces, and the other
-bundles it depends on. Core projects these specs into the
-``bundle_type`` table's ``structure`` column (via
-``seed_bundle_types``) and validates against them.
+Code is the source of truth for the set of bundle types, the member layer roles
+each one expects, the derived artifacts it produces, and the other bundles it
+depends on. Every consumer resolves a type through ``get_spec`` at the moment it
+needs it — there is no copy of any of this in the database. There used to be, in
+a ``bundle_type`` reference table, and it drifted the moment a spec changed.
 """
 
 from enum import Enum
@@ -89,6 +89,7 @@ def artifact_state(
     revision: int | None,
     layers_revision: int,
     storage_path: str | None,
+    dependencies_current: bool = True,
 ) -> BundleArtifactState:
     """Where an artifact stands, from what its last build did and what it left.
 
@@ -96,8 +97,16 @@ def artifact_state(
     whether a tool may route on the artifact, so the two cannot disagree.
 
     ``ready`` is the conjunction of everything that has to hold — a build that
-    finished, from the revision the layers are still at, with a file to point
-    at — so a caller has one thing to check rather than three.
+    finished, from the revision the layers are still at, built from the
+    dependencies that are still linked, with a file to point at — so a caller
+    has one thing to check rather than four.
+
+    ``dependencies_current`` says whether every bundle this one is built from is
+    still at the revision it was built from — ``bundle_dependency.built_revision``
+    against that bundle's ``layers_revision``. Computed by the caller, in the
+    query that reads the artifact, because it is a join rather than a fact about
+    this row. It defaults to true so a caller with no dependencies to consider
+    says nothing about them.
     """
     try:
         build = BundleArtifactBuildStatus(build_status)
@@ -111,6 +120,8 @@ def artifact_state(
     if build is not BundleArtifactBuildStatus.complete or not storage_path:
         return BundleArtifactState.failed
     if revision is None or revision != layers_revision:
+        return BundleArtifactState.outdated
+    if not dependencies_current:
         return BundleArtifactState.outdated
     return BundleArtifactState.ready
 
@@ -245,38 +256,6 @@ class BundleTypeSpec(BaseModel):
 
     def dependency(self, kind: str) -> Optional[DependencySpec]:
         return next((d for d in self.dependencies if d.kind == kind), None)
-
-    def to_structure(self) -> Dict[str, Any]:
-        """Descriptive projection of the type for the ``bundle_type``
-        table / frontend. Describes the roles, artifacts and dependencies —
-        membership itself lives in the ``bundle_layer`` link table."""
-        return {
-            "type": self.type.value,
-            "name": self.name,
-            "description": self.description,
-            "roles": [
-                {
-                    "key": r.key,
-                    "label": r.label,
-                    "required": r.required,
-                    "geometry": r.geometry,
-                    "required_columns": list(r.required_columns),
-                    "description": r.description,
-                }
-                for r in self.roles
-            ],
-            "artifacts": [k.value for k in self.artifacts],
-            "artifacts_build_from_layers": self.artifacts_build_from_layers,
-            "dependencies": [
-                {
-                    "kind": d.kind,
-                    "bundle_type": d.bundle_type.value,
-                    "required": d.required,
-                    "description": d.description,
-                }
-                for d in self.dependencies
-            ],
-        }
 
 
 SPECS: Dict[BundleTypeName, BundleTypeSpec] = {

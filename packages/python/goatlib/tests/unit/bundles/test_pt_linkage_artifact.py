@@ -6,6 +6,7 @@ refusal costs only the linkage, and that the archive a build writes is the one
 a consumer can read a single mode out of.
 """
 
+import sys
 import tarfile
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from goatlib.bundles.artifacts.gtfs import (
     DEFAULT_LINKAGE_MODES,
     LINKAGE_MODES,
     GtfsArtifactBuilder,
+    UnlinkableStopsError,
     linkage_member,
     unpack_pt_linkage,
 )
@@ -46,10 +48,11 @@ def test_walking_is_the_default_and_modes_deduplicate(builder) -> None:
     )
 
 
-def test_an_unusable_street_network_fails_only_the_linkage(builder, tmp_path) -> None:
-    """No street network in the dependencies means a linked one is broken —
-    the caller substitutes the default network when nothing is linked. Either
-    way the timetable built in the same pass is unaffected."""
+def test_an_unusable_street_network_is_reported_not_raised(builder, tmp_path) -> None:
+    """No street network in the dependencies means a linked one is broken — the
+    caller substitutes the default network when nothing is linked. Reported as
+    a failed artifact rather than raised, so the caller records which kind
+    failed before failing the build."""
     result = builder._build_linkage(
         timetable_path="/tt.bin",
         workdir=str(tmp_path),
@@ -139,3 +142,77 @@ def test_a_mode_the_bundle_lacks_says_what_it_has(tmp_path) -> None:
     message = str(excinfo.value)
     assert "car" in message
     assert "walking" in message
+
+
+class _FakeRoutingMode:
+    Walking = "walking"
+    Bicycle = "bicycle"
+    Pedelec = "pedelec"
+    Car = "car"
+
+
+class _FakeConfig:
+    """Stands in for `routing.AccessEgressConfig` — plain attributes."""
+
+    timetable_path = ""
+    edge_dir = ""
+    node_dir = ""
+    output_path = ""
+    mode = None
+    max_min = 0.0
+
+
+def _fake_routing(rows: int):
+    """A `routing` module whose table build writes `rows` stop/cell pairs."""
+    import types
+
+    import duckdb
+
+    module = types.ModuleType("routing")
+    module.RoutingMode = _FakeRoutingMode
+    module.AccessEgressConfig = _FakeConfig
+
+    def build_access_egress_table(cfg):
+        con = duckdb.connect()
+        try:
+            con.execute(
+                "COPY (SELECT * FROM (VALUES (1::UINTEGER, 2::UBIGINT, 3::UTINYINT)) "
+                "AS t(stop_idx, h3_index, cost_minutes) "
+                f"WHERE {rows} > 0) TO '{cfg.output_path}' (FORMAT PARQUET)"
+            )
+        finally:
+            con.close()
+        return cfg.output_path
+
+    module.build_access_egress_table = build_access_egress_table
+    return module
+
+
+def test_a_feed_no_stop_of_which_links_fails_the_import(builder, tmp_path, monkeypatch):
+    """An empty table is not a stage that failed but a pairing that cannot
+    work: the bundle would answer every accessibility question with nothing.
+    Raised rather than reported, so the caller deletes the half-built bundle."""
+    monkeypatch.setitem(sys.modules, "routing", _fake_routing(rows=0))
+
+    with pytest.raises(UnlinkableStopsError) as excinfo:
+        builder._build_linkage(
+            timetable_path="/tt.bin",
+            workdir=str(tmp_path),
+            dependencies={"street_network": STREET},
+            modes=("walking",),
+        )
+    assert "different region" in str(excinfo.value)
+
+
+def test_a_feed_whose_stops_link_produces_the_archive(builder, tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "routing", _fake_routing(rows=1))
+
+    result = builder._build_linkage(
+        timetable_path="/tt.bin",
+        workdir=str(tmp_path),
+        dependencies={"street_network": STREET},
+        modes=("walking",),
+    )
+    assert result.error is None
+    with tarfile.open(result.local_path) as tar:
+        assert tar.getnames() == [linkage_member("walking")]

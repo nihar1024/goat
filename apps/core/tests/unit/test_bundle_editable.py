@@ -1,8 +1,8 @@
 """Editability and artifact status as the API reports them.
 
-Resolved from the live spec at request time, never from
-``customer.bundle_type.structure`` — that JSONB is seeded once by migration and
-has already drifted from the specs in code.
+Resolved from the live spec at request time. There is nowhere else to resolve
+them from: the reference table that once held a copy of each type's structure is
+gone, precisely because the copy drifted.
 """
 
 import pytest
@@ -83,6 +83,22 @@ def test_artifact_state_is_derived_not_stored(
         artifact_state(build_status, revision, layers_revision, storage_path).value
         == expected
     )
+
+
+def test_a_dependency_that_moved_on_makes_an_artifact_outdated() -> None:
+    """The same answer the bundle's own revision gives, across the dependency
+    edge: a linkage built from a street network that has since been edited
+    describes a network that no longer exists."""
+    from goatlib.models.bundle import artifact_state
+
+    current = artifact_state("complete", 4, 4, "p.tar", True)
+    stale = artifact_state("complete", 4, 4, "p.tar", False)
+    assert (current.value, stale.value) == ("ready", "outdated")
+
+    # Nothing else changes meaning: a failed build stays failed, and a build
+    # still running stays building, whatever the dependencies are doing.
+    assert artifact_state("failed", 4, 4, "p.tar", False).value == "failed"
+    assert artifact_state("building", 4, 4, None, False).value == "building"
 
 
 @pytest.mark.parametrize(

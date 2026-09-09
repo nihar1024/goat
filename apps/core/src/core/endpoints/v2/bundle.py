@@ -308,10 +308,40 @@ def _from_layers(bundle_type: str) -> bool:
     return artifacts_from_layers(bundle_type)
 
 
+async def _bundles_with_stale_dependencies(
+    async_session: AsyncSession, bundle_ids: Sequence[UUID]
+) -> set[UUID]:
+    """Bundles whose artifacts were built from a dependency that has moved on.
+
+    Each dependency row records the revision the dependent's artifacts were
+    built from; a bundle is stale when that no longer matches the dependency's
+    current ``layers_revision`` — it was edited, or the link was re-pointed at
+    another bundle, which leaves the revision unrecorded. One query for the
+    whole listing, like the artifacts themselves.
+    """
+    if not bundle_ids:
+        return set()
+    rows = (
+        await async_session.execute(
+            select(BundleDependencyLink.bundle_id)
+            .join(Bundle, Bundle.id == BundleDependencyLink.depends_on_bundle_id)
+            .where(
+                BundleDependencyLink.bundle_id.in_(bundle_ids),
+                BundleDependencyLink.built_revision.is_distinct_from(
+                    Bundle.layers_revision
+                ),
+            )
+            .distinct()
+        )
+    ).all()
+    return {row[0] for row in rows}
+
+
 def _bundle_read(
     bundle: Bundle,
     *,
     artifacts: Sequence[BundleArtifact] = (),
+    dependencies_current: bool = True,
     owned_by: dict[str, Any] | None = None,
 ) -> BundleRead:
     """A bundle as the API reports it.
@@ -337,6 +367,7 @@ def _bundle_read(
                     a.revision,
                     bundle.layers_revision,
                     a.storage_path,
+                    dependencies_current,
                 ),
                 revision=a.revision,
                 size=a.size,
@@ -589,13 +620,14 @@ async def list_bundles(
         )
     stmt = stmt.order_by(Bundle.updated_at.desc())
     rows = (await async_session.execute(stmt)).all()
-    artifacts = await _artifacts_by_bundle(
-        async_session, [bundle.id for bundle, *_ in rows]
-    )
+    listed_ids = [bundle.id for bundle, *_ in rows]
+    artifacts = await _artifacts_by_bundle(async_session, listed_ids)
+    stale = await _bundles_with_stale_dependencies(async_session, listed_ids)
     return [
         _bundle_read(
             bundle,
             artifacts=artifacts[bundle.id],
+            dependencies_current=bundle.id not in stale,
             owned_by={
                 "id": uid,
                 "firstname": firstname,
@@ -623,7 +655,12 @@ async def read_bundle(
     """Retrieve a bundle the caller owns or has been shared."""
     bundle = await authorize_bundle(async_session, bundle_id, user_id, "read")
     artifacts = await _artifacts_by_bundle(async_session, [bundle_id])
-    return _bundle_read(bundle, artifacts=artifacts[bundle_id])
+    stale = await _bundles_with_stale_dependencies(async_session, [bundle_id])
+    return _bundle_read(
+        bundle,
+        artifacts=artifacts[bundle_id],
+        dependencies_current=bundle_id not in stale,
+    )
 
 
 @router.put(
@@ -675,7 +712,12 @@ async def update_bundle(
         await async_session.commit()
 
     artifacts = await _artifacts_by_bundle(async_session, [bundle_id])
-    return _bundle_read(updated, artifacts=artifacts[bundle_id])
+    stale = await _bundles_with_stale_dependencies(async_session, [bundle_id])
+    return _bundle_read(
+        updated,
+        artifacts=artifacts[bundle_id],
+        dependencies_current=bundle_id not in stale,
+    )
 
 
 @router.delete(

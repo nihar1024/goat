@@ -17,7 +17,12 @@ from sqlalchemy import delete as sql_delete
 from core.core.config import settings
 from core.core.content import create_query_accessible_folders
 from core.crud.crud_folder import folder as crud_folder
-from core.db.models._link_model import ResourceGrant, UserTeamLink
+from core.db.models._link_model import (
+    BundleDependencyLink,
+    ResourceGrant,
+    UserTeamLink,
+)
+from core.db.models.bundle import Bundle
 from core.db.models.folder import Folder
 from core.db.models.organization import Organization
 from core.db.models.role import Role
@@ -342,6 +347,44 @@ async def delete_folder(
     access_token: str = Depends(auth),
 ) -> None:
     """Delete a folder and all its contents"""
+
+    # A bundle inside the folder may be what a bundle outside it is built from —
+    # a public-transport network's stop-to-street linkage is computed against a
+    # street network bundle. The FK cascades, so without this the dependency row
+    # would vanish and the dependent would keep an artifact derived from a
+    # bundle that no longer exists, with nothing saying so. Refused for the same
+    # reason `DELETE /bundle/{id}` refuses it, and with the same status.
+    dependent = (
+        await async_session.execute(
+            select(BundleDependencyLink.bundle_id)
+            .join(Bundle, Bundle.id == BundleDependencyLink.depends_on_bundle_id)
+            .join(Folder, Folder.id == Bundle.folder_id)
+            .where(
+                Bundle.folder_id == folder_id,
+                # Scoped to a folder the caller owns — the same condition the
+                # delete itself enforces. Without it this answers before any
+                # ownership check has run, so a 409 rather than a 404 would
+                # tell someone holding a folder id they do not own that
+                # something in it is depended upon. A folder id is learnable:
+                # a shared bundle reports its `folder_id`.
+                Folder.user_id == user_id,
+                # A dependency wholly inside the folder goes with it, so only a
+                # dependent that would outlive the folder blocks the delete.
+                BundleDependencyLink.bundle_id.notin_(
+                    select(Bundle.id).where(Bundle.folder_id == folder_id)
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
+    if dependent is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot delete a folder holding a bundle that another bundle "
+                "depends on. Remove the dependency first."
+            ),
+        )
 
     await crud_folder.delete(
         async_session,

@@ -2684,5 +2684,9 @@
   "upload_finishing": "Finishing upload, waiting for the server",
   "of": "of",
   "allow_sorting": "Allow sorting",
-  "allow_filtering": "Allow filtering"
+  "allow_filtering": "Allow filtering",
+  "bundle_upload_note_pt_network_gtfs": "Public Transport Network bundles must be linked to a Street Network bundle in order for GOAT to connect stops with streets. Select a Street Network bundle that covers the same region to continue.",
+  "street_network_bundle": "Street Network bundle",
+  "default_street_network": "Default (Europe)",
+  "select_a_street_network": "Select a street network..."
 }

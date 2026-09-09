@@ -14,8 +14,9 @@ front door to a boarding stop — so it needs both the timetable (which defines
 the stop set) and the street network bundle this one depends on. One parquet per
 mode, tarred together because a bundle holds one artifact row per kind.
 
-The two are reported separately: a missing or unbuilt street network costs the
-linkage, never the timetable.
+The two are reported separately, so a build says which of them failed and why —
+but either failing fails the build: a public-transport bundle without its
+linkage cannot answer an accessibility question, so it is not one worth keeping.
 """
 
 import csv
@@ -62,6 +63,38 @@ DEFAULT_LINKAGE_MODES: Tuple[str, ...] = ("walking",)
 #: request time but never higher, so this is the ceiling for access and egress
 #: legs. Matches the global tables' 20.
 LINKAGE_MAX_MINUTES = 20.0
+
+
+class UnlinkableStopsError(ValueError):
+    """No stop in the feed could be reached from the linked street network.
+
+    Its own type so the import path can tell it from the ordinary reasons a
+    linkage does not build (nothing linked yet, a graph still building): those
+    leave the timetable published and the artifact marked failed, while this one
+    fails the whole import. A public-transport bundle whose stops connect to no
+    street cannot answer a single accessibility question — publishing it would
+    mean every tool that used it returned empty results with nothing to explain
+    why.
+    """
+
+
+def _linkage_rows(table: Path) -> int:
+    """Rows in one mode's access/egress table — stop/cell pairs found.
+
+    Read with DuckDB rather than pyarrow: it is already a dependency of the
+    street-network builder next door, and this only needs a count.
+    """
+    import duckdb
+
+    con = duckdb.connect()
+    try:
+        # Interpolated, not bound: the path is this build's own — a temp workdir
+        # plus `linkage_member` of a mode already checked against
+        # `LINKAGE_MODES` — so nothing here comes from a request.
+        row = con.execute(f"SELECT count(*) FROM read_parquet('{table}')").fetchone()
+        return int(row[0]) if row else 0
+    finally:
+        con.close()
 
 
 def linkage_member(mode: str) -> str:
@@ -146,10 +179,11 @@ class GtfsArtifactBuilder(ArtifactBuilder):
     ) -> BuiltArtifact:
         """One access/egress table per mode, tarred.
 
-        Returns a failed ``BuiltArtifact`` rather than raising: the timetable
-        built in the same pass is worth publishing on its own, and the reasons
-        this can fail — no street network linked, its graph not ready, the
-        extension not rebuilt — are all things a user fixes and retries.
+        Returns a failed ``BuiltArtifact`` rather than raising, so the caller
+        records *which* kind failed before failing the build — the reasons this
+        can fail (the linked network's graph not ready, the extension not
+        rebuilt) are things a user fixes and retries, and the message is what
+        tells them which.
         """
         kind = BundleArtifactKind.pt_network_linkage
 
@@ -174,10 +208,8 @@ class GtfsArtifactBuilder(ArtifactBuilder):
             return BuiltArtifact(
                 kind=kind,
                 error=(
-                    "The street network linked to this public-transport bundle "
-                    "is not ready to route on, so stops could not be connected "
-                    "to streets. Update that street network bundle, then update "
-                    "this one."
+                    "The linked street network is not ready to route on. "
+                    "Update it, then update this bundle."
                 ),
             )
 
@@ -235,6 +267,20 @@ class GtfsArtifactBuilder(ArtifactBuilder):
                         "but wrote no table."
                     ),
                 )
+            reached = _linkage_rows(member)
+            if reached == 0:
+                # Raised, not reported as a failed artifact: an empty table is
+                # not a stage that failed but a pairing that cannot work, and
+                # the bundle it would belong to is unusable for transit. The
+                # caller fails the import, which deletes the half-built bundle
+                # and leaves the user free to import again against the right
+                # network.
+                raise UnlinkableStopsError(
+                    "No stops could be connected to the linked street network. "
+                    "It likely covers a different region — link one that "
+                    "covers this feed's area."
+                )
+            logger.info("%s linkage: %d stop/cell pair(s)", mode, reached)
             members.append(member)
 
         archive = Path(workdir) / "pt_network_linkage.tar"

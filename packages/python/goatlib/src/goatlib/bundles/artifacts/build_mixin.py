@@ -19,16 +19,23 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from goatlib.bundles.artifacts import (
     ArtifactBuilderUnavailableError,
+    ArtifactBuildFailedError,
     get_artifact_builder,
     store_artifact,
 )
-from goatlib.bundles.artifacts.storage import build_token, delete_artifact_file
-from goatlib.bundles.artifacts.street_network import fetch_routing_network
+from goatlib.bundles.artifacts.storage import (
+    build_token,
+    delete_artifact_file,
+    resolve_artifact,
+)
+from goatlib.bundles.artifacts.street_network import require_routing_network
 from goatlib.models.bundle import (
     BundleArtifactBuildStatus,
+    BundleArtifactKind,
     BundleArtifactState,
     BundleTypeName,
     BundleTypeSpec,
+    artifact_state,
     get_spec,
 )
 from goatlib.tools.db import ToolDatabaseService
@@ -87,6 +94,41 @@ class BundleArtifactBuildMixin:
         logger.info("Exported %d member layer(s) for artifact build", len(paths))
         return paths
 
+    async def _resolve_dependency_artifact(
+        self,
+        db: ToolDatabaseService,
+        *,
+        bundle_id: str,
+        kind: str,
+    ) -> "Tuple[str | None, BundleArtifactState | None]":
+        """A dependency bundle's artifact, resolved the same way a tool's is.
+
+        The async twin of ``BaseToolRunner.resolve_bundle_artifact``, and not a
+        call to it: that one reads ``self.db_service``, which only the
+        single-output ``run()`` lifecycle sets up, and resolves through a nested
+        ``run_until_complete`` that cannot work inside the running loop a build
+        lives in. Both together meant a perfectly ready street network resolved
+        to nothing, and the build blamed the network for it.
+        """
+        row = await db.get_bundle_artifact(bundle_id, kind)
+        if not row:
+            return None, None
+        state = artifact_state(
+            row.get("build_status"),
+            row.get("revision"),
+            row["layers_revision"],
+            row.get("storage_path"),
+            bool(row.get("dependencies_current", True)),
+        )
+        if state is not BundleArtifactState.ready:
+            return None, state
+        resolved = resolve_artifact(self.settings.bundles_data_dir, row["storage_path"])
+        if resolved is None:
+            # Current and complete, but the file is gone. Rebuildable, so it
+            # reads as a failed build rather than as something to build on.
+            return None, BundleArtifactState.failed
+        return str(resolved), state
+
     async def _resolve_dependencies(
         self,
         db: ToolDatabaseService,
@@ -127,7 +169,14 @@ class BundleArtifactBuildMixin:
                 }
                 continue
             try:
-                edge_path, node_path = fetch_routing_network(self, depends_on, workdir)
+                edge_path, node_path = require_routing_network(
+                    *await self._resolve_dependency_artifact(
+                        db,
+                        bundle_id=depends_on,
+                        kind=BundleArtifactKind.street_network_graph.value,
+                    ),
+                    workdir,
+                )
             except Exception as e:
                 logger.warning(
                     "Street network %s unusable for bundle %s, so no linkage "
@@ -139,6 +188,10 @@ class BundleArtifactBuildMixin:
                 continue
             resolved[dependency.kind] = {
                 "bundle_id": depends_on,
+                # Captured here, with the paths, so the provenance recorded on
+                # the artifact is the revision the build actually read — not
+                # whatever the dependency is at by the time it publishes.
+                "revision": await db.get_bundle_revision(depends_on),
                 "edge_path": edge_path,
                 "node_path": node_path,
             }
@@ -163,10 +216,10 @@ class BundleArtifactBuildMixin:
         propagates so the caller marks the bundle failed; a missing toolchain is
         skipped with a warning (the import still completes).
 
-        A builder that produces several kinds may report one of them as failed
-        while the others build — that kind's row records the failure and the
-        rest still publish, so a GTFS bundle with no street network linked keeps
-        the timetable it could build.
+        A builder that produces several kinds records each kind's outcome
+        separately — which one failed and why — and then the build fails as a
+        whole. Nothing is published half-built: the artifacts a bundle type
+        declares are what makes a bundle of that type usable.
 
         ``build_options`` is passed through to the builder untouched (which
         access/egress modes to compute, say).
@@ -186,6 +239,7 @@ class BundleArtifactBuildMixin:
                 # A builder reads either the uploaded source (GTFS: the feed is
                 # the truth) or the member layers (street networks: the layers
                 # are, so an edited layer is what a rebuild must pick up).
+                dependencies: Dict[str, Any] = {}
                 if builder.builds_from_layers:
                     layer_paths = self.export_member_layers(
                         user_id=user_id, members=members or [], workdir=workdir
@@ -194,15 +248,13 @@ class BundleArtifactBuildMixin:
                         layer_paths=layer_paths, workdir=workdir
                     )
                 else:
+                    dependencies = await self._resolve_dependencies(
+                        db, bundle_id=bundle_id, spec=spec, workdir=workdir
+                    )
                     built = builder.build(
                         source_path=source_path,
                         workdir=workdir,
-                        dependencies=await self._resolve_dependencies(
-                            db,
-                            bundle_id=bundle_id,
-                            spec=spec,
-                            workdir=workdir,
-                        ),
+                        dependencies=dependencies,
                         options=build_options,
                     )
             except ArtifactBuilderUnavailableError as e:
@@ -227,6 +279,7 @@ class BundleArtifactBuildMixin:
                 if built_revision is not None
                 else await db.get_bundle_revision(bundle_id)
             )
+            failures: List[str] = []
             for art in built:
                 kind_value = getattr(art.kind, "value", art.kind)
                 artifact_id = await db.create_artifact(
@@ -235,9 +288,10 @@ class BundleArtifactBuildMixin:
                     build_status=BundleArtifactBuildStatus.building,
                 )
                 if art.error:
-                    # This kind alone could not be built. Recorded as failed so
-                    # the bundle says which artifact is missing and why, while
-                    # the others in this build go on to publish.
+                    # Recorded per kind, so a bundle that survives this build (a
+                    # rebuild does; an import does not) says which artifact is
+                    # missing and why. The build as a whole still fails, after
+                    # the loop has recorded every outcome.
                     await db.set_artifact_build_status(
                         artifact_id=artifact_id,
                         status=BundleArtifactBuildStatus.failed,
@@ -248,6 +302,7 @@ class BundleArtifactBuildMixin:
                         bundle_id,
                         art.error,
                     )
+                    failures.append(f"{kind_value}: {art.error}")
                     continue
                 # Guaranteed by BuiltArtifact: an entry with no error has a
                 # path. Bound here so the rest of the loop reads as a file.
@@ -315,5 +370,26 @@ class BundleArtifactBuildMixin:
                             self.settings.bundles_data_dir, storage_path
                         )
                     raise
+
+            if failures:
+                # After the loop, so every kind's outcome is on record first.
+                # A bundle short of an artifact its type declares is not a
+                # usable bundle, and an import that returned success would
+                # leave that to be discovered by whoever ran the first tool.
+                raise ArtifactBuildFailedError("; ".join(failures))
+
+            # Every artifact published, so the dependency rows can say which
+            # revision of each dependency these files were derived from. After
+            # the failure check: a build that did not publish has not been
+            # built from anything, and claiming otherwise would hide the
+            # staleness this records.
+            for kind, resolved in dependencies.items():
+                if resolved.get("bundle_id") is None:
+                    # The default network. Nothing identifies a revision of it,
+                    # and no dependency row points at it.
+                    continue
+                await db.set_dependency_built_revision(
+                    bundle_id, kind, int(resolved["revision"])
+                )
 
         return published

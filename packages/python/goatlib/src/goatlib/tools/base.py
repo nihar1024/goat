@@ -1123,6 +1123,7 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
             row.get("revision"),
             row["layers_revision"],
             row.get("storage_path"),
+            bool(row.get("dependencies_current", True)),
         )
         if state is not BundleArtifactState.ready:
             return None, state

@@ -489,11 +489,27 @@ class ToolDatabaseService:
         last build attempt did. Reading both means a layer write whose
         stale-marking never landed cannot leave a tool routing on a graph that
         no longer matches the data.
+
+        ``dependencies_current`` is the same comparison across the dependency
+        edge: each dependency's ``built_revision`` — the revision this bundle's
+        artifacts were built from — against that bundle's current
+        ``layers_revision``. An artifact derived from another bundle goes stale
+        when that bundle is edited, and nothing in this bundle's own revision
+        would say so. A dependency never built from reads as not current; one
+        that has been unlinked has nothing to compare and so does not.
         """
         kind_value = getattr(kind, "value", kind)
         row = await self.pool.fetchrow(
             f"""
-            SELECT a.storage_path, a.build_status, a.revision, b.layers_revision
+            SELECT a.storage_path, a.build_status, a.revision, b.layers_revision,
+                   NOT EXISTS (
+                       SELECT 1
+                       FROM {self.schema}.bundle_dependency d
+                       JOIN {self.schema}.bundle dep
+                         ON dep.id = d.depends_on_bundle_id
+                       WHERE d.bundle_id = a.bundle_id
+                         AND d.built_revision IS DISTINCT FROM dep.layers_revision
+                   ) AS dependencies_current
             FROM {self.schema}.bundle_artifact a
             JOIN {self.schema}.bundle b ON b.id = a.bundle_id
             WHERE a.bundle_id = $1 AND a.kind = $2
@@ -615,6 +631,31 @@ class ToolDatabaseService:
             return False, None
         displaced = row["displaced_path"]
         return True, (displaced if displaced != storage_path else None)
+
+    async def set_dependency_built_revision(
+        self: Self, bundle_id: str, kind: str, built_revision: int
+    ) -> None:
+        """Record which revision of a dependency this bundle was built from.
+
+        Called once the artifacts of a build have published, so the row says
+        what the published files were actually derived from. Guarded on the
+        dependency still being at that revision: if it moved on mid-build, the
+        row keeps saying "not built from the current revision", which is true —
+        the build read the older one.
+        """
+        await self.pool.execute(
+            f"""
+            UPDATE {self.schema}.bundle_dependency d
+            SET built_revision = $3
+            FROM {self.schema}.bundle dep
+            WHERE d.bundle_id = $1 AND d.dependency_kind = $2
+              AND dep.id = d.depends_on_bundle_id
+              AND dep.layers_revision = $3
+            """,
+            uuid_module.UUID(bundle_id),
+            kind,
+            built_revision,
+        )
 
     async def list_bundle_layers(self: Self, bundle_id: str) -> "list[dict]":
         """Role and layer id of each member layer of a bundle."""

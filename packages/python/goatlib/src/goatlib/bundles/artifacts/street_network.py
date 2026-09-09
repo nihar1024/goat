@@ -172,17 +172,17 @@ def unpack_routing_network(
     return str(edges), str(nodes)
 
 
-def fetch_routing_network(
-    source: ArtifactSource, bundle_id: str, dest_dir: str | Path
+def require_routing_network(
+    archive: str | None,
+    state: "BundleArtifactState | None",
+    dest_dir: str | Path,
 ) -> Tuple[str, str]:
-    """Fetch and unpack a bundle's routing graph for any tool that routes.
+    """Unpack a resolved graph, or refuse with why it cannot be used.
 
-    Returns the ``(edges, nodes)`` paths to hand to the analysis params, so a
-    consumer needs one call and no knowledge of the artifact's packaging.
+    Split from the fetch so the sync path (a tool, through its runner) and the
+    async one (a build, through its database service) resolve the artifact
+    however suits them and still refuse in the same words.
     """
-    archive, state = source.resolve_bundle_artifact(
-        bundle_id, BundleArtifactKind.street_network_graph.value
-    )
     if not archive:
         # The state separates "not ready yet" from "was ready until someone
         # edited it", which are different things to tell a user. None means no
@@ -207,6 +207,22 @@ def fetch_routing_network(
             )
         )
     return unpack_routing_network(archive, dest_dir)
+
+
+def fetch_routing_network(
+    source: ArtifactSource, bundle_id: str, dest_dir: str | Path
+) -> Tuple[str, str]:
+    """Fetch and unpack a bundle's routing graph for any tool that routes.
+
+    Returns the ``(edges, nodes)`` paths to hand to the analysis params, so a
+    consumer needs one call and no knowledge of the artifact's packaging.
+    """
+    return require_routing_network(
+        *source.resolve_bundle_artifact(
+            bundle_id, BundleArtifactKind.street_network_graph.value
+        ),
+        dest_dir,
+    )
 
 
 def _transform(

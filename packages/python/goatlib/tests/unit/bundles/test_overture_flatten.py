@@ -90,10 +90,10 @@ def test_surface_flattens_per_edge(flattened) -> None:
     """Frauenstraße changes surface at 0.5; each edge gets one value."""
     edges, _ = flattened
     assert [e["surface"] for e in _edges_of(edges, "seg-frauenstrasse")] == [
-        "sett",
-        "asphalt",
+        "paving_stones",
+        "paved",
     ]
-    assert all(e["surface"] == "asphalt" for e in _edges_of(edges, "seg-tal"))
+    assert all(e["surface"] == "paved" for e in _edges_of(edges, "seg-tal"))
 
 
 def test_road_flags_stay_whole_in_the_residual(flattened) -> None:
@@ -567,9 +567,7 @@ def test_unknown_fields_are_carried_rather_than_dropped() -> None:
 
 def test_residual_is_null_when_nothing_is_left_over() -> None:
     """An edge fully described by its columns shouldn't carry an empty blob."""
-    edge = flatten_segment(
-        _piece(road_surface=[{"value": "asphalt"}], speed_limits=None)
-    )
+    edge = flatten_segment(_piece(road_surface=[{"value": "paved"}], speed_limits=None))
     assert edge["other"] is None
 
 

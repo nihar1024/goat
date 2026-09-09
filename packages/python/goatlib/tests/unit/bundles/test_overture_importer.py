@@ -289,3 +289,34 @@ def test_extract_without_segments_fails_loudly(tmp_path: Path, importer) -> None
     workdir.mkdir()
     with pytest.raises(OvertureReadError):
         importer.extract_layers(str(archive), str(workdir))
+
+
+def test_only_writes_values_the_editor_allows(tmp_path: Path, importer) -> None:
+    """The importer and the editor share one vocabulary per column.
+
+    A value the importer can write but the editor's dropdown does not list
+    cannot be re-saved: the write path refuses it, so the row becomes
+    uneditable. Both columns are nullable and mostly null in real extracts, so
+    this checks what is written rather than that every value appears.
+    """
+    from goatlib.models.bundle import (
+        EDGE_SUBCLASSES,
+        EDGE_SURFACES,
+        ROUTING_CLASSES,
+        BundleTypeName,
+        get_spec,
+    )
+
+    edges, _ = _extract(tmp_path, importer)
+    allowed = get_spec(BundleTypeName.street_network).role("edges").allowed_values
+    assert set(allowed) == {"class", "subclass", "surface"}
+
+    for column, vocabulary in (
+        ("class", ROUTING_CLASSES),
+        ("subclass", EDGE_SUBCLASSES),
+        ("surface", EDGE_SURFACES),
+    ):
+        written = {e[column] for e in edges if e.get(column) is not None}
+        assert written <= vocabulary, (column, written - vocabulary)
+        # A vocabulary nothing exercises is a vocabulary nothing checks.
+        assert written

@@ -35,7 +35,10 @@ from goatlib.analysis.schemas.ui import (
     ui_sections,
 )
 from goatlib.bundles.artifacts.gtfs import fetch_pt_timetable
-from goatlib.bundles.artifacts.street_network import fetch_routing_network
+from goatlib.bundles.artifacts.street_network import (
+    fetch_linked_routing_network,
+    fetch_routing_network,
+)
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools._routing_limits import (
     DEFAULT_MAX_TIME_ACTIVE_MIN,
@@ -676,8 +679,12 @@ class TravelCostMatrixWindmillParams(ToolInputBase):
             field_order=29,
             label_key="street_network_bundle_id",
             widget="bundle-selector",
-            # A PT run takes its timetable from pt_network_bundle_id instead,
-            # so this selector is for street modes.
+            # Street modes only — not because a PT run needs no street
+            # network (its access and egress legs are routed live on one), but
+            # because for PT the answer is not the user's to give: it follows
+            # the PT bundle, which either names the network its stops were
+            # connected to or was built against the default. Offering a choice
+            # there is only a chance to pick one that disagrees.
             visible_when={
                 "$and": [
                     {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
@@ -1042,13 +1049,21 @@ class TravelCostMatrixToolRunner(BaseToolRunner[TravelCostMatrixWindmillParams])
                     self, params.pt_network_bundle_id
                 )
 
-            # An uploaded street network bundle's graph replaces the global network.
+            # The street network to route on, in order of what the user meant:
+            # the one they picked; else the one the chosen PT bundle is linked
+            # to, since that is the network its stops were connected to and the
+            # one its access and egress legs belong on; else the default.
+            graph = None
             if params.street_network_bundle_id:
-                edge_path, node_path = fetch_routing_network(
+                graph = fetch_routing_network(
                     self, params.street_network_bundle_id, temp_dir
                 )
-                analysis_params.edge_path = edge_path
-                analysis_params.node_path = node_path
+            elif params.routing_mode == RoutingMode.pt and params.pt_network_bundle_id:
+                graph = fetch_linked_routing_network(
+                    self, params.pt_network_bundle_id, temp_dir
+                )
+            if graph:
+                analysis_params.edge_path, analysis_params.node_path = graph
 
             tool = self.tool_class()
             try:

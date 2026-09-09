@@ -225,6 +225,27 @@ def fetch_routing_network(
     )
 
 
+def fetch_linked_routing_network(
+    source: ArtifactSource, bundle_id: str, dest_dir: str | Path
+) -> "Tuple[str, str] | None":
+    """The graph of the street network a bundle is linked to, if it names one.
+
+    Following the link rather than asking again: a public-transport bundle's
+    stops were connected to a particular street network, and routing its access
+    and egress legs on a different one — or on the default, which may not even
+    cover the region — is not something a user should have to know to avoid.
+
+    None when nothing is linked, so a caller can fall back to the default. A
+    network that *is* linked but unusable raises, as it does everywhere else:
+    silently routing on something other than what the bundle names is the
+    failure this exists to prevent.
+    """
+    depends_on = source.resolve_bundle_dependency(bundle_id, "street_network")
+    if not depends_on:
+        return None
+    return fetch_routing_network(source, depends_on, dest_dir)
+
+
 def _transform(
     con: "duckdb.DuckDBPyConnection",
     edges_layer: str,

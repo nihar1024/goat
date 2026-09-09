@@ -32,6 +32,8 @@ class ArtifactSource(Protocol):
         self, bundle_id: str, kind: str
     ) -> Tuple[str | None, BundleArtifactState | None]: ...
 
+    def resolve_bundle_dependency(self, bundle_id: str, kind: str) -> str | None: ...
+
 
 class ArtifactBuilderUnavailableError(Exception):
     """Raised when a builder's toolchain isn't available in this environment

@@ -238,6 +238,45 @@ def test_classes_stay_within_the_routing_vocabulary(artifact, con) -> None:
     assert classes <= ROUTING_CLASSES
 
 
+def test_the_surface_impedance_table_stays_inside_the_vocabulary() -> None:
+    """The editor offers `EDGE_SURFACES`; the build costs cycling from
+    `SURFACE_IMPEDANCE`. A key outside the vocabulary is a penalty nobody can
+    choose, and a surface the table has never heard of costs nothing extra —
+    so a drift either way changes how a street routes without saying so."""
+    from goatlib.bundles.artifacts.street_network import SURFACE_IMPEDANCE
+    from goatlib.models.bundle import EDGE_SURFACES
+
+    assert set(SURFACE_IMPEDANCE) <= EDGE_SURFACES
+
+
+def test_edge_vocabularies_match_the_overture_schema() -> None:
+    """`subclass` and `surface` are Overture's own enums — segment.subclass and
+    the roadSurface definition. Pinned literally: the importer can only produce
+    these, so widening the editor's dropdown past them would offer a value no
+    import can create, and narrowing it would refuse one an import already
+    stored."""
+    from goatlib.models.bundle import EDGE_SUBCLASSES, EDGE_SURFACES
+
+    assert EDGE_SUBCLASSES == {
+        "link",
+        "sidewalk",
+        "crosswalk",
+        "parking_aisle",
+        "driveway",
+        "alley",
+        "cycle_crossing",
+    }
+    assert EDGE_SURFACES == {
+        "unknown",
+        "paved",
+        "unpaved",
+        "gravel",
+        "dirt",
+        "paving_stones",
+        "metal",
+    }
+
+
 def test_pedestrian_classes_are_impassable_by_car(artifact, con) -> None:
     """0 is how the loader spells "cannot be traversed"."""
     edges, _ = artifact
@@ -384,7 +423,7 @@ def test_surface_impedance_uses_the_canonical_coefficients(artifact, con) -> Non
     )
     # Sendlinger Straße is paving_stones, which the config penalises.
     assert by_surface["pedestrian"] == pytest.approx(0.2, abs=1e-6)
-    # Rindermarkt is sett, which the config doesn't list — so no penalty.
+    # Rindermarkt is paved, which the config doesn't list — so no penalty.
     assert by_surface["living_street"] == pytest.approx(0.0, abs=1e-6)
 
 

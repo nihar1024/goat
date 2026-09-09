@@ -140,6 +140,30 @@ ROUTING_CLASSES = frozenset(
     }
 )  # fmt: skip
 
+# The edges layer's `subclass` domain: Overture's segment subclasses for roads,
+# which is what the importer can produce. Nothing routes on it — it describes
+# what kind of way a road is (a driveway, a sidewalk, the link off a junction)
+# and the engine never reads it — but it is the difference between a street and
+# a parking aisle to anyone reading the layer, so a typo should not be storable.
+# Most roads have no subclass at all, and none is a valid answer: the write path
+# treats a null as clearing the column rather than as a vocabulary violation.
+EDGE_SUBCLASSES = frozenset(
+    {
+        "link", "sidewalk", "crosswalk", "parking_aisle", "driveway", "alley",
+        "cycle_crossing",
+    }
+)  # fmt: skip
+
+# The edges layer's `surface` domain: Overture's `road_surface` values. Unlike
+# `class`, an unrecognised value here is not mapped to anything — the artifact
+# build's cycling impedance table (`SURFACE_IMPEDANCE`) keys on a subset of
+# these and everything else costs nothing extra, so a free-typed surface would
+# silently make a track as cheap as asphalt. Also nullable: a road that states
+# no surface is ordinary.
+EDGE_SURFACES = frozenset(
+    {"unknown", "paved", "unpaved", "gravel", "dirt", "paving_stones", "metal"}
+)
+
 # Default speed per drivable class, from data_preparation's
 # `overture_street_network_europe.yaml`. This table doubles as the definition of
 # "drivable": a class absent from it takes no speed limit at all.
@@ -296,7 +320,11 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 # The vocabulary the routing engine understands. Anything
                 # outside it is mapped to "unknown" by the artifact build, so a
                 # free-typed value would quietly change how the street routes.
-                allowed_values={"class": tuple(sorted(ROUTING_CLASSES))},
+                allowed_values={
+                    "class": tuple(sorted(ROUTING_CLASSES)),
+                    "subclass": tuple(sorted(EDGE_SUBCLASSES)),
+                    "surface": tuple(sorted(EDGE_SURFACES)),
+                },
                 # Classifying a street is a judgement the user can make later,
                 # and the engine has a meaning for "unknown", so a drawn edge
                 # gets one rather than failing to save.

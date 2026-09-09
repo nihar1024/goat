@@ -227,9 +227,6 @@ def _node_insert_sql(nodes_table: str, columns: Sequence[str], geom_expr: str) -
     """
     target = ['"id"']
     select = ["?"]
-    if "is_synthetic" in columns:
-        target.append('"is_synthetic"')
-        select.append("TRUE")
     target.append('"geometry"')
     select.append("g")
     if "bbox" in columns:

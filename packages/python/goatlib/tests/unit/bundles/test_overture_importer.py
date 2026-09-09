@@ -263,9 +263,17 @@ def test_geoparquet_metadata_is_present(tmp_path: Path, importer) -> None:
     assert b"geo" in metadata
 
 
-def test_nodes_flag_synthetic_connectors(tmp_path: Path, importer) -> None:
+def test_minted_nodes_are_named_after_where_they_were_minted(
+    tmp_path: Path, importer
+) -> None:
+    """A node minted at an attribute boundary carries it in its own id.
+
+    `{segment_id}@{linear_reference}`, and no GERS id contains an "@" — which
+    is why the layer holds no separate flag for it.
+    """
     _, nodes = _extract(tmp_path, importer)
-    assert sum(1 for n in nodes if n["is_synthetic"]) == 4
+    assert sum(1 for n in nodes if "@" in n["id"]) == 4
+    assert "is_synthetic" not in nodes[0]
 
 
 def test_edge_topology_references_existing_nodes(tmp_path: Path, importer) -> None:

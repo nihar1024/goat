@@ -430,6 +430,61 @@ def get_default_style(geometry_type: str | None) -> dict[str, Any]:
         }
 
 
+#: The colour a street network's edges are drawn in: mid grey, so the network
+#: reads as the backdrop it is and whatever is analysed on top of it keeps the
+#: colour. `#717171` is the same neutral the PT service palette uses for "no
+#: service", so the two greys in the app are one grey.
+STREET_NETWORK_GREY = "#717171"
+
+#: The colour its nodes are drawn in. Not grey: a node is what an edge is
+#: snapped to and split at, so it has to be findable against the edges it sits
+#: on top of — which is also why the editor lights the one under the cursor
+#: rather than leaving it to the layer's own colour.
+STREET_NETWORK_NODE_RED = "#e53935"
+
+#: Per-role overrides merged onto the geometry's default style when a bundle's
+#: member layers are created — keyed by (bundle type, spec role).
+#:
+#: A bundle's members are one dataset drawn together, so a random colour each
+#: (which is what an ordinary upload gets, and reasonably: nothing is known
+#: about it) makes a street network arrive as two unrelated layers in whatever
+#: two colours came up. Thin and grey is also what a network being *routed on*
+#: should look like: present, and not competing with the result drawn over it.
+BUNDLE_ROLE_STYLES: dict[tuple[str, str], dict[str, Any]] = {
+    ("street_network", "edges"): {
+        "color": hex_to_rgb(STREET_NETWORK_GREY),
+        "stroke_color": hex_to_rgb(STREET_NETWORK_GREY),
+        "stroke_width": 2,
+    },
+    ("street_network", "nodes"): {
+        "color": hex_to_rgb(STREET_NETWORK_NODE_RED),
+        "radius": 3,
+    },
+}
+
+
+def get_bundle_style(
+    bundle_type: str | None,
+    role: str | None,
+    geometry_type: str | None,
+) -> dict[str, Any]:
+    """The style a bundle member layer is created with.
+
+    The geometry's default style with the role's overrides on top, so a role
+    states only what it means to change and inherits the rest — a member with
+    no entry is styled exactly as any other upload of that geometry.
+    """
+    base = get_default_style(geometry_type)
+    # `getattr(x, "value", x)`: a caller may hold the enum member or the raw
+    # string, and `str()` on a `(str, Enum)` gives "BundleTypeName.x".
+    key = (
+        str(getattr(bundle_type, "value", bundle_type)),
+        str(getattr(role, "value", role)),
+    )
+    override = BUNDLE_ROLE_STYLES.get(key)
+    return {**base, **override} if override else base
+
+
 def get_tool_style(
     tool_type: str,
     geometry_type: str | None = "polygon",

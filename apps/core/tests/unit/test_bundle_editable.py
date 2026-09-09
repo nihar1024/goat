@@ -132,3 +132,27 @@ def test_filter_and_rebuild_follow_one_rule(bundle_type, from_layers) -> None:
         artifacts_from_layers=artifacts_from_layers(bundle_type),
     )
     assert reported.artifacts_from_layers is from_layers
+
+
+@pytest.mark.parametrize(
+    ("bundle_type", "role"),
+    [
+        # The edges are the network; the nodes are only where they meet.
+        (BundleTypeName.street_network, "edges"),
+        # Stops show where a feed serves; shapes are a tangle at this size.
+        (BundleTypeName.pt_network_gtfs, "stops"),
+    ],
+)
+def test_each_type_names_the_member_that_stands_for_it(bundle_type, role) -> None:
+    """A bundle has no geometry of its own, so its thumbnail is a member's.
+
+    Named on the spec rather than guessed from the roles: "the first one with
+    geometry" would give a GTFS feed its shapes, and adding a role later would
+    silently change what every existing bundle looks like.
+    """
+    from goatlib.models.bundle import get_spec
+
+    spec = get_spec(bundle_type)
+    assert spec.thumbnail_role == role
+    # And it has to be a role the type actually has, or nothing resolves.
+    assert spec.role(spec.thumbnail_role) is not None

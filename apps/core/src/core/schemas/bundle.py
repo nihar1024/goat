@@ -121,7 +121,12 @@ class BundleRead(BundleBase, ThumbnailUrlMixin):
     # standard dataset image when unset (same logic as layers). validate_default
     # lets the mixin's before-validator run even when no value is supplied.
     thumbnail_url: Optional[str] = Field(
-        None, description="Thumbnail URL", validate_default=True
+        None,
+        description=(
+            "Thumbnail: one member layer's, since a bundle renders nothing of "
+            "its own — the role the type's spec names"
+        ),
+        validate_default=True,
     )
     # The stored document as it is, not `DatasetProvenance`. That model is the
     # *input* contract — `max_length`, `EmailStr`, an ISO-country rule — and

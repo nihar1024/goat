@@ -2,6 +2,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from goatlib.models.bundle import member_draw_rank
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, select
 
@@ -12,6 +13,7 @@ from core.db.models._link_model import (
     LayerProjectLink,
 )
 from core.db.models.bundle import Bundle
+from core.db.models.layer import Layer
 from core.db.session import AsyncSession
 from core.schemas.project import ILayerProjectGroupCreate, ILayerProjectGroupUpdate
 
@@ -144,19 +146,26 @@ class CRUDLayerProjectGroup(CRUDBase):
                 detail=f"Bundle is not ready (status: {bundle.status})",
             )
 
-        # Ordered by link id, so members land in the order the import created
-        # them (the bundle spec's role order) rather than however the rows come back.
-        member_ids = (
-            (
-                await async_session.execute(
-                    select(BundleLayerLink.layer_id)
-                    .where(BundleLayerLink.bundle_id == bundle_id)
-                    .order_by(BundleLayerLink.id)
-                )
+        # Points before lines before polygons, so a node is not buried under
+        # the edges it joins — the same stacking the import path uses, from the
+        # same rule. Within one geometry, link id keeps the order the import
+        # created them in (the spec's role order) rather than however the rows
+        # come back.
+        member_rows = (
+            await async_session.execute(
+                select(BundleLayerLink.layer_id, Layer.feature_layer_geometry_type)
+                .join(Layer, Layer.id == BundleLayerLink.layer_id)
+                .where(BundleLayerLink.bundle_id == bundle_id)
+                .order_by(BundleLayerLink.id)
             )
-            .scalars()
-            .all()
-        )
+        ).all()
+        member_ids = [
+            layer_id
+            for layer_id, _ in sorted(
+                member_rows,
+                key=lambda row: member_draw_rank(row.feature_layer_geometry_type),
+            )
+        ]
 
         # Place the group below everything already in the project. Groups and
         # layers share one tree-wide order sequence, so the maximum has to be

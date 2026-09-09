@@ -77,9 +77,10 @@ def test_topology_columns_carry_the_endpoint_connectors(flattened) -> None:
         assert left["target_node"] == right["source_node"]
 
 
-def test_nodes_mark_synthetic_connectors(flattened) -> None:
+def test_minted_nodes_are_named_after_where_they_were_minted(flattened) -> None:
+    """Their id is `{segment_id}@{linear_reference}`; nothing else needs saying."""
     _, nodes = flattened
-    assert sum(1 for n in nodes if n["is_synthetic"]) == 4
+    assert sum(1 for n in nodes if "@" in n["id"]) == 4
     assert all(n["coordinate"] is not None for n in nodes)
 
 
@@ -579,10 +580,12 @@ def test_residual_is_json_serialisable(flattened) -> None:
 
 
 def test_flatten_connector_shape() -> None:
+    """Id and coordinate, and nothing else — `synthetic` is dropped, since the
+    id a minted connector was given already carries it."""
     node = flatten_connector(
         {"id": "c-a", "coordinate": (11.0, 48.0), "synthetic": True}
     )
-    assert node == {"id": "c-a", "coordinate": (11.0, 48.0), "is_synthetic": True}
+    assert node == {"id": "c-a", "coordinate": (11.0, 48.0)}
 
 
 # --- the one invariant this design depends on -----------------------------

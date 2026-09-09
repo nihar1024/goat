@@ -99,12 +99,13 @@ def flatten_segment(piece: Dict[str, Any]) -> Dict[str, Any]:
 
 def flatten_connector(connector: Dict[str, Any]) -> Dict[str, Any]:
     """One flat node record."""
+    # No `is_synthetic`: a minted node's own id says so. The splitter names it
+    # `{segment_id}@{linear_reference}`, and no GERS id contains an "@" — so a
+    # column repeating it would be a second copy of the same fact, kept in step
+    # by hand.
     return {
         "id": connector.get("id"),
         "coordinate": connector.get("coordinate"),
-        # Synthetic nodes were minted at attribute boundaries and are not
-        # GERS-resolvable; consumers need to be able to tell them apart.
-        "is_synthetic": bool(connector.get("synthetic")),
     }
 
 

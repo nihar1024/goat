@@ -75,7 +75,12 @@ class Bundle(ContentBaseAttributes, DateTimeBase, table=True):
     thumbnail_url: str | None = Field(
         default=settings.DEFAULT_LAYER_THUMBNAIL,
         sa_column=Column(Text, nullable=True),
-        description="Bundle thumbnail URL",
+        description=(
+            "Fallback thumbnail. A bundle has no geometry of its own, so the "
+            "read paths show one member layer's thumbnail instead — the role "
+            "the type's spec names; see crud_bundle.member_thumbnails. This "
+            "column is what they fall back to when that member has none"
+        ),
     )
     dataset_metadata: Dict[str, Any] | None = Field(
         default=None,

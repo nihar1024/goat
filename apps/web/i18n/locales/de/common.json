@@ -2686,5 +2686,6 @@
   "bundle_upload_note_pt_network_gtfs": "Datenpakete für ÖPNV-Netze müssen mit einem Straßennetz-Datenpaket verknüpft werden, damit GOAT Haltestellen mit Straßen verbinden kann. Wählen Sie ein Straßennetz-Datenpaket, das dieselbe Region abdeckt, um fortzufahren.",
   "street_network_bundle": "Straßennetz-Datenpaket",
   "default_street_network": "Standard (Europa)",
-  "select_a_street_network": "Straßennetz auswählen..."
+  "select_a_street_network": "Straßennetz auswählen...",
+  "editing_ended_layer_removed": "Bearbeitung beendet: Die Ebene wurde aus dem Projekt entfernt, nicht gespeicherte Änderungen wurden verworfen."
 }

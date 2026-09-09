@@ -23,6 +23,7 @@ from sqlalchemy import update as sql_update
 
 from core.core.config import settings
 from core.crud.crud_bundle import bundle as crud_bundle
+from core.crud.crud_bundle import member_thumbnails
 from core.db.models._link_model import (
     BundleDependencyLink,
     BundleLayerLink,
@@ -342,6 +343,7 @@ def _bundle_read(
     *,
     artifacts: Sequence[BundleArtifact] = (),
     dependencies_current: bool = True,
+    thumbnail_url: str | None = None,
     owned_by: dict[str, Any] | None = None,
 ) -> BundleRead:
     """A bundle as the API reports it.
@@ -352,8 +354,13 @@ def _bundle_read(
     rather than lazy-loaded — an async session cannot resolve a relationship on
     access, and a listing needs them fetched in bulk anyway.
     """
+    fields = bundle.model_dump()
+    if thumbnail_url:
+        # A member's thumbnail in place of the bundle's own, which is only ever
+        # the generic placeholder — see `member_thumbnails`.
+        fields["thumbnail_url"] = thumbnail_url
     return BundleRead(
-        **bundle.model_dump(),
+        **fields,
         owned_by=owned_by,
         artifacts_from_layers=_from_layers(bundle.bundle_type),
         artifacts=[
@@ -623,11 +630,13 @@ async def list_bundles(
     listed_ids = [bundle.id for bundle, *_ in rows]
     artifacts = await _artifacts_by_bundle(async_session, listed_ids)
     stale = await _bundles_with_stale_dependencies(async_session, listed_ids)
+    thumbnails = await member_thumbnails(async_session, listed_ids)
     return [
         _bundle_read(
             bundle,
             artifacts=artifacts[bundle.id],
             dependencies_current=bundle.id not in stale,
+            thumbnail_url=thumbnails.get(bundle.id),
             owned_by={
                 "id": uid,
                 "firstname": firstname,
@@ -656,10 +665,12 @@ async def read_bundle(
     bundle = await authorize_bundle(async_session, bundle_id, user_id, "read")
     artifacts = await _artifacts_by_bundle(async_session, [bundle_id])
     stale = await _bundles_with_stale_dependencies(async_session, [bundle_id])
+    thumbnails = await member_thumbnails(async_session, [bundle_id])
     return _bundle_read(
         bundle,
         artifacts=artifacts[bundle_id],
         dependencies_current=bundle_id not in stale,
+        thumbnail_url=thumbnails.get(bundle_id),
     )
 
 
@@ -713,10 +724,12 @@ async def update_bundle(
 
     artifacts = await _artifacts_by_bundle(async_session, [bundle_id])
     stale = await _bundles_with_stale_dependencies(async_session, [bundle_id])
+    thumbnails = await member_thumbnails(async_session, [bundle_id])
     return _bundle_read(
         updated,
         artifacts=artifacts[bundle_id],
         dependencies_current=bundle_id not in stale,
+        thumbnail_url=thumbnails.get(bundle_id),
     )
 
 

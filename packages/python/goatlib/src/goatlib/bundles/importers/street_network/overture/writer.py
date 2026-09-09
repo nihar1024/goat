@@ -49,7 +49,6 @@ EDGE_SCHEMA = pa.schema(
 NODE_SCHEMA = pa.schema(
     [
         ("id", pa.string()),
-        ("is_synthetic", pa.bool_()),
         _GEOMETRY,
     ]
 )

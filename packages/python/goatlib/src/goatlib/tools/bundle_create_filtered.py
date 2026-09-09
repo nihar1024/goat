@@ -42,7 +42,7 @@ from goatlib.models.io import DatasetMetadata
 from goatlib.storage.query_builder import build_cql_filter
 from goatlib.tools.db import ToolDatabaseService, normalize_geometry_type
 from goatlib.tools.schemas import ToolInputBase
-from goatlib.tools.style import get_default_style
+from goatlib.tools.style import get_bundle_style
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +230,7 @@ class BundleCreateFilteredRunner(BundleImportRunner):
                         db,
                         project_id=project_id,
                         bundle_id=bundle_id,
+                        bundle_type=bundle_type,
                         imported=imported,
                     )
                 except Exception as e:  # pragma: no cover - best effort
@@ -299,7 +300,14 @@ class BundleCreateFilteredRunner(BundleImportRunner):
             extent_wkt=info.get("extent_wkt"),
             feature_count=info.get("feature_count", 0),
             size=info.get("size", 0),
-            properties=get_default_style(geometry_type) if geometry_type else None,
+            # The same style the original's members were created with, from
+            # the same rule — a clipped copy of a street network should not
+            # arrive in different colours from the network it came from.
+            properties=(
+                get_bundle_style(spec.type, role, geometry_type)
+                if geometry_type
+                else None
+            ),
         )
         # The copy is the same kind of layer as the original, so it keeps the
         # per-column metadata: computed columns, locked flags, vocabularies and

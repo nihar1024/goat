@@ -588,3 +588,37 @@ def test_a_layer_where_no_edge_resolves_is_refused(tmp_path, con) -> None:
             )
     finally:
         build_con.close()
+
+
+def test_a_street_network_is_styled_as_a_backdrop() -> None:
+    """Thin grey edges with the nodes picked out on top of them.
+
+    An ordinary upload gets a random colour, which is right when nothing is
+    known about it — but a bundle's members are one dataset, so a street
+    network would otherwise arrive as two unrelated layers in two random
+    colours. Grey and thin is what a network being routed *on* should look
+    like: present, and not competing with the result drawn over it. The nodes
+    are the exception, because they are what an edge snaps to and splits at.
+    """
+    from goatlib.models.bundle import BundleTypeName
+    from goatlib.tools.style import (
+        STREET_NETWORK_GREY,
+        STREET_NETWORK_NODE_RED,
+        get_bundle_style,
+        hex_to_rgb,
+    )
+
+    edges = get_bundle_style(BundleTypeName.street_network, "edges", "line")
+    nodes = get_bundle_style(BundleTypeName.street_network, "nodes", "point")
+
+    grey = hex_to_rgb(STREET_NETWORK_GREY)
+    assert edges["color"] == edges["stroke_color"] == grey
+    assert edges["stroke_width"] == 2
+    assert nodes["color"] == hex_to_rgb(STREET_NETWORK_NODE_RED)
+    assert nodes["color"] != grey
+    assert nodes["radius"] == 3
+
+    # A role with nothing to say inherits the geometry's default untouched,
+    # random colour included — the override is per role, not per bundle.
+    stops = get_bundle_style(BundleTypeName.pt_network_gtfs, "stops", "point")
+    assert stops["radius"] == 5

@@ -261,6 +261,11 @@ class BundleTypeSpec(BaseModel):
     name: str
     description: str
     roles: Tuple[RoleSpec, ...]
+    # The member whose thumbnail stands for the whole bundle. A bundle has no
+    # geometry of its own to render, and the generic dataset placeholder tells
+    # a user nothing about which network they are looking at — one member's
+    # thumbnail does, and it is already generated.
+    thumbnail_role: Optional[str] = None
     artifacts: Tuple[BundleArtifactKind, ...] = ()
     # Whether the artifacts are built from the member layers rather than from
     # the uploaded source. Declared here rather than on the builder so a
@@ -346,6 +351,8 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 ),
             ),
         ),
+        # The edges are the network; the nodes are where they meet.
+        thumbnail_role="edges",
         artifacts=(BundleArtifactKind.street_network_graph,),
         artifacts_build_from_layers=True,
     ),
@@ -367,6 +374,9 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
             RoleSpec(key="calendar", label="Calendar", geometry="none"),
             RoleSpec(key="shapes", label="Shapes", geometry="line"),
         ),
+        # Stops, not shapes: a feed's stops show where it serves at a glance,
+        # while its shapes render as a tangle at thumbnail size.
+        thumbnail_role="stops",
         artifacts=(
             BundleArtifactKind.pt_network_graph,
             BundleArtifactKind.pt_network_linkage,
@@ -384,6 +394,28 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
         ),
     ),
 }
+
+
+#: Where each geometry sits in a bundle's stack. Lower is placed first, and the
+#: first layer in a project's list is the one drawn on top.
+#:
+#: Points over lines over polygons — the conventional stacking, and the only one
+#: that keeps every member visible: a node drawn under its edges disappears,
+#: while an edge under a node is still a line with a dot on it. A member with no
+#: geometry sorts last; it draws nothing.
+MEMBER_DRAW_RANK: Dict[str, int] = {"point": 0, "line": 1, "polygon": 2}
+
+
+def member_draw_rank(geometry_type: Any) -> int:
+    """Sort key placing a bundle's member layers so none hides another.
+
+    Used by both places a bundle is put into a project — the import that
+    arrives with one, and adding an existing bundle later — so the two cannot
+    stack it differently. Takes the enum member or the raw string, since one
+    caller reads it off a model and the other off a query.
+    """
+    value = getattr(geometry_type, "value", geometry_type)
+    return MEMBER_DRAW_RANK.get(str(value or ""), len(MEMBER_DRAW_RANK))
 
 
 def get_spec(type_: "BundleTypeName | str") -> BundleTypeSpec:

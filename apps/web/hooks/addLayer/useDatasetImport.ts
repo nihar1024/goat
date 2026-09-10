@@ -83,7 +83,7 @@ export const useDatasetImport = () => {
         let jobId: string | undefined;
         if (bundleType) {
           const response = await requestBundleImport({
-            s3_key: presigned.fields.key,
+            s3_key: presigned.key,
             folder_id: request.folderId as string,
             name: request.name,
             description: request.description,
@@ -95,7 +95,7 @@ export const useDatasetImport = () => {
             name: request.name,
             description: request.description,
             folder_id: request.folderId,
-            s3_key: presigned.fields.key,
+            s3_key: presigned.key,
             ...(request.hasHeader !== undefined && { has_header: request.hasHeader }),
             ...(request.sheetName && { sheet_name: request.sheetName }),
           });

@@ -1,18 +1,24 @@
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
-import { DrawHistory } from "@p4b/draw";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import type { MapRef } from "react-map-gl/maplibre";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { MapRef } from "react-map-gl/maplibre";
+import type { MapLayerMouseEvent } from "react-map-gl/maplibre";
 import { toast } from "react-toastify";
 import { mutate as globalMutate } from "swr";
 
-import type { MapLayerMouseEvent } from "react-map-gl/maplibre";
+import { DrawHistory } from "@p4b/draw";
 
-import { COLLECTIONS_API_BASE_URL, createFeaturesBulk, deleteFeature, getFeature, getFeatures, replaceFeature } from "@/lib/api/layers";
-import { useBundleEditSave } from "@/hooks/map/useBundleEditSave";
-import { useEdgeSnapping } from "@/hooks/map/useEdgeSnapping";
+import {
+  COLLECTIONS_API_BASE_URL,
+  createFeaturesBulk,
+  deleteFeature,
+  getFeature,
+  getFeatures,
+  replaceFeature,
+} from "@/lib/api/layers";
 import { useProjectLayers } from "@/lib/api/projects";
+import { useDraw } from "@/lib/providers/DrawProvider";
 import {
   addPendingFeature,
   clearPendingFeatures,
@@ -28,13 +34,15 @@ import {
   updatePendingGeometry,
 } from "@/lib/store/featureEditor/slice";
 import { setIsMapGetInfoActive, setMapCursor, setPopupInfo } from "@/lib/store/map/slice";
-import { defaultProperties } from "@/lib/utils/allowedValues";
-import { useDraw } from "@/lib/providers/DrawProvider";
-import useLayerFields from "@/hooks/map/CommonHooks";
-import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
-import type { FeatureLayerPointProperties } from "@/lib/validations/layer";
 import { getMapboxStyleMarker } from "@/lib/transformers/layer";
+import { defaultProperties } from "@/lib/utils/allowedValues";
+import type { FeatureLayerPointProperties } from "@/lib/validations/layer";
 import type { ProjectLayer } from "@/lib/validations/project";
+
+import useLayerFields from "@/hooks/map/CommonHooks";
+import { useBundleEditSave } from "@/hooks/map/useBundleEditSave";
+import { useEdgeSnapping } from "@/hooks/map/useEdgeSnapping";
+import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 /**
  * Hook that wires the feature editor Redux state to MapboxDraw.
@@ -92,9 +100,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   const snapLayerIds = useMemo(() => {
     if (!editingProjectLayer) return [];
     const base = String(editingProjectLayer.id);
-    return editingProjectLayer.feature_layer_geometry_type === "polygon"
-      ? [base, `stroke-${base}`]
-      : [base];
+    return editingProjectLayer.feature_layer_geometry_type === "polygon" ? [base, `stroke-${base}`] : [base];
   }, [editingProjectLayer]);
   // Offered for a bundle's editable member only: its topology is what the server
   // derives on save. Plain layers keep drawing exactly as before.
@@ -203,6 +209,13 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   );
 
   useEffect(() => {
+    // The ref trails `mode` for every run of this effect, whatever the early
+    // returns below do: undo/redo restores a mode, and a ref left behind would
+    // make the next run read a mode change that never happened — tearing down
+    // the shape just drawn, or never arming the tool.
+    const previousMode = previousModeRef.current;
+    previousModeRef.current = mode;
+
     if (!drawControl || !activeLayerId) return;
 
     // Skip after undo/redo — drawControl is already in the correct state
@@ -219,8 +232,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     // is finished. So the selection a mode change leaves behind is dealt with
     // on *entering* draw mode — not on every run while drawing, which would
     // tear down the shape that was only just created.
-    const enteringDraw = mode === "draw" && previousModeRef.current !== "draw";
-    previousModeRef.current = mode;
+    const enteringDraw = mode === "draw" && previousMode !== "draw";
 
     const currentPending = pendingFeaturesRef.current;
     const activeFeature = activeFeatureId ? currentPending[activeFeatureId] : null;
@@ -238,11 +250,17 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
         dispatch(setActiveFeature(null));
       } else if (activeFeature.action === "update") {
         // Auto-commit existing feature if changed
-        const geomChanged = JSON.stringify(activeFeature.geometry) !== JSON.stringify(activeFeature.originalGeometry);
+        const geomChanged =
+          JSON.stringify(activeFeature.geometry) !== JSON.stringify(activeFeature.originalGeometry);
         const filterInternal = (props: Record<string, unknown>) => {
-          const f = { ...props }; delete f._fillColor; delete f._fillOpacity; return f;
+          const f = { ...props };
+          delete f._fillColor;
+          delete f._fillOpacity;
+          return f;
         };
-        const propsChanged = JSON.stringify(filterInternal(activeFeature.properties)) !== JSON.stringify(filterInternal(activeFeature.originalProperties || {}));
+        const propsChanged =
+          JSON.stringify(filterInternal(activeFeature.properties)) !==
+          JSON.stringify(filterInternal(activeFeature.originalProperties || {}));
         if (geomChanged || propsChanged) {
           dispatch(commitFeature(activeFeatureId));
         } else {
@@ -278,9 +296,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     // Select mode with nothing selected. Half-drawn shapes are discarded, but
     // a finished one waiting to be committed is not: it is the user's work, and
     // it only lives in MapboxDraw until it is saved.
-    const hasUncommittedGeometry = Object.values(currentPending).some(
-      (f) => !f.committed && f.drawFeatureId
-    );
+    const hasUncommittedGeometry = Object.values(currentPending).some((f) => !f.committed && f.drawFeatureId);
     if (!hasUncommittedGeometry) {
       drawControl.deleteAll();
     }
@@ -304,9 +320,11 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       // Snapshot before feature creation — use empty draw features since
       // the feature in MapboxDraw is the one being created (not a previous state)
       if (!isUndoRedoRef.current) {
-        dispatch(pushSnapshot({
-          drawFeatures: { type: "FeatureCollection", features: [] },
-        }));
+        dispatch(
+          pushSnapshot({
+            drawFeatures: { type: "FeatureCollection", features: [] },
+          })
+        );
       }
 
       const drawnFeature = e.features[0];
@@ -318,9 +336,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       // Pull the endpoints onto what they were drawn at, so the geometry stored
       // matches what the snap indicator promised.
       if (drawnFeature.geometry.type === "LineString") {
-        const snapped = snapDrawnLine(
-          drawnFeature.geometry.coordinates as [number, number][]
-        );
+        const snapped = snapDrawnLine(drawnFeature.geometry.coordinates as [number, number][]);
         if (snapped) {
           drawnFeature.geometry = { type: "LineString", coordinates: snapped };
           drawControl.add(drawnFeature);
@@ -364,7 +380,6 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
           })
         );
       }
-
     },
     [drawControl, dispatch, pushHistory, snapDrawnLine, showIndicator]
   );
@@ -377,9 +392,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       if (!updatedFeature?.geometry) return;
 
       if (updatedFeature.geometry.type === "LineString") {
-        const snapped = snapDrawnLine(
-          updatedFeature.geometry.coordinates as [number, number][]
-        );
+        const snapped = snapDrawnLine(updatedFeature.geometry.coordinates as [number, number][]);
         if (snapped) {
           updatedFeature.geometry = { type: "LineString", coordinates: snapped };
           drawControl?.add(updatedFeature);
@@ -431,7 +444,9 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
         delete filtered._fillOpacity;
         return filtered;
       };
-      const propsChanged = JSON.stringify(filterInternal(pending.properties)) !== JSON.stringify(filterInternal(pending.originalProperties || {}));
+      const propsChanged =
+        JSON.stringify(filterInternal(pending.properties)) !==
+        JSON.stringify(filterInternal(pending.originalProperties || {}));
       if (geomChanged || propsChanged) {
         dispatch(commitFeature(activeId));
       } else {
@@ -451,8 +466,6 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
       // Skip if we just finished drawing — the click that completes a draw also fires as a map click
       if (Date.now() - lastCreateTimeRef.current < 200) return;
 
-
-
       const map = mapRef?.current?.getMap();
       if (!map) return;
 
@@ -469,7 +482,12 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
         layerIds.push(`text-label-${projectLayerId}`);
       }
       // Also check pending features overlay layers
-      const pendingLayerIds = ["pending-features-fill", "pending-features-line", "pending-features-circle", "pending-features-symbol"];
+      const pendingLayerIds = [
+        "pending-features-fill",
+        "pending-features-line",
+        "pending-features-circle",
+        "pending-features-symbol",
+      ];
       for (const id of pendingLayerIds) {
         if (map.getLayer(id)) layerIds.push(id);
       }
@@ -525,7 +543,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
           if (drawIds[0]) {
             dispatch(setDrawFeatureId({ id: existingPending.id, drawFeatureId: drawIds[0] }));
             // Mark as uncommitted so it's editable again
-                }
+          }
         }
         dispatch(setActiveFeature(existingPending.id));
         return;
@@ -610,8 +628,16 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   // Clean up when editing stops
   useEffect(() => {
     if (!activeLayerId && drawControl) {
-      try { drawControl.deleteAll(); } catch { /* map may be unmounted */ }
-      try { drawControl.changeMode(MapboxDraw.constants.modes.SIMPLE_SELECT); } catch { /* */ }
+      try {
+        drawControl.deleteAll();
+      } catch {
+        /* map may be unmounted */
+      }
+      try {
+        drawControl.changeMode(MapboxDraw.constants.modes.SIMPLE_SELECT);
+      } catch {
+        /* */
+      }
       dispatch(setMapCursor(undefined));
       dispatch(setIsMapGetInfoActive(true));
     }
@@ -623,49 +649,52 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   const hasUndo = undoStack.length > 0 || (DrawHistory.active?.hasUndo ?? false);
   const hasRedo = redoStack.length > 0 || (DrawHistory.active?.hasRedo ?? false);
 
-  const restoreDrawState = useCallback((snapshot: typeof undoStack[0]) => {
-    if (!drawControl) return;
+  const restoreDrawState = useCallback(
+    (snapshot: (typeof undoStack)[0]) => {
+      if (!drawControl) return;
 
-    const feature = snapshot.activeFeatureId ? snapshot.pendingFeatures[snapshot.activeFeatureId] : null;
-    // Restore MapboxDraw features
-    drawControl.deleteAll();
-    if (snapshot.drawFeatures.features.length > 0) {
-      drawControl.add(snapshot.drawFeatures);
-    }
-
-    // Restore the correct MapboxDraw interaction mode
-    let directSelectId: string | null = null;
-
-    if (feature?.drawFeatureId && drawControl.get(feature.drawFeatureId)) {
-      directSelectId = feature.drawFeatureId;
-    } else if (snapshot.drawFeatures.features.length > 0 && snapshot.activeFeatureId) {
-      // Feature has no drawFeatureId in snapshot but draw features exist —
-      // find the first draw feature and use it
-      const firstDrawFeature = snapshot.drawFeatures.features[0];
-      if (firstDrawFeature?.id && drawControl.get(firstDrawFeature.id as string)) {
-        directSelectId = firstDrawFeature.id as string;
+      const feature = snapshot.activeFeatureId ? snapshot.pendingFeatures[snapshot.activeFeatureId] : null;
+      // Restore MapboxDraw features
+      drawControl.deleteAll();
+      if (snapshot.drawFeatures.features.length > 0) {
+        drawControl.add(snapshot.drawFeatures);
       }
-    }
 
-    if (directSelectId) {
-      if (geometryType === "point") {
-        drawControl.changeMode(MapboxDraw.constants.modes.SIMPLE_SELECT, {
-          featureIds: [directSelectId],
-        });
+      // Restore the correct MapboxDraw interaction mode
+      let directSelectId: string | null = null;
+
+      if (feature?.drawFeatureId && drawControl.get(feature.drawFeatureId)) {
+        directSelectId = feature.drawFeatureId;
+      } else if (snapshot.drawFeatures.features.length > 0 && snapshot.activeFeatureId) {
+        // Feature has no drawFeatureId in snapshot but draw features exist —
+        // find the first draw feature and use it
+        const firstDrawFeature = snapshot.drawFeatures.features[0];
+        if (firstDrawFeature?.id && drawControl.get(firstDrawFeature.id as string)) {
+          directSelectId = firstDrawFeature.id as string;
+        }
+      }
+
+      if (directSelectId) {
+        if (geometryType === "point") {
+          drawControl.changeMode(MapboxDraw.constants.modes.SIMPLE_SELECT, {
+            featureIds: [directSelectId],
+          });
+        } else {
+          drawControl.changeMode(MapboxDraw.constants.modes.DIRECT_SELECT, {
+            featureId: directSelectId,
+          });
+        }
+        dispatch(setMapCursor(undefined));
+      } else if (snapshot.mode === "draw") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        drawControl.changeMode(getDrawMode() as any);
+        dispatch(setMapCursor("crosshair"));
       } else {
-        drawControl.changeMode(MapboxDraw.constants.modes.DIRECT_SELECT, {
-          featureId: directSelectId,
-        });
+        dispatch(setMapCursor(undefined));
       }
-      dispatch(setMapCursor(undefined));
-    } else if (snapshot.mode === "draw") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      drawControl.changeMode(getDrawMode() as any);
-      dispatch(setMapCursor("crosshair"));
-    } else {
-      dispatch(setMapCursor(undefined));
-    }
-  }, [drawControl, getDrawMode]);
+    },
+    [drawControl, getDrawMode]
+  );
 
   const performUndo = useCallback(() => {
     if (undoStack.length === 0 || !drawControl) return;
@@ -679,7 +708,9 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     restoreDrawState(previous);
 
     // Clear flag after a tick to allow React to process state changes
-    setTimeout(() => { isUndoRedoRef.current = false; }, 0);
+    setTimeout(() => {
+      isUndoRedoRef.current = false;
+    }, 0);
   }, [undoStack, drawControl, captureSnapshot, dispatch, restoreDrawState]);
 
   const performRedo = useCallback(() => {
@@ -693,7 +724,9 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
     dispatch(redo(snapshot));
     restoreDrawState(next);
 
-    setTimeout(() => { isUndoRedoRef.current = false; }, 0);
+    setTimeout(() => {
+      isUndoRedoRef.current = false;
+    }, 0);
   }, [redoStack, drawControl, captureSnapshot, dispatch, restoreDrawState]);
 
   const handleUndo = useCallback(() => {
@@ -760,7 +793,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
             current?.map((l) =>
               ids.includes(l.layer_id) ? { ...l, updated_at: new Date().toISOString() } : l
             ),
-          { revalidate: false },
+          { revalidate: false }
         );
       // Single-argument mutate = revalidate while KEEPING the cached data on
       // screen. Passing (key, undefined, {revalidate: true}) is NOT the same:
@@ -788,7 +821,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
         bumpLayerUpdatedAt();
       }, 2500);
     },
-    [mutateProjectLayers],
+    [mutateProjectLayers]
   );
 
   // A table layer has no geometry to draw, so arming "draw" *is* adding the
@@ -796,9 +829,22 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
   // geospatial layer creates its own when the shape is finished, so this must
   // not fire for one, or an empty feature would appear before anything is
   // drawn.
+  //
+  // Exactly one row per arming: the row is added on the transition into draw
+  // mode for a layer, not whenever nothing is selected. Otherwise finishing
+  // the row (Done) or discarding it (Cancel) — both of which clear the
+  // selection while the mode stays where the user left it — would spawn
+  // another blank row, endlessly, and "Stop editing" would always have a
+  // pending feature to warn about.
   const isTableLayer = !geometryType;
+  const tableDrawArmedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (mode !== "draw" || !activeLayerId || !isTableLayer || activeFeatureId) return;
+    if (mode !== "draw" || !activeLayerId || !isTableLayer) {
+      tableDrawArmedForRef.current = null;
+      return;
+    }
+    if (tableDrawArmedForRef.current === activeLayerId) return;
+    tableDrawArmedForRef.current = activeLayerId;
     dispatch(
       addPendingFeature({
         id: crypto.randomUUID(),
@@ -809,7 +855,7 @@ export function useFeatureEditor(mapRef: React.RefObject<MapRef | null> | null) 
         action: "create",
       })
     );
-  }, [mode, activeLayerId, activeFeatureId, isTableLayer, dispatch]);
+  }, [mode, activeLayerId, isTableLayer, dispatch]);
 
   // --- Save handler ---
   const handleSave = useCallback(async () => {

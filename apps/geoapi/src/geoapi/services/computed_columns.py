@@ -148,16 +148,23 @@ def column_defaults(field_config: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def apply_defaults(
-    field_config: dict[str, Any] | None, properties: dict[str, Any]
+    field_config: dict[str, Any] | None,
+    properties: dict[str, Any],
+    blank_is_absent: bool = False,
 ) -> dict[str, Any]:
-    """Fill in what a new feature did not state. Returns a new dict.
+    """Fill in what a feature did not state. Returns a new dict.
 
-    Creation only. An update that omits a column means "leave it alone", so
-    applying defaults there would silently reset columns the caller never
-    mentioned.
+    Creation only, for the per-feature paths. An update that omits a column
+    means "leave it alone", so applying defaults there would silently reset
+    columns the caller never mentioned.
 
-    An explicit null is left as null: clearing a column is a choice, and a
-    default that overrode it could not be cleared at all.
+    ``blank_is_absent`` is the second rule, for a write that replaces a row
+    whole: a null or an empty string then means the column was left blank
+    rather than deliberately cleared, so it takes the default too. The bundle
+    editor writes that way — it sends the whole edge back on every save, and an
+    edge with no class is not a routable street. Without the flag an explicit
+    null stays null, because clearing a column is a choice and a default that
+    overrode it could not be cleared at all.
 
     This is the only thing that applies a default. A column created with one
     also carries a DuckDB ``DEFAULT``, which would cover an INSERT that omitted
@@ -165,9 +172,24 @@ def apply_defaults(
     the ``field_config`` entry is the default of record and the DDL default is
     never consulted.
     """
+    return fill_defaults(
+        column_defaults(field_config), properties, blank_is_absent=blank_is_absent
+    )
+
+
+def fill_defaults(
+    defaults: dict[str, Any],
+    properties: dict[str, Any],
+    blank_is_absent: bool = False,
+) -> dict[str, Any]:
+    """``apply_defaults`` against an already-derived default map.
+
+    Separate so a bulk write derives the map once for the whole request rather
+    than once per feature.
+    """
     filled = dict(properties)
-    for name, value in column_defaults(field_config).items():
-        if name not in filled:
+    for name, value in defaults.items():
+        if name not in filled or (blank_is_absent and filled[name] in (None, "")):
             filled[name] = value
     return filled
 
@@ -185,7 +207,17 @@ def validate_allowed_values(
     A null clears the column, which is not a vocabulary violation — a column
     with no value is a different thing from one holding a value nobody allows.
     """
-    constrained = allowed_value_columns(field_config)
+    check_allowed_values(allowed_value_columns(field_config), properties)
+
+
+def check_allowed_values(
+    constrained: dict[str, list[Any]], properties: dict[str, Any]
+) -> None:
+    """``validate_allowed_values`` against an already-derived vocabulary map.
+
+    Separate for the same reason as ``fill_defaults``: a bulk write derives the
+    map once rather than once per feature.
+    """
     for name, value in properties.items():
         if value is None or name not in constrained:
             continue

@@ -2,10 +2,7 @@ import useSWR from "swr";
 
 import { apiRequestAuth, fetcher } from "@/lib/api/fetcher";
 
-export const BUNDLES_API_BASE_URL = new URL(
-  "api/v2/bundle",
-  process.env.NEXT_PUBLIC_API_URL
-).href;
+export const BUNDLES_API_BASE_URL = new URL("api/v2/bundle", process.env.NEXT_PUBLIC_API_URL).href;
 
 export interface BundleImportRequest {
   s3_key: string;
@@ -157,23 +154,17 @@ export const BUNDLE_TYPES: BundleTypeDef[] = [
  * Detect which bundle type an uploaded file is, or null when it's a
  * plain single-layer dataset.
  */
-export const detectBundleType = (
-  file: File | null | undefined
-): BundleTypeDef | null =>
-  file ? BUNDLE_TYPES.find((t) => t.matches(file)) ?? null : null;
+export const detectBundleType = (file: File | null | undefined): BundleTypeDef | null =>
+  file ? (BUNDLE_TYPES.find((t) => t.matches(file)) ?? null) : null;
 
 /**
  * True when a content tile is a bundle rather than a layer. The layer
  * listing endpoint tags bundle items with `content_type: "bundle"`.
  */
 export const isBundleTile = (item: unknown): boolean =>
-  !!item &&
-  typeof item === "object" &&
-  (item as { content_type?: string }).content_type === "bundle";
+  !!item && typeof item === "object" && (item as { content_type?: string }).content_type === "bundle";
 
-export const requestBundleImport = async (
-  req: BundleImportRequest
-): Promise<BundleImportResponse> => {
+export const requestBundleImport = async (req: BundleImportRequest): Promise<BundleImportResponse> => {
   const response = await apiRequestAuth(`${BUNDLES_API_BASE_URL}/import`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -297,10 +288,7 @@ export const useBundleDependencies = (bundleId: string | null) => {
 
 /** Fetch the grants (team/org access) on a bundle. Owner only. */
 export const useBundleGrants = (bundleId: string | null) =>
-  useSWR<BundleGrantsResponse>(
-    bundleId ? `${BUNDLES_API_BASE_URL}/${bundleId}/share` : null,
-    fetcher
-  );
+  useSWR<BundleGrantsResponse>(bundleId ? `${BUNDLES_API_BASE_URL}/${bundleId}/share` : null, fetcher);
 
 /** Grant (or update) a team/org's access to a bundle. */
 export const shareBundleGrant = async (

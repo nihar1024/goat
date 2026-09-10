@@ -7,8 +7,8 @@ export type VocabularyField = {
   default_value?: unknown;
 };
 
-/** Whether a field should be edited by picking rather than typing. */
-export function hasVocabulary(field: VocabularyField): boolean {
+/** Whether a field carries a vocabulary at all. */
+function hasVocabulary(field: VocabularyField): boolean {
   return Array.isArray(field.allowed_values) && field.allowed_values.length > 0;
 }
 
@@ -41,12 +41,58 @@ export function vocabularyItems(field: VocabularyField, current: unknown): Selec
 }
 
 /** The item matching a stored value, for Selector's controlled `selectedItems`. */
-export function selectedVocabularyItem(
-  items: SelectorItem[],
-  current: unknown
-): SelectorItem | undefined {
+export function selectedVocabularyItem(items: SelectorItem[], current: unknown): SelectorItem | undefined {
   if (current === null || current === undefined || current === "") return undefined;
   return items.find((item) => String(item.value) === String(current));
+}
+
+/** A column's editing metadata, as the field metadata reports it. */
+export type EditableField = VocabularyField & {
+  is_computed?: boolean;
+  is_locked?: boolean;
+};
+
+/**
+ * How one column may be edited.
+ *
+ * The single derivation for every editing surface — the attribute panel, the
+ * map's popover editor and the data table — so a column cannot be typed into
+ * in one and picked from in another.
+ */
+export type FieldEditability = {
+  /** Derived from other columns, and recomputed on save. */
+  computed: boolean;
+  /** Maintained by whatever owns the layer — a street network's endpoints are
+   *  resolved against its nodes on every save. Not derived: there is no
+   *  formula and nothing to recompute. */
+  locked: boolean;
+  /** Shown but never edited, for either reason. */
+  readOnly: boolean;
+  /** Edited by picking: the vocabulary is the whole set of accepted values. */
+  vocabulary: boolean;
+  /** Edited by typing, with the vocabulary offered as suggestions only. */
+  suggestions: boolean;
+  /** What to offer; empty unless `vocabulary` or `suggestions`. */
+  items: SelectorItem[];
+};
+
+export function fieldEditability(field: EditableField, current?: unknown): FieldEditability {
+  const computed = field.is_computed === true;
+  const locked = field.is_locked === true;
+  const readOnly = computed || locked;
+  const constrained = !readOnly && hasVocabulary(field);
+  // "Allow other values" makes the vocabulary a set of suggestions rather than
+  // the domain: the backend accepts a value outside it, so the editor has to
+  // let one be entered.
+  const suggestions = constrained && field.allow_other === true;
+  return {
+    computed,
+    locked,
+    readOnly,
+    vocabulary: constrained && !suggestions,
+    suggestions,
+    items: constrained ? vocabularyItems(field, current) : [],
+  };
 }
 
 /** A field that supplies a value when a new feature leaves it blank. */

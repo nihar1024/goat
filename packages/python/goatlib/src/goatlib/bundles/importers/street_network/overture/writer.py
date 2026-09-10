@@ -34,7 +34,16 @@ EDGE_SCHEMA = pa.schema(
         ("name", pa.string()),
         ("class", pa.string()),
         ("subclass", pa.string()),
-        ("length_m", pa.float32()),
+        # float64, not float32: the value is written by the `length` computed
+        # kind's own SQL, which is DOUBLE, and `SELECT * REPLACE (<expr> AS
+        # length_m)` takes the expression's type — so a narrower declaration
+        # here would simply be false about the file. Widening the declaration
+        # rather than narrowing the expression, because DOUBLE is also what the
+        # routing artifact reads the column as and what a later recompute
+        # produces: one width the whole way through, and no rounding step that
+        # would make the length a user sees differ from the length the engine
+        # routes on.
+        ("length_m", pa.float64()),
         ("surface", pa.string()),
         ("speed_limit_kph_forward", pa.int32()),
         ("speed_limit_kph_backward", pa.int32()),

@@ -7,12 +7,18 @@ needs it — there is no copy of any of this in the database. There used to be, 
 a ``bundle_type`` reference table, and it drifted the moment a spec changed.
 """
 
+import logging
 from enum import Enum
 from typing import Any, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel, model_validator
 
+from goatlib.computed_columns import COMPUTED_KIND_REGISTRY, ComputedKind
+
 GeometryKind = Literal["point", "line", "polygon", "none"]
+
+
+logger = logging.getLogger(__name__)
 
 
 class BundleTypeName(str, Enum):
@@ -238,6 +244,77 @@ class RoleSpec(BaseModel):
                     f"its allowed values"
                 )
         return self
+
+
+def role_computed_columns(role: "RoleSpec | None") -> Dict[str, ComputedKind]:
+    """The role's computed columns as column name -> resolved kind.
+
+    Resolving the names against the registry in one place is what keeps the
+    DDL half (add the column, fill it from the kind's SQL) and the metadata
+    half (``role_field_config`` below) agreeing on which columns exist and
+    which formula fills them. A name the registry does not know is dropped
+    with a warning rather than raised on: the layer is still a usable layer
+    without that column, and refusing the whole import over a spec typo is
+    worse than importing without it.
+    """
+    resolved: Dict[str, ComputedKind] = {}
+    for column, kind_name in (role.computed_columns if role else {}).items():
+        kind = COMPUTED_KIND_REGISTRY.get(kind_name)
+        if kind is None:
+            logger.warning(
+                "Role %s declares unknown computed kind %r; skipping column %s",
+                role.key if role else "?",
+                kind_name,
+                column,
+            )
+            continue
+        resolved[column] = kind
+    return resolved
+
+
+def role_field_config(role: "RoleSpec | None") -> Dict[str, Any]:
+    """The ``field_config`` a member layer of this role must carry.
+
+    The role's contract — which columns are computed and by what formula,
+    which the bundle owns, which take a fixed vocabulary, and what a blank one
+    defaults to — projected into the per-column blob the clients and the write
+    path read. Pure: it touches no layer and no database, so an import, a
+    filtered copy and a backfill can all produce the same blob from the spec
+    alone instead of each re-deriving it.
+
+    Merging is the caller's business. An import writes this as the layer's
+    whole ``field_config``; a copy of an existing layer merges it *under* what
+    that layer already stores, so the role's contract is always present while
+    the user's own display settings win.
+    """
+    field_config: Dict[str, Any] = {}
+    for column, kind in role_computed_columns(role).items():
+        field_config[column] = {
+            "is_computed": True,
+            "kind": kind.name,
+            "depends_on": list(kind.depends_on),
+            "display_config": {},
+        }
+
+    # Columns the bundle maintains and nobody may type into. Overlaps the
+    # computed ones: computed says where a value comes from, locked says who
+    # owns it.
+    for column in role.locked_columns if role else ():
+        field_config.setdefault(column, {"display_config": {}})["is_locked"] = True
+
+    # Columns whose value must come from a fixed vocabulary. The list travels
+    # with the layer so an editor and the write path read the same constraint.
+    for column, values in (role.allowed_values if role else {}).items():
+        entry = field_config.setdefault(column, {"display_config": {}})
+        entry["allowed_values"] = list(values)
+        entry["allow_other"] = False
+
+    # What a newly drawn feature gets for a column left blank.
+    for column, value in (role.default_values if role else {}).items():
+        entry = field_config.setdefault(column, {"display_config": {}})
+        entry["default_value"] = value
+
+    return field_config
 
 
 class DependencySpec(BaseModel):

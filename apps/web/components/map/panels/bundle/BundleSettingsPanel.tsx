@@ -1,16 +1,15 @@
 /**
  * Right-hand panel for a bundle selected in the layer tree.
  *
- * Mirrors `LayerSettingsPanel` — same container, same tabbed shell, tabs kept
- * mounted once visited — and is separate only because a bundle is a layer
+ * Mirrors `LayerSettingsPanel` — same container, same tabbed shell, the same
+ * `useLazyTabs` bookkeeping — and is separate only because a bundle is a layer
  * *group* in the tree and so cannot be addressed by `selectedLayerIds`.
  *
  * Two tabs, not three: a bundle has no style of its own, since its member
- * layers are styled individually. And one tab where the type cannot be
- * filtered — see `canFilter`.
+ * layers are styled individually.
  */
 import { Box, Stack, Tab, Tabs, Typography } from "@mui/material";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useBundle, useBundleLayers } from "@/lib/api/bundles";
@@ -19,14 +18,15 @@ import { setActiveRightPanel } from "@/lib/store/map/slice";
 
 import { MapSidebarItemID } from "@/types/map/common";
 
+import { useLazyTabs } from "@/hooks/map/useLazyTabs";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import BundleSummaryImpl from "@/components/dashboard/bundle/BundleSummary";
 import Container from "@/components/map/panels/Container";
 import BundleFilterImpl from "@/components/map/panels/bundle/BundleFilter";
 
-// Same reason as the layer panel: a tab switch flips local state here, and
-// without memo every switch re-renders the whole tab tree.
+// Same reason as the layer panel: a tab switch re-renders this panel, and
+// without memo it re-renders the whole tab tree with it.
 const BundleFilter = React.memo(BundleFilterImpl);
 const BundleSummary = React.memo(BundleSummaryImpl);
 
@@ -66,24 +66,15 @@ const BundleSettingsPanel = ({ projectId }: { projectId: string }) => {
     [METADATA_TAB]: t("metadata.title"),
   };
 
-  const [activeTab, setActiveTab] = useState(
-    activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB
-  );
-  useEffect(() => {
-    setActiveTab(
-      canFilter && activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB
-    );
-  }, [activeRightPanel, canFilter]);
-
-  const visitedTabsRef = useRef(new Set<number>());
-  visitedTabsRef.current.add(activeTab);
-  const isTabLive = (tab: number) => activeTab === tab || visitedTabsRef.current.has(tab);
-  useEffect(() => {
-    visitedTabsRef.current = new Set();
-  }, [selectedBundleId]);
+  // Which tab is open is already in Redux — the panel slot the tree opened,
+  // and what a tab click dispatches — so it is derived, not mirrored. Clamped
+  // to a tab that exists: the slot can ask for Filter on a bundle that has no
+  // Filter tab.
+  const activeTab =
+    canFilter && activeRightPanel === MapSidebarItemID.FILTER ? FILTER_TAB : METADATA_TAB;
+  const isTabLive = useLazyTabs(activeTab, selectedBundleId);
 
   const handleTabChange = (value: number) => {
-    setActiveTab(value);
     dispatch(
       setActiveRightPanel(value === FILTER_TAB ? MapSidebarItemID.FILTER : MapSidebarItemID.PROPERTIES)
     );

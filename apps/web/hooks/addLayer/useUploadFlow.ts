@@ -9,6 +9,7 @@ import {
   detectBundleType,
   useBundles,
 } from "@/lib/api/bundles";
+import { refreshContentFeed } from "@/lib/api/content";
 import { getWritableFolders, useFolders } from "@/lib/api/folders";
 import { useProject } from "@/lib/api/projects";
 import {
@@ -25,6 +26,7 @@ import { layerMetadataSchema } from "@/lib/validations/layer";
 import { useDatasetImport } from "@/hooks/addLayer/useDatasetImport";
 
 import type { FlowController } from "@/hooks/addLayer/flow";
+import { useShareNotice } from "@/hooks/addLayer/useShareNotice";
 
 /**
  * Uploading a file as a dataset: state, validation and submit — no UI.
@@ -107,6 +109,7 @@ export const useUploadFlow = ({
   const { t } = useTranslation("common");
 
   const { project } = useProject(projectId);
+  const notice = useShareNotice(projectId);
   const { importDataset } = useDatasetImport();
   const queryParams: GetContentQueryParams = { order: "descendent", order_by: "updated_at" };
   const { folders: allFolders } = useFolders(queryParams);
@@ -285,6 +288,11 @@ export const useUploadFlow = ({
         : {}),
     });
     reset();
+    // Also refreshed on job completion (`useJobStatus`, wired by the Content
+    // page) — this one is for anything the request already committed before
+    // the dialog closed, so the feed is never behind what the server already
+    // has by the time this call returns.
+    refreshContentFeed();
     onDone?.();
   }, [
     file,
@@ -340,9 +348,19 @@ export const useUploadFlow = ({
         !isValid ||
         !selectedFolder ||
         (requiresStreetNetwork && !streetNetworkId),
+      notice,
       run: submit,
     }),
-    [file, isValid, selectedFolder, requiresStreetNetwork, streetNetworkId, submit, t]
+    [
+      file,
+      isValid,
+      selectedFolder,
+      requiresStreetNetwork,
+      streetNetworkId,
+      submit,
+      t,
+      notice,
+    ]
   );
 
   return {

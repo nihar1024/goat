@@ -82,7 +82,7 @@ export const updateDataset = async (datasetId: string, payload: PostDataset) => 
     },
   });
   if (!response.ok) {
-    await response.json();
+    throw new Error("Failed to update dataset");
   }
   return response;
 };
@@ -153,11 +153,19 @@ export const useLayerClassBreaks = (
   return { classBreaks: data, isLoading, isError: error };
 };
 
-export const deleteLayer = async (id: string): Promise<Job> => {
-  // user_id is extracted from JWT token by the server
-  return executeProcessAsync("layer_delete", {
-    layer_id: id,
-  });
+/** Move a dataset to the trash (30-day soft delete; restorable from the space's trash). */
+export const deleteLayer = async (id: string): Promise<void> => {
+  const response = await apiRequestAuth(`${LAYERS_API_BASE_URL}/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    let detail = "Failed to delete layer";
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // no body
+    }
+    throw new Error(detail);
+  }
 };
 
 /**
@@ -234,10 +242,7 @@ export type CreateEmptyLayerPayload = {
   fields: Array<{ name: string; kind: CreatableFieldKind }>;
 };
 
-export const createEmptyLayer = async (
-  payload: CreateEmptyLayerPayload,
-  projectId: string
-): Promise<Job> => {
+export const createEmptyLayer = async (payload: CreateEmptyLayerPayload, projectId: string): Promise<Job> => {
   const inputs: Record<string, unknown> = {
     name: payload.name,
     geometry_type: payload.geometry_type,
@@ -491,7 +496,7 @@ export const getFeatures = async (
     limit?: number;
     offset?: number;
     properties?: string[];
-  },
+  }
 ): Promise<GeoJSON.FeatureCollection> => {
   const parts: string[] = [];
   if (params?.filter) {
@@ -502,10 +507,9 @@ export const getFeatures = async (
   if (params?.offset) parts.push(`offset=${params.offset}`);
   if (params?.properties) parts.push(`properties=${params.properties.join(",")}`);
   const query = parts.length > 0 ? `?${parts.join("&")}` : "";
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/items${query}`,
-    { method: "GET" },
-  );
+  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/items${query}`, {
+    method: "GET",
+  });
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to get features");
@@ -628,19 +632,19 @@ export interface AddColumnPayload {
   kind: FieldKind;
   display_config?: Record<string, unknown>;
   default_value?: unknown;
+  /** The values the column accepts; `allow_other` makes them suggestions. */
+  allowed_values?: (string | number)[];
+  allow_other?: boolean;
   /** SQL expression for kind="formula" (validated server-side) */
   formula?: string;
 }
 
 export const addColumn = async (layerId: string, payload: AddColumnPayload) => {
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }
-  );
+  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/columns`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to add column");
@@ -648,93 +652,50 @@ export const addColumn = async (layerId: string, payload: AddColumnPayload) => {
   return response.json();
 };
 
-export const updateColumnFormula = async (
+/** What a PATCH may change about a column; the endpoint takes any subset. */
+export interface ColumnPatch {
+  new_name?: string;
+  /** SQL expression for a formula column; revalidated and recomputed. */
+  formula?: string;
+  /** An empty list removes the vocabulary, leaving the column free text. */
+  allowed_values?: (string | number)[];
+  allow_other?: boolean;
+  display_config?: Record<string, unknown>;
+  default_value?: unknown;
+}
+
+/**
+ * Change a column. Every field of `ColumnUpdate` travels in one request, so
+ * two edits to the same column are one round trip and one revision.
+ */
+export const patchColumn = async (
   layerId: string,
   columnName: string,
-  formula: string,
+  body: ColumnPatch,
+  failureMessage = "Failed to update column"
 ) => {
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ formula }),
-    }
-  );
+  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || "Failed to update formula");
+    throw new Error(error.detail || failureMessage);
   }
   return response.json();
 };
 
-export const renameColumn = async (
-  layerId: string,
-  columnName: string,
-  newName: string,
-) => {
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ new_name: newName }),
-    }
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to rename column");
-  }
-  return response.json();
-};
+export const updateColumnFormula = (layerId: string, columnName: string, formula: string) =>
+  patchColumn(layerId, columnName, { formula }, "Failed to update formula");
 
-export const updateColumnAllowedValues = async (
-  layerId: string,
-  columnName: string,
-  allowedValues: (string | number)[],
-  allowOther: boolean,
-) => {
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      // An empty list removes the vocabulary, leaving the column free text.
-      body: JSON.stringify({ allowed_values: allowedValues, allow_other: allowOther }),
-    }
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to update allowed values");
-  }
-  return await response.json();
-};
-
-export const updateColumnDisplayConfig = async (
-  layerId: string,
-  columnName: string,
-  displayConfig: Record<string, unknown>,
-) => {
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ display_config: displayConfig }),
-    }
-  );
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to update column");
-  }
-  return response.json();
-};
+export const renameColumn = (layerId: string, columnName: string, newName: string) =>
+  patchColumn(layerId, columnName, { new_name: newName }, "Failed to rename column");
 
 export const deleteColumn = async (layerId: string, columnName: string) => {
-  const response = await apiRequestAuth(
-    `${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`,
-    { method: "DELETE" }
-  );
+  const response = await apiRequestAuth(`${COLLECTIONS_API_BASE_URL}/${layerId}/columns/${columnName}`, {
+    method: "DELETE",
+  });
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to delete column");

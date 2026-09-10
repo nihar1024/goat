@@ -125,13 +125,7 @@ const Expression: React.FC<ExpressionProps> = (props) => {
     }
 
     return layerStyleMoreMenuOptions;
-  }, [
-    isExpressionValid,
-    props.onDuplicate,
-    t,
-    theme.palette.error.main,
-    theme.palette.text.secondary,
-  ]);
+  }, [isExpressionValid, props.onDuplicate, t, theme.palette.error.main, theme.palette.text.secondary]);
 
   useEffect(() => {
     if (hasExpressionChanged && isExpressionValid) {
@@ -359,7 +353,9 @@ const Expression: React.FC<ExpressionProps> = (props) => {
                             key={index}
                             kind="datetime"
                             label={index === 0 ? t("from") : t("to")}
-                            value={Array.isArray(expression.value) ? String(expression.value[index] ?? "") : ""}
+                            value={
+                              Array.isArray(expression.value) ? String(expression.value[index] ?? "") : ""
+                            }
                             onChange={(value: string) => {
                               const current = Array.isArray(expression.value)
                                 ? [...(expression.value as string[])]

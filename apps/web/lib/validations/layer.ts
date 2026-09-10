@@ -36,6 +36,7 @@ export const shareLayerWithTeamOrOrganizationSchema = z.object({
 export const shareLayerSchema = z.object({
   teams: z.array(shareLayerWithTeamOrOrganizationSchema).optional(),
   organizations: z.array(shareLayerWithTeamOrOrganizationSchema).optional(),
+  users: z.array(z.object({ id: z.string(), role: layerShareRoleEnum })).optional(),
 });
 
 const HexColor = z.string();
@@ -184,9 +185,7 @@ export const lineStyleSchema = z.object({
   // Generic so v2 can add "chevron" / "dot" / "tick" without a migration.
   decoration_type: z.enum(["none", "arrow"]).default("none"),
   decoration_direction: z.enum(["forward", "backward", "both"]).default("forward"),
-  decoration_placement: z
-    .enum(["repeat", "start", "end", "start_and_end", "center"])
-    .default("repeat"),
+  decoration_placement: z.enum(["repeat", "start", "end", "start_and_end", "center"]).default("repeat"),
   decoration_spacing: z.number().min(50).max(800).default(200),
   // Target arrow size in screen pixels (matches the visible arrow extent
   // because the source SVG fills its 32x32 viewBox). `.catch(32)` ensures
@@ -394,13 +393,7 @@ export const popupBlock = z.discriminatedUnion("type", [
 
 export const popupAnchor = z.enum(["top_left", "top_right", "bottom_left", "bottom_right"]);
 
-export const popupLayout = z.enum([
-  "popup",
-  "pinned",
-  "modal",
-  "left_sidebar",
-  "right_sidebar",
-]);
+export const popupLayout = z.enum(["popup", "pinned", "modal", "left_sidebar", "right_sidebar"]);
 
 export const popupHeader = z.enum(["standard", "compact", "none"]);
 
@@ -462,8 +455,7 @@ export const featureLayerPointPropertiesSchema = featureLayerBasePropertiesSchem
     cluster: clusterSchema.optional(),
   });
 
-export const featureLayerLinePropertiesSchema =
-  featureLayerBasePropertiesSchema.merge(lineStyleSchema);
+export const featureLayerLinePropertiesSchema = featureLayerBasePropertiesSchema.merge(lineStyleSchema);
 
 export const featureLayerPolygonPropertiesSchema = featureLayerBasePropertiesSchema.merge(strokeColorSchema);
 
@@ -492,19 +484,20 @@ export const tableConfigSchema = z.object({
   column_widths: z.record(z.string(), z.number()).optional(),
 });
 
-export const otherPropertiesSchmea = z.object({
-  url: z.string().optional(),
-  layers: z.array(z.string()).optional(),
-  srs: z.string().optional(),
-  width: z.number().optional(), // width of the image (only for external imagery)
-  height: z.number().optional(), // height of the image (only for external imagery)
-  legend_urls: z.array(z.string()).optional(),
-  version: z.string().optional(),
-  dpi: z.number().optional(),
-  tile_size: z.number().optional(),
-  // Per-project-layer data table preferences
-  table_config: tableConfigSchema.optional(),
-})
+export const otherPropertiesSchmea = z
+  .object({
+    url: z.string().optional(),
+    layers: z.array(z.string()).optional(),
+    srs: z.string().optional(),
+    width: z.number().optional(), // width of the image (only for external imagery)
+    height: z.number().optional(), // height of the image (only for external imagery)
+    legend_urls: z.array(z.string()).optional(),
+    version: z.string().optional(),
+    dpi: z.number().optional(),
+    tile_size: z.number().optional(),
+    // Per-project-layer data table preferences
+    table_config: tableConfigSchema.optional(),
+  })
   /**
    * Not a closed shape: `other_properties` is a free-form blob, and a promoted
    * catalog layer carries `catalog_item` and `catalog_materialize` in it. A
@@ -790,15 +783,11 @@ export type FieldKind = z.infer<typeof fieldKindSchema>;
 
 /** The kind used to FORMAT a field's values: formula fields format as their
  * inferred result kind (number/string/boolean/datetime). */
-export const resolveDisplayKind = (field: {
-  kind?: string;
-  output_kind?: string;
-}): string | undefined =>
+export const resolveDisplayKind = (field: { kind?: string; output_kind?: string }): string | undefined =>
   field.kind === "formula" ? (field.output_kind ?? "string") : field.kind;
 
 const numericFormatSchema = z.object({
-  decimals: z.union([z.literal("auto"), z.number().int().min(0).max(10)])
-    .default("auto"),
+  decimals: z.union([z.literal("auto"), z.number().int().min(0).max(10)]).default("auto"),
   thousands_separator: z.boolean().default(false),
   abbreviate: z.boolean().default(false),
   always_show_sign: z.boolean().default(false),
@@ -806,20 +795,28 @@ const numericFormatSchema = z.object({
 
 export const stringDisplayConfigSchema = z.object({}).strict();
 export const numberDisplayConfigSchema = numericFormatSchema.strict();
-export const areaDisplayConfigSchema = numericFormatSchema.extend({
-  unit: z.enum(["auto", "mm²", "cm²", "m²", "ha", "km²"]).default("auto"),
-}).strict();
+export const areaDisplayConfigSchema = numericFormatSchema
+  .extend({
+    unit: z.enum(["auto", "mm²", "cm²", "m²", "ha", "km²"]).default("auto"),
+  })
+  .strict();
 export const lengthLikeUnitSchema = z.enum(["auto", "mm", "cm", "m", "km"]);
-export const perimeterDisplayConfigSchema = numericFormatSchema.extend({
-  unit: lengthLikeUnitSchema.default("auto"),
-}).strict();
-export const lengthDisplayConfigSchema = numericFormatSchema.extend({
-  unit: lengthLikeUnitSchema.default("auto"),
-}).strict();
-export const datetimeDisplayConfigSchema = z.object({
-  tz: z.string().default("UTC"),
-  format: z.string().nullish(),
-}).strict();
+export const perimeterDisplayConfigSchema = numericFormatSchema
+  .extend({
+    unit: lengthLikeUnitSchema.default("auto"),
+  })
+  .strict();
+export const lengthDisplayConfigSchema = numericFormatSchema
+  .extend({
+    unit: lengthLikeUnitSchema.default("auto"),
+  })
+  .strict();
+export const datetimeDisplayConfigSchema = z
+  .object({
+    tz: z.string().default("UTC"),
+    format: z.string().nullish(),
+  })
+  .strict();
 
 export const displayConfigSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("string"), config: stringDisplayConfigSchema }),
@@ -859,11 +856,9 @@ export const createEmptyLayerSchema = z.object({
       },
       { message: "Field names must be unique" }
     )
-    .refine(
-      (fields) =>
-        fields.every((f) => !RESERVED_FIELD_NAMES.includes(f.name.toLowerCase())),
-      { message: "Field name conflicts with a reserved system column" }
-    ),
+    .refine((fields) => fields.every((f) => !RESERVED_FIELD_NAMES.includes(f.name.toLowerCase())), {
+      message: "Field name conflicts with a reserved system column",
+    }),
 });
 
 export type FieldDefinition = z.infer<typeof fieldDefinitionSchema>;
@@ -894,9 +889,4 @@ export const isCreatableKind = (kind: FieldKind): kind is CreatableFieldKind =>
 
 // Kinds whose VALUES are computed by the backend (read-only in editors).
 // Formula belongs here: its values are derived, only its expression is edited.
-export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set([
-  "area",
-  "perimeter",
-  "length",
-  "formula",
-]);
+export const COMPUTED_KINDS: ReadonlySet<FieldKind> = new Set(["area", "perimeter", "length", "formula"]);

@@ -729,6 +729,59 @@ def test_a_default_fills_a_blank_on_creation_only() -> None:
     assert apply_defaults(field_config, {"name": None})["name"] is None
 
 
+def test_the_bulk_path_applies_the_same_default_and_vocabulary_rule() -> None:
+    """The bulk path derives both maps once for the whole request rather than
+    per feature, so the rule the loop applies has to stay the one a single
+    create applies."""
+    con, layer_info = _setup_db()
+    try:
+        field_config: dict[str, Any] = {
+            "name": {
+                "default_value": "unknown",
+                "allowed_values": ["unknown", "asphalt"],
+                "allow_other": False,
+            }
+        }
+        with patch(
+            "geoapi.services.feature_write_service.ducklake_write_manager",
+            _FakeManager(con),
+        ):
+            ids = FeatureWriteService().create_features_bulk(
+                layer_info=layer_info,
+                features=[
+                    {"geometry": POLYGON_GEOJSON, "properties": {}},
+                    {"geometry": POLYGON_GEOJSON, "properties": {"name": "asphalt"}},
+                ],
+                column_names=COLUMN_NAMES,
+                geometry_column="geometry",
+                field_config=field_config,
+            )
+        assert len(ids) == 2
+        assert [
+            r[0]
+            for r in con.execute(
+                "SELECT name FROM lake.test_schema.features ORDER BY rowid"
+            ).fetchall()
+        ] == ["unknown", "asphalt"]
+
+        with _fails_with("not an accepted value"):
+            with patch(
+                "geoapi.services.feature_write_service.ducklake_write_manager",
+                _FakeManager(con),
+            ):
+                FeatureWriteService().create_features_bulk(
+                    layer_info=layer_info,
+                    features=[
+                        {"geometry": POLYGON_GEOJSON, "properties": {"name": "moon"}}
+                    ],
+                    column_names=COLUMN_NAMES,
+                    geometry_column="geometry",
+                    field_config=field_config,
+                )
+    finally:
+        con.close()
+
+
 def test_a_vocabulary_is_stored_as_the_column_type() -> None:
     """A number column holding the string "30" would never match the 30 a write
     sends, so the dropdown would offer a value that then fails validation."""

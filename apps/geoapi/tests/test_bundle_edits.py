@@ -6,6 +6,7 @@ id/attribute handling that decides whether a save actually lands.
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from uuid import UUID
 
 import duckdb
 import pytest
@@ -13,6 +14,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 LAYER = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+CALLER = "744e4fd1-685c-495c-8b02-efebce875359"
 BUNDLE = "22222222-2222-2222-2222-222222222222"
 EDITS_URL = f"/collections/{LAYER}/edits"
 
@@ -20,6 +22,7 @@ EDITS_URL = f"/collections/{LAYER}/edits"
 @pytest.fixture
 def client(mock_ducklake_manager):
     from geoapi.dependencies import LayerInfo, get_layer_info
+    from geoapi.deps.auth import get_user_id
     from geoapi.main import app
 
     # Resolving a LayerInfo would hit the DuckLake catalog for the layer's
@@ -27,6 +30,9 @@ def client(mock_ducklake_manager):
     app.dependency_overrides[get_layer_info] = lambda: LayerInfo(
         layer_id=LAYER, schema_name="user_data", table_name="layer_test"
     )
+    # The route requires a caller. Overriding the dependency pins one whatever
+    # `AUTH` is set to, rather than leaning on the AUTH=False mock identity.
+    app.dependency_overrides[get_user_id] = lambda: UUID(CALLER)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -98,6 +104,7 @@ def _post(
     nodes_owner="owner-a",
     apply_raises=None,
     mocks: dict | None = None,
+    field_config=None,
 ):
     """Post a batch with the surrounding lookups stubbed.
 
@@ -141,7 +148,11 @@ def _post(
         patch("geoapi.routers.bundle_edits.get_layer_info_sync"),
         patch(
             "geoapi.routers.bundle_edits._load_field_config",
-            AsyncMock(return_value=_edges_field_config()),
+            AsyncMock(
+                return_value=(
+                    _edges_field_config() if field_config is None else field_config
+                )
+            ),
         ),
         patch(
             "geoapi.routers.bundle_edits._invalidate_caches_and_pmtiles",
@@ -298,13 +309,80 @@ def test_class_and_speed_defaults():
     assert filled["class"] == edge_class
     assert filled["speed_limit_kph_forward"] == CLASS_DEFAULT_MAXSPEED[edge_class]
 
-    # A cleared class falls back to the default rather than saving as blank.
+    # A cleared class falls back to the default rather than saving as blank —
+    # the editor sends "" and the web nulls it, so both spellings count as
+    # blank on a write that replaces the row whole.
     assert _fill_class_defaults({"class": ""}, config)["class"] == edge_class
+    assert _fill_class_defaults({"class": None}, config)["class"] == edge_class
 
     # A stated class wins, and its speeds follow from it rather than the default.
     stated = _fill_class_defaults({"class": "footway"}, config)
     assert stated["class"] == "footway"
     assert "speed_limit_kph_forward" not in stated
+
+
+def test_a_cleared_class_is_defaulted_not_refused(client):
+    """The editor sends "" for a field the user emptied, and the type's default
+    is what an unclassified edge is meant to get — so the value has to be
+    validated as it will be written, after the default is filled in."""
+    response = _post(client, _payload(properties={"class": ""}))
+    assert response.status_code == 200, response.json()
+
+
+def test_a_layer_with_no_field_config_keeps_the_bundle_type_contract(client):
+    """field_config only exists on layers the current importer wrote (and only
+    where a PG pool is configured). The type's own vocabulary is the floor, or a
+    pre-existing network would accept a typo that the artifact build maps to a
+    drivable road."""
+    bogus = _post(client, _payload(properties={"class": "motorwayy"}), field_config={})
+    assert bogus.status_code == 400
+    assert "motorwayy" in bogus.json()["detail"]
+    # And a real class still saves.
+    assert (
+        _post(
+            client, _payload(properties={"class": "residential"}), field_config={}
+        ).status_code
+        == 200
+    )
+
+
+def test_the_type_supplies_the_class_default_when_the_layer_does_not():
+    """An edge drawn without a class on such a layer must not be written with
+    class NULL and NULL speeds: the build coalesces those to speed 0, which the
+    engine reads as impassable for cars."""
+    from goatlib.models.bundle import (
+        CLASS_DEFAULT_MAXSPEED,
+        BundleTypeName,
+        get_spec,
+    )
+
+    from geoapi.routers.bundle_edits import _fill_class_defaults, _with_role_contract
+
+    role = get_spec(BundleTypeName.street_network).role("edges")
+    floor = _with_role_contract({}, role)
+    filled = _fill_class_defaults({}, floor)
+    assert filled["class"] == role.default_values["class"]
+    assert filled["speed_limit_kph_forward"] == CLASS_DEFAULT_MAXSPEED[filled["class"]]
+
+    # The layer's own config wins where it has one, key by key: a narrowed
+    # vocabulary is a user's decision, and the floor only fills the silence.
+    narrowed = _with_role_contract({"class": {"allowed_values": ["residential"]}}, role)
+    assert narrowed["class"]["allowed_values"] == ["residential"]
+    assert narrowed["class"]["default_value"] == role.default_values["class"]
+
+
+def test_a_three_dimensional_edge_is_refused(client):
+    """A Z ordinate passes _validate_line and then dies mid-transaction with
+    "Inconsistent coordinate dimensionality", because the resolved vertices come
+    back as 2-tuples: refuse it up front instead."""
+    payload = _payload()
+    payload["create"][0]["geometry"]["coordinates"] = [
+        [11.0, 48.0, 515.0],
+        [11.001, 48.0, 517.0],
+    ]
+    response = _post(client, payload)
+    assert response.status_code == 400
+    assert "2D" in response.json()["detail"]
 
 
 # --- topology within one batch ---------------------------------------------

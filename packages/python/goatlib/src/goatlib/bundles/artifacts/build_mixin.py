@@ -234,6 +234,19 @@ class BundleArtifactBuildMixin:
             return True
 
         published = True
+        # The revision the artifacts will claim, read BEFORE the build rather
+        # than after it. Only a concurrent edit moves `layers_revision`, so
+        # reading it afterwards would pick up that edit and claim output built
+        # from the older layers came from the newer revision — which is exactly
+        # the case the publish guard exists to reject, and it would sail
+        # through. Read here, a build overtaken mid-flight is correctly refused.
+        # (A caller that read the revision before starting passes it in; this
+        # only fills in for callers that do not, like an import.)
+        revision = (
+            built_revision
+            if built_revision is not None
+            else await db.get_bundle_revision(bundle_id)
+        )
         with tempfile.TemporaryDirectory() as workdir:
             try:
                 # A builder reads either the uploaded source (GTFS: the feed is
@@ -268,17 +281,9 @@ class BundleArtifactBuildMixin:
                 # it from the bundle" instead of promising an update that is
                 # not running. (On an import no rows exist yet, so this is a
                 # no-op and the caller's bundle-failed handling takes over.)
-                await db.mark_bundle_artifacts_failed(bundle_id)
+                await db.mark_bundle_artifacts_failed(bundle_id, revision)
                 raise
 
-            # The revision the artifacts are about to claim. Read here rather
-            # than taken on trust when a caller did not supply one, so every
-            # published artifact records where it came from.
-            revision = (
-                built_revision
-                if built_revision is not None
-                else await db.get_bundle_revision(bundle_id)
-            )
             failures: List[str] = []
             for art in built:
                 kind_value = getattr(art.kind, "value", art.kind)
@@ -286,6 +291,7 @@ class BundleArtifactBuildMixin:
                     bundle_id=bundle_id,
                     kind=kind_value,
                     build_status=BundleArtifactBuildStatus.building,
+                    built_revision=revision,
                 )
                 if art.error:
                     # Recorded per kind, so a bundle that survives this build (a
@@ -295,6 +301,7 @@ class BundleArtifactBuildMixin:
                     await db.set_artifact_build_status(
                         artifact_id=artifact_id,
                         status=BundleArtifactBuildStatus.failed,
+                        built_revision=revision,
                     )
                     logger.warning(
                         "Artifact %s for bundle %s not built: %s",
@@ -340,6 +347,7 @@ class BundleArtifactBuildMixin:
                         await db.set_artifact_build_status(
                             artifact_id=artifact_id,
                             status=BundleArtifactBuildStatus.failed,
+                            built_revision=revision,
                         )
                         delete_artifact_file(
                             self.settings.bundles_data_dir, storage_path
@@ -365,6 +373,7 @@ class BundleArtifactBuildMixin:
                     await db.set_artifact_build_status(
                         artifact_id=artifact_id,
                         status=BundleArtifactBuildStatus.failed,
+                        built_revision=revision,
                     )
                     if storage_path:
                         delete_artifact_file(

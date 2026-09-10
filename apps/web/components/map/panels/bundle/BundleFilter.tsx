@@ -22,7 +22,6 @@ import { Box, Button, Divider, Stack, Typography, useTheme } from "@mui/material
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { v4 } from "uuid";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
@@ -36,14 +35,7 @@ import { useProcessExecution } from "@/hooks/map/useOgcProcesses";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import Expression from "@/components/map/panels/filter/Expression";
-
-const blankExpression = (): ExpressionType => ({
-  id: v4(),
-  attribute: "",
-  expression: "",
-  value: "",
-  type: FilterType.Spatial,
-});
+import { createExpression, validateExpressions } from "@/components/map/panels/filter/Filter";
 
 type BundleFilterProps = {
   bundle: BundleRead;
@@ -65,10 +57,9 @@ const BundleFilter = ({ bundle, projectId, memberLayerId }: BundleFilterProps) =
   const [expression, setExpression] = useState<ExpressionType | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const isComplete = useMemo(
-    () => !!expression?.attribute && !!expression.expression && !!expression.value?.toString(),
-    [expression]
-  );
+  // Completeness means the same thing here as for a layer's filter, so it is
+  // the same check — over the one expression a bundle takes.
+  const isComplete = useMemo(() => !!expression && validateExpressions([expression]), [expression]);
 
   const saveAsNewBundle = async () => {
     if (!expression) return;
@@ -124,7 +115,7 @@ const BundleFilter = ({ bundle, projectId, memberLayerId }: BundleFilterProps) =
             unlike a layer. */}
         {!expression ? (
           <Button
-            onClick={() => setExpression(blankExpression())}
+            onClick={() => setExpression(createExpression(FilterType.Spatial))}
             fullWidth
             size="small"
             startIcon={<Icon iconName={ICON_NAME.PLUS} style={{ fontSize: "15px" }} />}>

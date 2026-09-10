@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
 
+import { useFolders } from "@/lib/api/folders";
 import {
   addProjectLayers,
   createProjectLayerGroup,
@@ -14,12 +15,10 @@ import {
   useProjectLayerGroups,
   useProjectLayers,
 } from "@/lib/api/projects";
-import { useFolders } from "@/lib/api/folders";
 import { SYSTEM_LAYERS_IDS } from "@/lib/constants";
 import { DEFAULT_BASEMAP } from "@/lib/constants/basemaps";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setActiveRightPanel } from "@/lib/store/map/slice";
-import { DATA_PANEL_HEIGHT_CONSUMER_ATTR, DATA_PANEL_HEIGHT_VAR } from "@/components/map/panels/DataPanel";
 import type { CustomBasemap, Project, ProjectLayerTreeUpdate } from "@/lib/validations/project";
 
 import { MapSidebarItemID } from "@/types/map/common";
@@ -31,7 +30,6 @@ import { useMeasureTool } from "@/hooks/map/useMeasureTool";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { FloatingPanel } from "@/components/common/FloatingPanel";
-import FeatureEditPanel from "@/components/map/panels/FeatureEditPanel";
 import AttributionControl from "@/components/map/controls/Attribution";
 import { BasemapSelector } from "@/components/map/controls/BasemapSelector";
 import { CustomBasemapDialog } from "@/components/map/controls/CustomBasemapDialog";
@@ -42,11 +40,13 @@ import { Zoom } from "@/components/map/controls/Zoom";
 import { MeasureButton, MeasureResultsPanel } from "@/components/map/controls/measure";
 import SearchControl from "@/components/map/controls/search/SearchControl";
 import { useEditorSearchLayers } from "@/components/map/controls/search/editorSearchLayers";
+import { DATA_PANEL_HEIGHT_CONSUMER_ATTR, DATA_PANEL_HEIGHT_VAR } from "@/components/map/panels/DataPanel";
+import FeatureEditPanel from "@/components/map/panels/FeatureEditPanel";
 import BundleSettingsPanel from "@/components/map/panels/bundle/BundleSettingsPanel";
 import LayerSettingsPanel from "@/components/map/panels/layer/LayerSettingsPanel";
-import { MapFixedPopupSlot } from "@/components/map/popover/MapFixedPopupSlot";
 import { ProjectLayerTree } from "@/components/map/panels/layer/ProjectLayerTree";
 import Toolbox from "@/components/map/panels/toolbox/CombinedToolbox";
+import { MapFixedPopupSlot } from "@/components/map/popover/MapFixedPopupSlot";
 
 const toolbarHeight = 52;
 const panelWidth = 300;
@@ -81,10 +81,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   // Queryables for the search scope are only fetched once the control is opened.
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
-  const { searchLayers, layersById: searchLayersById } = useEditorSearchLayers(
-    projectLayers,
-    searchExpanded
-  );
+  const { searchLayers, layersById: searchLayersById } = useEditorSearchLayers(projectLayers, searchExpanded);
   const searchSource = useMemo(
     () => ({ mode: "editor" as const, placesEnabled: true as const, layers: searchLayers }),
     [searchLayers]
@@ -95,8 +92,10 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   // persist); this remembers what to restore when the dialog closes.
   const basemapBeforeEdit = useRef<string | null>(null);
 
-  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } =
-    useCustomBasemapMutations(project, onProjectUpdate);
+  const { addCustomBasemap, editCustomBasemap, deleteCustomBasemap } = useCustomBasemapMutations(
+    project,
+    onProjectUpdate
+  );
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomBasemap | null>(null);
@@ -298,8 +297,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   // Width occupied by the right-side stack (measure results, feature
   // editor panel, active right component). Used to size the fixed-popup
   // host below so it doesn't extend behind the panels.
-  const measureVisible =
-    measureTool.measureOpen || measureTool.measurements.length > 0;
+  const measureVisible = measureTool.measureOpen || measureTool.measurements.length > 0;
   const rightStackWidth = useMemo(() => {
     const FEATURE_EDIT_PANEL_WIDTH = 320;
     const MEASURE_PANEL_WIDTH = 320;
@@ -314,7 +312,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
   return (
     <>
       <Box
-      {...{ [DATA_PANEL_HEIGHT_CONSUMER_ATTR]: "" }}
+        {...{ [DATA_PANEL_HEIGHT_CONSUMER_ATTR]: "" }}
         sx={{
           position: "absolute",
           top: toolbarHeight + 10,
@@ -439,9 +437,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
               }}
               onEdit={(id) => {
                 const target =
-                  (project?.custom_basemaps as CustomBasemap[] | undefined)?.find(
-                    (c) => c.id === id
-                  ) ?? null;
+                  (project?.custom_basemaps as CustomBasemap[] | undefined)?.find((c) => c.id === id) ?? null;
                 if (target && project?.basemap !== id) {
                   // Ephemeral preview only — reverted on close, never persisted.
                   basemapBeforeEdit.current = project?.basemap ?? DEFAULT_BASEMAP;
@@ -455,9 +451,7 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
           {/* -10px cancels the right-overlay's 10px bottom inset (height: calc(100% - toolbarHeight - 20px) at top: toolbarHeight+10) so the strip sits flush to the map's bottom edge. */}
           <Box sx={{ mb: "-10px" }}>
             <AttributionControl
-              extraAttribution={
-                activeBasemap.source === "custom" ? activeBasemap.attribution : null
-              }
+              extraAttribution={activeBasemap.source === "custom" ? activeBasemap.attribution : null}
             />
           </Box>
         </Stack>
@@ -474,7 +468,10 @@ const DataProjectLayout = ({ project, onProjectUpdate }: DataProjectLayoutProps)
             zIndex: (theme) => theme.zIndex.drawer + 1,
             pointerEvents: "none",
           }}>
-          <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start", height: "100%", overflow: "hidden" }}>
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ alignItems: "flex-start", height: "100%", overflow: "hidden" }}>
             <MeasureResultsPanel {...measureTool} />
             {showFeatureEditPanel && (
               <FloatingPanel width={320} maxHeight="100%" fillHeight>

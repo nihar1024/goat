@@ -28,7 +28,6 @@ from goatlib.bundles.topology import (
     ReuseNode,
     SplitEdge,
     interior_join,
-    orphaned_nodes,
     resolve_endpoint,
     segments_from_breaks,
     validate_edge_endpoints,
@@ -36,6 +35,7 @@ from goatlib.bundles.topology import (
 from goatlib.models.bundle import (
     CLASS_DEFAULT_MAXSPEED,
     BundleTypeName,
+    RoleSpec,
     get_spec,
 )
 from pydantic import BaseModel, Field
@@ -303,6 +303,23 @@ def _validate_line(geometry: dict[str, Any]) -> None:
                 status_code=400,
                 detail="Every point of an edge needs a longitude and a latitude.",
             )
+        if len(point) > 2:
+            # Refused rather than flattened. Everything downstream is 2D — the
+            # snap tolerance is measured in projected metres, a split is a
+            # fraction along a 2D line, and a resolved vertex is read back from
+            # the nodes layer as ST_X/ST_Y — so an elevation would be dropped
+            # somewhere between the drawn line and the stored row either way.
+            # Dropping it here silently would also mix 2- and 3-tuples in one
+            # coordinate list and fail mid-transaction with "Inconsistent
+            # coordinate dimensionality"; saying so is a 400 the client can act
+            # on.
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "An edge must be a 2D LineString: a street network stores "
+                    "longitude and latitude only."
+                ),
+            )
 
 
 def _to_3857(geometry: dict[str, Any]) -> Any:
@@ -344,32 +361,73 @@ def _batch_bbox_3857(
     return (xmin - pad, ymin - pad, xmax + pad, ymax + pad)
 
 
+# The edges layer's per-direction speed limits, filled from the class above.
+# Named here because the derivation below is the only thing that writes them.
+SPEED_COLUMNS = ("speed_limit_kph_forward", "speed_limit_kph_backward")
+
+
 def _fill_class_defaults(
     properties: dict[str, Any], field_config: dict[str, Any] | None
 ) -> dict[str, Any]:
     """Give a drawn edge the layer's defaults, and the speeds its class implies.
 
     The plain defaults come from ``field_config`` through the same
-    ``apply_defaults`` the per-feature endpoints use — an unclassified edge gets
-    its ``class`` there, because classifying a street is a judgement the user
-    can make later and the engine has a meaning for "unknown".
+    ``apply_defaults`` the per-feature endpoints use, under its
+    blank-counts-as-absent rule: this endpoint replaces the row whole and the
+    editor sends "" (or null) for a field the user cleared, so an unclassified
+    edge gets its ``class`` rather than saving as blank. Classifying a street is
+    a judgement the user can make later and the engine has a meaning for
+    "unknown".
 
     The speeds cannot come from there: they follow from whichever class ended up
-    on the edge, so they are derived rather than declared.
+    on the edge, so they are derived rather than declared, and only a street
+    network has them.
 
     They matter more than they look. The artifact build coalesces a null speed
     to 0 and the engine treats maxspeed <= 0 as impassable, so an edge saved
     without them would be walkable but invisible to car routing.
     """
-    # A blank is the same as an absent column here: the editor sends "" for a
-    # field the user cleared, and an edge still needs a class.
-    stated = {k: v for k, v in properties.items() if v not in (None, "")}
-    filled = {**properties, **apply_defaults(field_config, stated)}
+    filled = apply_defaults(field_config, properties, blank_is_absent=True)
     default = CLASS_DEFAULT_MAXSPEED.get(filled.get("class"))
-    for column in ("speed_limit_kph_forward", "speed_limit_kph_backward"):
+    for column in SPEED_COLUMNS:
         if filled.get(column) is None and default is not None:
             filled[column] = default
     return filled
+
+
+def _with_role_contract(
+    field_config: dict[str, Any] | None, role_spec: RoleSpec
+) -> dict[str, Any]:
+    """The layer's own field_config over the bundle type's contract.
+
+    A member layer carries the role's vocabularies and defaults in its
+    field_config, written there at import so the constraint travels with the
+    layer. Only the current importer writes them: a network imported before it,
+    a filtered copy that lost the metadata, or a deployment whose PG pool is not
+    configured all present an empty config, and the type's contract still holds
+    for those. So the role's own declaration is the floor — ``class`` keeps its
+    vocabulary, so a typo is a 400 rather than a road the artifact build maps to
+    a drivable default, and keeps its default, so an edge drawn without one is
+    "unknown" instead of NULL with NULL speeds, which the build turns into speed
+    0: impassable for cars while looking like a street.
+
+    Merged key by key, so whatever the layer states wins — a user may have
+    narrowed the vocabulary or changed the default on their own copy.
+    """
+    merged: dict[str, Any] = {
+        name: dict(entry) if isinstance(entry, dict) else entry
+        for name, entry in (field_config or {}).items()
+    }
+    for column, values in role_spec.allowed_values.items():
+        entry = merged.setdefault(column, {})
+        if isinstance(entry, dict) and not entry.get("allowed_values"):
+            entry["allowed_values"] = list(values)
+            entry.setdefault("allow_other", False)
+    for column, value in role_spec.default_values.items():
+        entry = merged.setdefault(column, {})
+        if isinstance(entry, dict) and entry.get("default_value") is None:
+            entry["default_value"] = value
+    return merged
 
 
 @router.post(
@@ -461,17 +519,25 @@ async def apply_bundle_edits(
     authorization = request.headers.get("Authorization")
 
     try:
-        # The computed columns the layer declares; the writer refreshes them
-        # after every geometry write, the way the per-feature endpoints do.
         # The layer's own field_config, exactly as the per-feature endpoints
-        # read it: the role's vocabularies and defaults are written into it at
-        # import, so this is the same constraint the editor was offering.
-        # An absent value is filled from it below; one outside a vocabulary is
-        # refused, because the artifact build maps an unknown street class to a
-        # drivable road rather than reporting the mistake.
-        field_config = await _load_field_config(layer_info)
+        # read it, over the bundle type's contract: the role's vocabularies and
+        # defaults are written into the layer at import, and the type's own
+        # declaration stands in for a layer that predates that. It carries two
+        # things — the computed columns the writer refreshes after every
+        # geometry write, and the constraint the editor was offering.
+        field_config = _with_role_contract(
+            await _load_field_config(layer_info), spec_role
+        )
         for edit in (*body.create, *body.update):
-            validate_allowed_values(field_config, edit.properties)
+            # Validated as it will be written, defaults and all: a cleared
+            # field takes the layer's default here, so refusing the raw value
+            # would refuse exactly what the editor sends for a field the user
+            # emptied. A value outside the vocabulary is still refused, because
+            # the artifact build maps an unknown street class to a drivable
+            # road rather than reporting the mistake.
+            validate_allowed_values(
+                field_config, _fill_class_defaults(edit.properties, field_config)
+            )
         changes = await loop.run_in_executor(
             None, _apply, layer_info, nodes_info, body, field_config
         )
@@ -651,9 +717,40 @@ def _apply(
 
             # Nodes the save might orphan: the endpoints of everything it
             # removes or moves.
-            release_candidates = _endpoints_of(
+            release_candidates = writer.edge_endpoints(
                 con, edges_table, delete_ids + list(update_ids.values())
             )
+
+            def write_segment(
+                segment: DrawnSegment,
+                properties: dict[str, Any],
+                coordinates: list[Any],
+                projected: list[Any],
+            ) -> None:
+                """Write one piece of a drawn line as a new edge.
+
+                A create writes every piece this way; an update keeps its first
+                piece on the row the client knows and writes the rest here.
+                """
+                new_id = writer.mint_id()
+                writer.insert_edge(
+                    con,
+                    edges_table,
+                    columns,
+                    new_id,
+                    _segment_geometry(coordinates, segment),
+                    properties,
+                    segment.source_node,
+                    segment.target_node,
+                    field_config,
+                )
+                edge_changes.created.append(new_id)
+                batch.record(
+                    new_id,
+                    segment.source_node,
+                    segment.target_node,
+                    _segment_line(projected, segment),
+                )
 
             for created in body.create:
                 segments, coordinates, projected = _plan(batch, created.geometry)
@@ -661,25 +758,7 @@ def _apply(
                     created.properties, batch.field_config
                 )
                 for segment in segments:
-                    new_id = writer.mint_id()
-                    writer.insert_edge(
-                        con,
-                        edges_table,
-                        columns,
-                        new_id,
-                        _segment_geometry(coordinates, segment),
-                        properties,
-                        segment.source_node,
-                        segment.target_node,
-                        field_config,
-                    )
-                    edge_changes.created.append(new_id)
-                    batch.record(
-                        new_id,
-                        segment.source_node,
-                        segment.target_node,
-                        _segment_line(projected, segment),
-                    )
+                    write_segment(segment, properties, coordinates, projected)
 
             for updated in body.update:
                 own_id = update_ids[updated.id]
@@ -719,35 +798,20 @@ def _apply(
                     _segment_line(projected, head),
                 )
                 for segment in tail:
-                    new_id = writer.mint_id()
-                    writer.insert_edge(
-                        con,
-                        edges_table,
-                        columns,
-                        new_id,
-                        _segment_geometry(coordinates, segment),
-                        properties,
-                        segment.source_node,
-                        segment.target_node,
-                        field_config,
-                    )
-                    edge_changes.created.append(new_id)
-                    batch.record(
-                        new_id,
-                        segment.source_node,
-                        segment.target_node,
-                        _segment_line(projected, segment),
-                    )
+                    write_segment(segment, properties, coordinates, projected)
 
             if delete_ids:
                 writer.delete_edges_by_id(con, edges_table, delete_ids)
                 edge_changes.deleted.extend(delete_ids)
 
             if release_candidates:
-                surviving = writer.surviving_edge_endpoints(
+                # The same question ``node_references`` answers for snapping,
+                # asked after the writes and with nothing excluded: a candidate
+                # no surviving edge holds is this save's orphan.
+                held = writer.node_references(
                     con, edges_table, list(release_candidates)
                 )
-                orphans = orphaned_nodes(release_candidates, surviving)
+                orphans = {node_id for node_id, holders in held.items() if not holders}
                 writer.delete_nodes_by_id(con, nodes_table, orphans)
                 node_changes.removed.extend(sorted(orphans))
 
@@ -757,19 +821,6 @@ def _apply(
             raise
 
     return edge_changes, node_changes
-
-
-def _endpoints_of(con: Any, edges_table: str, edge_ids: list[str]) -> set[str]:
-    """Node ids the given edges currently reference."""
-    if not edge_ids:
-        return set()
-    placeholders = ", ".join(["?"] * len(edge_ids))
-    rows = con.execute(
-        f"SELECT source_node, target_node FROM {edges_table} "
-        f'WHERE "id" IN ({placeholders})',
-        list(edge_ids),
-    ).fetchall()
-    return {value for row in rows for value in row if value}
 
 
 def _plan(

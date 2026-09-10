@@ -113,9 +113,14 @@ class CRUDLayerProjectGroup(CRUDBase):
         async_session: AsyncSession,
         project_id: UUID,
         bundle_id: UUID,
+        *,
+        user_id: UUID,
     ) -> tuple[LayerProjectGroup, list]:
         """Add a bundle to a project: create a bundle-backed group and place all
         of the bundle's member layers into it. Membership is locked downstream.
+
+        ``user_id`` is the user doing the adding; it decides whether each member
+        link is shareable (D7), exactly as for a plain layer add.
         """
         # Reuse crud_layer_project for the member links (name/order handling).
         from core.crud.crud_layer_project import layer_project as crud_layer_project
@@ -137,13 +142,15 @@ class CRUDLayerProjectGroup(CRUDBase):
         bundle = await async_session.get(Bundle, bundle_id)
         if bundle is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Bundle not found")
-        if bundle.status != "ready":
-            # A bundle mid-import has no member layers yet; adding it now would
-            # commit a locked, empty group that the import's own attach then
-            # 409s against.
+        # Legacy-data guard: `failed` is no longer in `BundleStatus` and an
+        # import that fails now deletes its own bundle, so only rows written
+        # before that can be in this state. Such a row died part-way through
+        # its ingest, so whatever member links it has describe an incomplete
+        # import and must not be put in front of a user.
+        if bundle.status == "failed":
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                detail=f"Bundle is not ready (status: {bundle.status})",
+                detail="Bundle import failed; it cannot be added to a project",
             )
 
         # Points before lines before polygons, so a node is not buried under
@@ -166,6 +173,19 @@ class CRUDLayerProjectGroup(CRUDBase):
                 key=lambda row: member_draw_rank(row.feature_layer_geometry_type),
             )
         ]
+        if not member_ids:
+            # Having members is the actual requirement: the group's membership
+            # is locked, so an empty one can never be filled from the project
+            # side, and a bundle whose import is still running (its member
+            # links are written when the import completes) would collide with
+            # the import's own attach. `bundle.status` is not the question —
+            # it reports the import alone, so a bundle assembled by hand stays
+            # `processing` for ever, and usability is per artifact and derived
+            # (see BundleStatus / BundleArtifactState).
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Bundle has no member layers yet",
+            )
 
         # A bundle goes to the top like anything else added to a project, so
         # the project moves down by the group plus every member that will sit
@@ -182,30 +202,28 @@ class CRUDLayerProjectGroup(CRUDBase):
         await async_session.commit()
         await async_session.refresh(group)
 
-        layers: list = []
-        if member_ids:
-            try:
-                layers = await crud_layer_project.create(
-                    async_session,
-                    project_id=project_id,
-                    layer_ids=list(member_ids),
-                    group_id=group.id,
-                    # Directly below the group header, in role order. Room for
-                    # them was made above, so the links take it as given rather
-                    # than pushing the project down a second time.
-                    start_order=group.order + 1,
-                )
-            except Exception:
-                # The group was already committed; if adding members fails, drop
-                # it (cascades any partial links) so no empty bundle group lingers.
-                await async_session.rollback()
-                await async_session.execute(
-                    sql_delete(LayerProjectGroup).where(
-                        LayerProjectGroup.id == group.id
-                    )
-                )
-                await async_session.commit()
-                raise
+        layers: list
+        try:
+            layers = await crud_layer_project.create(
+                async_session,
+                project_id=project_id,
+                layer_ids=list(member_ids),
+                user_id=user_id,
+                group_id=group.id,
+                # Directly below the group header, in role order. Room for
+                # them was made above, so the links take it as given rather
+                # than pushing the project down a second time.
+                start_order=group.order + 1,
+            )
+        except Exception:
+            # The group was already committed; if adding members fails, drop
+            # it (cascades any partial links) so no empty bundle group lingers.
+            await async_session.rollback()
+            await async_session.execute(
+                sql_delete(LayerProjectGroup).where(LayerProjectGroup.id == group.id)
+            )
+            await async_session.commit()
+            raise
         return group, layers
 
 

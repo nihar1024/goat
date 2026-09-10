@@ -25,8 +25,9 @@ from shapely import wkt
 from geoapi.services.computed_columns import parse_computed_columns
 
 # One definition of the rowid convention (a public feature id is rowid + 1,
-# because MapLibre treats MVT feature id 0 as "unset").
-from geoapi.services.feature_write_service import _feature_id_to_rowid
+# because MapLibre treats MVT feature id 0 as "unset"), and one of the
+# GeoParquet bbox struct every write path keeps in step with the geometry.
+from geoapi.services.feature_write_service import _feature_id_to_rowid, bbox_struct_sql
 
 logger = logging.getLogger(__name__)
 
@@ -246,10 +247,7 @@ def _node_insert_sql(nodes_table: str, columns: Sequence[str], geom_expr: str) -
     select.append("g")
     if "bbox" in columns:
         target.append('"bbox"')
-        select.append(
-            "struct_pack(xmin := ST_XMin(g), ymin := ST_YMin(g), "
-            "xmax := ST_XMax(g), ymax := ST_YMax(g))"
-        )
+        select.append(bbox_struct_sql("g"))
     for axis, fn in (
         ("xmin", "ST_XMin"),
         ("ymin", "ST_YMin"),
@@ -459,14 +457,7 @@ def _derived(
             if spec.name in columns
         ]
     if "bbox" in columns:
-        derived.append(
-            (
-                "bbox",
-                'struct_pack(xmin := ST_XMin("__geom__"), '
-                'ymin := ST_YMin("__geom__"), xmax := ST_XMax("__geom__"), '
-                'ymax := ST_YMax("__geom__"))',
-            )
-        )
+        derived.append(("bbox", bbox_struct_sql('"__geom__"')))
     derived += [
         (axis, f'{fn}("__geom__")')
         for axis, fn in (
@@ -503,21 +494,22 @@ def delete_edges_by_id(con: Any, edges_table: str, edge_ids: Sequence[str]) -> N
     )
 
 
-def surviving_edge_endpoints(
-    con: Any, edges_table: str, node_ids: Sequence[str]
-) -> list[tuple[str, str]]:
-    """Endpoint pairs of every edge still referencing any of these nodes."""
-    if not node_ids:
-        return []
-    placeholders = ", ".join(["?"] * len(node_ids))
+def edge_endpoints(con: Any, edges_table: str, edge_ids: Sequence[str]) -> set[str]:
+    """Node ids the given edges currently reference.
+
+    The nodes a save might orphan: the endpoints of everything it removes or
+    moves. Which of them actually end up orphaned is ``node_references``.
+    """
+    ids = list(edge_ids)
+    if not ids:
+        return set()
+    placeholders = ", ".join(["?"] * len(ids))
     rows = con.execute(
-        f"""
-        SELECT source_node, target_node FROM {edges_table}
-        WHERE source_node IN ({placeholders}) OR target_node IN ({placeholders})
-        """,
-        list(node_ids) * 2,
+        f"SELECT source_node, target_node FROM {edges_table} "
+        f'WHERE "id" IN ({placeholders})',
+        ids,
     ).fetchall()
-    return [(r[0], r[1]) for r in rows]
+    return {value for row in rows for value in row if value}
 
 
 def delete_nodes_by_id(con: Any, nodes_table: str, node_ids: Iterable[str]) -> int:

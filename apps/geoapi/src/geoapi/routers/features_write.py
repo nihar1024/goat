@@ -630,6 +630,17 @@ async def add_column(
         else:
             validated_cfg = body.display_config or {}
 
+        # Coerced before the DDL, with everything else that can be refused: the
+        # ALTER TABLE below is not part of the field_config transaction, so a
+        # 400 raised after it would leave a real DuckDB column with no entry
+        # describing it and the client's corrected retry would fail with
+        # "column already exists".
+        coerced_allowed_values: list[Any] | None = None
+        if body.allowed_values and body.kind is not None:
+            coerced_allowed_values = coerce_allowed_values(
+                cfg_kind, body.allowed_values
+            )
+
         feature_write_service.add_column_with_sql(
             layer_info=layer_info,
             name=body.name,
@@ -650,10 +661,8 @@ async def add_column(
             if body.kind == "formula":
                 entry["formula"] = body.formula
                 entry["output_kind"] = output_kind
-            if body.allowed_values:
-                entry["allowed_values"] = coerce_allowed_values(
-                    body.kind, body.allowed_values
-                )
+            if coerced_allowed_values is not None:
+                entry["allowed_values"] = coerced_allowed_values
                 entry["allow_other"] = body.allow_other
             if body.default_value is not None:
                 # Two stores, one authority. The ALTER TABLE above set a DuckDB
@@ -810,14 +819,24 @@ async def update_column(
                             formula_update["output_kind"], None
                         ).model_dump()
 
-                if body.display_config is not None:
-                    # Resolve the column's kind: prefer the JSONB entry,
-                    # otherwise infer from the actual DuckDB column type
-                    # (matches what queryables surfaces to the frontend).
+                def config_kind() -> str:
+                    """The kind a display_config or a vocabulary is read against.
+
+                    Prefers the JSONB entry, and infers from the actual DuckDB
+                    column type when the column has no entry yet — the common
+                    case, since an entry is only written when someone edits the
+                    column's definition. Shared by both branches below: a
+                    vocabulary coerced against ``None`` would store a number
+                    column's values as strings, and the strict ``in`` in
+                    ``validate_allowed_values`` would then refuse every value
+                    the editor offers.
+                    """
                     kind = entry.get("kind")
                     if not kind:
                         col_types = feature_write_service.get_column_types(layer_info)
-                        duckdb_type = col_types.get(columnName, "")
+                        # The rename above has already landed, so the column
+                        # answers to its new name by now.
+                        duckdb_type = col_types.get(body.new_name or columnName, "")
                         json_type = layer_service._duckdb_to_json_type(duckdb_type)
                         kind = (
                             "number" if json_type in ("number", "integer") else "string"
@@ -825,13 +844,14 @@ async def update_column(
                         entry["kind"] = kind
                         entry.setdefault("is_computed", False)
                         entry.setdefault("depends_on", [])
-                    # Formula display config is validated against the
-                    # formula's result kind, not "formula" itself.
-                    cfg_kind = (
-                        entry.get("output_kind", "string")
-                        if kind == "formula"
-                        else kind
-                    )
+                    # A formula's own config follows its *result* kind, not
+                    # "formula" itself.
+                    if kind == "formula":
+                        return str(entry.get("output_kind", "string"))
+                    return str(kind)
+
+                if body.display_config is not None:
+                    cfg_kind = config_kind()
                     try:
                         entry["display_config"] = validate_display_config(
                             cfg_kind, body.display_config
@@ -844,11 +864,12 @@ async def update_column(
                     # hold a value is not what changing a default means, and the
                     # column's DDL default is left alone for the same reason —
                     # `field_config` is the default of record (see add_column).
-                    entry["default_value"] = (
-                        None if body.default_value == "" else body.default_value
-                    )
-                    if entry["default_value"] is None:
+                    if body.default_value == "":
+                        # An empty string removes the default rather than
+                        # making the blank itself the default.
                         entry.pop("default_value", None)
+                    else:
+                        entry["default_value"] = body.default_value
 
                 if body.allowed_values is not None:
                     # An empty list removes the vocabulary, leaving the column
@@ -857,10 +878,11 @@ async def update_column(
                     # written from now on, and rewriting a column's data is not
                     # what editing its definition means.
                     if body.allowed_values:
-                        # Against the column's own kind, which the entry knows
-                        # even though the request does not.
+                        # Against the column's own kind, which the server
+                        # resolves (entry, else the DuckDB type) because the
+                        # request does not carry it.
                         entry["allowed_values"] = coerce_allowed_values(
-                            entry.get("kind"), body.allowed_values
+                            config_kind(), body.allowed_values
                         )
                         entry["allow_other"] = bool(body.allow_other)
                     else:

@@ -112,8 +112,14 @@ const BundleSummary: React.FC<BundleSummaryProps> = ({
   // remedy. A bundle with no artifacts is either still importing or of a type
   // that derives none, and neither is something a rebuild fixes — an import
   // that fails deletes its bundle rather than leaving one to rescue.
+  // The second clause is the import that never got to write an artifact row at
+  // all: a worker killed outright (OOM/SIGKILL) never reaches the delete that a
+  // failed import does, leaving the bundle at `processing` for good. Still gated
+  // on the type being rebuildable, or the button would only ever refuse.
   const needsRebuild =
-    !!bundle.artifacts_from_layers && artifacts.some((artifact) => artifact.state !== "ready");
+    !!bundle.artifacts_from_layers &&
+    (artifacts.some((artifact) => artifact.state !== "ready") ||
+      (artifacts.length === 0 && bundle.status !== "ready"));
   // A build already running makes a second click a duplicate, not a retry.
   const isBuilding = artifacts.some((artifact) => artifact.state === "building");
 

@@ -130,12 +130,15 @@ class BundleRead(BundleBase, ThumbnailUrlMixin):
     name: str = Field(..., description="Bundle name")
     description: str | None = Field(None, description="Bundle description")
     # The stored value, not the enum — as `BundleByLayerResponse` already
-    # reports it. `customer.bundle_type` is the FK authority and is migrated
-    # ahead of the code that ships the matching member, so validating it here
-    # would take every bundle listing down for the length of a rolling deploy.
+    # reports it. The column is plain text with no reference table behind it,
+    # so a row can hold a type this release does not know (written by a newer
+    # one, or left by a rollback); validating it here would take every bundle
+    # listing down rather than just that row.
     bundle_type: str = Field(..., description="Bundle type")
     id: UUID = Field(..., description="Bundle ID")
-    user_id: UUID = Field(..., description="Bundle owner ID")
+    user_id: UUID | None = Field(
+        None, description="Bundle owner ID; None if the owning user was deleted"
+    )
     folder_id: UUID = Field(..., description="Folder the bundle lives in")
     status: str = Field("ready", description="Processing lifecycle status")
     # The mixin turns the stored value into a presigned URL and falls back to the

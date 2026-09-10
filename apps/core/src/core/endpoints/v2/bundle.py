@@ -1,3 +1,5 @@
+import contextlib
+import logging
 import os
 import tempfile
 from collections import defaultdict
@@ -9,7 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from fastapi.concurrency import run_in_threadpool
 from goatlib.bundles.importers import get_importer, infer_bundle_type
 from goatlib.models.bundle import (
-    BundleArtifactBuildStatus,
+    BundleArtifactState,
     BundleStatus,
     BundleTypeName,
     artifact_state,
@@ -17,20 +19,18 @@ from goatlib.models.bundle import (
     get_spec,
 )
 from pydantic import UUID4
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import update as sql_update
 
+from core.core import authz
+from core.core.authz import Action
 from core.core.config import settings
 from core.crud.crud_bundle import bundle as crud_bundle
 from core.crud.crud_bundle import member_thumbnails
 from core.db.models._link_model import (
     BundleDependencyLink,
     BundleLayerLink,
-    LayerProjectLink,
-    ProjectOrganizationLink,
-    ProjectTeamLink,
-    ProjectUserLink,
     ResourceGrant,
     UserTeamLink,
 )
@@ -63,8 +63,10 @@ from core.schemas.bundle import (
     BundleUpdate,
     request_examples,
 )
-from core.services.processes import execute_process
+from core.services.processes import dispatch_never_started, execute_process
 from core.services.s3 import s3_service
+
+logger = logging.getLogger(__name__)
 
 RESOURCE_TYPE = "bundle"
 
@@ -112,15 +114,6 @@ def _grant_conditions(team_ids: list[UUID], org_id: UUID | None) -> list:
     return conds
 
 
-# Grant roles that confer each access level on a bundle. Access is grant-based
-# (like folders): a bundle's own grant, or a grant on the folder it lives in
-# (folder grants cascade to the bundle), plus ownership.
-_BUNDLE_EDITOR_ROLES = {"bundle-editor", "folder-editor"}
-_BUNDLE_VIEWER_ROLES = _BUNDLE_EDITOR_ROLES | {
-    "bundle-viewer",
-    "folder-viewer",
-}
-
 BundleAccess = Literal["read", "write", "owner"]
 
 
@@ -132,64 +125,48 @@ async def authorize_bundle(
 ) -> Bundle:
     """Single authorization gate for a bundle.
 
-    Resolves the caller's effective access from ownership, the bundle's own
-    grants, and its folder's grants (folder grants cascade to the bundle), then
-    checks it against the required level:
+    Resolves the caller's effective access via ``customer.effective_role``
+    (the caller's role in the bundle's space, the bundle's own grants, and its
+    folder's grants — folder grants cascade to the bundle), then checks it
+    against the required level:
 
     * ``read``  — viewer or above (view/list),
     * ``write`` — editor or above (update, move, members, dependencies, share),
-    * ``owner`` — the bundle owner only (delete — a whole-bundle cascade).
+    * ``owner`` — rank 3 (delete — a whole-bundle cascade). Only the owner or
+      admin of the space the bundle lives in holds rank 3: a grant is capped
+      at editor, and owning the bundle's folder gives editor-equivalent access
+      to its contents (per ``effective_role``'s folder-inheritance rule),
+      never owner. The row's ``user_id`` ("created by") confers nothing, so a
+      member who created a bundle in a team space cannot delete it — the same
+      rule ``authz.require(..., "delete")`` applies to a layer, folder,
+      project or template.
 
     Returns the bundle, or raises 404 (no access — existence not leaked) /
     403 (has read access but not the required level).
     """
     bundle = await async_session.get(Bundle, bundle_id)
-    if bundle is None:
+    if bundle is None or bundle.deleted_at is not None:
+        # A trashed bundle behaves as gone for every normal route — the
+        # trash listing is the only place it still surfaces.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Bundle not found"
         )
-    if bundle.user_id == user_id:
-        return bundle
     if level == "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the bundle owner can perform this action",
-        )
-
-    team_ids, org_id = await _user_teams_and_org(async_session, user_id)
-    conds = _grant_conditions(team_ids, org_id)
-    role_names: set[str] = set()
-    if conds:
-        role_names = set(
-            (
-                await async_session.execute(
-                    select(Role.name)
-                    .join(ResourceGrant, ResourceGrant.role_id == Role.id)
-                    .where(
-                        or_(
-                            and_(
-                                ResourceGrant.resource_type == RESOURCE_TYPE,
-                                ResourceGrant.resource_id == bundle_id,
-                            ),
-                            and_(
-                                ResourceGrant.resource_type == "folder",
-                                ResourceGrant.resource_id == bundle.folder_id,
-                            ),
-                        ),
-                        or_(*conds),
-                    )
-                )
+        if not await authz.can(
+            async_session, RESOURCE_TYPE, bundle_id, user_id, "delete"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a space owner or admin can perform this action",
             )
-            .scalars()
-            .all()
-        )
-    is_editor = bool(role_names & _BUNDLE_EDITOR_ROLES)
-    is_viewer = is_editor or bool(role_names & _BUNDLE_VIEWER_ROLES)
-    if level == "write" and is_editor:
         return bundle
-    if level == "read" and is_viewer:
+
+    action: Action = "write" if level == "write" else "read"
+    if await authz.can(async_session, RESOURCE_TYPE, bundle_id, user_id, action):
         return bundle
-    if is_viewer:
+    if action == "write" and await authz.can(
+        async_session, RESOURCE_TYPE, bundle_id, user_id, "read"
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have edit access to this bundle",
@@ -203,7 +180,8 @@ async def _bundle_reachable_via_project(
     async_session: AsyncSession, bundle_id: UUID, user_id: UUID
 ) -> bool:
     """Whether a member layer of the bundle sits in a project the caller can
-    reach (as project owner, direct member, or via team / organization).
+    reach through any effective-role path (owner, direct grant, team,
+    organization, or folder grant).
 
     Project sharing mints no bundle or folder grant, yet someone working in
     such a project handles the member layers daily — they get read-only
@@ -212,55 +190,43 @@ async def _bundle_reachable_via_project(
     members. Writes stay behind geoapi's layer-edit rule, and everything
     beyond reading stays behind ``authorize_bundle``.
     """
-    project_ids = (
-        select(LayerProjectLink.project_id)
-        .join(BundleLayerLink, BundleLayerLink.layer_id == LayerProjectLink.layer_id)
-        .where(BundleLayerLink.bundle_id == bundle_id)
+    result = await async_session.execute(
+        text(
+            f"""
+            SELECT EXISTS (
+                SELECT 1
+                FROM {settings.SCHEMA}.layer_project lp
+                JOIN {settings.SCHEMA}.bundle_layer bl ON bl.layer_id = lp.layer_id
+                JOIN {settings.SCHEMA}.bundle b ON b.id = bl.bundle_id
+                WHERE bl.bundle_id = :bundle_id
+                  AND b.deleted_at IS NULL
+                  AND {settings.SCHEMA}.effective_role('project', lp.project_id, :user_id) IS NOT NULL
+            )
+            """
+        ),
+        {"bundle_id": str(bundle_id), "user_id": str(user_id)},
     )
-    team_ids, org_id = await _user_teams_and_org(async_session, user_id)
-    reach = [
-        select(Project.id)
-        .where(Project.id.in_(project_ids), Project.user_id == user_id)
-        .exists(),
-        select(ProjectUserLink.id)
-        .where(
-            ProjectUserLink.project_id.in_(project_ids),
-            ProjectUserLink.user_id == user_id,
-        )
-        .exists(),
-    ]
-    if team_ids:
-        reach.append(
-            select(ProjectTeamLink.id)
-            .where(
-                ProjectTeamLink.project_id.in_(project_ids),
-                ProjectTeamLink.team_id.in_(team_ids),
-            )
-            .exists()
-        )
-    if org_id:
-        reach.append(
-            select(ProjectOrganizationLink.id)
-            .where(
-                ProjectOrganizationLink.project_id.in_(project_ids),
-                ProjectOrganizationLink.organization_id == org_id,
-            )
-            .exists()
-        )
-    return bool((await async_session.execute(select(or_(*reach)))).scalar())
+    return bool(result.scalar())
 
 
 async def _authorize_bundle_read_or_project_reach(
     async_session: AsyncSession, bundle_id: UUID, user_id: UUID
 ) -> Bundle:
-    """Grant-based read, falling back to shared-project reachability."""
+    """Grant-based read, falling back to shared-project reachability.
+
+    A trashed bundle must behave as gone through this fallback too:
+    ``authorize_bundle`` already 404s on it, but the project-reachability
+    fallback below doesn't look at ``deleted_at`` on its own — re-check it
+    here before falling back, so a shared-project editor can't still resolve
+    a trashed bundle's membership/roles through this path.
+    """
     try:
         return await authorize_bundle(async_session, bundle_id, user_id, "read")
     except HTTPException:
-        if not await _bundle_reachable_via_project(async_session, bundle_id, user_id):
-            raise
         bundle = await async_session.get(Bundle, bundle_id)
-        if bundle is None:
+        if bundle is None or bundle.deleted_at is not None:
+            raise
+        if not await _bundle_reachable_via_project(async_session, bundle_id, user_id):
             raise
         return bundle
 
@@ -446,8 +412,27 @@ async def import_bundle(
         )
     filename = payload.s3_key.rsplit("/", 1)[-1]
 
+    # The target folder must exist, be live, and be writable by the caller —
+    # the bundle then takes THAT folder's own space (personal, or a team/org
+    # space the caller may write to), never just the caller's personal space
+    # regardless of where folder_id actually points.
     folder = await async_session.get(Folder, payload.folder_id)
-    if folder is None or folder.user_id != user_id:
+    if folder is None or folder.deleted_at is not None or folder.space_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
+        )
+    if not await authz.can(
+        async_session, "folder", payload.folder_id, user_id, "write"
+    ):
+        # Read access but not write: confirm the folder is there but refuse
+        # it (403). No access at all: behave as if it weren't there (404)
+        # rather than confirming a totally foreign folder's existence to a
+        # caller with no relationship to it.
+        if await authz.can(async_session, "folder", payload.folder_id, user_id, "read"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed to write this folder",
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
         )
@@ -516,9 +501,11 @@ async def import_bundle(
             link_street = True
 
     # Create the bundle shell (processing) + optional dependency, synchronously.
+    space_id = folder.space_id
     bundle = Bundle(
         user_id=user_id,
         folder_id=payload.folder_id,
+        space_id=space_id,
         name=payload.name,
         description=payload.description,
         bundle_type=bundle_type,
@@ -557,12 +544,31 @@ async def import_bundle(
             },
             access_token=access_token,
         )
-    except Exception:
-        # The shell is committed but nothing ran, so there is nothing to keep:
-        # an import that never started cannot be resumed, and a bundle stuck at
-        # "processing" offers no action that would fix it.
-        await async_session.delete(bundle)
-        await async_session.commit()
+    except Exception as error:
+        # Remove the committed shell only when the dispatch cannot have taken
+        # effect: an import that never started cannot be resumed, and a bundle
+        # stuck at "processing" offers no action that would fix it. A timeout or
+        # a 502 says nothing about whether the job was accepted, and an ingest
+        # that is already running needs this row — it is the foreign key its
+        # member layers point at — so an ambiguous failure leaves the bundle
+        # alone and the job carries the outcome.
+        if dispatch_never_started(error):
+            # Read before the cleanup: a session that fails leaves the instance
+            # in a state where reloading an attribute fails too.
+            bundle_id = bundle.id
+            try:
+                await async_session.delete(bundle)
+                await async_session.commit()
+            except Exception:
+                # A session that is itself broken must not replace the reason
+                # the dispatch failed with an error about the cleanup.
+                with contextlib.suppress(Exception):
+                    await async_session.rollback()
+                logger.exception(
+                    "Could not remove the shell of bundle %s after its import "
+                    "failed to start",
+                    bundle_id,
+                )
         raise
 
     # The ingest has only just been queued, so the bundle has no artifacts to
@@ -594,13 +600,25 @@ async def list_bundles(
     team_ids, org_id = await _user_teams_and_org(async_session, user_id)
     conds = _grant_conditions(team_ids, org_id)
     # Join the owner so tiles can show an avatar (same "owned_by" shape as layers).
-    stmt = select(
-        Bundle,
-        User.id,
-        User.firstname,
-        User.lastname,
-        User.avatar,
-    ).join(User, User.id == Bundle.user_id)
+    stmt = (
+        select(
+            Bundle,
+            User.id,
+            User.firstname,
+            User.lastname,
+            User.avatar,
+        )
+        .outerjoin(
+            # LEFT, not INNER: `user_id` is "created by" and is cleared when
+            # the account is removed, and an inner join would drop an
+            # offboarded member's bundles from the listing silently rather
+            # than returning them with an empty `owned_by` — same as the
+            # content listing.
+            User,
+            User.id == Bundle.user_id,
+        )
+        .where(Bundle.deleted_at.is_(None))
+    )
     if conds:
         shared_ids = select(ResourceGrant.resource_id).where(
             ResourceGrant.resource_type == RESOURCE_TYPE, or_(*conds)
@@ -610,27 +628,41 @@ async def list_bundles(
         stmt = stmt.where(Bundle.user_id == user_id)
     if bundle_type:
         stmt = stmt.where(Bundle.bundle_type == bundle_type)
-    if artifact_kind:
-        # Restrict to bundles with a ready artifact of the requested kind
-        # (e.g. only PT bundles whose routing graph is built). Readiness is not
-        # a stored column: it is the same conjunction `artifact_state` derives,
-        # spelled as SQL so the list and the read DTO agree.
-        stmt = stmt.where(
-            select(BundleArtifact.id)
-            .where(
-                BundleArtifact.bundle_id == Bundle.id,
-                BundleArtifact.kind == artifact_kind,
-                BundleArtifact.build_status == BundleArtifactBuildStatus.complete.value,
-                BundleArtifact.storage_path.is_not(None),
-                BundleArtifact.revision == Bundle.layers_revision,
-            )
-            .exists()
-        )
     stmt = stmt.order_by(Bundle.updated_at.desc())
     rows = (await async_session.execute(stmt)).all()
+    # One query for every listed bundle's artifacts, whether or not they are
+    # also being filtered on.
+    artifacts = await _artifacts_by_bundle(
+        async_session, [bundle.id for bundle, *_ in rows]
+    )
+    stale = await _bundles_with_stale_dependencies(
+        async_session, [bundle.id for bundle, *_ in rows]
+    )
+    if artifact_kind:
+        # Restrict to bundles with a ready artifact of the requested kind (e.g.
+        # only PT bundles whose routing graph is built). Readiness is asked of
+        # `artifact_state` over the rows already loaded, not respelled as SQL:
+        # a second copy of the rule cannot see whether the file is there, cannot
+        # treat a build_status from another release as failed, and cannot know
+        # whether the dependencies it was built from have moved on — so the
+        # listing and the read DTO would disagree about the same bundle.
+        rows = [
+            row
+            for row in rows
+            if any(
+                getattr(a.kind, "value", a.kind) == artifact_kind
+                and artifact_state(
+                    a.build_status,
+                    a.revision,
+                    row[0].layers_revision,
+                    a.storage_path,
+                    row[0].id not in stale,
+                )
+                is BundleArtifactState.ready
+                for a in artifacts[row[0].id]
+            )
+        ]
     listed_ids = [bundle.id for bundle, *_ in rows]
-    artifacts = await _artifacts_by_bundle(async_session, listed_ids)
-    stale = await _bundles_with_stale_dependencies(async_session, listed_ids)
     thumbnails = await member_thumbnails(async_session, listed_ids)
     return [
         _bundle_read(
@@ -638,12 +670,18 @@ async def list_bundles(
             artifacts=artifacts[bundle.id],
             dependencies_current=bundle.id not in stale,
             thumbnail_url=thumbnails.get(bundle.id),
-            owned_by={
-                "id": uid,
-                "firstname": firstname,
-                "lastname": lastname,
-                "avatar": avatar,
-            },
+            # None when the row has no owner left (the creator's account was
+            # removed), matching `build_shared_with_object`'s `owned_by`.
+            owned_by=(
+                {
+                    "id": uid,
+                    "firstname": firstname,
+                    "lastname": lastname,
+                    "avatar": avatar,
+                }
+                if uid is not None
+                else None
+            ),
         )
         for bundle, uid, firstname, lastname, avatar in rows
     ]
@@ -744,12 +782,11 @@ async def delete_bundle(
     *,
     async_session: AsyncSession = Depends(get_db),
     user_id: UUID4 = Depends(get_user_id),
-    access_token: str = Depends(auth),
     bundle_id: UUID4 = Path(..., description="The bundle ID"),
 ) -> None:
-    """Delete a bundle (owner only — this cascades every member layer).
-    Member layers are removed via cascade, and their DuckLake data is cleaned up
-    via GeoAPI."""
+    """Delete a bundle (owner only). Soft delete: the bundle and every
+    member layer get `deleted_at` — rows and DuckLake data stay until the
+    trash retention window expires (the purge task)."""
     await authorize_bundle(async_session, bundle_id, user_id, "owner")
 
     # Block deletion while another bundle depends on this one (deleting would
@@ -775,7 +812,6 @@ async def delete_bundle(
         async_session,
         id=bundle_id,
         user_id=user_id,
-        access_token=access_token,
     )
     return
 

@@ -1,5 +1,6 @@
 import ClearIcon from "@mui/icons-material/Clear";
 import { FormControl, IconButton, InputAdornment, OutlinedInput, useTheme } from "@mui/material";
+import type { InputBaseComponentProps } from "@mui/material";
 import React, { useState } from "react";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -22,6 +23,10 @@ type TextFieldInputProps = {
   placeholder?: string;
   multiline?: boolean;
   rows?: number;
+  autoFocus?: boolean;
+  /** Attributes for the native input — an `aria-label` when no visible
+   * label names the field, a `data-testid`. */
+  inputProps?: InputBaseComponentProps;
 };
 
 const TextFieldInput: React.FC<TextFieldInputProps> = ({
@@ -37,6 +42,8 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
   clearable = true,
   multiline = false,
   rows = 2,
+  autoFocus,
+  inputProps,
 }) => {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -58,7 +65,8 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
           if (onFocus) onFocus();
         }}
         multiline={multiline}
-        rows={rows}
+        rows={multiline ? rows : undefined}
+        autoFocus={autoFocus}
         placeholder={placeholder}
         onBlur={() => setFocused(false)}
         disabled={disabled}
@@ -66,12 +74,18 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
         sx={{ pr: 0, fontSize: "0.875rem" }}
         inputProps={{
           type,
+          ...inputProps,
           style: {
             width: "100%",
-            padding: "0px 15px 0px 12px",
-            height: "40px",
+            padding: multiline ? "8px 15px 8px 12px" : "0px 15px 0px 12px",
+            // A multiline field is sized by its rows: the autosize shadow
+            // textarea shares this style, and any height key here (even an
+            // undefined one) replaces the shadow's zero height and inflates
+            // the row measurement.
+            ...(multiline ? {} : { height: "40px" }),
             // GOAT green accent for number input spinners
             accentColor: "#2BB381",
+            ...inputProps?.style,
           },
         }}
         endAdornment={
@@ -84,12 +98,14 @@ const TextFieldInput: React.FC<TextFieldInputProps> = ({
               />
             </InputAdornment>
           ) : (
-            !disabled && !!value && clearable && (
-            <InputAdornment position="end" sx={{ mr: 2 }}>
-              <IconButton size="small" aria-label="clear input" onClick={() => onChange("")} edge="end">
-                <ClearIcon />
-              </IconButton>
-            </InputAdornment>
+            !disabled &&
+            !!value &&
+            clearable && (
+              <InputAdornment position="end" sx={{ mr: 2 }}>
+                <IconButton size="small" aria-label="clear input" onClick={() => onChange("")} edge="end">
+                  <ClearIcon />
+                </IconButton>
+              </InputAdornment>
             )
           )
         }

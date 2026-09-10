@@ -19,7 +19,11 @@ from geoapi.dependencies import LayerInfo
 from geoapi.ducklake_write import ducklake_write_manager
 from geoapi.models.write import COLUMN_TYPE_MAP
 from geoapi.services.computed_columns import (
+    allowed_value_columns,
     apply_defaults,
+    check_allowed_values,
+    column_defaults,
+    fill_defaults,
     locked_column_names,
     parse_computed_columns,
     select_recompute_specs,
@@ -31,16 +35,26 @@ logger = logging.getLogger(__name__)
 # Columns that cannot be modified by users
 PROTECTED_COLUMNS = {"id", "geometry", "geom", "rowid"}
 
-# The GeoParquet bbox struct, kept in step with the geometry on every write.
-# Every ? is the same GeoJSON string. One definition, shared with the bundle
-# editor, so bbox upkeep cannot drift between the two writers.
-BBOX_STRUCT_SQL = (
-    "struct_pack("
-    "xmin := ST_XMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-    "ymin := ST_YMin(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-    "xmax := ST_XMax(ST_MakeValid(ST_GeomFromGeoJSON(?))), "
-    "ymax := ST_YMax(ST_MakeValid(ST_GeomFromGeoJSON(?))))"
-)
+
+def bbox_struct_sql(geom_expr: str) -> str:
+    """The GeoParquet bbox struct for a geometry expression.
+
+    The one definition of that struct, so bbox upkeep cannot drift between the
+    writers that maintain it — the per-feature paths below splice a bound
+    GeoJSON parameter in, the bundle editor a column or a projected expression.
+    """
+    return (
+        "struct_pack("
+        f"xmin := ST_XMin({geom_expr}), "
+        f"ymin := ST_YMin({geom_expr}), "
+        f"xmax := ST_XMax({geom_expr}), "
+        f"ymax := ST_YMax({geom_expr}))"
+    )
+
+
+# The bbox struct as the per-feature writes spell it: every ? is the same
+# GeoJSON string, bound four times.
+BBOX_STRUCT_SQL = bbox_struct_sql("ST_MakeValid(ST_GeomFromGeoJSON(?))")
 
 
 def _feature_id_to_rowid(feature_id: str) -> int:
@@ -206,14 +220,16 @@ class FeatureWriteService:
         # sent for either is dropped rather than written. Clients round-trip
         # whole features, so this is ordinary, not a malformed request.
         uneditable = {s.name for s in specs} | locked_column_names(field_config)
+        # Derived once for the request: both are a projection of the same
+        # field_config, and the loop below can run to thousands of features.
+        defaults = column_defaults(field_config)
+        constrained = allowed_value_columns(field_config)
 
         with ducklake_write_manager.connection() as con:
             for feature_data in features:
                 geometry = feature_data.get("geometry")
-                properties = apply_defaults(
-                    field_config, feature_data.get("properties", {})
-                )
-                validate_allowed_values(field_config, properties)
+                properties = fill_defaults(defaults, feature_data.get("properties", {}))
+                check_allowed_values(constrained, properties)
 
                 columns: list[str] = []
                 placeholders: list[str] = []

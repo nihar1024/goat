@@ -18,6 +18,7 @@ filtered copy could not build one.
 """
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -31,15 +32,17 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
+from goatlib.bundles.artifacts import get_artifact_builder
 from goatlib.bundles.runner import BundleImportRunner, ImportedLayer
 from goatlib.models.bundle import (
     BundleStatus,
     BundleTypeName,
-    artifacts_from_layers,
     get_spec,
+    role_field_config,
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.storage.query_builder import build_cql_filter
+from goatlib.tools.authz import authorize_bundle_copy
 from goatlib.tools.db import ToolDatabaseService, normalize_geometry_type
 from goatlib.tools.schemas import ToolInputBase
 from goatlib.tools.style import get_bundle_style
@@ -100,23 +103,26 @@ class BundleCreateFilteredRunner(BundleImportRunner):
         )
 
     def _export_filtered(
-        self, layer_id: str, cql_filter: Optional[Dict[str, Any]]
+        self, layer_id: str, cql_filter: Optional[Dict[str, Any]], workdir: str
     ) -> str:
-        """A member layer's filtered rows as parquet.
+        """A member layer's filtered rows as parquet, written into ``workdir``.
 
         Copied straight out of DuckLake rather than through
         ``export_layer_to_parquet``: that resolves the layer's owner with a
         nested ``run_until_complete``, which cannot work inside an already
         running event loop. The owner is known from the bundle anyway.
+
+        The caller owns ``workdir`` and removes it, the way
+        ``BundleImportRunner._ingest_layers`` does: a city-scale member layer
+        is tens to hundreds of MB, and a directory per member left behind fills
+        the worker's disk one job at a time.
         """
         import json
-        import tempfile
 
         table = self.get_layer_table_path(layer_id)
-        out = (
-            Path(tempfile.mkdtemp(prefix="goat_bundle_filter_")) / f"{layer_id}.parquet"
-        )
+        out = Path(workdir) / f"{layer_id}.parquet"
         clause = ""
+        params: List[Any] = []
         if cql_filter:
             described = self.duckdb_con.execute(
                 f"DESCRIBE SELECT * FROM {table}"
@@ -131,11 +137,23 @@ class BundleCreateFilteredRunner(BundleImportRunner):
                 columns,
                 geometry_column,
             )
-            if filters.clauses:
-                clause = f" WHERE {' AND '.join(filters.clauses)}"
+            if not filters.clauses:
+                # `build_cql_filter` logs the parse error and hands back no
+                # clauses, which for its usual caller means "show everything".
+                # Here it would mean copying the whole source bundle — a
+                # full-size, unfiltered duplicate of a city network — and
+                # calling it the filtered copy the user asked for. A filter
+                # that did not compile is a failed job, not an empty one.
+                raise ValueError(
+                    "The filter could not be applied to this bundle's member "
+                    "layers, so a filtered copy cannot be made. Check the "
+                    "filter and try again."
+                )
+            clause = f" WHERE {' AND '.join(filters.clauses)}"
+            params = list(filters.params)
         self.duckdb_con.execute(
             f"COPY (SELECT * FROM {table}{clause}) TO '{out}' (FORMAT PARQUET)",
-            filters.params if clause else [],
+            params,
         )
         return str(out)
 
@@ -154,53 +172,80 @@ class BundleCreateFilteredRunner(BundleImportRunner):
         pool = await self.get_postgres_pool()
         db = ToolDatabaseService(pool, schema=self.settings.customer_schema)
 
-        source = await db.get_bundle(source_bundle_id)
-        bundle_type = BundleTypeName(source["bundle_type"])
-        members = await db.list_bundle_layers(source_bundle_id)
-        if not members:
-            raise ValueError(
-                "The source bundle holds no member layers, so there is nothing "
-                "to filter."
-            )
-
-        if not artifacts_from_layers(bundle_type):
-            raise ValueError(
-                f"A '{bundle_type.value}' bundle's artifacts are built from the "
-                "uploaded source, which is not kept, so a filtered copy could "
-                "not build them. Filtering is not supported for this type."
-            )
-
-        spec = get_spec(bundle_type)
-        source_name = await db.get_bundle_name(source_bundle_id)
-        name = result_bundle_name or f"{source_name} (filtered)"
-
-        bundle_id = str(uuid4())
-        await db.create_bundle(
-            bundle_id=bundle_id,
-            user_id=user_id,
-            folder_id=folder_id,
-            name=name,
-            bundle_type=bundle_type,
-            status=BundleStatus.processing,
-            description=source.get("description"),
-        )
-
-        imported: List[ImportedLayer] = []
+        # Everything from here needs the pool, so the whole of it sits
+        # inside the try whose finally closes it — including the
+        # authorization refusals below, which are the earliest way out.
         try:
+            # Both ids came in as tool inputs and neither has been checked against
+            # the caller yet: the processes service dispatches a job without
+            # authorizing its inputs, so without this an authenticated user could
+            # copy any bundle by id, or write the copy into somebody else's folder.
+            # Asked before anything is created or exported, so a refused job leaves
+            # nothing behind. `tools/authz.py` holds the verb-per-tool reasoning.
+            await authorize_bundle_copy(
+                db,
+                user_id=user_id,
+                source_bundle_id=source_bundle_id,
+                folder_id=folder_id,
+            )
+
+            source = await db.get_bundle(source_bundle_id)
+            bundle_type = BundleTypeName(source["bundle_type"])
+            members = await db.list_bundle_layers(source_bundle_id)
+            if not members:
+                raise ValueError(
+                    "The source bundle holds no member layers, so there is nothing "
+                    "to filter."
+                )
+
+            builder = get_artifact_builder(bundle_type)
+            if builder is not None and not builder.builds_from_layers:
+                raise ValueError(
+                    f"A '{bundle_type.value}' bundle's artifacts are built from the "
+                    "uploaded source, which is not kept, so a filtered copy could "
+                    "not build them. Filtering is not supported for this type."
+                )
+
+            spec = get_spec(bundle_type)
+            source_name = await db.get_bundle_name(source_bundle_id)
+            name = result_bundle_name or f"{source_name} (filtered)"
+
+            bundle_id = str(uuid4())
+            await db.create_bundle(
+                bundle_id=bundle_id,
+                user_id=user_id,
+                folder_id=folder_id,
+                name=name,
+                bundle_type=bundle_type,
+                status=BundleStatus.processing,
+                # What the source says about itself describes the copy just as
+                # well, so both travel with it rather than the copy arriving blank.
+                description=source.get("description"),
+                dataset_metadata=source.get("dataset_metadata"),
+            )
+
+            imported: List[ImportedLayer] = []
             try:
-                for member in members:
-                    imported.append(
-                        await self._copy_member(
-                            db,
-                            member=member,
-                            cql_filter=cql_filter,
-                            user_id=user_id,
-                            folder_id=folder_id,
-                            bundle_id=bundle_id,
-                            bundle_name=name,
-                            spec=spec,
+                # One workdir for every member's parquet, removed on the way
+                # out — the same shape `_ingest_layers` uses, and for the same
+                # reason: these files are tens to hundreds of MB each.
+                with tempfile.TemporaryDirectory(
+                    prefix="goat_bundle_filter_"
+                ) as workdir:
+                    for member in members:
+                        imported.append(
+                            await self._copy_member(
+                                db,
+                                member=member,
+                                cql_filter=cql_filter,
+                                user_id=user_id,
+                                folder_id=folder_id,
+                                bundle_id=bundle_id,
+                                bundle_name=name,
+                                spec=spec,
+                                workdir=workdir,
+                            )
                         )
-                    )
                 await self.build_and_store_artifacts(
                     db,
                     bundle_id=bundle_id,
@@ -213,12 +258,13 @@ class BundleCreateFilteredRunner(BundleImportRunner):
                     ],
                 )
             except Exception:
-                # Same contract as an import that fails: nothing half-built is
-                # left behind, and the job carries the failure.
-                await self._cleanup_layers(
-                    db, user_id, [layer.layer_id for layer in imported]
+                # Same contract as an import that fails, through the same
+                # function: nothing half-built is left behind — layers,
+                # artifact files and the bundle row all go — and the job
+                # carries the failure.
+                await self._rollback_bundle(
+                    db, user_id=user_id, bundle_id=bundle_id, imported=imported
                 )
-                await db.delete_bundle(bundle_id)
                 raise
 
             await db.update_bundle_status(
@@ -230,7 +276,6 @@ class BundleCreateFilteredRunner(BundleImportRunner):
                         db,
                         project_id=project_id,
                         bundle_id=bundle_id,
-                        bundle_type=bundle_type,
                         imported=imported,
                     )
                 except Exception as e:  # pragma: no cover - best effort
@@ -255,6 +300,29 @@ class BundleCreateFilteredRunner(BundleImportRunner):
             await pool.close()
             self.cleanup()
 
+    @staticmethod
+    def _merged_field_config(
+        role_config: Dict[str, Any], stored: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """The role's field_config with the source layer's entries on top.
+
+        Merged per column rather than per blob: a column the role describes and
+        the layer also has an entry for keeps both halves — the role's
+        ``is_computed``/``kind``/``is_locked`` and the layer's own
+        ``display_config`` — instead of one side replacing the other wholesale.
+        Where both name the same key the layer's value wins, because that one
+        is the user's.
+        """
+        merged: Dict[str, Any] = {
+            column: dict(entry) for column, entry in role_config.items()
+        }
+        for column, entry in (stored or {}).items():
+            if isinstance(merged.get(column), dict) and isinstance(entry, dict):
+                merged[column].update(entry)
+            else:
+                merged[column] = entry
+        return merged
+
     async def _copy_member(
         self,
         db: ToolDatabaseService,
@@ -266,6 +334,7 @@ class BundleCreateFilteredRunner(BundleImportRunner):
         bundle_id: str,
         bundle_name: str,
         spec: Any,
+        workdir: str,
     ) -> ImportedLayer:
         """One member layer, filtered, as a layer of the new bundle."""
         role = member["role"]
@@ -278,7 +347,7 @@ class BundleCreateFilteredRunner(BundleImportRunner):
         # applying it would empty the layer. Such a member is copied whole.
         has_geometry = bool(source.get("geometry_type"))
         parquet = self._export_filtered(
-            source_layer_id, cql_filter if has_geometry else None
+            source_layer_id, cql_filter if has_geometry else None, workdir
         )
 
         layer_id = str(uuid4())
@@ -312,8 +381,20 @@ class BundleCreateFilteredRunner(BundleImportRunner):
         # The copy is the same kind of layer as the original, so it keeps the
         # per-column metadata: computed columns, locked flags, vocabularies and
         # defaults all still apply to it.
-        if source.get("field_config"):
-            await db.set_layer_field_config(layer_id, source["field_config"])
+        #
+        # The role's own contract goes UNDER whatever the source layer stores.
+        # Two things follow from that order. A copy of a bundle imported before
+        # the contract existed comes out with it anyway — which is what lets a
+        # filtered copy of a legacy bundle behave like a fresh import, rather
+        # than inheriting the gap that makes its edges layer uneditable. And
+        # anything the user authored on the source — a column's display config,
+        # a vocabulary they extended — still wins, because their entry is the
+        # one that overwrites.
+        field_config = self._merged_field_config(
+            role_field_config(spec.role(role)), source.get("field_config")
+        )
+        if field_config:
+            await db.set_layer_field_config(layer_id, field_config)
         await db.add_layer_to_bundle(bundle_id=bundle_id, layer_id=layer_id, role=role)
         return ImportedLayer(
             role=role,

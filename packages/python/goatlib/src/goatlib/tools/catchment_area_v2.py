@@ -499,7 +499,43 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             field_order=8,
             label_key="weekday",
             enum_labels=WEEKDAY_LABELS,
-            visible_when={"routing_mode": "pt"},
+            # Only for the default network. Its three choices resolve to three
+            # fixed anchor dates, which exist in that network's timetable and
+            # almost certainly not in an uploaded feed's — so when a bundle is
+            # chosen, `pt_date` replaces this rather than sitting beside it.
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"pt_network_bundle_id": {"$exists": False}},
+                ]
+            },
+        ),
+    )
+    pt_date: str | None = Field(
+        default=None,
+        description=(
+            "Date to route on (YYYY-MM-DD). For an uploaded public-transport "
+            "bundle, whose timetable covers the window its feed declares."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=8,
+            label_key="pt_date",
+            widget="date-picker",
+            # Replaces the weekday choice, which only means anything for the
+            # default network. Shown exactly when a bundle is chosen.
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"pt_network_bundle_id": {"$exists": True}},
+                ]
+            },
+            # Bounded by the window the chosen bundle's timetable was built
+            # for: outside it every journey comes back "no service".
+            widget_options={
+                "bounds_from": "pt_network_bundle_id",
+                "bounds_artifact": "pt_network_graph",
+            },
         ),
     )
     pt_start_time: int = Field(
@@ -919,6 +955,9 @@ class CatchmentAreaV2ToolRunner(CatchmentAreaToolRunner):
         if params.routing_mode == CatchmentAreaRoutingMode.pt:
             time_window = PTTimeWindow(
                 weekday=params.pt_day,
+                # Set only for a bundle, whose timetable the weekday
+                # anchors do not fall inside; it wins when present.
+                on_date=params.pt_date,
                 from_time=params.pt_start_time,
                 to_time=params.pt_end_time,
             )

@@ -328,6 +328,7 @@ class BundleArtifactBuildMixin:
                         built_revision=revision,
                         storage_path=storage_path,
                         size=art.size,
+                        properties=art.properties,
                     )
                     if not current:
                         # A save landed while this built, so the rebuild that

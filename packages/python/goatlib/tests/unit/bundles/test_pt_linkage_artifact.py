@@ -8,6 +8,7 @@ a consumer can read a single mode out of.
 
 import sys
 import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -184,7 +185,11 @@ def _fake_routing(rows: int):
             con.close()
         return cfg.output_path
 
+    def build_timetable(source_path, out_path, start_date, length_days):
+        Path(out_path).write_bytes(b"timetable")
+
     module.build_access_egress_table = build_access_egress_table
+    module.build_timetable = build_timetable
     return module
 
 
@@ -216,3 +221,38 @@ def test_a_feed_whose_stops_link_produces_the_archive(builder, tmp_path, monkeyp
     assert result.error is None
     with tarfile.open(result.local_path) as tar:
         assert tar.getnames() == [linkage_member("walking")]
+
+
+def test_the_timetable_records_the_window_it_was_built_for(
+    builder, tmp_path, monkeypatch
+) -> None:
+    """The feed is not kept, so a build that does not write the window down
+    leaves nothing able to ask again — and outside it every journey comes back
+    "no service"."""
+    monkeypatch.setitem(sys.modules, "routing", _fake_routing(rows=1))
+    feed = tmp_path / "gtfs.zip"
+    _write_feed(feed, start="20260301", end="20260628")
+
+    built = builder.build(
+        source_path=str(feed),
+        workdir=str(tmp_path),
+        dependencies={"street_network": STREET},
+    )
+
+    timetable = next(
+        art for art in built if art.kind is BundleArtifactKind.pt_network_graph
+    )
+    assert timetable.properties == {
+        "service_start": "2026-03-01",
+        "service_days": 120,
+    }
+    assert Path(timetable.local_path).exists()
+
+
+def _write_feed(path: Path, *, start: str, end: str) -> None:
+    """The smallest feed `_date_window` reads: one calendar row."""
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(
+            "calendar.txt",
+            f"service_id,start_date,end_date\ns1,{start},{end}\n",
+        )

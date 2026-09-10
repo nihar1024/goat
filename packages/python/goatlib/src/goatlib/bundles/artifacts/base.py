@@ -64,6 +64,10 @@ class BuiltArtifact(BaseModel):
     kind: BundleArtifactKind
     local_path: str | None = None
     size: int = 0
+    #: What this build knows about its output that nobody can derive later —
+    #: a timetable's service window, say, since the feed is not kept. Stored
+    #: verbatim on the artifact row; see ``BundleArtifact.properties``.
+    properties: Dict[str, Any] = {}
     #: Why this kind was not produced, in words a user can act on. Recorded
     #: against the artifact so the bundle reports it as failed rather than as
     #: never attempted.

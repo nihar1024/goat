@@ -62,6 +62,10 @@ export interface BundleArtifact {
   /** The bundle revision this artifact was built from; null if never built. */
   revision?: number | null;
   size?: number | null;
+  /** What the build recorded about its own output — a PT timetable's
+   *  `service_start` / `service_days`, which bound a date offered against it.
+   *  Free-form by design, so read defensively. */
+  properties?: Record<string, unknown> | null;
   updated_at?: string | null;
 }
 

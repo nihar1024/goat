@@ -98,7 +98,28 @@ class BundleArtifactSummary(BaseModel):
     # tell how far behind it is. Null for an artifact that never built.
     revision: int | None = None
     size: int | None = None
+    #: What the build recorded about its own output — a PT timetable's service
+    #: window, which is what bounds a date offered against it. Free-form by
+    #: design (see the column), so reported as stored and typed as a document:
+    #: validating a shape nothing writes deliberately would let one artifact
+    #: fail a whole listing.
+    properties: Dict[str, Any] | None = None
     updated_at: Optional[datetime] = None
+
+    @field_validator("properties", mode="before")
+    @classmethod
+    def _drop_non_document_properties(cls, value: Any) -> Any:
+        """A stored value that is not a document reads as none recorded.
+
+        The same rule as `BundleRead.dataset_metadata`, for the same reason: a
+        free-form column can hold anything, a listing builds one DTO per
+        artifact, and one malformed row must not fail every artifact the caller
+        asked for.
+        """
+        if value is not None and not isinstance(value, dict):
+            logger.warning("Ignoring non-document artifact properties: %r", value)
+            return None
+        return value
 
 
 class BundleRead(BundleBase, ThumbnailUrlMixin):

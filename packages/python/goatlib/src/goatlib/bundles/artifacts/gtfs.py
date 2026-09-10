@@ -147,6 +147,14 @@ class GtfsArtifactBuilder(ArtifactBuilder):
             kind=BundleArtifactKind.pt_network_graph,
             local_path=out_path,
             size=os.path.getsize(out_path),
+            # The window the timetable was built for. Outside it every journey
+            # comes back "no service", and the feed it was derived from is not
+            # kept — so if this build does not write it down, nothing can ask
+            # again. It is what bounds a date offered against this bundle.
+            properties={
+                "service_start": start_date,
+                "service_days": length_days,
+            },
         )
 
         # Built second and reported separately: it needs the timetable that was

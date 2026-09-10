@@ -584,6 +584,7 @@ class ToolDatabaseService:
         built_revision: int,
         storage_path: str,
         size: int,
+        properties: "dict[str, Any] | None" = None,
     ) -> "tuple[bool, str | None]":
         """Mark an artifact ready, unless the layers have moved on since.
 
@@ -610,6 +611,10 @@ class ToolDatabaseService:
                     storage_path = $3,
                     size = $4,
                     revision = $5,
+                    -- Replaced, not merged: these describe *this* build's
+                    -- output, so the previous build's facts are not partial
+                    -- truths to keep — they are about a file being displaced.
+                    properties = $7::jsonb,
                     updated_at = NOW()
                 FROM {self.schema}.bundle b
                 WHERE a.id = $1 AND b.id = $2 AND a.bundle_id = b.id
@@ -626,6 +631,7 @@ class ToolDatabaseService:
             size,
             built_revision,
             BundleArtifactBuildStatus.complete.value,
+            json.dumps(properties) if properties else None,
         )
         if row is None or not row["published"]:
             return False, None

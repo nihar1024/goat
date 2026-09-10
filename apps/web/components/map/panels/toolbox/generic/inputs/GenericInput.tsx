@@ -22,6 +22,7 @@ import OevStationConfigInput from "@/components/map/panels/toolbox/generic/input
 import RepeatableObjectInput from "@/components/map/panels/toolbox/generic/inputs/RepeatableObjectInput";
 import StartingPointsInput from "@/components/map/panels/toolbox/generic/inputs/StartingPointsInput";
 import StringInput from "@/components/map/panels/toolbox/generic/inputs/StringInput";
+import DateInput from "./DateInput";
 import TimePickerInput from "@/components/map/panels/toolbox/generic/inputs/TimePickerInput";
 
 interface GenericInputProps {
@@ -176,6 +177,17 @@ export default function GenericInput({
           value={value as number | undefined}
           onChange={onChange}
           disabled={disabled}
+        />
+      );
+
+    case "date-picker":
+      return (
+        <DateInput
+          input={input}
+          value={value as string | undefined}
+          onChange={onChange}
+          disabled={disabled}
+          formValues={safeFormValues}
         />
       );
 

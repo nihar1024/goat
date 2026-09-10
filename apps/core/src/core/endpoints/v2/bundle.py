@@ -378,6 +378,7 @@ def _bundle_read(
                 ),
                 revision=a.revision,
                 size=a.size,
+                properties=a.properties,
                 updated_at=a.updated_at,
             )
             for a in artifacts

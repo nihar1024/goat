@@ -430,17 +430,22 @@ def get_default_style(geometry_type: str | None) -> dict[str, Any]:
         }
 
 
-#: The colour a street network's edges are drawn in: mid grey, so the network
-#: reads as the backdrop it is and whatever is analysed on top of it keeps the
-#: colour. `#717171` is the same neutral the PT service palette uses for "no
-#: service", so the two greys in the app are one grey.
-STREET_NETWORK_GREY = "#717171"
+#: A network's bulk: mid grey, so it reads as the backdrop it is and whatever is
+#: analysed on top of it keeps the colour. `#717171` is the same neutral the PT
+#: service palette uses for "no service", so the two greys in the app are one
+#: grey.
+BUNDLE_BACKDROP_GREY = "#717171"
 
-#: The colour its nodes are drawn in. Not grey: a node is what an edge is
-#: snapped to and split at, so it has to be findable against the edges it sits
-#: on top of — which is also why the editor lights the one under the cursor
-#: rather than leaving it to the layer's own colour.
-STREET_NETWORK_NODE_RED = "#e53935"
+#: The part of a network worth picking out of that bulk — the nodes an edge
+#: snaps to and splits at, the shapes a stop belongs to. Findable against the
+#: grey without being a colour an analysis result would want.
+BUNDLE_ACCENT_RED = "#e53935"
+
+#: A halo, so a point stays a point wherever it lands: a grey stop sitting on
+#: the red line it serves, or on a basemap the same value as itself, is only
+#: separable from what is behind it by an outline. The same white the editor's
+#: snapping indicator rings its vertices with.
+BUNDLE_POINT_HALO_WHITE = "#ffffff"
 
 #: Per-role overrides merged onto the geometry's default style when a bundle's
 #: member layers are created — keyed by (bundle type, spec role).
@@ -451,14 +456,31 @@ STREET_NETWORK_NODE_RED = "#e53935"
 #: two colours came up. Thin and grey is also what a network being *routed on*
 #: should look like: present, and not competing with the result drawn over it.
 BUNDLE_ROLE_STYLES: dict[tuple[str, str], dict[str, Any]] = {
+    # A street network is its edges, with the nodes picked out on top.
     ("street_network", "edges"): {
-        "color": hex_to_rgb(STREET_NETWORK_GREY),
-        "stroke_color": hex_to_rgb(STREET_NETWORK_GREY),
+        "color": hex_to_rgb(BUNDLE_BACKDROP_GREY),
+        "stroke_color": hex_to_rgb(BUNDLE_BACKDROP_GREY),
         "stroke_width": 2,
     },
     ("street_network", "nodes"): {
-        "color": hex_to_rgb(STREET_NETWORK_NODE_RED),
+        "color": hex_to_rgb(BUNDLE_ACCENT_RED),
         "radius": 3,
+    },
+    # A PT network reads the other way round: the stops are the many, and the
+    # shapes are the lines they sit along.
+    ("pt_network_gtfs", "stops"): {
+        "color": hex_to_rgb(BUNDLE_BACKDROP_GREY),
+        "radius": 4,
+        # `stroked` is what turns the outline on: the point default has it off,
+        # and the renderer reads a width of 0 without it.
+        "stroked": True,
+        "stroke_color": hex_to_rgb(BUNDLE_POINT_HALO_WHITE),
+        "stroke_width": 2,
+    },
+    ("pt_network_gtfs", "shapes"): {
+        "color": hex_to_rgb(BUNDLE_ACCENT_RED),
+        "stroke_color": hex_to_rgb(BUNDLE_ACCENT_RED),
+        "stroke_width": 3,
     },
 }
 

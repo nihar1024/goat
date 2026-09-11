@@ -47,6 +47,8 @@ class LayerProjectLink(DateTimeBase, table=True):
         sa_column=Column(
             UUID_PG(as_uuid=True),
             ForeignKey(f"{settings.SCHEMA}.project.id", ondelete="CASCADE"),
+            # Every read and reorder of a project's tree filters on it.
+            index=True,
         ),
         description="Project ID",
     )
@@ -110,6 +112,7 @@ class LayerProjectGroup(DateTimeBase, table=True):
             UUID_PG(as_uuid=True),
             ForeignKey(f"{settings.SCHEMA}.project.id", ondelete="CASCADE"),
             nullable=False,
+            index=True,
         )
     )
 

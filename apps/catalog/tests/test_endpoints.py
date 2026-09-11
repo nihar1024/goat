@@ -187,6 +187,37 @@ def test_collection_item_not_found_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
+def test_collections_intersects_filters_like_bbox(client: TestClient) -> None:
+    """A drawn shape narrows Collection Search the way a bbox does.
+
+    The parameter has to be declared on the collections query model: FastAPI
+    drops an undeclared query parameter without a word, and the catalog page
+    sends every drawn polygon and buffered point as `intersects` -- so the
+    filter silently returned the whole catalog.
+    """
+    # The western half of the fixture's footprints, so some rows fall outside.
+    envelope = {
+        "type": "Polygon",
+        "coordinates": [[[5, 47], [10, 47], [10, 56], [5, 56], [5, 47]]],
+    }
+    everything = client.get("/stac/collections", params={"limit": 1}).json()
+    boxed = client.get(
+        "/stac/collections", params={"bbox": "5,47,10,56", "limit": 1}
+    ).json()
+    drawn = client.get(
+        "/stac/collections",
+        params={"intersects": json.dumps(envelope), "limit": 1},
+    ).json()
+
+    assert drawn["numberMatched"] == boxed["numberMatched"]
+    assert drawn["numberMatched"] < everything["numberMatched"]
+
+
+def test_collections_intersects_invalid_400(client: TestClient) -> None:
+    r = client.get("/stac/collections", params={"intersects": "{not json"})
+    assert r.status_code == 400
+
+
 def test_collections_bbox_boost_invalid_400(client: TestClient) -> None:
     r = client.get("/stac/collections", params={"bbox_boost": "5,47,16"})
     assert r.status_code == 400

@@ -11,6 +11,7 @@ import ArrayInput from "@/components/map/panels/toolbox/generic/inputs/ArrayInpu
 import BooleanInput from "@/components/map/panels/toolbox/generic/inputs/BooleanInput";
 import BundleInput from "@/components/map/panels/toolbox/generic/inputs/BundleInput";
 import ChipsInput from "@/components/map/panels/toolbox/generic/inputs/ChipsInput";
+import DateInput from "@/components/map/panels/toolbox/generic/inputs/DateInput";
 import EnumInput from "@/components/map/panels/toolbox/generic/inputs/EnumInput";
 import FieldInput from "@/components/map/panels/toolbox/generic/inputs/FieldInput";
 import FieldStatisticsInput from "@/components/map/panels/toolbox/generic/inputs/FieldStatisticsInput";
@@ -22,7 +23,6 @@ import OevStationConfigInput from "@/components/map/panels/toolbox/generic/input
 import RepeatableObjectInput from "@/components/map/panels/toolbox/generic/inputs/RepeatableObjectInput";
 import StartingPointsInput from "@/components/map/panels/toolbox/generic/inputs/StartingPointsInput";
 import StringInput from "@/components/map/panels/toolbox/generic/inputs/StringInput";
-import DateInput from "./DateInput";
 import TimePickerInput from "@/components/map/panels/toolbox/generic/inputs/TimePickerInput";
 
 interface GenericInputProps {

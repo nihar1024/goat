@@ -13,7 +13,9 @@ from goatlib.bundles.importers import get_importer, infer_bundle_type
 from goatlib.models.bundle import (
     BundleArtifactState,
     BundleStatus,
+    BundleTypeName,
     artifact_state,
+    artifacts_from_layers,
     get_spec,
 )
 from pydantic import UUID4
@@ -25,6 +27,7 @@ from core.core import authz
 from core.core.authz import Action
 from core.core.config import settings
 from core.crud.crud_bundle import bundle as crud_bundle
+from core.crud.crud_bundle import member_thumbnails
 from core.db.models._link_model import (
     BundleDependencyLink,
     BundleLayerLink,
@@ -259,26 +262,54 @@ async def _artifacts_by_bundle(
     return grouped
 
 
-def _artifact_state(
-    artifact: BundleArtifact, layers_revision: int
-) -> BundleArtifactState:
-    """Where one artifact row stands, from the single definition in goatlib.
+def _from_layers(bundle_type: str) -> bool:
+    """Whether a type's artifacts are built from its member layers.
 
-    Loaded values may be the enum or the raw string, depending on whether
-    SQLModel coerced the column, so the raw value is what goes in.
+    What makes both a filtered copy and an in-place rebuild possible: a type
+    built from the uploaded source has nothing to build from once the import's
+    temporary download is gone. Unknown types answer False — a read must not
+    fail on a type the database holds and this release does not know.
     """
-    return artifact_state(
-        getattr(artifact.build_status, "value", artifact.build_status),
-        artifact.revision,
-        layers_revision,
-        artifact.storage_path,
-    )
+    if bundle_type not in {t.value for t in BundleTypeName}:
+        return False
+    return artifacts_from_layers(bundle_type)
+
+
+async def _bundles_with_stale_dependencies(
+    async_session: AsyncSession, bundle_ids: Sequence[UUID]
+) -> set[UUID]:
+    """Bundles whose artifacts were built from a dependency that has moved on.
+
+    Each dependency row records the revision the dependent's artifacts were
+    built from; a bundle is stale when that no longer matches the dependency's
+    current ``layers_revision`` — it was edited, or the link was re-pointed at
+    another bundle, which leaves the revision unrecorded. One query for the
+    whole listing, like the artifacts themselves.
+    """
+    if not bundle_ids:
+        return set()
+    rows = (
+        await async_session.execute(
+            select(BundleDependencyLink.bundle_id)
+            .join(Bundle, Bundle.id == BundleDependencyLink.depends_on_bundle_id)
+            .where(
+                BundleDependencyLink.bundle_id.in_(bundle_ids),
+                BundleDependencyLink.built_revision.is_distinct_from(
+                    Bundle.layers_revision
+                ),
+            )
+            .distinct()
+        )
+    ).all()
+    return {row[0] for row in rows}
 
 
 def _bundle_read(
     bundle: Bundle,
     *,
     artifacts: Sequence[BundleArtifact] = (),
+    dependencies_current: bool = True,
+    thumbnail_url: str | None = None,
     owned_by: dict[str, Any] | None = None,
 ) -> BundleRead:
     """A bundle as the API reports it.
@@ -289,18 +320,31 @@ def _bundle_read(
     rather than lazy-loaded — an async session cannot resolve a relationship on
     access, and a listing needs them fetched in bulk anyway.
     """
+    fields = bundle.model_dump()
+    if thumbnail_url:
+        # A member's thumbnail in place of the bundle's own, which is only ever
+        # the generic placeholder — see `member_thumbnails`.
+        fields["thumbnail_url"] = thumbnail_url
     return BundleRead(
-        **bundle.model_dump(),
+        **fields,
         owned_by=owned_by,
+        artifacts_from_layers=_from_layers(bundle.bundle_type),
         artifacts=[
             BundleArtifactSummary(
                 # Loaded values may be the enum or the raw string, depending on
                 # whether SQLModel coerced the column.
                 kind=getattr(a.kind, "value", a.kind),
                 build_status=getattr(a.build_status, "value", a.build_status),
-                state=_artifact_state(a, bundle.layers_revision),
+                state=artifact_state(
+                    getattr(a.build_status, "value", a.build_status),
+                    a.revision,
+                    bundle.layers_revision,
+                    a.storage_path,
+                    dependencies_current,
+                ),
                 revision=a.revision,
                 size=a.size,
+                properties=a.properties,
                 updated_at=a.updated_at,
             )
             for a in artifacts
@@ -604,27 +648,41 @@ async def list_bundles(
     artifacts = await _artifacts_by_bundle(
         async_session, [bundle.id for bundle, *_ in rows]
     )
+    stale = await _bundles_with_stale_dependencies(
+        async_session, [bundle.id for bundle, *_ in rows]
+    )
     if artifact_kind:
         # Restrict to bundles with a ready artifact of the requested kind (e.g.
         # only PT bundles whose routing graph is built). Readiness is asked of
         # `artifact_state` over the rows already loaded, not respelled as SQL:
-        # a second copy of the rule cannot see whether the file is there and
-        # cannot treat a build_status from another release as failed, so the
+        # a second copy of the rule cannot see whether the file is there, cannot
+        # treat a build_status from another release as failed, and cannot know
+        # whether the dependencies it was built from have moved on — so the
         # listing and the read DTO would disagree about the same bundle.
         rows = [
             row
             for row in rows
             if any(
                 getattr(a.kind, "value", a.kind) == artifact_kind
-                and _artifact_state(a, row[0].layers_revision)
+                and artifact_state(
+                    a.build_status,
+                    a.revision,
+                    row[0].layers_revision,
+                    a.storage_path,
+                    row[0].id not in stale,
+                )
                 is BundleArtifactState.ready
                 for a in artifacts[row[0].id]
             )
         ]
+    listed_ids = [bundle.id for bundle, *_ in rows]
+    thumbnails = await member_thumbnails(async_session, listed_ids)
     return [
         _bundle_read(
             bundle,
             artifacts=artifacts[bundle.id],
+            dependencies_current=bundle.id not in stale,
+            thumbnail_url=thumbnails.get(bundle.id),
             # None when the row has no owner left (the creator's account was
             # removed), matching `build_shared_with_object`'s `owned_by`.
             owned_by=(
@@ -658,7 +716,14 @@ async def read_bundle(
     """Retrieve a bundle the caller owns or has been shared."""
     bundle = await authorize_bundle(async_session, bundle_id, user_id, "read")
     artifacts = await _artifacts_by_bundle(async_session, [bundle_id])
-    return _bundle_read(bundle, artifacts=artifacts[bundle_id])
+    stale = await _bundles_with_stale_dependencies(async_session, [bundle_id])
+    thumbnails = await member_thumbnails(async_session, [bundle_id])
+    return _bundle_read(
+        bundle,
+        artifacts=artifacts[bundle_id],
+        dependencies_current=bundle_id not in stale,
+        thumbnail_url=thumbnails.get(bundle_id),
+    )
 
 
 @router.put(
@@ -710,7 +775,14 @@ async def update_bundle(
         await async_session.commit()
 
     artifacts = await _artifacts_by_bundle(async_session, [bundle_id])
-    return _bundle_read(updated, artifacts=artifacts[bundle_id])
+    stale = await _bundles_with_stale_dependencies(async_session, [bundle_id])
+    thumbnails = await member_thumbnails(async_session, [bundle_id])
+    return _bundle_read(
+        updated,
+        artifacts=artifacts[bundle_id],
+        dependencies_current=bundle_id not in stale,
+        thumbnail_url=thumbnails.get(bundle_id),
+    )
 
 
 @router.delete(

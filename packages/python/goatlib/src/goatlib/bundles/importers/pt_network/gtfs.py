@@ -31,8 +31,10 @@ def _clean(value: Optional[str]) -> Optional[str]:
 
 
 def _valid_email(value: Optional[str]) -> Optional[str]:
-    """Agencies write free text here, and the API models the column as an
-    email, so anything unparseable is dropped rather than stored."""
+    """Agencies write free text in this column — a phone number, opening
+    hours — so anything unparseable is dropped rather than stored as a contact
+    nobody can write to. Hygiene, not a constraint the read path relies on:
+    `BundleRead` reports the document as stored."""
     if value and re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
         return value
     return None

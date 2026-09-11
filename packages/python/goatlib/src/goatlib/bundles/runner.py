@@ -27,6 +27,7 @@ from goatlib.models.bundle import (
     BundleStatus,
     BundleTypeName,
     get_spec,
+    member_draw_rank,
     role_computed_columns,
     role_field_config,
 )
@@ -34,7 +35,7 @@ from goatlib.models.io import DatasetMetadata
 from goatlib.tools.authz import authorize_bundle_ingest
 from goatlib.tools.base import BaseToolRunner
 from goatlib.tools.db import ToolDatabaseService, normalize_geometry_type
-from goatlib.tools.style import get_default_style
+from goatlib.tools.style import get_bundle_style
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +253,15 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                         extent_wkt=info.get("extent_wkt"),
                         feature_count=info.get("feature_count", 0),
                         size=info.get("size", 0),
+                        # Stated rather than left to `create_layer`, which
+                        # picks a random colour when given none: a bundle's
+                        # members are one dataset and should not arrive in two
+                        # unrelated colours.
+                        properties=get_bundle_style(
+                            bundle_type,
+                            extracted.role,
+                            normalize_geometry_type(info.get("geometry_type")),
+                        ),
                     )
                     if field_config:
                         await db.set_layer_field_config(layer_id, field_config)
@@ -283,6 +293,7 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
         *,
         project_id: str,
         bundle_id: str,
+        bundle_type: "BundleTypeName | str",
         imported: List[ImportedLayer],
     ) -> None:
         """Place the freshly-imported member layers into a locked bundle-backed
@@ -298,10 +309,21 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
         group_id, group_order = await db.create_bundle_project_group(
             project_id=project_id, bundle_id=bundle_id, name=bundle_name
         )
+        # Points before lines before polygons, so a node is not buried under
+        # the edges it joins. Stable, so members of one geometry keep the
+        # order the spec lists their roles in.
+        placed = sorted(
+            imported,
+            key=lambda layer: member_draw_rank(
+                normalize_geometry_type(layer.geometry_type)
+            ),
+        )
         try:
-            for position, layer in enumerate(imported):
+            for position, layer in enumerate(placed):
                 geom = normalize_geometry_type(layer.geometry_type)
-                properties = get_default_style(geom) if geom else None
+                properties = (
+                    get_bundle_style(bundle_type, layer.role, geom) if geom else None
+                )
                 await db.add_to_project(
                     layer_id=layer.layer_id,
                     project_id=project_id,
@@ -401,6 +423,7 @@ class BundleImportRunner(BundleArtifactBuildMixin, BaseToolRunner):
                         db,
                         project_id=project_id,
                         bundle_id=bundle_id,
+                        bundle_type=type_value,
                         imported=imported,
                     )
                 except Exception:

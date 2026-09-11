@@ -814,3 +814,41 @@ class HuffmodelV2Params(BaseModel):
                 "is only coherent as a pair"
             )
         return self
+
+    # ---- PT network override ------------------------------------------------
+    # Point the engine at an uploaded PT bundle's timetable and its
+    # stop-to-street linkage instead of the global network. None uses the
+    # default. The three belong together: `stop_idx` in an access/egress table
+    # indexes into the timetable it was built against, so a table from one
+    # network read against another's timetable resolves to the wrong stops
+    # rather than to nothing.
+    timetable_path: str | None = Field(
+        default=None,
+        description="Path to a nigiri timetable .bin to use for PT routing",
+    )
+    access_table_path: str | None = Field(
+        default=None,
+        description="Path to the access-mode access/egress parquet",
+    )
+    egress_table_path: str | None = Field(
+        default=None,
+        description="Path to the egress-mode access/egress parquet",
+    )
+
+    @model_validator(mode="after")
+    def validate_pt_network_override(self: Self) -> Self:
+        # A timetable without its tables would fall back to the global tables,
+        # whose stop indices belong to a different network — the lookups would
+        # land on unrelated stops instead of failing.
+        supplied = [
+            bool(self.timetable_path),
+            bool(self.access_table_path),
+            bool(self.egress_table_path),
+        ]
+        if any(supplied) and not all(supplied):
+            raise ValueError(
+                "timetable_path, access_table_path and egress_table_path must "
+                "be set together — an access/egress table's stop indices are "
+                "only meaningful against the timetable it was built from"
+            )
+        return self

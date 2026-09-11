@@ -1084,6 +1084,22 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
         logger.info(f"Filtered temp layer written to: {temp_path}")
         return temp_path
 
+    def resolve_bundle_dependency(
+        self: Self, bundle_id: str, kind: str
+    ) -> "str | None":
+        """The bundle this one depends on for ``kind``, or None if unlinked.
+
+        A tool asks this to follow a link the user already made rather than
+        making them state it twice: a public-transport bundle names the street
+        network its stops were connected to, and that is the network its
+        journeys' access and egress legs should be routed on.
+        """
+        if self.db_service is None:
+            return None
+        return _get_or_create_event_loop().run_until_complete(
+            self.db_service.get_bundle_dependency(bundle_id, kind)
+        )
+
     def resolve_bundle_artifact(
         self: Self, bundle_id: str, kind: str
     ) -> "tuple[str | None, BundleArtifactState | None]":
@@ -1115,6 +1131,7 @@ class BaseToolRunner(SimpleToolRunner, ABC, Generic[TParams]):
             row.get("revision"),
             row["layers_revision"],
             row.get("storage_path"),
+            bool(row.get("dependencies_current", True)),
         )
         if state is not BundleArtifactState.ready:
             return None, state

@@ -2977,5 +2977,22 @@
   "transfer_ellipsis": "Transfer…",
   "thumbnail_too_large": "Choose an image of {{mb}} MB or less.",
   "thumbnail_invalid_type": "Choose a PNG, JPEG or WebP image.",
-  "reset_to_generated": "Reset to generated"
+  "reset_to_generated": "Reset to generated",
+  "add_layer_handoff_note": "{{source}} still opens in its own dialog. It moves into this window once it has been rebuilt here.",
+  "add_layer_handoff_open": "Open {{source}}",
+  "add_layout": "Add Layout",
+  "add_workflow": "Add Workflow",
+  "dataset_explorer": "Dataset Explorer",
+  "error_adding_bundle": "Error adding bundle",
+  "select_folder_destination": "Select Folder Destination",
+  "read_access": "Read",
+  "write_access": "Write",
+  "shared_folders": "Shared Folders",
+  "catalog_tab_workflows": "Workflows",
+  "catalog_tab_projects": "Projects",
+  "bundle_upload_note_pt_network_gtfs": "Public Transport Network bundles must be linked to a Street Network bundle in order for GOAT to connect stops with streets. Select a Street Network bundle that covers the same region to continue.",
+  "street_network_bundle": "Street Network bundle",
+  "default_street_network": "Default (Europe)",
+  "select_a_street_network": "Select a street network...",
+  "editing_ended_layer_removed": "Editing ended: the layer was removed from the project, so unsaved edits were discarded."
 }

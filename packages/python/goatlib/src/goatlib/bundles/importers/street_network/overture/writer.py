@@ -58,7 +58,6 @@ EDGE_SCHEMA = pa.schema(
 NODE_SCHEMA = pa.schema(
     [
         ("id", pa.string()),
-        ("is_synthetic", pa.bool_()),
         _GEOMETRY,
     ]
 )
@@ -117,18 +116,12 @@ def _write(
         con.register("records", table)
         # Same optimiser every other layer goes through — bbox struct for
         # row-group pruning, Hilbert ordering, Parquet V2 — so a bundle's layers
-        # aren't second-class for tile and feature queries.
-        #
-        # REPLACE keeps the declared column *order*. It does not keep types: a
-        # replaced column takes the type of the expression that replaces it,
-        # which is why geometry comes out a geometry and why a computed column
-        # comes out at its kind's own width. The declared schema has to agree
-        # with those expressions — `test_writer_schema_types_match_the_file`
-        # is what holds it — since the declaration is what anything reading the
-        # layer trusts.
-        #
-        # Geometry first, then anything computed from it: a computed expression
-        # needs a real geometry, not the WKB the records carry.
+        # aren't second-class for tile and feature queries. REPLACE keeps the
+        # declared column order and types; only geometry changes type.
+        # Geometry first, then anything computed from it — a computed
+        # expression needs a real geometry, not the WKB the records carry.
+        # REPLACE in both layers so the schema's declared column order and
+        # types survive; only the values change.
         geom_query = (
             "SELECT * REPLACE (ST_GeomFromWKB(geometry) AS geometry) FROM records"
         )

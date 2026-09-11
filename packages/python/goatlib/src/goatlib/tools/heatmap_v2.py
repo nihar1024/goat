@@ -10,8 +10,6 @@ parquet paths.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
-from datetime import time as time_of_day
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -19,6 +17,7 @@ from typing import Any, Literal, Self
 from pydantic import ConfigDict, Field, model_validator
 
 from goatlib.analysis.accessibility import HeatmapV2Tool
+from goatlib.analysis.pt_time import pt_anchor_unix_minutes
 from goatlib.analysis.schemas.catchment_area import WEEKDAY_LABELS
 from goatlib.analysis.schemas.catchment_area_v2 import (
     AccessEgressMode,
@@ -50,6 +49,7 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
+from goatlib.bundles.artifacts.gtfs import fetch_pt_linkage, fetch_pt_timetable
 from goatlib.bundles.artifacts.street_network import fetch_routing_network
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools._opportunity_handles import (
@@ -521,7 +521,43 @@ class HeatmapV2WindmillParams(ToolInputBase):
             field_order=3,
             label_key="weekday",
             enum_labels=WEEKDAY_LABELS,
-            visible_when={"routing_mode": "pt"},
+            # Only for the default network. Its three choices resolve to three
+            # fixed anchor dates, which exist in that network's timetable and
+            # almost certainly not in an uploaded feed's — so when a bundle is
+            # chosen, `pt_date` replaces this rather than sitting beside it.
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"pt_network_bundle_id": {"$exists": False}},
+                ]
+            },
+        ),
+    )
+    pt_date: str | None = Field(
+        default=None,
+        description=(
+            "Date to route on (YYYY-MM-DD). For an uploaded public-transport "
+            "bundle, whose timetable covers the window its feed declares."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=3,
+            label_key="pt_date",
+            widget="date-picker",
+            # Replaces the weekday choice, which only means anything for the
+            # default network. Shown exactly when a bundle is chosen.
+            visible_when={
+                "$and": [
+                    {"routing_mode": "pt"},
+                    {"pt_network_bundle_id": {"$exists": True}},
+                ]
+            },
+            # Bounded by the window the chosen bundle's timetable was built
+            # for: outside it every journey comes back "no service".
+            widget_options={
+                "bounds_from": "pt_network_bundle_id",
+                "bounds_artifact": "pt_network_graph",
+            },
         ),
     )
     pt_arrival_time: int = Field(
@@ -789,7 +825,8 @@ class HeatmapV2WindmillParams(ToolInputBase):
             field_order=21,
             label_key="street_network_bundle_id",
             widget="bundle-selector",
-            # PT legs route on the global network, so this is for street modes.
+            # A PT run takes its network from pt_network_bundle_id below, so
+            # this selector is for street modes.
             visible_when={
                 "$and": [
                     {"routing_mode": {"$in": ["walking", "bicycle", "pedelec", "car"]}},
@@ -800,6 +837,33 @@ class HeatmapV2WindmillParams(ToolInputBase):
             widget_options={
                 "bundle_type": "street_network",
                 "artifact_kind": "street_network_graph",
+            },
+        ),
+    )
+
+    pt_network_bundle_id: str | None = Field(
+        default=None,
+        description=(
+            "Choose a custom Public Transport bundle to use for routing. "
+            "If unset, the default network will be used."
+        ),
+        json_schema_extra=ui_field(
+            section="configuration",
+            field_order=22,
+            label_key="pt_network_bundle_id",
+            widget="bundle-selector",
+            visible_when={
+                "$and": [
+                    {"routing_mode": {"$eq": "pt"}},
+                    {"show_advanced": True},
+                ]
+            },
+            # Only PT bundles whose stop-to-street linkage is built: the
+            # timetable alone is not enough here, since access and egress legs
+            # are read out of that table.
+            widget_options={
+                "bundle_type": "pt_network_gtfs",
+                "artifact_kind": "pt_network_linkage",
             },
         ),
     )
@@ -1188,22 +1252,6 @@ _ACCESS_EGRESS_MODE_MAP: dict[AccessEgressMode, RoutingMode] = {
 # Anchor dates per weekday type — must match catchment v2's
 # `_pt_departure_unix_minutes` so PT routing resolves against the same
 # representative service days.
-_PT_WEEKDAY_DATES: dict[str, date] = {
-    "weekday": date(2026, 6, 16),
-    "saturday": date(2026, 6, 20),
-    "sunday": date(2026, 6, 21),
-}
-
-
-def _pt_arrival_unix_minutes(pt_day: Weekday, seconds_of_day: int) -> int:
-    """Convert a weekday type + time-of-day into a unix-minute arrival
-    anchor (UTC), mirroring catchment v2's departure conversion."""
-    day_value = pt_day.value if hasattr(pt_day, "value") else str(pt_day)
-    anchor = _PT_WEEKDAY_DATES.get(day_value, _PT_WEEKDAY_DATES["weekday"])
-    arrival_dt = datetime.combine(
-        anchor, time_of_day.min, tzinfo=timezone.utc
-    ) + timedelta(seconds=seconds_of_day)
-    return int(arrival_dt.timestamp() // 60)
 
 
 class Heatmap2SFCAV2WindmillParams(
@@ -1480,7 +1528,9 @@ class HeatmapV2ToolRunner(BaseToolRunner[HeatmapV2WindmillParams]):
             # per-mode lookup table (walk/bicycle/pedelec/car); the analysis
             # layer resolves the table path and errors if it isn't built yet.
             arrival_time=(
-                _pt_arrival_unix_minutes(params.pt_day, params.pt_arrival_time)
+                pt_anchor_unix_minutes(
+                    params.pt_day, params.pt_arrival_time, params.pt_date
+                )
                 if is_pt
                 else None
             ),
@@ -1507,6 +1557,29 @@ class HeatmapV2ToolRunner(BaseToolRunner[HeatmapV2WindmillParams]):
             )
             analysis_params.edge_path = edge_path
             analysis_params.node_path = node_path
+
+        # An uploaded PT bundle replaces the global network. Both legs read
+        # from the bundle's own linkage: mixing one network's timetable with
+        # another's tables would resolve stop indices to unrelated stops.
+        if params.routing_mode == HeatmapRoutingMode.pt and params.pt_network_bundle_id:
+            analysis_params.timetable_path = fetch_pt_timetable(
+                self, params.pt_network_bundle_id
+            )
+            # The mapped analysis mode, not the tool's own value: the table is
+            # named for the routing mode ("walking"), while the tool field
+            # spells the UI's ("walk").
+            analysis_params.access_table_path = fetch_pt_linkage(
+                self,
+                params.pt_network_bundle_id,
+                analysis_params.access_mode.value,
+                temp_dir,
+            )
+            analysis_params.egress_table_path = fetch_pt_linkage(
+                self,
+                params.pt_network_bundle_id,
+                analysis_params.egress_mode.value,
+                temp_dir,
+            )
 
         tool = self.tool_class()
         try:

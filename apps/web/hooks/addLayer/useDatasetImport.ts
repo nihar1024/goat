@@ -39,6 +39,9 @@ export type DatasetImportRequest = {
   /** Spreadsheets only, and only when someone has answered for them. */
   hasHeader?: boolean;
   sheetName?: string;
+  /** Bundle types that depend on one — a GTFS feed links to the street network
+   *  its stop-to-street linkage is built against. */
+  streetNetworkBundleId?: string;
 };
 
 /**
@@ -88,6 +91,9 @@ export const useDatasetImport = () => {
             name: request.name,
             description: request.description,
             ...(request.projectId && { project_id: request.projectId }),
+            ...(request.streetNetworkBundleId && {
+              street_network_bundle_id: request.streetNetworkBundleId,
+            }),
           });
           jobId = response.job_id ?? undefined;
         } else {

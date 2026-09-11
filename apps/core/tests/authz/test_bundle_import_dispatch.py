@@ -22,7 +22,6 @@ from core.core.config import settings
 from core.db.models.folder import Folder
 from core.db.models.organization import Organization
 from core.db.models.user import User
-from core.db.seed_bundle_types import seed_bundle_types
 from core.endpoints.deps import get_db, session_manager
 from core.endpoints.v2 import bundle as bundle_endpoints
 from core.main import app
@@ -117,7 +116,6 @@ async def test_an_ambiguous_dispatch_failure_keeps_the_bundle(
     org = await make_org()
     owner = await make_user(org.id)
     folder = await make_folder(owner, "Imports")
-    await seed_bundle_types(db_session)
     await db_session.commit()
     _accept_the_upload(monkeypatch)
 
@@ -157,7 +155,6 @@ async def test_a_client_timeout_keeps_the_bundle(
     org = await make_org()
     owner = await make_user(org.id)
     folder = await make_folder(owner, "Imports")
-    await seed_bundle_types(db_session)
     await db_session.commit()
     _accept_the_upload(monkeypatch)
 
@@ -192,7 +189,6 @@ async def test_a_dispatch_that_never_left_removes_the_shell(
     org = await make_org()
     owner = await make_user(org.id)
     folder = await make_folder(owner, "Imports")
-    await seed_bundle_types(db_session)
     await db_session.commit()
     _accept_the_upload(monkeypatch)
 
@@ -230,7 +226,6 @@ async def test_a_broken_session_does_not_replace_the_original_failure(
     org = await make_org()
     owner = await make_user(org.id)
     folder = await make_folder(owner, "Imports")
-    await seed_bundle_types(db_session)
     await db_session.commit()
     _accept_the_upload(monkeypatch)
 

@@ -129,8 +129,9 @@ export const useCatalogFacetSections = ({
   const sections = useMemo(
     () =>
       facetPlan.flatMap(({ name, param }) => {
+        const hidden = FACET_HIDDEN_VALUES[name];
         const options = (buckets[name] ?? [])
-          .filter((bucket) => bucket.key !== null)
+          .filter((bucket) => bucket.key !== null && !hidden?.has(bucket.key))
           .map((bucket) => ({
             value: bucket.key as string,
             label: optionLabel(param, bucket.key as string),

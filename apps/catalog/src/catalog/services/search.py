@@ -765,10 +765,12 @@ def _build_order_by(
         prefix += f"{BBOX_AREA_SQL} DESC, "
 
     if not p.sortby:
-        # A layer list has no relevance to order by, so it keeps recency; `id`
-        # behind it because `updated` repeats and offset paging over a partial
-        # order can serve one row on two pages.
-        body = "" if scored else "updated DESC, id"
+        # Recency, then `id`, behind every ranking key: the score has four
+        # values and the footprint ties across NULL and oversized bboxes, so
+        # without a unique key offset paging over the partial order serves one
+        # row on two pages and skips another. A layer list, which carries no
+        # score, starts here.
+        body = "updated DESC, id"
     else:
         clauses: list[str] = []
         for field, direction in p.sortby:
@@ -782,8 +784,6 @@ def _build_order_by(
             clauses.append(f"{column} {direction_sql}")
         body = ", ".join(clauses)
 
-    if not body:
-        return f"ORDER BY {prefix.rstrip(', ')}", order_params
     return f"ORDER BY {prefix}{body}", order_params
 
 

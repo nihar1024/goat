@@ -47,6 +47,7 @@ from goatlib.bundles.artifacts.street_network import (
 )
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools.catchment_area import CatchmentAreaToolRunner
+from goatlib.tools.pt_network import pt_date_field
 from goatlib.tools.schemas import ToolInputBase, get_default_layer_name
 
 logger = logging.getLogger(__name__)
@@ -511,33 +512,7 @@ class CatchmentAreaV2WindmillParams(ToolInputBase):
             },
         ),
     )
-    pt_date: str | None = Field(
-        default=None,
-        description=(
-            "Date to route on (YYYY-MM-DD). For an uploaded public-transport "
-            "bundle, whose timetable covers the window its feed declares."
-        ),
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=8,
-            label_key="pt_date",
-            widget="date-picker",
-            # Replaces the weekday choice, which only means anything for the
-            # default network. Shown exactly when a bundle is chosen.
-            visible_when={
-                "$and": [
-                    {"routing_mode": "pt"},
-                    {"pt_network_bundle_id": {"$exists": True}},
-                ]
-            },
-            # Bounded by the window the chosen bundle's timetable was built
-            # for: outside it every journey comes back "no service".
-            widget_options={
-                "bounds_from": "pt_network_bundle_id",
-                "bounds_artifact": "pt_network_graph",
-            },
-        ),
-    )
+    pt_date: str | None = pt_date_field(8)
     pt_start_time: int = Field(
         default=25200,
         description="PT window start (seconds from midnight).",

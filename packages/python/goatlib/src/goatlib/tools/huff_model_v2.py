@@ -26,7 +26,6 @@ from goatlib.analysis.schemas.ui import (
     ui_field,
     ui_sections,
 )
-from goatlib.bundles.artifacts.gtfs import fetch_pt_linkage, fetch_pt_timetable
 from goatlib.bundles.artifacts.street_network import fetch_routing_network
 from goatlib.models.io import DatasetMetadata
 from goatlib.tools._routing_limits import (
@@ -56,6 +55,11 @@ from goatlib.tools.heatmap_v2 import (
     SECTION_RESULT_HM,
     SECTION_ROUTING_HM,
     HeatmapRoutingMode,
+)
+from goatlib.tools.pt_network import (
+    apply_pt_bundle_override,
+    pt_date_field,
+    pt_network_bundle_field,
 )
 from goatlib.tools.schemas import (
     ToolInputBase,
@@ -163,32 +167,7 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
         ),
     )
 
-    pt_network_bundle_id: str | None = Field(
-        default=None,
-        description=(
-            "Choose a custom Public Transport bundle to use for routing. "
-            "If unset, the default network will be used."
-        ),
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=27,
-            label_key="pt_network_bundle_id",
-            widget="bundle-selector",
-            visible_when={
-                "$and": [
-                    {"routing_mode": {"$eq": "pt"}},
-                    {"show_advanced": True},
-                ]
-            },
-            # Only PT bundles whose stop-to-street linkage is built: the
-            # timetable alone is not enough here, since access and egress legs
-            # are read out of that table.
-            widget_options={
-                "bundle_type": "pt_network_gtfs",
-                "artifact_kind": "pt_network_linkage",
-            },
-        ),
-    )
+    pt_network_bundle_id: str | None = pt_network_bundle_field(27)
 
     # ---- Routing section --------------------------------------------------
     # Same enum + icons + labels as the other v2 tools, and required (no
@@ -275,33 +254,7 @@ class HuffModelV2ToolParams(ToolInputBase, HuffmodelV2Params):
             },
         ),
     )
-    pt_date: str | None = Field(
-        default=None,
-        description=(
-            "Date to route on (YYYY-MM-DD). For an uploaded public-transport "
-            "bundle, whose timetable covers the window its feed declares."
-        ),
-        json_schema_extra=ui_field(
-            section="configuration",
-            field_order=3,
-            label_key="pt_date",
-            widget="date-picker",
-            # Replaces the weekday choice, which only means anything for the
-            # default network. Shown exactly when a bundle is chosen.
-            visible_when={
-                "$and": [
-                    {"routing_mode": "pt"},
-                    {"pt_network_bundle_id": {"$exists": True}},
-                ]
-            },
-            # Bounded by the window the chosen bundle's timetable was built
-            # for: outside it every journey comes back "no service".
-            widget_options={
-                "bounds_from": "pt_network_bundle_id",
-                "bounds_artifact": "pt_network_graph",
-            },
-        ),
-    )
+    pt_date: str | None = pt_date_field(3)
     pt_arrival_time: int = Field(
         default=32400,  # 09:00
         ge=0,
@@ -766,26 +719,16 @@ class HuffModelV2ToolRunner(BaseToolRunner[HuffModelV2ToolParams]):
             analysis_params.edge_path = edge_path
             analysis_params.node_path = node_path
 
-        # An uploaded PT bundle replaces the global network. Both legs read
-        # from the bundle's own linkage: mixing one network's timetable with
-        # another's tables would resolve stop indices to unrelated stops.
-        # Access and egress are walk-only here, matching the analysis params
-        # set above.
+        # An uploaded PT bundle replaces the global network: its timetable and
+        # its stop-to-street linkage, in the analysis layer's mode spelling.
         if params.routing_mode == HeatmapRoutingMode.pt and params.pt_network_bundle_id:
-            analysis_params.timetable_path = fetch_pt_timetable(
-                self, params.pt_network_bundle_id
-            )
-            analysis_params.access_table_path = fetch_pt_linkage(
+            apply_pt_bundle_override(
                 self,
+                analysis_params,
                 params.pt_network_bundle_id,
-                analysis_params.access_mode.value,
                 temp_dir,
-            )
-            analysis_params.egress_table_path = fetch_pt_linkage(
-                self,
-                params.pt_network_bundle_id,
-                analysis_params.egress_mode.value,
-                temp_dir,
+                access_mode=analysis_params.access_mode.value,
+                egress_mode=analysis_params.egress_mode.value,
             )
 
         tool = self.tool_class()

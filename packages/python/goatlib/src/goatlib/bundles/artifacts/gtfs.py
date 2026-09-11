@@ -347,14 +347,18 @@ def unpack_pt_linkage(archive: str | Path, dest_dir: str | Path, mode: str) -> s
     engine loads one access table and one egress table per request.
     """
     linkage_dir = Path(dest_dir) / "pt_network_linkage"
-    linkage_dir.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive) as tar:
-        # filter="data" refuses members with absolute or parent-relative paths.
-        # We wrote this tar, but it is read back off a shared volume, so the
-        # bytes are not necessarily the ones we wrote.
-        tar.extractall(linkage_dir, filter="data")
-
     table = linkage_dir / linkage_member(mode)
+    # Extracted once per destination: a run asks for an access table and an
+    # egress table from the same archive, and the first call already unpacked
+    # every mode into this directory.
+    if not table.exists():
+        linkage_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(archive) as tar:
+            # filter="data" refuses members with absolute or parent-relative
+            # paths. We wrote this tar, but it is read back off a shared
+            # volume, so the bytes are not necessarily the ones we wrote.
+            tar.extractall(linkage_dir, filter="data")
+
     if not table.exists():
         available = sorted(
             path.name.removeprefix("accessegress_").removesuffix(

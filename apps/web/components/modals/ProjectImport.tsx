@@ -82,15 +82,10 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({
         return;
       }
       setFileValue(file);
-      // Auto-populate project name from filename if empty
-      if (!projectName) {
-        const name = file.name
-          .replace(/^project-export-/, "")
-          .replace(/-\d{8}_\d{6}\.zip$/, "")
-          .replace(/\.zip$/, "")
-          .replace(/_/g, " ");
-        setProjectName(name);
-      }
+      // The name stays empty unless the user types one: the archive carries
+      // the project's own name, and the file name is a sanitised copy of it
+      // (parentheses and other characters stripped for the file system), so
+      // pre-filling from it would rename the project on every import.
     }
   };
 

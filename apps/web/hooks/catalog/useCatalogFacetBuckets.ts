@@ -8,6 +8,8 @@ import {
 import { fetcher } from "@/lib/api/fetcher";
 import type { CatalogAggregationBucket, CatalogAggregations } from "@/lib/validations/catalog";
 
+import { FACET_HIDDEN_VALUES } from "@/hooks/catalog/useCatalogFacetSections";
+
 /** Facet counts, each computed with that facet's *own* selection excluded. */
 export const useCatalogFacetBuckets = ({
   facets,
@@ -94,11 +96,18 @@ export const useCatalogFacetBuckets = ({
       // Until the baseline lands, show what the filtered query returned rather
       // than nothing.
       buckets[facet.name] = data?.[facet.name] ?? [];
-      continue;
+    } else {
+      buckets[facet.name] = universe.map(
+        (bucket) => current.get(bucket.key) ?? { ...bucket, frequency: 0 }
+      );
     }
-    buckets[facet.name] = universe.map(
-      (bucket) => current.get(bucket.key) ?? { ...bucket, frequency: 0 }
-    );
+
+    const suppressed = FACET_HIDDEN_VALUES[facet.name];
+    if (suppressed) {
+      buckets[facet.name] = buckets[facet.name].filter(
+        (bucket) => bucket.key === null || !suppressed.has(bucket.key)
+      );
+    }
   }
 
   return { buckets, isLoading, isError: error };

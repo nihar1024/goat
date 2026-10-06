@@ -55,7 +55,10 @@ FORBIDDEN_FUNCTIONS = frozenset(
 )
 # Table functions a query may call: they only generate rows from their
 # arguments, and any subquery in those arguments is checked like the rest.
-ALLOWED_TABLE_FUNCTIONS = frozenset({"range", "generate_series", "unnest"})
+# json_each and json_tree expand the JSON value they are given, never a file.
+ALLOWED_TABLE_FUNCTIONS = frozenset(
+    {"range", "generate_series", "unnest", "json_each", "json_tree"}
+)
 
 _PLAIN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _QUERY_NODES = frozenset(
@@ -68,11 +71,86 @@ _PLAIN_TABLE_REFS = frozenset(
 )
 
 
+_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# The value list a pivot without one is checked with: the check needs the
+# pivot's source, column and aggregates, not the values the data holds.
+_PIVOT_CHECK_VALUES = " IN ('__pivot_check__') "
+
+
+def _with_pivot_value_lists(sql: str) -> str:
+    """The SQL with a stand-in value list on every `PIVOT ... ON <column>`
+    that has none, for checking only.
+
+    DuckDB plans such a pivot as two statements, one reading the column's
+    distinct values from the pivot's source and one the pivot itself, and
+    cannot serialize that. Both read only the source, column and aggregates
+    the pivot names, which a pivot with a value list exposes to the check
+    unchanged. The SQL that runs is the original.
+    """
+    words: list[tuple[str, int, int]] = []  # (upper word, offset, depth)
+    depth, i, n = 0, 0, len(sql)
+    while i < n:
+        char = sql[i]
+        if char in "'\"":
+            end = i + 1
+            while end < n and not (sql[end] == char and sql[end + 1 : end + 2] != char):
+                end += 2 if sql[end] == char else 1
+            i = end + 1
+        elif sql.startswith("--", i):
+            i = sql.find("\n", i) if "\n" in sql[i:] else n
+        elif sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+        elif char == "(":
+            depth += 1
+            i += 1
+        elif char == ")":
+            words.append((")", i, depth))
+            depth -= 1
+            i += 1
+        elif char == ";":
+            words.append((";", i, depth))
+            i += 1
+        elif match := _WORD.match(sql, i):
+            words.append((match.group().upper(), i, depth))
+            i = match.end()
+        else:
+            i += 1
+
+    inserts: list[int] = []
+    for index, (word, _, depth) in enumerate(words):
+        if word != "PIVOT":
+            continue
+        seen_on = seen_in = False
+        for later, offset, later_depth in words[index + 1 :]:
+            if later == ")" and later_depth == depth:
+                end = offset  # the pivot ends with the parentheses around it
+                break
+            if later_depth != depth:
+                continue
+            if later == "ON":
+                seen_on = True
+            elif later == "IN" and seen_on:
+                seen_in = True
+            elif later in ("USING", "GROUP", "ORDER", "LIMIT", ";") and seen_on:
+                end = offset
+                break
+        else:
+            end = n
+        if seen_on and not seen_in:
+            inserts.append(end)
+    for offset in sorted(inserts, reverse=True):
+        sql = sql[:offset] + _PIVOT_CHECK_VALUES + sql[offset:]
+    return sql
+
+
 def _parse(sql: str) -> dict[str, Any]:
     """DuckDB's parse tree of exactly one SELECT statement."""
     connection = duckdb.connect()
     try:
-        row = connection.execute("SELECT json_serialize_sql(?)", [sql]).fetchone()
+        row = connection.execute(
+            "SELECT json_serialize_sql(?)", [_with_pivot_value_lists(sql)]
+        ).fetchone()
     finally:
         connection.close()
     try:

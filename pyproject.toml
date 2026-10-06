@@ -93,6 +93,7 @@ testpaths = [
     "apps/processes/tests",
     "packages/python/goatlib/tests",
     "packages/python/goatobs/tests",
+    "scripts/odoo/tests",
 ]
 python_files = ["test_*.py", "*_test.py"]
 # tests/benchmarks holds manually-run scripts (benchmark_* functions and a

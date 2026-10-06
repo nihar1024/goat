@@ -26,3 +26,20 @@ export const rowCount = async (api: APIRequestContext, layerId: string): Promise
 
 /** The id of one of the owner's provisioned datasets (auth on only). */
 export const datasetOf = (key: "points" | "table" | "editable"): string => castOf().datasets[key];
+
+/** Shares a dataset with users ("layer-viewer" / "layer-editor"). */
+export const shareDatasetWithUsers = async (
+  api: APIRequestContext,
+  layerId: string,
+  users: { id: string; role: "layer-viewer" | "layer-editor" }[]
+): Promise<void> => {
+  const shared = await api.post(`${API_URL}/api/v2/share/layer/${layerId}`, { data: { users } });
+  expect(shared.ok(), await shared.text()).toBeTruthy();
+};
+
+/** The folder a dataset is in. */
+export const datasetFolder = async (api: APIRequestContext, layerId: string): Promise<string> => {
+  const layer = await api.get(`${API_URL}/api/v2/layer/${layerId}`);
+  expect(layer.ok(), await layer.text()).toBeTruthy();
+  return ((await layer.json()) as { folder_id: string }).folder_id;
+};

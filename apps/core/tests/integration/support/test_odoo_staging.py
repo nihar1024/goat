@@ -13,7 +13,8 @@ from collections.abc import AsyncIterator
 
 import aiohttp
 import pytest
-from core.support.odoo_client import OdooRejected, SupportOdooClient
+from core.support.errors import SupportCompanyRefused
+from core.support.odoo_client import SupportOdooClient
 from core.support.odoo_provider import OdooSupportProvider
 from core.support.types import NewTicket, TicketQuery, UploadedFile
 
@@ -149,12 +150,26 @@ async def test_contacts_come_from_the_action_only(
             ["child_ids", "not any", [["partner_share", "=", False]]],
         ],
         fields=["id"],
-        limit=1,
+        limit=20,
     )
-    company = companies[0]["id"]
-    contact = await provider.create_contact(
-        name="GOAT IT Company Contact", email=email, lang="en", company_id=company
-    )
+    # The action also refuses companies with former staff in them (archived
+    # users or employees, archived contacts too), which this domain cannot see:
+    # take the first company it accepts.
+    contact = company = None
+    for candidate in (c["id"] for c in companies):
+        try:
+            contact = await provider.create_contact(
+                name="GOAT IT Company Contact",
+                email=email,
+                lang="en",
+                company_id=candidate,
+            )
+        except SupportCompanyRefused:
+            continue
+        company = candidate
+        break
+    if contact is None:
+        pytest.skip("no customer company without (former) staff on staging")
     (row,) = await odoo.call(
         "res.partner",
         "read",
@@ -172,7 +187,7 @@ async def test_contacts_come_from_the_action_only(
         limit=1,
     )
     for parent in (own["id"], contact):
-        with pytest.raises(OdooRejected):
+        with pytest.raises(SupportCompanyRefused):
             await provider.create_contact(
                 name="GOAT IT Bad Parent",
                 email=f"bad-{email}",

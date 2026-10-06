@@ -114,7 +114,9 @@ async def execute_workflow(
     # read every dataset and configured layer, and write where it writes.
     await ensure_allowed(
         user_id,
-        workflow_references(request.nodes, request.project_id, request.folder_id),
+        workflow_references(
+            request.nodes, request.project_id, request.folder_id, edges=request.edges
+        ),
     )
 
     # Build job inputs

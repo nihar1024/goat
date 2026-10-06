@@ -246,6 +246,36 @@ def test_a_workflow_checks_datasets_tool_configs_and_its_destination() -> None:
     }
 
 
+def test_a_workflow_checks_only_the_tool_inputs_no_edge_replaces() -> None:
+    """The runner overwrites every connected input with the upstream node's
+    layer, so a stale id left in the config of a connected input is never
+    read and must not refuse the run; an unconnected one is read, so it is
+    still checked."""
+    stale, unconnected = "e3c4967b-906f-4f20-a83b-6812b1088ab2", OTHER
+    nodes = [
+        {"id": "points", "data": {"type": "dataset", "layerId": LAYER}},
+        {
+            "id": "sql",
+            "data": {
+                "type": "tool",
+                "processId": "custom_sql",
+                "config": {
+                    "input_layer_1_id": stale,
+                    "input_layer_2_id": unconnected,
+                },
+            },
+        },
+    ]
+    edges = [{"source": "points", "target": "sql", "targetHandle": "input_layer_1_id"}]
+    refs = workflow_references(nodes, PROJECT, FOLDER, edges=edges)
+    assert _entries(refs) == {
+        ("layer", LAYER, "read"),
+        ("layer", unconnected, "read"),
+        ("project", PROJECT, "write"),
+        ("folder", FOLDER, "write"),
+    }
+
+
 @pytest.fixture
 def deny(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """Every reference is refused; records what was asked."""

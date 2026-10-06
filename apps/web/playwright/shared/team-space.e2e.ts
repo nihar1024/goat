@@ -54,7 +54,8 @@ test("a team member runs Buffer in a project of the team's space", async ({ page
 test("a team member uploads a dataset into the team's space", async ({ page }) => {
   await page.goto("/content");
   await page.getByText(TEAM, { exact: true }).click();
-  await expect(page.getByRole("heading", { name: TEAM })).toBeVisible({ timeout: 15000 });
+  // The space is open once its search offers to look in it.
+  await expect(page.getByPlaceholder(new RegExp(`^Search in ${TEAM}`))).toBeVisible({ timeout: 15000 });
 
   await page.getByRole("button", { name: "Add new" }).click();
   await page.getByRole("menuitem", { name: "Upload dataset" }).click();

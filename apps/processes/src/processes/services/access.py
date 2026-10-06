@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Sequence
 from functools import lru_cache
 from typing import Any
 from uuid import UUID
@@ -285,10 +286,23 @@ def analytics_references(process_id: str, inputs: dict[str, Any]) -> References:
 
 
 def workflow_references(
-    nodes: list[dict[str, Any]], project_id: Any, folder_id: Any
+    nodes: list[dict[str, Any]],
+    project_id: Any,
+    folder_id: Any,
+    edges: Sequence[dict[str, Any]] = (),
 ) -> References:
     """Dataset nodes' layers, tool nodes' configured layer inputs, and where
-    the workflow writes."""
+    the workflow writes.
+
+    A tool input an edge feeds is not checked: the runner replaces it with
+    the upstream node's layer (`workflow_runner`), so whatever id its config
+    still holds, often one left from before the input was connected, is
+    never read. The upstream dataset's layer is checked instead.
+    """
+    connected = {
+        (edge.get("target"), edge.get("targetHandle", "input_layer_id"))
+        for edge in edges
+    }
     refs = References()
     for node in nodes:
         data = node.get("data") or {}
@@ -298,7 +312,11 @@ def workflow_references(
             tool = str(data.get("processId") or "")
             if tool not in REGISTERED_TOOLS:
                 raise _refuse(f"Unknown tool in workflow: {tool!r}")
-            config = data.get("config") or {}
+            config = {
+                key: value
+                for key, value in (data.get("config") or {}).items()
+                if (node.get("id"), key) not in connected
+            }
             for entry in tool_references(tool, config).entries:
                 if entry["kind"] not in ("project", "folder"):
                     refs.entries.append(entry)

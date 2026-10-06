@@ -40,3 +40,20 @@ export const ensureTeamSpace = async (
   expect(root, `no root folder in the space of team ${name}`).toBeTruthy();
   return { teamId: team.id, spaceId: space!.id, folderId: root!.id };
 };
+
+/** An item of a space's content by name, as the Content page lists it. */
+export const spaceItem = async (
+  api: APIRequestContext,
+  spaceId: string,
+  name: string
+): Promise<{ id: string; type: string; folder_id: string | null } | undefined> => {
+  const listed = await api.get(`${API_URL}/api/v2/content`, {
+    params: { view: "space", space_id: spaceId, search: name },
+  });
+  expect(listed.ok(), await listed.text()).toBeTruthy();
+  const body = (await listed.json()) as
+    | { items: { id: string; name: string; type: string; folder_id: string | null }[] }
+    | { id: string; name: string; type: string; folder_id: string | null }[];
+  const items = Array.isArray(body) ? body : body.items;
+  return items.find((item) => item.name === name);
+};

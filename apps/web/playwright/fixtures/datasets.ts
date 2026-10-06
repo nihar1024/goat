@@ -36,10 +36,3 @@ export const shareDatasetWithUsers = async (
   const shared = await api.post(`${API_URL}/api/v2/share/layer/${layerId}`, { data: { users } });
   expect(shared.ok(), await shared.text()).toBeTruthy();
 };
-
-/** The folder a dataset is in. */
-export const datasetFolder = async (api: APIRequestContext, layerId: string): Promise<string> => {
-  const layer = await api.get(`${API_URL}/api/v2/layer/${layerId}`);
-  expect(layer.ok(), await layer.text()).toBeTruthy();
-  return ((await layer.json()) as { folder_id: string }).folder_id;
-};

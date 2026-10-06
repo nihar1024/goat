@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import path from "path";
 
-import { datasetFolder, datasetIdByName, datasetOf, rowCount } from "../fixtures/datasets";
+import { datasetOf, rowCount } from "../fixtures/datasets";
 import { addDatasetsToProject, createProject, deleteProject } from "../fixtures/projects";
-import { ensureTeamSpace } from "../fixtures/spaces";
+import { ensureTeamSpace, spaceItem } from "../fixtures/spaces";
 import { bufferRows, runBufferFromToolbox } from "../fixtures/tools";
 import { actAs, apiAs, needsAuth, userOf } from "../fixtures/users";
 
@@ -65,12 +65,13 @@ test("a team member uploads a dataset into the team's space", async ({ page }) =
   await page.getByRole("button", { name: "Upload" }).click();
   await expect(page.getByText("1 layer imported")).toBeVisible({ timeout: 120000 });
 
+  // It is in the team space's folder, with every row of the file.
   const editor = await apiAs("editor");
   try {
-    const layerId = await datasetIdByName(editor, datasetName);
-    expect(layerId, `no dataset named ${datasetName}`).toBeTruthy();
-    expect(await datasetFolder(editor, layerId!)).toBe(space.folderId);
-    expect(await rowCount(editor, layerId!)).toBe(10);
+    const item = await spaceItem(editor, space.spaceId, datasetName);
+    expect(item, `no dataset named ${datasetName} in the team space`).toBeTruthy();
+    expect(item!.folder_id).toBe(space.folderId);
+    expect(await rowCount(editor, item!.id)).toBe(10);
   } finally {
     await editor.dispose();
   }

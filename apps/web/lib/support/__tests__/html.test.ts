@@ -5,10 +5,10 @@ import { prepareSupportHtml } from "@/lib/support/html";
 describe("prepareSupportHtml", () => {
   it("drops scripts, images and event handlers but keeps text and links", () => {
     const { main } = prepareSupportHtml(
-      '<p onclick="x()">Hi <a href="https://goat.plan4better.de/docs">docs</a></p><script>alert(1)</script><img src="https://x/y.png">'
+      '<p onclick="x()">Hi <a href="https://goat.example.org/docs">docs</a></p><script>alert(1)</script><img src="https://x/y.png">'
     );
     expect(main).toContain("Hi");
-    expect(main).toContain('href="https://goat.plan4better.de/docs"');
+    expect(main).toContain('href="https://goat.example.org/docs"');
     expect(main).not.toContain("script");
     expect(main).not.toContain("<img");
     expect(main).not.toContain("onclick");
@@ -41,10 +41,10 @@ describe("prepareSupportHtml", () => {
 
   it("adds target and rel to links in main and in quoted, and keeps mailto links", () => {
     const { main, quoted } = prepareSupportHtml(
-      '<p><a href="https://goat.plan4better.de">site</a> <a href="mailto:support@plan4better.de">mail</a></p><div data-o-mail-quote="1"><a href="https://example.com/old">old</a></div>'
+      '<p><a href="https://goat.example.org">site</a> <a href="mailto:support@example.org">mail</a></p><div data-o-mail-quote="1"><a href="https://example.com/old">old</a></div>'
     );
-    expect(main).toContain('href="mailto:support@plan4better.de"');
-    expect(main).toMatch(/<a [^>]*href="https:\/\/goat\.plan4better\.de"[^>]*>/);
+    expect(main).toContain('href="mailto:support@example.org"');
+    expect(main).toMatch(/<a [^>]*href="https:\/\/goat\.example\.org"[^>]*>/);
     for (const html of [main, quoted]) {
       expect(html).toContain('target="_blank"');
       expect(html).toContain('rel="noopener noreferrer"');

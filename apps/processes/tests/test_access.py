@@ -276,6 +276,29 @@ def test_a_workflow_checks_only_the_tool_inputs_no_edge_replaces() -> None:
     }
 
 
+def test_the_default_network_names_no_bundle() -> None:
+    """A workflow saves the network selector's "default" in its config; it
+    is the default network, not a bundle to check."""
+    inputs = {"reference_area_layer_id": LAYER, "pt_network_bundle_id": "default"}
+    assert _entries(tool_references("oev_gueteklassen", inputs, USER)) == {
+        ("layer", LAYER, "read")
+    }
+    nodes = [
+        {
+            "id": "oev",
+            "data": {
+                "type": "tool",
+                "processId": "oev_gueteklassen",
+                "config": {"pt_network_bundle_id": "default"},
+            },
+        }
+    ]
+    assert _entries(workflow_references(nodes, PROJECT, FOLDER)) == {
+        ("project", PROJECT, "write"),
+        ("folder", FOLDER, "write"),
+    }
+
+
 @pytest.fixture
 def deny(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """Every reference is refused; records what was asked."""

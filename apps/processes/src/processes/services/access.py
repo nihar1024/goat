@@ -27,6 +27,7 @@ from uuid import UUID
 import asyncpg
 from fastapi import HTTPException, status
 from goatlib.tools.registry import TOOL_REGISTRY
+from goatlib.tools.schemas import DEFAULT_NETWORK_BUNDLE
 
 from processes.config import settings
 from processes.services.access_sql import access_check_sql
@@ -257,7 +258,10 @@ def tool_references(
             refs.add("layer_project", value)
     for path in BUNDLE_READ_FIELDS:
         for value in _values(inputs, path):
-            refs.add("bundle", value)
+            # The network selectors' answer for the default network, which a
+            # workflow keeps in its config: it names no bundle.
+            if value != DEFAULT_NETWORK_BUNDLE:
+                refs.add("bundle", value)
     for path in BUNDLE_WRITE_FIELDS:
         for value in _values(inputs, path):
             refs.add("bundle", value, "write")

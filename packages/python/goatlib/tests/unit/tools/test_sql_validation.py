@@ -159,3 +159,31 @@ def test_pivots_over_the_declared_inputs_pass(sql: str) -> None:
 def test_a_pivot_reaching_beyond_the_declared_inputs_is_refused(sql: str) -> None:
     with pytest.raises(ValueError):
         validate_sql_query(sql, INPUTS)
+
+
+USING_KEY = (
+    "WITH RECURSIVE g(id, v) USING KEY (id) AS ("
+    " SELECT id, v FROM input_1 UNION SELECT q.id, q.v + 1 FROM recurring.g q WHERE q.v < 3"
+    ") SELECT * FROM g"
+)
+
+
+def test_a_using_key_cte_reads_its_own_recurring_table() -> None:
+    # `recurring.g` is the CTE's previous iteration, not a schema.
+    validate_sql_query(USING_KEY, INPUTS)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # Outside the recursive CTE it names, `recurring.` is a schema.
+        "SELECT * FROM recurring.input_1",
+        "WITH g AS (SELECT * FROM input_1) SELECT * FROM recurring.g",
+        USING_KEY.replace("SELECT * FROM g", "SELECT * FROM recurring.g"),
+        # Only the CTE's own name: not another table in that schema.
+        USING_KEY.replace("FROM recurring.g q", "FROM recurring.other q"),
+    ],
+)
+def test_recurring_is_refused_outside_its_own_recursive_cte(sql: str) -> None:
+    with pytest.raises(ValueError):
+        validate_sql_query(sql, INPUTS)

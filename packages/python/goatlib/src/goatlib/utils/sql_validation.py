@@ -184,12 +184,20 @@ def _check_function(node: dict[str, Any]) -> None:
 
 
 def _check_tree(
-    node: Any, allowed: set[str] | None, visible_ctes: frozenset[str]
+    node: Any,
+    allowed: set[str] | None,
+    visible_ctes: frozenset[str],
+    recurring: frozenset[str] = frozenset(),
 ) -> None:
-    """Every table, table function and function anywhere in the tree."""
+    """Every table, table function and function anywhere in the tree.
+
+    `recurring` holds the name of the `USING KEY` recursive CTE being
+    defined, if any: inside it, `recurring.<its name>` reads its previous
+    iteration rather than a schema.
+    """
     if isinstance(node, list):
         for item in node:
-            _check_tree(item, allowed, visible_ctes)
+            _check_tree(item, allowed, visible_ctes, recurring)
         return
     if not isinstance(node, dict):
         return
@@ -206,7 +214,8 @@ def _check_tree(
             value = entry.get("value") or {}
             query_node = (value.get("query") or {}).get("node") or {}
             own = {name} if query_node.get("type") == "RECURSIVE_CTE_NODE" else set()
-            _check_tree(value, allowed, visible_ctes | defined | own)
+            keyed = frozenset(own) if query_node.get("key_targets") else frozenset()
+            _check_tree(value, allowed, visible_ctes | defined | own, keyed)
             defined.add(name)
         visible_ctes = visible_ctes | defined
         node = {key: value for key, value in node.items() if key != "cte_map"}
@@ -216,6 +225,12 @@ def _check_tree(
         if kind == "BASE_TABLE":
             name = str(node.get("table_name") or "")
             if (
+                node.get("schema_name") == "recurring"
+                and not node.get("catalog_name")
+                and name.lower() in recurring
+            ):
+                pass  # the USING KEY CTE's own previous iteration
+            elif (
                 node.get("schema_name")
                 or node.get("catalog_name")
                 or not _PLAIN_NAME.fullmatch(name)
@@ -243,7 +258,7 @@ def _check_tree(
 
     for value in node.values():
         if isinstance(value, (dict, list)):
-            _check_tree(value, allowed, visible_ctes)
+            _check_tree(value, allowed, visible_ctes, recurring)
 
 
 def validate_sql_query(sql: str, allowed_tables: Iterable[str] | None = None) -> None:

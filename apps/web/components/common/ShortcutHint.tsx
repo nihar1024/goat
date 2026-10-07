@@ -17,12 +17,18 @@ interface ShortcutHintProps {
  * `Ctrl+K` on Windows and Linux. That can only be known on the client, so
  * nothing is rendered until after mount — the server has no platform to
  * render, and guessing one would mismatch on hydration.
+ *
+ * Nor is anything shown on a device with no mouse or trackpad (a phone, a
+ * tablet without one): it has no keyboard to press the shortcut on.
  */
 const ShortcutHint: React.FC<ShortcutHintProps> = ({ letter }) => {
   const [label, setLabel] = useState<string | null>(null);
 
   useEffect(() => {
-    setLabel(shortcutLabel(letter, window.navigator));
+    // Without matchMedia (older browsers, tests) the hint is shown, as before.
+    const hasPointer =
+      typeof window.matchMedia !== "function" || window.matchMedia("(any-pointer: fine)").matches;
+    setLabel(hasPointer ? shortcutLabel(letter, window.navigator) : null);
   }, [letter]);
 
   if (!label) return null;

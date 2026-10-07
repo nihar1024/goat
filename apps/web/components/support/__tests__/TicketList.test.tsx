@@ -41,6 +41,7 @@ const ticket = (o: Partial<SupportTicket>): SupportTicket => ({
   category: "bug",
   impact: "blocking",
   customer_name: "Marco",
+  customer_contact_id: 100,
   is_mine: true,
   agent_name: "Lena",
   via: "app",

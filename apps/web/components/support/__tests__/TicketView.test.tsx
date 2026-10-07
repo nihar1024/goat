@@ -63,6 +63,7 @@ const detail = (
     category: "bug",
     impact: "blocking",
     customer_name: "Marco",
+    customer_contact_id: 100,
     is_mine: true,
     agent_name: "Lena",
     via: "app",
@@ -494,7 +495,7 @@ describe("TicketView", () => {
       mutate: m.mutate,
       isLoading: false,
     });
-    m.colleagues.mockReturnValue([{ user_id: "u1", name: "Marco", email: "m@x.de" }]);
+    m.colleagues.mockReturnValue([{ user_id: "u1", name: "Marco", email: "m@x.de", contact_id: 100 }]);
     render(<TicketView ticketRef="00031" />);
     // The server leaves the customer out of the followers: only Anna gets a remove button.
     expect(screen.getAllByRole("button", { name: /^support_remove / })).toHaveLength(1);
@@ -508,13 +509,31 @@ describe("TicketView", () => {
       isLoading: false,
     });
     m.colleagues.mockReturnValue([
-      { user_id: "u1", name: "Marco", email: "m@x.de" },
-      { user_id: "u2", name: "Berta", email: "b@x.de" },
+      { user_id: "u1", name: "Marco", email: "m@x.de", contact_id: 100 },
+      { user_id: "u2", name: "Berta", email: "b@x.de", contact_id: null },
     ]);
     render(<TicketView ticketRef="00031" />);
     fireEvent.mouseDown(screen.getByPlaceholderText("support_add_colleague"));
-    expect(screen.getByRole("option", { name: "Berta" })).toBeTruthy();
-    expect(screen.queryByRole("option", { name: "Marco" })).toBeNull();
+    expect(screen.getByRole("option", { name: /^Berta/ })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /^Marco/ })).toBeNull();
+  });
+
+  it("tells colleagues with the same name apart by contact and email", () => {
+    m.useSupportTicket.mockReturnValue({
+      ticket: detail({ is_mine: false }),
+      mutate: m.mutate,
+      isLoading: false,
+    });
+    // two people called "Test Test": one already follows (Anna's contact 101 in the fixture)
+    m.colleagues.mockReturnValue([
+      { user_id: "u1", name: "Test Test", email: "one@x.de", contact_id: 101 },
+      { user_id: "u2", name: "Test Test", email: "two@x.de", contact_id: 102 },
+    ]);
+    render(<TicketView ticketRef="00031" />);
+    fireEvent.mouseDown(screen.getByPlaceholderText("support_add_colleague"));
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(options[0].textContent).toContain("two@x.de");
   });
 
   it("keeps the thread when a refetch fails but data is present", () => {

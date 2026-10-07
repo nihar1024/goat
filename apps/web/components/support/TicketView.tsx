@@ -421,10 +421,9 @@ const SidePanel = ({ detail, onChanged }: { detail: SupportTicketDetail; onChang
   const { colleagues } = useSupportColleagues();
   const tk = detail.ticket;
   const [busy, setBusy] = useState(false);
-  // Matching by name: the ticket's customer is shown on their own line, not among the followers.
-  const addable = colleagues.filter(
-    (c) => c.name !== tk.customer_name && !detail.followers.some((f) => f.name === c.name)
-  );
+  // By contact, not name: two colleagues can share a name. The customer has their own line.
+  const onTicket = new Set([tk.customer_contact_id, ...detail.followers.map((f) => f.contact_id)]);
+  const addable = colleagues.filter((c) => c.contact_id === null || !onTicket.has(c.contact_id));
   const change = async (
     update: { add_user_ids?: string[]; remove_contact_ids?: number[] },
     leave = false
@@ -496,6 +495,19 @@ const SidePanel = ({ detail, onChanged }: { detail: SupportTicketDetail; onChang
             sx={{ mt: "12px" }}
             options={addable}
             getOptionLabel={(c) => c.name}
+            getOptionKey={(c) => c.user_id}
+            renderOption={({ key, ...props }, c) => (
+              <li key={key} {...props}>
+                <Stack sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 14 }} noWrap>
+                    {c.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary" }} noWrap>
+                    {c.email}
+                  </Typography>
+                </Stack>
+              </li>
+            )}
             value={null}
             blurOnSelect
             disabled={busy}

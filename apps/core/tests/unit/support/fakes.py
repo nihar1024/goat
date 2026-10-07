@@ -94,29 +94,93 @@ def staff_op(staff: Sequence[int] = ()) -> Handler:
     return handler
 
 
-def action_ops(staff: Sequence[int] = (), agent_partner: int | None = None) -> Handler:
-    """The server action's read-only ops: "staff" and "agent" (the ticket's handler's partner)."""
+def action_ops(
+    staff: Sequence[int] = (),
+    agent_partner: int | None = None,
+    people: Mapping[int, Mapping[str, Any]] | None = None,
+    contacts: Mapping[str, int] | None = None,
+    goat_contacts: Sequence[int] = (),
+) -> Handler:
+    """The server action's read-only ops, answered like the goat_support module does.
+
+    `staff`: former staff (the "staff" op names them; staff in "people" and
+    "exist" too). `agent_partner`: the "agent" op's answer. `people`: the
+    participants "people" knows, {id: {"name", "staff", "photo"?}}; it sends a
+    photo of staff only, when asked for photos. `contacts`: what "find"
+    matches, {normalized email: id}. `goat_contacts`: the active GOAT contacts
+    "exist" answers for.
+    """
     staff_handler = staff_op(staff)
+    known = people or {}
+    matches = contacts or {}
 
     def handler(kw: dict[str, Any]) -> Any:
-        if (kw.get("context") or {}).get("goat_op") == "agent":
+        ctx = kw.get("context") or {}
+        op = ctx.get("goat_op")
+        if op == "agent":
             return {"goat_agent_partner_id": agent_partner or False}
+        if op == "people":
+            found = []
+            for pid in ctx["goat_partner_ids"]:
+                if pid not in known:
+                    continue
+                is_staff = bool(known[pid].get("staff")) or pid in staff
+                person = {
+                    "id": pid,
+                    "name": known[pid].get("name") or "",
+                    "staff": is_staff,
+                }
+                if ctx.get("goat_with_photos") and is_staff and known[pid].get("photo"):
+                    person["photo"] = known[pid]["photo"]
+                found.append(person)
+            return {"goat_people": found}
+        if op == "find":
+            return {
+                "goat_contacts": {
+                    e: matches[e] for e in ctx["goat_emails"] if e in matches
+                }
+            }
+        if op == "exist":
+            return {
+                "goat_contact_ids": [
+                    p
+                    for p in ctx["goat_partner_ids"]
+                    if p in goat_contacts and p not in staff
+                ]
+            }
         return staff_handler(kw)
 
     return handler
 
 
+def op_calls(odoo: FakeOdooClient, op: str) -> list[dict[str, Any]]:
+    """The contexts of the server action runs of one op, in order."""
+    return [
+        kw["context"]
+        for kw in odoo.calls_to("ir.actions.server", "run")
+        if (kw.get("context") or {}).get("goat_op") == op
+    ]
+
+
 def base_odoo(
-    staff: Sequence[int] = (), agent_partner: int | None = None
+    staff: Sequence[int] = (),
+    agent_partner: int | None = None,
+    people: Mapping[int, Mapping[str, Any]] | None = None,
+    contacts: Mapping[str, int] | None = None,
+    goat_contacts: Sequence[int] = (),
 ) -> FakeOdooClient:
     """A fake with stages, tags, public subtypes and the post action registered.
 
-    `staff`: former staff (share partners the "staff" op names as staff).
-    `agent_partner`: what the "agent" op answers (the handler's partner id).
+    The keyword arguments are what the server action's read-only ops answer
+    (see action_ops).
     """
     return (
         FakeOdooClient()
-        .on("ir.actions.server", "run", action_ops(staff, agent_partner))
+        .on(
+            "ir.actions.server",
+            "run",
+            action_ops(staff, agent_partner, people, contacts, goat_contacts),
+        )
         .on("helpdesk.stage", "search_read", lambda kw: STAGES)
         .on("helpdesk.tag", "search_read", lambda kw: TAGS)
         .on(

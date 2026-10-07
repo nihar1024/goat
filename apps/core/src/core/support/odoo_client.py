@@ -15,8 +15,6 @@ from core.support.errors import SupportRejected, SupportUnavailable
 
 ALLOWED_CALLS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("res.partner", "search_read"),
-        ("res.partner", "read"),
         ("res.users", "context_get"),
         ("res.users", "read"),
         ("helpdesk.ticket", "search_read"),

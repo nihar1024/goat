@@ -207,7 +207,7 @@ def base_odoo(
         .on(
             "res.users",
             "read",
-            lambda kw: [{"id": 16, "partner_id": [43402, "GOAT Support Bridge"]}],
+            lambda kw: [{"id": 16, "partner_id": [43402, "GOAT Support Bot"]}],
         )
     )
 

@@ -922,7 +922,7 @@ async def test_bridge_partner_is_never_a_follower() -> None:
     provider.add(
         make_ticket(),
         followers=(
-            Follower(7, "GOAT Support Bridge", False),
+            Follower(7, "GOAT Support Bot", False),
             Follower(101, "A", False),
         ),
     )

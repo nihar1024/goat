@@ -1,4 +1,4 @@
-"""SupportProvider on Odoo Helpdesk, as the portal user "GOAT Support Bridge".
+"""SupportProvider on Odoo Helpdesk, as the bridge portal user ("GOAT Support Bot").
 
 The bridge cannot read ir.model, cannot post as someone else and cannot create
 or edit contacts: customer posts, ratings and new contacts go through the server

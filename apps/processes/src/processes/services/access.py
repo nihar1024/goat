@@ -310,6 +310,10 @@ def workflow_references(
     refs = References()
     for node in nodes:
         data = node.get("data") or {}
+        # A node the editor never makes: refused like any malformed input,
+        # rather than failing the check itself.
+        if not isinstance(data, dict) or not isinstance(data.get("config") or {}, dict):
+            raise _refuse("A workflow node is malformed")
         if data.get("type") == "dataset" and data.get("layerId"):
             refs.add_layer(data["layerId"])
         elif data.get("type") == "tool":

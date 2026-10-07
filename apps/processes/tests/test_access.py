@@ -524,3 +524,13 @@ def test_a_refused_workflow_names_the_nodes_it_cannot_use(
     assert detail["message"] == "Resource not found"
     assert detail["refused_nodes"] == ["private", "buffer"]
     assert detail["destination_refused"] is False
+
+
+@pytest.mark.parametrize(
+    "data",
+    ["oops", ["a"], {"type": "tool", "processId": "buffer", "config": "oops"}],
+)
+def test_a_malformed_workflow_node_is_refused_not_a_server_error(data: Any) -> None:
+    with pytest.raises(HTTPException) as refused:
+        workflow_references([{"id": "a", "data": data}], PROJECT, FOLDER)
+    assert refused.value.status_code == 422

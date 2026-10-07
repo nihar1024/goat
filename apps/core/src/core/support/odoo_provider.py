@@ -2,7 +2,7 @@
 
 The bridge cannot read ir.model, cannot post as someone else and cannot create
 or edit contacts: customer posts, ratings and new contacts go through the server
-action created by scripts/odoo/support_bridge_setup.py. Odoo stores log notes and automatic mails
+action of the goat_support Odoo module. Odoo stores log notes and automatic mails
 as comment / non-internal messages with an internal subtype, and the bridge
 cannot read internal subtypes, so "customer facing" is an allow-list of public
 subtypes (see odoo_mapping.is_customer_facing), not only a message_type check.
@@ -237,7 +237,7 @@ class OdooSupportProvider:
         The bridge cannot read users, and the partner is only known from the
         ticket's messages once the agent has written. Cosmetic (the photo of
         "Handled by"): a failure gives None and caches nothing, except that a
-        server action without the op (Odoo set up by an older script) is not
+        server action without the op (an older goat_support module) is not
         asked again for AGENT_OP_MISSING_TTL.
         """
         if self._agent_partners.get(("agent_op_missing",)):
@@ -262,7 +262,7 @@ class OdooSupportProvider:
                 if exc.message == "unknown operation":
                     logger.warning(
                         "support: the Odoo server action has no 'agent' op; "
-                        "re-run support_bridge_setup.py"
+                        "update the goat_support module in Odoo"
                     )
                     self._agent_partners.set(
                         ("agent_op_missing",), True, AGENT_OP_MISSING_TTL

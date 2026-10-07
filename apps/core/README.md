@@ -11,7 +11,7 @@ Core owns the Postgres schema (`customer` by default) and serves it under `/api/
 - **Projects**: projects and their layers, layer groups, workflows, report layouts, publishing.
 - **Datasets**: layer and bundle metadata, upload URLs, templates, user assets.
 - **Plans and billing**: plan lookup, quotas, the Stripe webhook.
-- **Support tickets** (SaaS only): tickets in Plan4Better's Odoo Helpdesk, read and answered from GOAT (`src/core/support`).
+- **Support tickets** (SaaS only): tickets in Plan4Better's Odoo Helpdesk, read and answered from GOAT (`src/core/support`). The Odoo side (the bridge user, its rights, the server action, the GOAT links in ticket emails) is the `goat_support` module in Plan4Better's Odoo.sh repository.
 
 The full, current route list is the OpenAPI document at `/api/docs`. The liveness check is `GET /api/healthz`.
 

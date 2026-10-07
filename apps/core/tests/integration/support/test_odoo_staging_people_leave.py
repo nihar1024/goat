@@ -2,8 +2,8 @@
 
 Staff who leave (user archived or deleted), customer contacts that are archived,
 deleted or merged, and colleagues whose stored contact was merged away. Needs
-the bridge key (ODOO_SUPPORT_API_KEY) and an admin key (ODOO_ADMIN_KEY, as for
-scripts/odoo/support_bridge_setup.py): the admin plays Odoo's staff (creates a
+the bridge key (ODOO_SUPPORT_API_KEY) and an admin key (ODOO_ADMIN_KEY): the
+admin plays Odoo's staff (creates a
 throwaway internal user, archives, deletes, merges) and removes every record a
 test created. The service runs on an in-memory store, so neither GOAT's
 database nor its caches are involved.

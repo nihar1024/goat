@@ -110,13 +110,14 @@ const SupportActionRows = ({
     onNavigate();
     router.push(path);
   };
+  const countLabel = counts ? supportCountLabel(t, counts) : undefined;
   return (
     <>
       {counts && (
         <HeaderPopoverRow
           icon={ICON_NAME.HELP}
           label={t("support_tickets")}
-          trailing={<CountPill active>{supportCountLabel(t, counts)}</CountPill>}
+          trailing={countLabel ? <CountPill active>{countLabel}</CountPill> : undefined}
           onClick={() => go("/support")}
         />
       )}

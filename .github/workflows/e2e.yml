@@ -47,6 +47,9 @@ jobs:
     name: playwright
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Steps that download or install have their own, shorter limits, several
+    # times their slowest healthy run: a hung package mirror then fails the
+    # step in minutes instead of holding the job for the full hour.
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v7
@@ -140,6 +143,7 @@ jobs:
       # init creates the keycloak database. Mailpit catches the mail that
       # core and Keycloak send (invitations, password setup).
       - name: 🐘 Infra (Postgres, Redis, Garage, Keycloak, Mailpit)
+        timeout-minutes: 10
         run: |
           docker compose up -d --wait db redis
           docker run -d --name garage -p 3900:3900 -p 3903:3903 \
@@ -173,9 +177,11 @@ jobs:
       # As in the test jobs: gdal and the C++ routing package are imported
       # lazily, by code paths the suite does not reach.
       - name: 🐍 Python dependencies
+        timeout-minutes: 10
         run: uv sync --frozen --all-packages --all-extras --no-install-package gdal --no-install-package routing
 
       - name: 📥 JS dependencies
+        timeout-minutes: 10
         uses: ./.github/actions/pnpm-install
 
       - name: 🪣 Buckets
@@ -201,6 +207,7 @@ jobs:
       # 8000 from core. Windmill passes a job only the variables in
       # WHITELIST_ENVS, the compose bundle's list.
       - name: 🌬️ Windmill
+        timeout-minutes: 15
         run: |
           image=ghcr.io/plan4better/goat
           windmill_db="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5432/windmill?sslmode=disable"
@@ -275,6 +282,7 @@ jobs:
           start catalog 8400
 
       - name: 🏗️ Web build
+        timeout-minutes: 15
         run: pnpm --filter @p4b/web build
 
       - name: 🌐 Web server
@@ -303,9 +311,11 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - name: 📥 Install Playwright Chromium
+        timeout-minutes: 15
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter web exec playwright install --with-deps chromium
       - name: 📥 Playwright system dependencies
+        timeout-minutes: 15
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter web exec playwright install-deps chromium
 

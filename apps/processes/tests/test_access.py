@@ -461,3 +461,76 @@ def test_numeric_statistics_inputs_are_capped(
     )
     assert response.status_code < 300, response.text
     assert received and received[0]["num_bins"] == 1_000
+
+
+def test_a_refused_workflow_names_the_nodes_it_cannot_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The run is refused as before, and the answer says which of the
+    caller's own nodes hold the datasets they may not read: ids and labels
+    the caller sent, so it reveals nothing about the data, not even whether
+    it exists."""
+    from uuid import UUID
+
+    from processes.deps.auth import get_user_id
+
+    async def refuse_other(
+        user_id: Any, entries: list[dict[str, str]]
+    ) -> list[dict[str, str]]:
+        # The shape the database answers with.
+        return [
+            {"kind": e["kind"], "raw_id": e["id"], "action": e["action"]}
+            for e in entries
+            if e["id"] == OTHER
+        ]
+
+    monkeypatch.setattr(access, "denied_references", refuse_other)
+    app.dependency_overrides[get_user_id] = lambda: UUID(USER)
+    try:
+        response = TestClient(app).post(
+            "/workflows/7a193b81-0000-4000-8000-000000000001/execute",
+            json={
+                "project_id": PROJECT,
+                "folder_id": FOLDER,
+                "nodes": [
+                    {
+                        "id": "readable",
+                        "data": {"type": "dataset", "label": "Mine", "layerId": LAYER},
+                    },
+                    {
+                        "id": "private",
+                        "data": {
+                            "type": "dataset",
+                            "label": "Schools",
+                            "layerId": OTHER,
+                        },
+                    },
+                    {
+                        "id": "buffer",
+                        "data": {
+                            "type": "tool",
+                            "processId": "buffer",
+                            "config": {"input_layer_id": OTHER},
+                        },
+                    },
+                ],
+                "edges": [],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_user_id, None)
+    assert response.status_code == 404, response.text
+    detail = response.json()["detail"]
+    assert detail["message"] == "Resource not found"
+    assert detail["refused_nodes"] == ["private", "buffer"]
+    assert detail["destination_refused"] is False
+
+
+@pytest.mark.parametrize(
+    "data",
+    ["oops", ["a"], {"type": "tool", "processId": "buffer", "config": "oops"}],
+)
+def test_a_malformed_workflow_node_is_refused_not_a_server_error(data: Any) -> None:
+    with pytest.raises(HTTPException) as refused:
+        workflow_references([{"id": "a", "data": data}], PROJECT, FOLDER)
+    assert refused.value.status_code == 422

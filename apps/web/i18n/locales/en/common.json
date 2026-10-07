@@ -2630,6 +2630,8 @@
   "workflow_delete_confirmation": "Are you sure you want to delete the workflow \"{{name}}\"? This action cannot be undone.",
   "workflow_download_dataset": "Download Dataset",
   "workflow_failed": "Workflow failed",
+  "workflow_datasets_refused": "You have no access to the datasets in {{names}}. Ask their owner to share them, or use Replace datasets… to pick others.",
+  "workflow_destination_refused": "You cannot run workflows in this project.",
   "workflow_missing_context": "Missing workflow context",
   "workflow_name": "Workflow Name",
   "workflow_no_variables": "This workflow has no configurable variables",

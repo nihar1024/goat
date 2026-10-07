@@ -2753,6 +2753,8 @@
   "workflow_delete_confirmation": "Sind Sie sicher, dass Sie den Workflow \"{{name}}\" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
   "workflow_download_dataset": "Datensatz herunterladen",
   "workflow_failed": "Workflow fehlgeschlagen",
+  "workflow_datasets_refused": "Sie haben keinen Zugriff auf die Datensätze in {{names}}. Bitten Sie die Eigentümer, sie zu teilen, oder wählen Sie mit Datensätze ersetzen… andere aus.",
+  "workflow_destination_refused": "In diesem Projekt können Sie keine Workflows ausführen.",
   "workflow_missing_context": "Fehlender Workflow-Kontext",
   "workflow_name": "Workflow-Name",
   "workflow_no_variables": "Dieser Workflow hat keine konfigurierbaren Variablen",

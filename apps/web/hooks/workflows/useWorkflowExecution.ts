@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { dismissJob, useJobs } from "@/lib/api/processes";
 import {
   type WorkflowExecuteRequest,
+  WorkflowRefusedError,
   cleanupWorkflowTemp,
   executeWorkflow,
   finalizeWorkflowLayer,
@@ -373,12 +374,27 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
       toast.dismiss();
       toast.success(t("workflow_started"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Execution failed";
+      let message = error instanceof Error ? error.message : "Execution failed";
+      let refusedStatuses: Record<string, NodeExecutionStatus> = {};
+      if (error instanceof WorkflowRefusedError) {
+        // Name the nodes as the canvas shows them, and mark them there.
+        const names = error.refusedNodes
+          .map((id) => nodes.find((node) => node.id === id)?.data as { label?: string } | undefined)
+          .map((data) => data?.label)
+          .filter((label): label is string => !!label);
+        message =
+          names.length > 0
+            ? t("workflow_datasets_refused", { names: names.join(", ") })
+            : error.destinationRefused
+              ? t("workflow_destination_refused")
+              : message;
+        refusedStatuses = Object.fromEntries(error.refusedNodes.map((id) => [id, "failed" as const]));
+      }
       setState((s) => ({
         ...s,
         isExecuting: false,
         error: message,
-        nodeStatuses: {},
+        nodeStatuses: refusedStatuses,
       }));
       toast.dismiss();
       toast.error(`${t("workflow_failed")}: ${message}`);

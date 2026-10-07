@@ -331,6 +331,69 @@ def workflow_references(
     return refs
 
 
+def refused_workflow_nodes(
+    nodes: list[dict[str, Any]], denied: list[dict[str, str]]
+) -> list[str]:
+    """The workflow's nodes that name a refused dataset, layer or bundle:
+    a dataset node by its layer, a tool node by any setting holding the id."""
+    refused_ids = {
+        str(entry.get("raw_id", entry.get("id")))
+        for entry in denied
+        if entry.get("kind") in ("layer", "bundle")
+    }
+    names: list[str] = []
+    for node in nodes:
+        data = node.get("data") or {}
+        if data.get("type") == "dataset":
+            hit = str(data.get("layerId")) in refused_ids
+        elif data.get("type") == "tool":
+            hit = any(
+                str(value) in refused_ids
+                for value in _layer_shaped_values(data.get("config") or {})
+                + [
+                    value
+                    for path in BUNDLE_READ_FIELDS
+                    for value in _values(data.get("config") or {}, path)
+                ]
+            )
+        else:
+            hit = False
+        if hit and node.get("id"):
+            names.append(str(node["id"]))
+    return names
+
+
+async def ensure_workflow_allowed(
+    user_id: UUID | None, refs: References, nodes: list[dict[str, Any]]
+) -> None:
+    """`ensure_allowed` for a workflow run, whose refusal says which of the
+    caller's own nodes hold what they may not use, and whether the project
+    or folder it writes to is refused. Node ids are the caller's own, so the
+    answer reveals nothing about the data, not even whether it exists."""
+    if not refs.entries:
+        return
+    try:
+        denied = await denied_references(user_id, refs.entries)
+    except Exception:
+        logger.exception("access check failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Access could not be checked",
+        )
+    if denied:
+        logger.info("access denied user=%s refs=%s", user_id, denied)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "message": "Resource not found",
+                "refused_nodes": refused_workflow_nodes(nodes, denied),
+                "destination_refused": any(
+                    entry.get("kind") in ("project", "folder") for entry in denied
+                ),
+            },
+        )
+
+
 _pool: asyncpg.Pool | None = None
 _pool_lock = asyncio.Lock()
 

@@ -2,10 +2,11 @@
 
 The bridge cannot read ir.model, cannot post as someone else and cannot create
 or edit contacts: customer posts, ratings and new contacts go through the server
-action of the goat_support Odoo module. It reads only the contacts GOAT created
-or matched by email, so finding contacts by email, checking stored links and the
-names and photos of ticket participants are server action ops as well. Odoo stores log notes and automatic mails
-as comment / non-internal messages with an internal subtype, and the bridge
+action of the goat_support Odoo module. It reads no contacts, followers or
+ratings either, so finding contacts by email, checking stored links, names and
+photos of ticket participants, followers, followed tickets and ratings are
+server action ops as well. Odoo stores log notes and automatic mails as
+comment / non-internal messages with an internal subtype, and the bridge
 cannot read internal subtypes, so "customer facing" is an allow-list of public
 subtypes (see odoo_mapping.is_customer_facing), not only a message_type check.
 
@@ -197,14 +198,24 @@ class OdooSupportProvider:
             self._bridge_partner_id = partner
         return self._bridge_partner_id
 
-    async def _run_op(self, op: str, **values: Any) -> dict[str, Any]:
-        """One read-only operation of the server action, `values` as its context."""
+    async def _run_op(
+        self, op: str, ticket_id: int | None = None, **values: Any
+    ) -> dict[str, Any]:
+        """One read-only operation of the server action, `values` as its context,
+        on `ticket_id` when given."""
         try:
             action = await self._post_action()
         except LookupError as exc:
             raise SupportUnavailable(str(exc)) from exc
+        context: dict[str, Any] = {"goat_op": op, **values}
+        if ticket_id is not None:
+            context |= {
+                "active_model": "helpdesk.ticket",
+                "active_id": ticket_id,
+                "active_ids": [ticket_id],
+            }
         result = await self._odoo.call(
-            "ir.actions.server", "run", ids=[action], context={"goat_op": op, **values}
+            "ir.actions.server", "run", ids=[action], context=context
         )
         return result or {}
 
@@ -455,19 +466,12 @@ class OdooSupportProvider:
         if query.customer_ids:
             alternatives.append(["partner_id", "in", list(query.customer_ids)])
         if query.follower_contact_id:
-            followed = await self._odoo.call(
-                "mail.followers",
-                "search_read",
-                domain=[
-                    ["res_model", "=", "helpdesk.ticket"],
-                    ["partner_id", "=", query.follower_contact_id],
-                ],
-                fields=["res_id"],
+            result = await self._run_op(
+                "followed", goat_partner_id=query.follower_contact_id
             )
+            followed = sorted({int(i) for i in result.get("goat_ticket_ids") or []})
             if followed:
-                alternatives.append(
-                    ["id", "in", sorted({f["res_id"] for f in followed})]
-                )
+                alternatives.append(["id", "in", followed])
         if query.org_id:
             alternatives.append(["x_goat_organization_id", "=", query.org_id])
         if not alternatives:
@@ -582,17 +586,12 @@ class OdooSupportProvider:
             ):
                 attachments[row["id"]] = AttachmentMeta(
                     row["id"],
-                    row["name"],
+                    m.file_name(row["name"]),
                     row["mimetype"] or "",
                     int(row["file_size"] or 0),
                 )
-        followers_raw = await self._odoo.call(
-            "mail.followers",
-            "search_read",
-            domain=[["res_model", "=", "helpdesk.ticket"], ["res_id", "=", rec["id"]]],
-            fields=["partner_id"],
-        )
-        follower_ids = [m.many2one_id(f["partner_id"]) or 0 for f in followers_raw]
+        result = await self._run_op("followers", rec["id"])
+        follower_ids = [int(i) for i in result.get("goat_partner_ids") or []]
         shares = await self._people(
             [m.many2one_id(msg["author_id"]) or 0 for msg in visible]
             + follower_ids
@@ -828,22 +827,10 @@ class OdooSupportProvider:
         )
 
     async def my_rating(self, ticket_id: int, contact_id: int) -> Rating | None:
-        rows = await self._odoo.call(
-            "rating.rating",
-            "search_read",
-            domain=[
-                ["res_model", "=", "helpdesk.ticket"],
-                ["res_id", "=", ticket_id],
-                ["partner_id", "=", contact_id],
-                ["consumed", "=", True],
-            ],
-            fields=["rating"],
-            order="write_date desc, id desc",
-            limit=1,
-        )
-        if not rows:
+        result = await self._run_op("my_rating", ticket_id, goat_partner_id=contact_id)
+        if not result.get("goat_rating"):
             return None
-        value = int(round(float(rows[0].get("rating") or 0)))
+        value = int(round(float(result["goat_rating"])))
         return next((r for r, v in RATING_VALUE.items() if v == value), None)
 
     async def download(self, attachment_id: int) -> tuple[AttachmentMeta, bytes]:
@@ -855,7 +842,7 @@ class OdooSupportProvider:
         )
         meta = AttachmentMeta(
             row["id"],
-            row["name"],
+            m.file_name(row["name"]),
             row["mimetype"] or "application/octet-stream",
             int(row["file_size"] or 0),
         )

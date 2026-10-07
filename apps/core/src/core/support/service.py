@@ -6,10 +6,12 @@ write) and keeps the per-user read markers. See the support tickets spec.
 
 A user is matched to a contact by email only when the request's token vouches
 for the stored email (GOAT stores a changed profile email before it is
-verified). A colleague is matched by the contact id GOAT stored for them; one
-without gets the existing Odoo contact of their email only when Keycloak
-(not the request) vouches for it: `emailVerified` and the same address as the
-stored one. Otherwise they get a new contact of their own.
+verified). A colleague is matched by the contact id GOAT stored for them. One
+without is added only when Keycloak (not the request) vouches for their email:
+`emailVerified` and the same address as the stored one. They get the existing
+Odoo contact of that email, else a new one. A colleague whose email is not
+verified is refused: their GOAT email may be anyone's, and Odoo would email
+that address about the ticket.
 """
 
 import logging
@@ -57,6 +59,8 @@ State = Literal["open", "closed"]
 # reloads and tab switches in a row ask Odoo once. The user's own writes drop
 # their entries at once; changes from Odoo show up when the entries expire.
 LIST_TTL = 60.0
+# Open tickets a user may have as the customer; a new one waits until one is closed.
+MAX_OPEN_TICKETS = 25
 # Replies on tickets closed this recently still count as unread (header badge).
 CLOSED_UNREAD_DAYS = 14
 NO_CONTACT_TTL = 600.0
@@ -130,7 +134,10 @@ class SupportService:
         reply_limiter: RateLimiter,
         email_proof: EmailProof,
         keycloak_user: KeycloakUser | None = None,
+        status_limiter: RateLimiter | None = None,
+        read_limiter: RateLimiter | None = None,
     ) -> None:
+        """The limiters are per user; the optional ones are off when not given."""
         self._provider = provider
         self._store = store
         self._cache = cache
@@ -138,6 +145,12 @@ class SupportService:
         self._reply_limiter = reply_limiter
         self._email_proof = email_proof
         self._keycloak_user = keycloak_user
+        self._status_limiter = status_limiter
+        self._read_limiter = read_limiter
+
+    def _limit(self, limiter: RateLimiter | None, key: tuple[object, ...]) -> None:
+        if limiter is not None and not limiter.hit(key):
+            raise SupportRateLimited()
 
     # ----------------------------------------------------------------- identity
     def _may_link_by_email(self, user: SupportUser) -> bool:
@@ -267,12 +280,12 @@ class SupportService:
     ) -> dict[UUID, int]:
         """Stored contact ids of the user's org members.
 
-        Members named in `create_for` who have none are linked to the existing
-        Odoo contact of their email when Keycloak verified that email and it is
-        the stored one (`_verified_colleague_emails`), else they get a new
-        contact of their own: the stored email alone is not verified, so it is
-        never used to link. The caller is skipped (they get their contact
-        through `_contact_for_write`). The stored contacts of
+        Members named in `create_for` who have none need an email Keycloak
+        verified that is the stored one; they are linked to the existing Odoo
+        contact of that email, else get a new contact with it. Any of them
+        without a verified email refuses the whole call before anything is
+        written (`colleague_email_not_verified`). The caller is skipped (they
+        get their contact through `_contact_for_write`). The stored contacts of
         `create_for` members are checked first (one batch, cached like the
         user's own): a contact deleted, archived or merged away in the ticket
         system is unlinked and replaced by a new one, as for a member without.
@@ -293,14 +306,17 @@ class SupportService:
             if uid not in contacts and uid != user.id
         ]
         if missing:
-            linked = await self._link_verified_colleagues(user, missing)
+            verified = await self._verified_colleague_emails(missing)
+            if len(verified) < len(missing):
+                raise SupportInvalid("colleague_email_not_verified")
+            linked = await self._link_verified_colleagues(user, verified)
             contacts.update(linked)
             for m in missing:
                 if m.user_id in linked:
                     continue
                 member_user = await self._store.load_user(m.user_id)
                 cid = await self._create_contact(
-                    m.name, m.email, member_user.lang, user.org_id
+                    m.name, verified[m.user_id], member_user.lang, user.org_id
                 )
                 await self._save_contact(m.user_id, cid)
                 contacts[m.user_id] = cid
@@ -346,21 +362,29 @@ class SupportService:
         self._cache.set(key, verified, KEYCLOAK_VERDICT_TTL)
         return verified or None
 
-    async def _link_verified_colleagues(
-        self, user: SupportUser, missing: list[Member]
-    ) -> dict[UUID, int]:
-        """Existing Odoo contacts for the members whose email Keycloak verified.
+    async def _verified_colleague_emails(
+        self, members: list[Member]
+    ) -> dict[UUID, str]:
+        """The members whose stored (GOAT) email Keycloak verified, with that email.
 
-        The stored (GOAT) email must be the verified one: a profile email can
-        be changed before it is verified. Staff and bridge partners are already
-        excluded by the lookup. Members without a match are left to the caller,
-        who creates a new contact for them.
+        The stored email must be the verified one: a profile email can be
+        changed before it is verified.
         """
         emails: dict[UUID, str] = {}
-        for m in missing:
+        for m in members:
             verified = await self._keycloak_verified_email(m.user_id)
             if verified and verified == m.email.strip().lower():
                 emails[m.user_id] = verified
+        return emails
+
+    async def _link_verified_colleagues(
+        self, user: SupportUser, emails: dict[UUID, str]
+    ) -> dict[UUID, int]:
+        """Existing Odoo contacts for members by their verified email.
+
+        Staff and bridge partners are already excluded by the lookup. Members
+        without a match are left to the caller, who creates a new contact.
+        """
         if not emails:
             return {}
         company = await self._store.org_company_id(user.org_id) if user.org_id else None
@@ -441,6 +465,8 @@ class SupportService:
     async def _visible(
         self, user: SupportUser, ref: str
     ) -> tuple[TicketDetail, int | None, bool]:
+        # Each ticket read costs several Odoo calls, before visibility is known.
+        self._limit(self._read_limiter, (user.id, "read"))
         detail = await self._provider.get_ticket(ref)
         if detail is None:
             raise TicketNotFound()
@@ -519,6 +545,7 @@ class SupportService:
         if scope == "org" and not (user.is_org_admin and user.org_id):
             raise SupportForbidden()  # before the cache: a revoked admin gets nothing
         if request_id:
+            self._limit(self._read_limiter, (user.id, "read"))  # not cached
             items = await self._compute(user, scope, state, request_id)
         else:
             items = await self._items(user, scope, state)
@@ -712,6 +739,9 @@ class SupportService:
                 failed_files=tuple(f.name for f in data.files),
             )
         self._check_can_get_contact(user)
+        await self._check_open_tickets(user)
+        # A burst guard behind the open-ticket limit: parallel requests, and
+        # opening and resolving tickets in a loop.
         if not self._ticket_limiter.hit((user_id, "ticket")):
             raise SupportRateLimited()
         contact = await self._contact_for_write(user)
@@ -765,6 +795,24 @@ class SupportService:
                 failed = tuple(f.name for f in data.files)
         return WriteResult(ref=ticket.ref, message_id=message_id, failed_files=failed)
 
+    async def _check_open_tickets(self, user: SupportUser) -> None:
+        """At most MAX_OPEN_TICKETS open tickets with the user as the customer.
+
+        Counted from the cached "mine, open" list (own writes drop it), so the
+        same for every pod; tickets the user only follows do not count.
+        """
+        contact = await self._contact_for_read(user)
+        if not contact:
+            return
+        mine = await self._items(user, "mine", "open")
+        open_own = sum(
+            1
+            for i in mine
+            if i.ticket.customer_contact_id == contact and i.ticket.is_open
+        )
+        if open_own >= MAX_OPEN_TICKETS:
+            raise SupportInvalid("too_many_open_tickets")
+
     async def _check_colleagues(
         self, user: SupportUser, colleague_ids: tuple[UUID, ...]
     ) -> None:
@@ -772,9 +820,18 @@ class SupportService:
             return
         if not user.org_id:
             raise SupportForbidden()
-        member_ids = {m.user_id for m in await self._store.org_members(user.org_id)}
-        if any(uid not in member_ids for uid in colleague_ids):
+        members = {m.user_id: m for m in await self._store.org_members(user.org_id)}
+        if any(uid not in members for uid in colleague_ids):
             raise SupportForbidden()
+        # Before anything is written or counted (_member_contacts checks again,
+        # also for stored contacts that turn out to be gone).
+        without = [
+            members[uid]
+            for uid in dict.fromkeys(colleague_ids)
+            if uid != user.id and not members[uid].contact_id
+        ]
+        if len(await self._verified_colleague_emails(without)) < len(without):
+            raise SupportInvalid("colleague_email_not_verified")
 
     async def reply(
         self, user_id: UUID, ref: str, text: str, files: tuple[UploadedFile, ...]
@@ -802,6 +859,8 @@ class SupportService:
         detail, _, _ = await self._visible(user, ref)
         if not detail.ticket.is_open:
             raise SupportInvalid("already_closed")
+        # Every stage change emails the followers.
+        self._limit(self._status_limiter, (user_id, "status"))
         await self._provider.set_status(detail.ticket.id, "solved")
         self._changed(user_id)
 
@@ -810,6 +869,7 @@ class SupportService:
         detail, _, _ = await self._visible(user, ref)
         if detail.ticket.is_open:
             raise SupportInvalid("already_open")
+        self._limit(self._status_limiter, (user_id, "status"))
         await self._provider.set_status(detail.ticket.id, "in_progress")
         self._changed(user_id)
 

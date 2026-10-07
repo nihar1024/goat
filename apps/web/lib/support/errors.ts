@@ -20,6 +20,9 @@ export const supportErrorMessage = (
   if (status === 429) return t("support_rate_limited");
   // Core refuses to link a support contact to an unconfirmed email address (403, both create and reply).
   if (detail === "email_not_verified") return t("support_email_not_verified");
+  // A colleague added to the ticket has not confirmed their email address (422).
+  if (detail === "colleague_email_not_verified") return t("support_colleague_email_not_verified");
+  if (detail === "too_many_open_tickets") return t("support_too_many_open_tickets");
   if (detail === "too_many_files") return t("support_too_many_files");
   // The server names no file, so "file_too_large" falls back to the generic size message.
   if (status === 413 || FILE_LIMIT_DETAILS.includes(detail)) return t("support_files_too_large");

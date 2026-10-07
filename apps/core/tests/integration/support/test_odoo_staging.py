@@ -193,15 +193,12 @@ async def test_contacts_come_from_the_action_only(
         break
     if contact is None:
         pytest.skip("no customer company without (former) staff on staging")
-    # a GOAT contact: the bridge reads it itself
-    status, rows = await _raw_json(
+    (row,) = await _admin(
         "res.partner",
         "read",
         ids=[contact],
         fields=["parent_id", "lang", "is_company", "partner_share", "goat_contact"],
     )
-    assert status == 200, rows
-    (row,) = rows
     assert row["parent_id"][0] == company and row["lang"] == "en_US"
     assert row["is_company"] is False and row["partner_share"] is True
     assert row["goat_contact"] is True
@@ -220,12 +217,15 @@ async def test_contacts_come_from_the_action_only(
         await _raw("res.partner", "write", ids=[contact], vals={"email": "e@x.invalid"})
         == 403
     )
-    # nor read other contacts: the customer company is no GOAT contact
-    assert await _raw("res.partner", "read", ids=[company], fields=["name"]) == 403
+    # nor read any contact but its own, followers or ratings
+    for partner in (company, contact):
+        assert await _raw("res.partner", "read", ids=[partner], fields=["name"]) == 403
     status, found = await _raw_json(
         "res.partner", "search", domain=[["id", "in", [company, contact]]]
     )
-    assert (status, found) == (200, [contact])
+    assert (status, found) == (200, [])
+    for model in ("mail.followers", "rating.rating"):
+        assert await _raw(model, "search", domain=[]) == 403
 
 
 async def test_the_bridge_writes_only_what_goat_writes(
@@ -263,6 +263,17 @@ async def test_the_bridge_writes_only_what_goat_writes(
     assert (
         await _raw("helpdesk.ticket", "write", ids=[ticket.id], vals={"name": "x"})
         >= 400
+    )
+    # no mail of its own: GOAT posts through the server action
+    assert (
+        await _raw(
+            "helpdesk.ticket",
+            "message_post",
+            ids=[ticket.id],
+            body="x",
+            outgoing_email_to="anyone@example.invalid",
+        )
+        == 403
     )
     await provider.stamp_org([ticket.id], "it-org")
     await provider.stamp_org([ticket.id], "it-org")

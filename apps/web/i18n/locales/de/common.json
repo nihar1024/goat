@@ -3255,6 +3255,8 @@
   "support_invalid": "Bitte prüfen Sie Ihre Eingaben und versuchen Sie es erneut.",
   "support_forbidden": "Dafür fehlt Ihnen bei diesem Ticket die Berechtigung.",
   "support_email_not_verified": "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse. Den Bestätigungslink finden Sie in Ihrem Postfach.",
+  "support_colleague_email_not_verified": "Eine hinzugefügte Person hat ihre E-Mail-Adresse noch nicht bestätigt. Sie kann hinzugefügt werden, sobald sie das getan hat.",
+  "support_too_many_open_tickets": "Sie haben die maximale Anzahl offener Tickets erreicht. Schließen Sie ein Ticket, das Sie nicht mehr benötigen, oder ergänzen Sie ein bestehendes.",
   "support_unread": "Ungelesen",
   "support_opened_the_ticket": "Hat das Ticket eröffnet",
   "support_following": "Folgt dem Ticket"

@@ -95,7 +95,7 @@ async def test_list_builds_an_or_domain_including_followed_tickets() -> None:
                 100: {"name": "Marco", "staff": False},
             }
         )
-        .on("mail.followers", "search_read", lambda kw: [{"res_id": 29}])
+        .on_op("followed", lambda ctx: {"goat_ticket_ids": [29]})
         .on("helpdesk.ticket", "search_read", lambda kw: [ticket_record()])
         .on(
             "mail.message",
@@ -246,15 +246,7 @@ def _detail_odoo(
                 for a in kw["ids"]
             ],
         )
-        .on(
-            "mail.followers",
-            "search_read",
-            lambda kw: [
-                {"partner_id": [100, "Marco"]},
-                {"partner_id": [26, "Majk"]},
-                {"partner_id": [101, "Anna"]},
-            ],
-        )
+        .on_op("followers", lambda ctx: {"goat_partner_ids": [100, 26, 101]})
     )
 
 
@@ -578,11 +570,7 @@ def _prefixed_odoo(messages: list[dict[str, Any]], **record: Any) -> Any:
     }
     return (
         _goat_ticket_odoo(messages, partner_id=[100, "Stadt, Marco Albrecht"], **record)
-        .on(
-            "mail.followers",
-            "search_read",
-            lambda kw: [{"partner_id": [26, "Test, Majk Shkurti"]}],
-        )
+        .on_op("followers", lambda ctx: {"goat_partner_ids": [26]})
         .on("ir.actions.server", "run", action_ops(people=people))
     )
 
@@ -644,7 +632,7 @@ async def test_a_missing_partner_name_falls_back_to_the_many2one_name() -> None:
     reply = _msg(62, [26, "Test, Majk Shkurti"], "<p>Hi</p>", "2026-09-28 11:00:00", [])
     odoo = (
         _goat_ticket_odoo([reply])
-        .on("mail.followers", "search_read", lambda kw: [])
+        .on_op("followers", lambda ctx: {"goat_partner_ids": []})
         .on(
             "ir.actions.server",
             "run",
@@ -892,11 +880,7 @@ def _former_staff_odoo(staff: tuple[int, ...] = (FORMER,)) -> Any:
                 reverse=kw["order"] == "id desc",
             ),
         )
-        .on(
-            "mail.followers",
-            "search_read",
-            lambda kw: [{"partner_id": [p, "x"]} for p in (100, FORMER, 26)],
-        )
+        .on_op("followers", lambda ctx: {"goat_partner_ids": [100, FORMER, 26]})
     )
 
 
@@ -1169,8 +1153,8 @@ async def test_create_contact_sends_a_clean_name_the_action_accepts() -> None:
 
 
 # ------------------------------------------------------------------- rating
-def _rating_odoo(rows: list[dict[str, Any]]) -> Any:
-    return base_odoo().on("rating.rating", "search_read", lambda kw: rows)
+def _rating_odoo(value: Any) -> Any:
+    return base_odoo().on_op("my_rating", lambda ctx: {"goat_rating": value})
 
 
 @pytest.mark.parametrize(
@@ -1178,20 +1162,15 @@ def _rating_odoo(rows: list[dict[str, Any]]) -> Any:
     [(1.0, "ko"), (3.0, "ok"), (5.0, "top"), (0.0, None), (2.0, None), (False, None)],
 )
 async def test_my_rating_maps_odoos_values(value: Any, expected: str | None) -> None:
-    odoo = _rating_odoo([{"id": 7, "rating": value}])
+    odoo = _rating_odoo(value)
     assert await _provider(odoo).my_rating(31, 100) == expected
 
 
 async def test_my_rating_asks_for_this_contacts_consumed_rating_of_this_ticket() -> (
     None
 ):
-    odoo = _rating_odoo([])
+    odoo = _rating_odoo(False)
     assert await _provider(odoo).my_rating(31, 100) is None
-    (call,) = odoo.calls_to("rating.rating", "search_read")
-    assert call["domain"] == [
-        ["res_model", "=", "helpdesk.ticket"],
-        ["res_id", "=", 31],
-        ["partner_id", "=", 100],
-        ["consumed", "=", True],
-    ]
-    assert call["limit"] == 1 and "rating" in call["fields"]
+    (ask,) = op_calls(odoo, "my_rating")
+    assert (ask["active_model"], ask["active_id"]) == ("helpdesk.ticket", 31)
+    assert ask["goat_partner_id"] == 100

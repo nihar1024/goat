@@ -31,13 +31,23 @@ class FakeOdooClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         self._handlers: dict[tuple[str, str], Handler] = {}
+        self._ops: dict[str, Handler] = {}
 
     def on(self, model: str, method: str, handler: Handler) -> "FakeOdooClient":
         self._handlers[(model, method)] = handler
         return self
 
+    def on_op(self, op: str, handler: Handler) -> "FakeOdooClient":
+        """Answer one server action op (`handler` gets the context), whatever
+        answers the other runs."""
+        self._ops[op] = handler
+        return self
+
     async def call(self, model: str, method: str, **kwargs: Any) -> Any:
         self.calls.append((model, method, kwargs))
+        op = (kwargs.get("context") or {}).get("goat_op")
+        if (model, method) == ("ir.actions.server", "run") and op in self._ops:
+            return self._ops[op](kwargs["context"])
         handler = self._handlers.get((model, method))
         if handler is None:
             raise AssertionError(f"unexpected Odoo call {model}.{method} {kwargs}")
@@ -140,6 +150,12 @@ def action_ops(
                     e: matches[e] for e in ctx["goat_emails"] if e in matches
                 }
             }
+        if op == "followers":
+            return {"goat_partner_ids": []}
+        if op == "followed":
+            return {"goat_ticket_ids": []}
+        if op == "my_rating":
+            return {"goat_rating": False}
         if op == "exist":
             return {
                 "goat_contact_ids": [

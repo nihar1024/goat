@@ -27,8 +27,6 @@ ALLOWED_CALLS: frozenset[tuple[str, str]] = frozenset(
         ("helpdesk.tag", "search_read"),
         ("mail.message", "search_read"),
         ("mail.message.subtype", "search_read"),
-        ("mail.followers", "search_read"),
-        ("rating.rating", "search_read"),
         ("ir.attachment", "create"),
         ("ir.attachment", "read"),
         ("ir.actions.server", "search"),

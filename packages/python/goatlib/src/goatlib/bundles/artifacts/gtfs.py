@@ -40,6 +40,7 @@ from goatlib.models.bundle import (
     BundleArtifactKind,
     BundleArtifactState,
     BundleTypeName,
+    get_spec,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,9 +67,11 @@ DEFAULT_LINKAGE_MODES: Tuple[str, ...] = ("walking",)
 LINKAGE_MAX_MINUTES = 20.0
 
 
-#: Columns the import adds that no GTFS file declares, dropped when the feed is
-#: written back out. `geometry` is derived from columns that are still there.
-_NON_GTFS_COLUMNS = frozenset({"geometry", "geom", "id", "h3_3"})
+#: Columns the import adds to a member that has a geometry, dropped when the
+#: feed is written back out. `geometry` is derived from columns that are still
+#: there; `OGC_FID` and `bbox` were added by the GeoJSON path older imports took.
+#: A layer without a geometry is written with every column it holds.
+_IMPORT_COLUMNS = frozenset({"geometry", "OGC_FID", "bbox"})
 
 
 class UnlinkableStopsError(ValueError):
@@ -168,35 +171,59 @@ def _root_level_feed(source_path: str, workdir: str) -> str:
 def _write_feed_from_layers(layer_paths: Dict[str, str], feed_dir: str) -> List[str]:
     """Write the member layers back out as a GTFS feed. Returns the files made.
 
-    The import stored every column as text and kept the feed's own columns as
-    the layer's properties, so writing them back is a faithful round trip. Two
-    things are dropped: the geometry column the import adds to `stops` and
-    `shapes` — which is derived from `stop_lat`/`stop_lon` and the shape points,
-    both still present as columns — and the internal id, which no GTFS file
-    declares. Anything else is written as it stands; a reader ignores columns it
-    does not know.
+    The import stored every column as text and kept the feed's own columns, so
+    writing them back is a faithful round trip. What is left out is only what
+    the import added: the geometry next to a stop's own coordinates, and the
+    shape lines, which are a drawing of the shape points rather than a file.
+    Members the spec does not name are files the feed brought beyond it and go
+    back under their own name.
+
+    A GTFS file whose layer lacks a column that file requires is not written:
+    a bundle imported before shapes were kept point by point holds only lines,
+    and a `shapes.txt` of bare ids would be a broken file rather than a missing
+    one.
     """
     import duckdb
 
-    from goatlib.bundles.importers.pt_network.gtfs import _GTFS_FILE
+    from goatlib.bundles.importers.pt_network.gtfs import (
+        _GTFS_FILE,
+        _REQUIRED_COLUMNS,
+    )
 
+    spec = get_spec(BundleTypeName.pt_network_gtfs)
     written: List[str] = []
     con = duckdb.connect()
     try:
         con.execute("INSTALL spatial; LOAD spatial")
         for role, path in sorted(layer_paths.items()):
-            filename = _GTFS_FILE.get(role)
-            if not filename:
-                # A member layer that is not a GTFS file. Nothing to write.
+            role_spec = spec.role(role)
+            if role_spec is not None and role_spec.derived_from:
                 continue
+            filename = _GTFS_FILE.get(role) or (
+                os.path.basename(role) if role and role.endswith(".txt") else None
+            )
+            if not filename:
+                # A member that is not a file of the feed. Nothing to write.
+                continue
+            described = con.execute(
+                f"DESCRIBE SELECT * FROM read_parquet('{path}')"
+            ).fetchall()
+            has_geometry = any("GEOMETRY" in str(row[1]).upper() for row in described)
             columns = [
                 row[0]
-                for row in con.execute(
-                    f"DESCRIBE SELECT * FROM read_parquet('{path}')"
-                ).fetchall()
-                if row[0] not in _NON_GTFS_COLUMNS
+                for row in described
+                if not (has_geometry and row[0] in _IMPORT_COLUMNS)
             ]
             if not columns:
+                continue
+            absent = _REQUIRED_COLUMNS.get(role, set()) - set(columns)
+            if absent:
+                logger.warning(
+                    "Not writing %s: its layer lacks %s (imported before the "
+                    "file was kept whole); re-import the feed to restore it",
+                    filename,
+                    ", ".join(sorted(absent)),
+                )
                 continue
             select = ", ".join(f'"{c}"' for c in columns)
             out = os.path.join(feed_dir, filename)

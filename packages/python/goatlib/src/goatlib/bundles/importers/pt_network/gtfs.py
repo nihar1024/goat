@@ -1,14 +1,14 @@
 """GTFS importer: a gtfs.zip → member layers for a ``pt_network_gtfs`` bundle.
 
 Role → file and per-role column requirements are GTFS-specific and live here;
-which roles are *required* comes from the spec. Geometry roles (stops, shapes)
-are emitted as GeoJSON so the runner's IOConverter builds proper geometry;
-attribute roles are passed through as CSV.
+which roles are *required* comes from the spec. Every file becomes one layer
+holding its rows and columns as published, all as text. Stops carry a geometry
+alongside their own columns, and the shape points get a derived line layer for
+the map; neither replaces the data it is drawn from.
 """
 
 import csv
 import io
-import json
 import os
 import re
 import shutil
@@ -261,64 +261,84 @@ class GtfsImporter(BundleImporter):
     # -- extraction --------------------------------------------------------
 
     def extract_layers(self, source_path: str, workdir: str) -> List[ExtractedLayer]:
+        """One layer per file in the feed, every column kept as published.
+
+        Files the spec does not name — agency extensions such as
+        `route_directions.txt` — are imported too, with the file name as the
+        role, so a feed written back out is the feed that was uploaded.
+        """
         layers: List[ExtractedLayer] = []
         with zipfile.ZipFile(source_path) as zf:
-            names = {os.path.basename(n) for n in zf.namelist()}
+            names = {
+                os.path.basename(n) for n in zf.namelist() if self._is_feed_file(n)
+            }
             for role in self.spec.role_keys():
-                fname = _GTFS_FILE[role]
-                if fname not in names:
+                fname = _GTFS_FILE.get(role)
+                if fname is None or fname not in names:
                     continue
                 role_spec = self.spec.role(role)
                 label = role_spec.label if role_spec else role
-
+                txt_path = self._extract_member(zf, fname, workdir)
+                out_path = os.path.join(workdir, f"{role}.parquet")
                 if role == "stops":
-                    path = self._write_points_geojson(
-                        self._read_rows(zf, fname),
-                        "stop_lon",
-                        "stop_lat",
-                        os.path.join(workdir, "stops.geojson"),
-                    )
+                    # The stop's position as a geometry next to its own columns.
+                    # Nullable: GTFS leaves coordinates empty for generic nodes
+                    # and boarding areas, and those stops are kept regardless.
+                    self._txt_to_parquet(txt_path, out_path, point=True)
                     layers.append(
                         ExtractedLayer(
                             role=role,
                             name=label,
                             layer_type="feature",
                             geometry_type="point",
-                            file_path=path,
+                            file_path=out_path,
                         )
                     )
-                elif role == "shapes":
-                    path = self._write_shapes_geojson(
-                        self._read_rows(zf, fname),
-                        os.path.join(workdir, "shapes.geojson"),
+                    continue
+                self._txt_to_parquet(txt_path, out_path)
+                layers.append(
+                    ExtractedLayer(
+                        role=role,
+                        name=label,
+                        layer_type="table",
+                        geometry_type=None,
+                        file_path=out_path,
                     )
+                )
+                if role == "shapes":
+                    lines_spec = self.spec.role("shape_lines")
                     layers.append(
                         ExtractedLayer(
-                            role=role,
-                            name=label,
+                            role="shape_lines",
+                            name=lines_spec.label if lines_spec else "Shape lines",
                             layer_type="feature",
                             geometry_type="line",
-                            file_path=path,
+                            file_path=self._shape_lines_parquet(
+                                out_path, os.path.join(workdir, "shape_lines.parquet")
+                            ),
                         )
                     )
-                else:
-                    # Attribute table → parquet with EVERY column as text: GTFS
-                    # ids/codes are strings (e.g. "FLUO 11", zero-padded ids), so
-                    # type auto-detection is wrong. DuckDB streams the file, so
-                    # large tables (stop_times can be 100s of MB) stay off-heap.
-                    txt_path = self._extract_member(zf, fname, workdir)
-                    path = self._txt_to_parquet(
-                        txt_path, os.path.join(workdir, f"{role}.parquet")
+
+            known = set(_GTFS_FILE.values())
+            for fname in sorted(names - known):
+                if not fname.endswith(".txt"):
+                    continue
+                # The file name itself, so it can never take a spec role's key
+                # (a stray `shape_lines.txt` would otherwise collide with the
+                # derived layer) and the write-back knows what to call it.
+                role = fname
+                txt_path = self._extract_member(zf, fname, workdir)
+                out_path = os.path.join(workdir, f"extra_{len(layers)}.parquet")
+                self._txt_to_parquet(txt_path, out_path)
+                layers.append(
+                    ExtractedLayer(
+                        role=role,
+                        name=role,
+                        layer_type="table",
+                        geometry_type=None,
+                        file_path=out_path,
                     )
-                    layers.append(
-                        ExtractedLayer(
-                            role=role,
-                            name=label,
-                            layer_type="table",
-                            geometry_type=None,
-                            file_path=path,
-                        )
-                    )
+                )
         return layers
 
     # -- helpers -----------------------------------------------------------
@@ -357,7 +377,15 @@ class GtfsImporter(BundleImporter):
         return dest
 
     @staticmethod
-    def _txt_to_parquet(txt_path: str, out_path: str) -> str:
+    def _is_feed_file(name: str) -> bool:
+        """A file of the feed, not an archiver's by-product."""
+        base = os.path.basename(name)
+        return (
+            bool(base) and not name.startswith("__MACOSX/") and not base.startswith(".")
+        )
+
+    @staticmethod
+    def _txt_to_parquet(txt_path: str, out_path: str, point: bool = False) -> str:
         """Convert a GTFS text file to parquet with all columns as VARCHAR.
 
         ``all_varchar`` disables type auto-detection — GTFS ids/codes/names are
@@ -369,6 +397,9 @@ class GtfsImporter(BundleImporter):
         fields with embedded commas (e.g. a stop_headsign "Town, Street") when
         they first appear past the sample. ``strict_mode=false`` also tolerates
         the minor RFC deviations real-world feeds commonly have.
+
+        ``point`` adds a nullable ``geometry`` built from ``stop_lon``/``stop_lat``,
+        leaving both columns as they were.
         """
         # Imported here, not at module scope: `core` depends on goatlib
         # without the `full` extra, so it must be able to import this module
@@ -377,66 +408,69 @@ class GtfsImporter(BundleImporter):
 
         src = txt_path.replace("'", "''")
         dst = out_path.replace("'", "''")
+        read = (
+            f"read_csv('{src}', all_varchar=true, header=true, delim=',', "
+            f"quote='\"', escape='\"', strict_mode=false)"
+        )
         con = duckdb.connect()
         try:
-            con.execute(
-                f"COPY (SELECT * FROM read_csv('{src}', all_varchar=true, "
-                f"header=true, delim=',', quote='\"', escape='\"', "
-                f"strict_mode=false)) TO '{dst}' (FORMAT parquet)"
-            )
+            select = f"SELECT * FROM {read}"
+            if not point:
+                con.execute(f"COPY ({select}) TO '{dst}' (FORMAT parquet)")
+                return out_path
+            from goatlib.io.geoparquet import write_optimized_parquet
+
+            con.execute("INSTALL spatial; LOAD spatial")
+            columns = {row[0] for row in con.execute(f"DESCRIBE {select}").fetchall()}
+            if {"stop_lon", "stop_lat"} <= columns:
+                select = (
+                    f"SELECT *, ST_Point(TRY_CAST(trim(stop_lon) AS DOUBLE), "
+                    f"TRY_CAST(trim(stop_lat) AS DOUBLE)) AS geometry FROM {read}"
+                )
+            else:
+                select = f"SELECT *, NULL::GEOMETRY AS geometry FROM {read}"
+            # The writer every feature upload goes through: it adds the bbox
+            # the tile and feature paths prune row groups on.
+            write_optimized_parquet(con, select, out_path)
         finally:
             con.close()
         return out_path
 
     @staticmethod
-    def _write_points_geojson(
-        rows: List[Dict[str, str]], lon_col: str, lat_col: str, out_path: str
-    ) -> str:
-        features = []
-        for row in rows:
-            try:
-                lon = float(row[lon_col])
-                lat = float(row[lat_col])
-            except (KeyError, TypeError, ValueError):
-                continue
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
-                    "properties": row,
-                }
-            )
-        with open(out_path, "w", encoding="utf-8") as fh:
-            json.dump({"type": "FeatureCollection", "features": features}, fh)
-        return out_path
+    def _shape_lines_parquet(shapes_path: str, out_path: str) -> str:
+        """One line per shape, joined from its points in sequence order.
 
-    @staticmethod
-    def _write_shapes_geojson(rows: List[Dict[str, str]], out_path: str) -> str:
-        shapes: Dict[str, List[tuple]] = {}
-        for row in rows:
-            try:
-                shape_id = row["shape_id"]
-                seq = int(row["shape_pt_sequence"])
-                lon = float(row["shape_pt_lon"])
-                lat = float(row["shape_pt_lat"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            shapes.setdefault(shape_id, []).append((seq, lon, lat))
+        A drawing of the shapes table, not a copy of it: points whose sequence or
+        coordinates do not parse are left out of the line but stay in the table,
+        and a shape with fewer than two drawable points gets no line.
+        """
+        import duckdb
 
-        features = []
-        for shape_id, pts in shapes.items():
-            ordered = [[lon, lat] for _, lon, lat in sorted(pts)]
-            if len(ordered) < 2:
-                continue
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": {"type": "LineString", "coordinates": ordered},
-                    "properties": {"shape_id": shape_id},
-                }
+        from goatlib.io.geoparquet import write_optimized_parquet
+
+        src = shapes_path.replace("'", "''")
+        con = duckdb.connect()
+        try:
+            con.execute("INSTALL spatial; LOAD spatial")
+            write_optimized_parquet(
+                con,
+                f"""
+                SELECT shape_id, ST_MakeLine(list(ST_Point(lon, lat) ORDER BY seq)) AS geometry
+                FROM (
+                    SELECT shape_id,
+                           TRY_CAST(trim(shape_pt_sequence) AS BIGINT) AS seq,
+                           TRY_CAST(trim(shape_pt_lon) AS DOUBLE) AS lon,
+                           TRY_CAST(trim(shape_pt_lat) AS DOUBLE) AS lat
+                    FROM read_parquet('{src}')
+                )
+                WHERE seq IS NOT NULL AND lon IS NOT NULL AND lat IS NOT NULL
+                GROUP BY shape_id
+                HAVING count(*) >= 2
+                """,
+                out_path,
             )
-        with open(out_path, "w", encoding="utf-8") as fh:
-            json.dump({"type": "FeatureCollection", "features": features}, fh)
+        finally:
+            con.close()
         return out_path
 
 

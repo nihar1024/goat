@@ -30,8 +30,8 @@ class ExtractedLayer(BaseModel):
     name: str
     layer_type: LayerKind
     geometry_type: Optional[GeometryType] = None
-    # Local file the runner hands to IOConverter → DuckLake (GeoJSON for
-    # geometry roles, CSV for attribute tables).
+    # Local file the runner ingests into DuckLake: parquet as is, anything else
+    # through IOConverter first.
     file_path: str
 
 

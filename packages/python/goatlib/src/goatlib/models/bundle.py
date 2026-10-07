@@ -204,6 +204,10 @@ class RoleSpec(BaseModel):
     # or in both — each is optional alone, but a feed with neither declares no
     # service at all.
     required_group: Optional[str] = None
+    # The role this member is regenerated from, for a member that is a view of
+    # another rather than data of its own — a feed's shape lines are drawn from
+    # its shape points. Such a member is never written back to the source.
+    derived_from: Optional[str] = None
     # Whether a user may edit this member layer's features. False until someone
     # has decided what saving it means for the bundle's derived artifacts.
     editable: bool = False
@@ -490,7 +494,16 @@ SPECS: Dict[BundleTypeName, BundleTypeSpec] = {
                 required_group="service",
             ),
             # Optional
-            RoleSpec(key="shapes", label="Shapes", geometry="line"),
+            # One row per shape point, as published: the line geometry cannot
+            # hold the sequence or the distance travelled.
+            RoleSpec(key="shapes", label="Shapes", geometry="none"),
+            RoleSpec(
+                key="shape_lines",
+                label="Shape lines",
+                geometry="line",
+                derived_from="shapes",
+                description="The shape points joined into one line per shape.",
+            ),
             RoleSpec(key="frequencies", label="Frequencies", geometry="none"),
             RoleSpec(key="transfers", label="Transfers", geometry="none"),
             RoleSpec(key="pathways", label="Pathways", geometry="none"),

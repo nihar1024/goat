@@ -259,7 +259,8 @@ const TicketList = () => {
   // The tab's list has not arrived yet: hold its place rather than claim it is empty.
   const loading = current.tickets === undefined;
   const orgScope = effectiveScope === "org";
-  const newTicket = () => router.push(newTicketPath("/support"));
+  // From the support pages themselves: no page to name in the ticket's details.
+  const newTicket = () => router.push(newTicketPath());
 
   const headerActions = mobile ? (
     <Stack direction="row" spacing="8px" alignItems="center">
@@ -325,12 +326,14 @@ const TicketList = () => {
                 {t("support_answer")}
               </Button>
             }>
-            {waiting.length === 1
-              ? t("support_banner_one", {
-                  agent: supportReplyAgent(waiting[0], t("support_goat_team")),
-                  subject: waiting[0].subject,
-                })
-              : t("support_banner_many", { count: waiting.length })}
+            {waiting.length > 1
+              ? t("support_banner_many", { count: waiting.length })
+              : supportReplyAgent(waiting[0])
+                ? t("support_banner_one", {
+                    agent: supportReplyAgent(waiting[0]),
+                    subject: waiting[0].subject,
+                  })
+                : t("support_banner_one_team", { subject: waiting[0].subject })}
           </Alert>
         )}
       </Stack>

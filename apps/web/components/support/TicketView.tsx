@@ -630,7 +630,6 @@ const TicketView = ({ ticketRef }: { ticketRef: string }) => {
       const result = await postSupportReply(tk.ref, reply, files);
       clearReply();
       setFiles([]);
-      toast.success(t("support_reply_sent"));
       if (result.failed_files.length)
         toast.warning(t("support_failed_files", { files: result.failed_files.join(", ") }));
       await mutate();
@@ -741,7 +740,9 @@ const TicketView = ({ ticketRef }: { ticketRef: string }) => {
             }}>
             {tk.needs_my_reply && (
               <InlineNotice icon={ICON_NAME.CLOCK} tone="warning">
-                {t("support_waiting_banner", { agent: supportReplyAgent(tk, t("support_goat_team")) })}
+                {supportReplyAgent(tk)
+                  ? t("support_waiting_banner", { agent: supportReplyAgent(tk) })
+                  : t("support_waiting_banner_team")}
               </InlineNotice>
             )}
             {!detail.on_ticket && (

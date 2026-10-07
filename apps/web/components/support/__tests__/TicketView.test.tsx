@@ -223,6 +223,17 @@ describe("TicketView", () => {
     expect(screen.getByText("support_waiting_banner:Jonas")).toBeTruthy();
   });
 
+  it("names the team, not the handler, when no agent wrote the latest message", () => {
+    m.useSupportTicket.mockReturnValue({
+      ticket: detail({ latest_message_author: "Anna", latest_message_is_agent: false }),
+      mutate: m.mutate,
+      isLoading: false,
+    });
+    render(<TicketView ticketRef="00031" />);
+    expect(screen.getByText("support_waiting_banner_team")).toBeTruthy();
+    expect(screen.queryByText("support_waiting_banner:Lena")).toBeNull();
+  });
+
   it("keeps the reply draft per user and ticket", () => {
     localStorage.clear();
     m.useSupportTicket.mockReturnValue({ ticket: detail(), mutate: m.mutate, isLoading: false });

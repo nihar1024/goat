@@ -3257,6 +3257,8 @@
   "support_email_not_verified": "Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse. Den Bestätigungslink finden Sie in Ihrem Postfach.",
   "support_colleague_email_not_verified": "Eine hinzugefügte Person hat ihre E-Mail-Adresse noch nicht bestätigt. Sie kann hinzugefügt werden, sobald sie das getan hat.",
   "support_too_many_open_tickets": "Sie haben die maximale Anzahl offener Tickets erreicht. Schließen Sie ein Ticket, das Sie nicht mehr benötigen, oder ergänzen Sie ein bestehendes.",
+  "support_staff_email": "Ihre E-Mail-Adresse gehört zu einem Mitglied des Support-Teams. Tickets werden aus Kundenkonten eröffnet. Bitte arbeiten Sie direkt im Helpdesk.",
+  "support_colleague_is_staff": "Eine hinzugefügte Person gehört zum Support-Team und sieht das Ticket ohnehin im Helpdesk. Entfernen Sie sie und senden Sie erneut.",
   "support_unread": "Ungelesen",
   "support_opened_the_ticket": "Hat das Ticket eröffnet",
   "support_following": "Folgt dem Ticket"

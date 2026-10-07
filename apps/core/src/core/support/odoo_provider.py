@@ -26,7 +26,11 @@ from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from core.support import odoo_mapping as m
-from core.support.errors import SupportCompanyRefused, SupportUnavailable
+from core.support.errors import (
+    SupportCompanyRefused,
+    SupportStaffEmail,
+    SupportUnavailable,
+)
 from core.support.odoo_client import OdooRejected, SupportOdooClient
 from core.support.throttle import TTLCache
 from core.support.types import (
@@ -415,6 +419,8 @@ class OdooSupportProvider:
         except OdooRejected as exc:
             if exc.message == "invalid parent company":
                 raise SupportCompanyRefused(str(exc)) from exc
+            if exc.message == "email belongs to staff":
+                raise SupportStaffEmail(str(exc)) from exc
             raise
         return int(result["goat_contact_id"])
 

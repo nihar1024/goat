@@ -3257,6 +3257,8 @@
   "support_email_not_verified": "Please confirm your email address first. The confirmation link is in your inbox.",
   "support_colleague_email_not_verified": "A person you added has not confirmed their email address yet. They can be added once they have.",
   "support_too_many_open_tickets": "You have reached the maximum number of open tickets. Close a ticket you no longer need, or add to an existing one.",
+  "support_staff_email": "Your email address belongs to a member of the support team. Tickets are opened from customer accounts; please work in the help desk directly.",
+  "support_colleague_is_staff": "A person you added is a member of the support team and sees the ticket in the help desk anyway. Remove them and submit again.",
   "support_unread": "Unread",
   "support_opened_the_ticket": "Opened the ticket",
   "support_following": "Following"

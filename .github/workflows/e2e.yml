@@ -172,7 +172,7 @@ jobs:
       - name: 🏗️ Start the web build
         run: scripts/e2e/bg.sh build pnpm --filter @p4b/web build
 
-      # While the web builds: the browser and its system packages.
+      # While the web builds: the browser's version, for its cache key.
       - name: 🎭 Playwright version
         id: playwright
         run: echo "version=$(pnpm --filter web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
@@ -182,14 +182,14 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: 📥 Install Playwright Chromium
-        timeout-minutes: 15
+      # Chromium and its system packages install in the background too; the
+      # tests are the first to need them.
+      - name: 📥 Start installing Playwright Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter web exec playwright install --with-deps chromium
-      - name: 📥 Playwright system dependencies
-        timeout-minutes: 15
+        run: scripts/e2e/bg.sh chromium pnpm --filter web exec playwright install --with-deps chromium
+      - name: 📥 Start installing Playwright's system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter web exec playwright install-deps chromium
+        run: scripts/e2e/bg.sh chromium pnpm --filter web exec playwright install-deps chromium
 
       - name: ⏳ Infra and Python dependencies
         run: |
@@ -317,6 +317,9 @@ jobs:
 
       - name: 👥 Test users, organizations, datasets
         run: uv run --no-sync python scripts/e2e/provision.py --datasets
+
+      - name: ⏳ Playwright Chromium
+        run: scripts/e2e/await.sh chromium 900
 
       - name: 🧪 Playwright
         run: pnpm exec playwright test --config=playwright.config.ts

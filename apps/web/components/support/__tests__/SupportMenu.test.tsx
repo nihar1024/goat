@@ -47,6 +47,7 @@ const ticket = (ref: string, over: Partial<SupportTicket> = {}): SupportTicket =
   category: "bug",
   impact: null,
   customer_name: "Me",
+  customer_contact_id: null,
   is_mine: true,
   agent_name: "Anna",
   via: "app",

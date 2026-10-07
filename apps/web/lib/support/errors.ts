@@ -23,6 +23,9 @@ export const supportErrorMessage = (
   // A colleague added to the ticket has not confirmed their email address (422).
   if (detail === "colleague_email_not_verified") return t("support_colleague_email_not_verified");
   if (detail === "too_many_open_tickets") return t("support_too_many_open_tickets");
+  // The ticket system refuses contacts with a staff member's email (422): staff work in it directly.
+  if (detail === "staff_email") return t("support_staff_email");
+  if (detail === "colleague_is_staff") return t("support_colleague_is_staff");
   if (detail === "too_many_files") return t("support_too_many_files");
   // The server names no file, so "file_too_large" falls back to the generic size message.
   if (status === 413 || FILE_LIMIT_DETAILS.includes(detail)) return t("support_files_too_large");

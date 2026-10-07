@@ -1174,3 +1174,16 @@ async def test_my_rating_asks_for_this_contacts_consumed_rating_of_this_ticket()
     (ask,) = op_calls(odoo, "my_rating")
     assert (ask["active_model"], ask["active_id"]) == ("helpdesk.ticket", 31)
     assert ask["goat_partner_id"] == 100
+
+
+async def test_a_staff_email_is_its_own_error() -> None:
+    from core.support.errors import SupportStaffEmail
+
+    def run(kw: dict[str, Any]) -> Any:
+        raise OdooRejected(422, "odoo.exceptions.UserError", "email belongs to staff")
+
+    provider = _provider(base_odoo().on("ir.actions.server", "run", run))
+    with pytest.raises(SupportStaffEmail):
+        await provider.create_contact(
+            name="Lena", email="lena@plan4better.example", lang="en", company_id=None
+        )

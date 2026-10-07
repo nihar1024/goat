@@ -28,6 +28,7 @@ from core.support.errors import (
     SupportInvalid,
     SupportRateLimited,
     SupportRejected,
+    SupportStaffEmail,
     SupportUnavailable,
     TicketNotFound,
 )
@@ -242,9 +243,12 @@ class SupportService:
         contact = await self._contact_for_read(user)
         if contact:
             return contact
-        contact = await self._create_contact(
-            user.name, user.email, user.lang, user.org_id
-        )
+        try:
+            contact = await self._create_contact(
+                user.name, user.email, user.lang, user.org_id
+            )
+        except SupportStaffEmail:
+            raise SupportInvalid("staff_email") from None
         await self._save_contact(user.id, contact)
         return contact
 
@@ -315,9 +319,13 @@ class SupportService:
                 if m.user_id in linked:
                     continue
                 member_user = await self._store.load_user(m.user_id)
-                cid = await self._create_contact(
-                    m.name, verified[m.user_id], member_user.lang, user.org_id
-                )
+                try:
+                    cid = await self._create_contact(
+                        m.name, verified[m.user_id], member_user.lang, user.org_id
+                    )
+                except SupportStaffEmail:
+                    # staff follow tickets in the ticket system itself
+                    raise SupportInvalid("colleague_is_staff") from None
                 await self._save_contact(m.user_id, cid)
                 contacts[m.user_id] = cid
         return contacts

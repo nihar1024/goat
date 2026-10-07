@@ -350,7 +350,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     ODOO_URL: str | None = None
     ODOO_DB: str | None = None
-    # Support tickets (Odoo Helpdesk), through the portal user "GOAT Support Bridge".
+    # Support tickets (Odoo Helpdesk), through the bridge portal user ("GOAT Support Bot").
     ODOO_SUPPORT_API_KEY: str | None = None
     ODOO_SUPPORT_TEAM_ID: int | None = None
     ODOO_SUPPORT_POST_ACTION: str = "GOAT: post message as ticket participant"

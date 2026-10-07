@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from core.support.errors import SupportCompanyRefused
+from core.support.errors import SupportCompanyRefused, SupportStaffEmail
 from core.support.types import (
     AttachmentMeta,
     Follower,
@@ -207,7 +207,7 @@ def base_odoo(
         .on(
             "res.users",
             "read",
-            lambda kw: [{"id": 16, "partner_id": [43402, "GOAT Support Bridge"]}],
+            lambda kw: [{"id": 16, "partner_id": [43402, "GOAT Support Bot"]}],
         )
     )
 
@@ -279,6 +279,7 @@ class FakeProvider:
         self.contact_checks: list[tuple[int, ...]] = []
         self.contacts_exist_error: Exception | None = None
         self.refused_companies: set[int] = set()  # the contact op's parent guard
+        self.staff_emails: set[str] = set()  # the contact op's staff guard
         self.list_calls = 0
 
     def add(
@@ -313,6 +314,8 @@ class FakeProvider:
     ) -> int:
         if company_id in self.refused_companies:
             raise SupportCompanyRefused("invalid parent company")
+        if email.lower() in self.staff_emails:
+            raise SupportStaffEmail("email belongs to staff")
         self.next_contact += 1
         self.contacts[email.lower()] = self.next_contact
         self.created_contacts.append(

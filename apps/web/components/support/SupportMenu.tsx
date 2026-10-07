@@ -86,7 +86,7 @@ const AttentionRow = ({ ticket, onOpen }: { ticket: SupportTicket; onOpen: () =>
         </Box>
       }
       label={ticket.subject}
-      secondary={`#${ticket.ref} · ${supportReplyAgent(ticket, t("support_goat_team"))} · ${when}`}
+      secondary={`#${ticket.ref} · ${supportReplyAgent(ticket) ?? t("support_goat_team")} · ${when}`}
     />
   );
 };

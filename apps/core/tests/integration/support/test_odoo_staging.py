@@ -300,4 +300,4 @@ async def test_the_bridge_knows_its_own_partner(
     )
     assert status == 200, rows
     (row,) = rows
-    assert row["name"] == "GOAT Support Bridge" and row["partner_share"] is True
+    assert row["name"] == "GOAT Support Bot" and row["partner_share"] is True

@@ -922,7 +922,7 @@ async def test_bridge_partner_is_never_a_follower() -> None:
     provider.add(
         make_ticket(),
         followers=(
-            Follower(7, "GOAT Support Bridge", False),
+            Follower(7, "GOAT Support Bot", False),
             Follower(101, "A", False),
         ),
     )
@@ -1342,3 +1342,25 @@ async def test_stage_changes_and_ticket_reads_are_limited() -> None:
     await service.get(me.id, "00031")
     with pytest.raises(SupportRateLimited):
         await service.get(me.id, "00031")
+
+
+# ------------------------------------------------------------- staff emails
+async def test_staff_cannot_open_tickets_from_goat_and_learn_why() -> None:
+    provider, store = FakeProvider(), MemoryStore()
+    me = store.add_user(email="lena@plan4better.example")
+    provider.staff_emails = {"lena@plan4better.example"}
+    with pytest.raises(SupportInvalid, match="staff_email"):
+        await _service(provider, store).create(me.id, _input())
+    assert provider.created == []
+
+
+async def test_a_staff_colleague_is_refused_with_its_own_reason() -> None:
+    provider, store = FakeProvider(), MemoryStore()
+    me = store.add_user(email="m@x.de", contact_id=100)
+    cyrine = store.add_user(email="cyrine@plan4better.example", name="Cyrine")
+    provider.staff_emails = {"cyrine@plan4better.example"}
+    with pytest.raises(SupportInvalid, match="colleague_is_staff"):
+        await _service(provider, store).create(
+            me.id, _input(colleague_ids=(cyrine.id,))
+        )
+    assert provider.created == [] and provider.follower_changes == []

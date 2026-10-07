@@ -75,6 +75,7 @@ from core.templates.snapshot import (
     kinds_for,
     layout_page_mm,
     strip_layout_bindings,
+    with_output_styles,
 )
 
 
@@ -638,6 +639,30 @@ class CRUDTemplate:
     # Create
     # ------------------------------------------------------------------
 
+    async def _export_styles(
+        self, db: AsyncSession, project_id: UUID, workflow_id: UUID
+    ) -> dict[str, dict[str, Any]]:
+        """The style each of the workflow's export nodes' results has in the
+        project: the entry stamped with the workflow and node (see goatlib's
+        ``workflow_export_target``), the most recently changed one first."""
+        rows = await db.execute(
+            text(
+                "SELECT other_properties->'workflow_export'->>'export_node_id' AS node, "
+                "properties "
+                f"FROM {settings.SCHEMA}.layer_project "
+                "WHERE project_id = :p "
+                "AND other_properties->'workflow_export'->>'workflow_id' = :w "
+                "AND properties IS NOT NULL "
+                "ORDER BY updated_at DESC"
+            ),
+            {"p": project_id, "w": str(workflow_id)},
+        )
+        styles: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if row.node and isinstance(row.properties, dict):
+                styles.setdefault(row.node, row.properties)
+        return styles
+
     async def create(
         self, db: AsyncSession, *, user_id: UUID, obj_in: TemplateCreate
     ) -> TemplateRead:
@@ -668,6 +693,9 @@ class CRUDTemplate:
                     )
             inputs = await self._with_layer_flags(db, inputs)
             config = freeze_workflow_config(dict(wf.config or {}), inputs)
+            config = with_output_styles(
+                config, await self._export_styles(db, obj_in.source.project_id, wf.id)
+            )
             if thumbnail_url is None:
                 thumbnail_url = wf.thumbnail_url
         elif payload_kind == "layout":

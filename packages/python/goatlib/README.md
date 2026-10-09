@@ -45,7 +45,7 @@ Run the tests from this directory:
 
 ```bash
 uv run pytest tests/unit         # unit tests (run in CI, advisory)
-uv run pytest tests/integration  # needs local infra (DB, MinIO, …)
+uv run pytest tests/integration  # needs local infra (DB, Garage, …)
 ```
 
 ## GDAL dependency

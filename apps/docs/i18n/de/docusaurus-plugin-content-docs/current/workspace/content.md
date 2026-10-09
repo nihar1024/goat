@@ -59,9 +59,9 @@ Wählen Sie ein Element aus, oder mehrere, um damit zu arbeiten. Das Menü auf e
 
 **Teilen** gewährt Zugriff, während Sie Besitzer bleiben. Das ist sinnvoll, wenn Kolleginnen und Kollegen etwas sehen oder bearbeiten sollen, das weiterhin in Ihrer Verantwortung liegt.
 
-**Rechte übertragen** verschiebt das Element dauerhaft in den Bereich einer anderen Person. Das ist der richtige Weg, wenn ein Projekt tatsächlich den Besitzer wechselt, etwa bei einer Übergabe vor dem Wechsel aus einem Team.
+**Rechte übertragen** verschiebt das Element dauerhaft in den Bereich eines Teams oder der Organisation. Das ist der richtige Weg, wenn ein Projekt tatsächlich den Besitzer wechselt, etwa bei einer Übergabe vor dem Wechsel aus einem Team.
 
-Im Ursprungsbereich bleibt eine **Verknüpfung** zurück, als solche gekennzeichnet und mit dem echten Namen des Elements. Sie ist ein Verweis: Ein Klick darauf führt Sie zum Element an seinem neuen Ort.
+Standardmäßig bleibt im Ursprungsbereich eine **Verknüpfung** zurück, als solche gekennzeichnet und mit dem echten Namen des Elements. Sie ist ein Verweis: Ein Klick darauf führt Sie zum Element an seinem neuen Ort.
 
 :::info Wer was sehen kann
 Ein Element zeigt seine **Sichtbarkeit**: privat, mit einzelnen Personen geteilt, mit einem Team oder der Organisation geteilt, oder öffentlich. Ordner und Datenpakete können mit Teams und der Organisation geteilt werden.
@@ -69,7 +69,7 @@ Ein Element zeigt seine **Sichtbarkeit**: privat, mit einzelnen Personen geteilt
 
 ### Papierkorb und Wiederherstellen
 
-Gelöschte Inhalte verschwinden nicht sofort: Sie landen im **Papierkorb**, aus dem der Besitzer sie **Wiederherstellen** kann. Sie bleiben dort, bis sie endgültig entfernt werden. Ein versehentliches Löschen lässt sich also rückgängig machen.
+Gelöschte Inhalte verschwinden nicht sofort: Sie landen im **Papierkorb**, aus dem der Besitzer sie **Wiederherstellen** kann. Sie bleiben dort **30 Tage** lang und werden dann endgültig entfernt. Ein versehentliches Löschen lässt sich also rückgängig machen. Wo Sie den Papierkorb finden, steht unter [Papierkorb](../sharing/sharing.md#papierkorb).
 
 ## Inhalte hinzufügen
 
@@ -77,7 +77,7 @@ Gelöschte Inhalte verschwinden nicht sofort: Sie landen im **Papierkorb**, aus 
 
 - **Neuer Ordner**, um Inhalte so zu gruppieren, wie es Ihnen passt
 - **Leeres Projekt** oder **Projekt importieren**
-- **Datensatz**, um eine Datei von Ihrem Gerät hochzuladen (GeoPackage, GeoJSON, Shapefile, KML, CSV, XLSX, Parquet sowie GTFS- und Overture-Archive)
+- **Datensatz hochladen**, um eine Datei von Ihrem Gerät hochzuladen (GeoPackage, GeoJSON, Shapefile, KML, CSV, XLSX, Parquet sowie [GTFS](https://www.plan4better.de/de/glossar/gtfs)- und [Overture](https://www.plan4better.de/de/glossar/overture-maps)-Archive)
 - **Dienst verbinden**, um einen externen Layer per URL hinzuzufügen (WFS, WMS, WMTS, XYZ-Kacheln oder COG)
 - **Dokument hochladen**, für eine Datei, die zur Arbeit gehört, ohne selbst Daten zu sein
 
@@ -141,7 +141,7 @@ GOAT unterstützt mehrere Dateiformate zum Hochladen: **GeoPackage**, **GeoJSON*
 
 <div class="step">
   <div class="step-number">2</div>
-  <div class="content">Klicken Sie auf <code>Neu</code> und wählen Sie <code>Datensatz</code>.</div>
+  <div class="content">Klicken Sie auf <code>Neu</code> und wählen Sie <code>Datensatz hochladen</code>.</div>
 </div>
 
 <div class="step">

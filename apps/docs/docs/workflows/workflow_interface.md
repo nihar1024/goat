@@ -23,32 +23,30 @@ The visual canvas interface makes complex spatial analysis automation accessible
 The workflow interface consists of two main panels and the workflow canvas, providing an intuitive workspace for visual workflow construction.
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workflows/workflows_interface.webp').default} alt="Map Interface Overview" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workflows/workflows_canvas-bars.webp').default} alt="Map Interface Overview" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 ### Workflow Management and Project Layers panel
 This panel is located on the left and it is divided into two sections:
 
-#### Workflows Management
+**Workflow Management**
 
 - **New**: Click <code>+ New</code> and choose <code>From scratch</code> or <code>From template</code> to create new analytical pipelines
-
 - **Workflow List**: Manage existing workflows with options to rename, duplicate, and delete
 
-#### Project Layers
+**Project Layers**
 
 - **Layer Tree**: Read-only display of project's data layers. You can drag and drop them onto the canvas to build the workflow.
-
 - **Add a Layer**: Add new layers to the project to use them in the workflow and map mode.
 
 ### Workflow Canvas
 
-#### Canvas Workspace
+**Canvas Workspace**
 
 The canvas workspace is where you can drag and drop nodes, zoom, pan, and select elements. It contains several control areas:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-  <img src={require('/img/workflows/workflows_canvas-bars.webp').default} alt="Map Interface Overview" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
+  <img src={require('/img/workflows/workflows_interface.webp').default} alt="Map Interface Overview" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
 **Canvas View Bar**: Located in the bottom left corner of the canvas:
@@ -67,7 +65,7 @@ The canvas workspace is where you can drag and drop nodes, zoom, pan, and select
 
 **Minimap**: Located in the bottom right corner of the canvas, providing an overview navigator for complex workflows.
 
-**Data View Controls**: Located at the bottom of the canvas. Select a node to activate the panel — it shows the data of that node's layer:
+**Data View Controls**: Located at the bottom of the canvas. Select a node to activate the panel. It shows the data of that node's layer:
 - <code>Table</code>: Opens the attribute table of the selected node's layer
 - <code>Map</code>: Opens a map preview of the selected node's layer (only available if the layer has geometry)
 
@@ -78,47 +76,42 @@ The right panel changes depending if there is a node selected or not. If no node
   <img src={require('/img/workflows/workflow_right-panel.webp').default} alt="Map Interface Overview" style={{ maxHeight: "auto", maxWidth: "auto", objectFit: "cover"}}/>
 </div> 
 
-#### Tools and History panel
+**Tools and History panel**
 
 **Tools Tab**
 
 This tab contains categorized tools available for workflow construction, similar to the Map Mode Toolbox. Drag and drop tools onto the canvas to add them to your workflow. The tools are organized into the following categories:
 
 - **Data I/O**
-  - <code>+ Add Dataset</code>: Create dataset nodes
-  - <code>Save as Dataset</code>: Save workflow results as permanent datasets. Configure the **Dataset name**, toggle **Add to project** to automatically add the result to the project layer list, and enable **Overwrite on re-run** to replace the previously exported dataset each time the workflow runs instead of creating a new one.
+  - <code>+ Add dataset</code>: Create dataset nodes
+  - <code>Save as dataset</code>: Save workflow results as permanent datasets. Configure the **Dataset name**, toggle **Add to project** to automatically add the result to the project layer list, and enable **Overwrite on re-run** to replace the previously exported dataset each time the workflow runs instead of creating a new one.
 
 :::tip Good practice
-Give each **Save as Dataset** node a descriptive name and enable **Overwrite on re-run** when running the same workflow repeatedly — this keeps your project clean by avoiding duplicate layers after each run.
+Give each **Save as dataset** node a descriptive name and enable **Overwrite on re-run** when running the same workflow repeatedly. This keeps your project clean by avoiding duplicate layers after each run.
 :::
 
-- **Accessibility Indicators**
-  - All tools available in the [Accessibility Indicators](../category/accessibility-indicators) section of the Toolbox
-
-- **Geoanalysis**
-  - All tools available in the [Geoanalysis](../category/geoanalysis) section of the Toolbox
-
-- **Geoprocessing**
-  - All tools available in the [Geoprocessing](../category/geoprocessing) section of the Toolbox
-  
+- **Accessibility Indicators**: All tools available in the [Accessibility Indicators](../category/accessibility-indicators) section of the Toolbox
+- **Geoanalysis**: All tools available in the [Geoanalysis](../category/geoanalysis) section of the Toolbox
+- **Geoprocessing**: All tools available in the [Geoprocessing](../category/geoprocessing) section of the Toolbox
 - **Data Management**
   - [Join](../toolbox/data_management/join.md), [Merge](../toolbox/data_management/merge.md), and other data manipulation tools
   - [Custom SQL](custom_sql.md): Advanced data processing with SQL queries
-
-- **Control**
-  - <code>Conditional</code>: Add a branching node that routes the layer to a <strong>True</strong> or <strong>False</strong> path based on defined conditions. See [Conditional](if_clause).
+- **Control**: Add a <code>Conditional</code> node that routes the layer to a <strong>True</strong> or <strong>False</strong> path based on defined conditions. See [Conditional](if_clause).
 
 
 **History Tab**
+
 Here you can see:
 - **Execution Log**: Previous workflow runs with timestamps and status
 - **Execution Details**: Duration, success/failure status, and error messages
 - **Result Access**: Links to previous workflow outputs
 
-#### Configuration Panel (Tool Node Selected)
+**Configuration Panel (Tool Node Selected)**
+
 When a tool node is selected, the right panel displays the **Tool Configuration** panel. Configure all tool-specific parameters for the selected analysis. You can also use [workflow variables](variables.md) within parameter fields for dynamic values.
 
-#### Dataset Panel (Dataset Node Selected)
+**Dataset Panel (Dataset Node Selected)**
+
 When a **dataset node** is selected, the dataset panel appears with two available tabs:
 
 **Source Tab**: View metadata from the data source and access table and map views. You can also change the dataset assigned to the node from this tab.
@@ -161,7 +154,7 @@ Begin with simple 2-3 node workflows to understand the interface, then gradually
 
 <div class="step">
   <div class="step-number">1</div>
-  <div class="content"><strong>Add Data Sources</strong>: Add data to your workflow by either dragging <code>+ Add Dataset</code> from the right panel's Tools tab onto the canvas, or by dragging layers directly from the Project Layers panel on the left. Configure the dataset node to reference your input data layers.</div>
+  <div class="content"><strong>Add Data Sources</strong>: Add data to your workflow by either dragging <code>+ Add dataset</code> from the right panel's Tools tab onto the canvas, or by dragging layers directly from the Project Layers panel on the left. Configure the dataset node to reference your input data layers.</div>
 </div>
 
 <div class="step">
@@ -206,19 +199,26 @@ Begin with simple 2-3 node workflows to understand the interface, then gradually
   <div class="content"><strong>Save Results</strong>: Add and configure export nodes to save important results as permanent datasets in your project.</div>
 </div>
 
-### Results
-
-Successfully using the workflow interface provides:
-
-- **Reproducible Analysis**: Documented analytical processes that can be rerun with different data or parameters
-- **Efficient Workflow**: Streamlined multi-step analysis execution with automatic dependency management  
-- **Quality Control**: Validation capabilities at each step of complex analytical pipelines
-- **Collaborative Documentation**: Visual representation of methodology for team sharing and knowledge transfer
-- **Advanced Capabilities**: Access to specialized tools like [Custom SQL](custom_sql.md) and [workflow variables](variables.md) for sophisticated analysis
-
 :::info Auto-Save Feature
 Workflows automatically save changes as you build them. The system preserves all configurations, connections, and execution states.
 :::
+
+### Start from a template
+
+<div class="step">
+  <div class="step-number">1</div>
+  <div class="content">In the <code>Workflows</code> panel, click <code>From template</code> to open the template browser, filtered to workflow templates.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">2</div>
+  <div class="content">Search or browse, select a template to <strong>preview</strong> it, and click <code>Use template</code>.</div>
+</div>
+
+<div class="step">
+  <div class="step-number">3</div>
+  <div class="content">The workflow is added to your project. Where the template left an input open, pick a layer once it is in the project.</div>
+</div>
 
 ### Save a workflow as a template
 
@@ -252,23 +252,6 @@ Once a workflow is set up, you can save it as a **template** so it can be reused
 :::info Update instead of duplicate
 If a template was already saved from this workflow, you can **update it from the source** with the current version instead of creating a duplicate. Because the inputs are part of the saved snapshot, use <code>Update template from source</code> to change them.
 :::
-
-### Start from a template
-
-<div class="step">
-  <div class="step-number">1</div>
-  <div class="content">In the <code>Workflows</code> panel, click <code>From template</code> to open the template browser, filtered to workflow templates.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">2</div>
-  <div class="content">Search or browse, select a template to <strong>preview</strong> it, and click <code>Use template</code>.</div>
-</div>
-
-<div class="step">
-  <div class="step-number">3</div>
-  <div class="content">The workflow is added to your project. Where the template left an input open, pick a layer once it is in the project.</div>
-</div>
 
 ## 4. Running workflows from the Map view
 

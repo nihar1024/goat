@@ -514,6 +514,23 @@ def convert_filter_to_cql(filter_config: dict) -> dict | None:
     return {"op": logical_op, "args": cql_args}
 
 
+def export_style(
+    export_data: dict[str, Any], source_result: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """The style an export's result gets when it becomes a new layer.
+
+    A template remembers how its author styled each export's result
+    (``outputStyle``, see core's ``with_output_styles``); that look wins
+    over the source tool's default. An export that overwrites an earlier
+    result keeps that layer's own style either way (finalize_layer).
+    """
+    remembered = export_data.get("outputStyle")
+    if isinstance(remembered, dict) and remembered:
+        return remembered
+    source_properties = (source_result or {}).get("properties")
+    return source_properties if isinstance(source_properties, dict) else None
+
+
 def build_tool_inputs(
     node: dict,
     edges: list[dict],
@@ -1102,10 +1119,9 @@ def main(
                     "overwrite_previous": overwrite_previous,
                 }
 
-                # Pass style properties from the source tool's result
-                source_properties = source_result.get("properties")
-                if source_properties:
-                    finalize_inputs["properties"] = source_properties
+                properties = export_style(export_data, source_result)
+                if properties:
+                    finalize_inputs["properties"] = properties
 
                 job_id, result = run_tool_node(
                     export_node_id, "finalize_layer", finalize_inputs

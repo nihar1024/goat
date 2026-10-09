@@ -28,6 +28,7 @@ from .report_layout import ReportLayout
 from .resource import Resource
 from .role import Role
 from .space import Space
+from .support import SupportTicketRead
 from .system_setting import SystemSetting
 from .team import Team
 from .template import Template

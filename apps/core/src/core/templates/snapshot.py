@@ -277,6 +277,28 @@ def freeze_workflow_config(
     return result
 
 
+def with_output_styles(
+    config: dict[str, Any], styles: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Give each export node the style its result has in the source project.
+
+    ``styles`` maps an export node's id to the style of the project entry
+    showing that node's result (the author's styling after a run). The
+    runner applies ``outputStyle`` when the export creates a new layer, so a
+    template's users see the author's look on their first run; an export
+    that overwrites an earlier result keeps that layer's own style. Nodes
+    whose export never ran get nothing, so such configs stay as they were.
+    """
+    result = copy.deepcopy(config)
+    for node in result.get("nodes", []):
+        data = node.get("data")
+        if isinstance(data, dict) and data.get("type") == "export":
+            style = styles.get(str(node.get("id")))
+            if style:
+                data["outputStyle"] = style
+    return result
+
+
 def bind_workflow_config(
     frozen: dict[str, Any], bindings: dict[str, tuple[UUID | None, int | None]]
 ) -> tuple[dict[str, Any], list[str]]:

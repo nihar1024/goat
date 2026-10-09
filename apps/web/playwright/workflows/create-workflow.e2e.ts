@@ -1,6 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { type Page, expect, test } from "@playwright/test";
 
 import { deleteContentItem } from "../fixtures/content";
+
+/** The Workflows panel's "New" button opens a menu; "From scratch" creates
+ * an empty workflow and opens its canvas. */
+const newWorkflow = async (page: Page) => {
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByRole("menuitem", { name: "From scratch" }).click();
+};
 
 test.describe("Workflow Management", () => {
   // Set by beforeEach, read by afterEach — safe as a describe-scoped
@@ -14,13 +21,13 @@ test.describe("Workflow Management", () => {
     // behind its "Add new" menu instead.
     await page.goto("/content");
     await page.getByRole("button", { name: "Add new" }).click();
-    await page.getByRole("menuitem", { name: "New Project" }).click();
-    await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Blank project" }).click();
+    await expect(page.getByRole("dialog").getByText("New project", { exact: true })).toBeVisible();
 
     // The dialog asks for a name and nothing else — the destination is the
     // folder being browsed.
     projectName = `E2E Workflow Test ${Date.now()}`;
-    await page.getByLabel("New Project").fill(projectName);
+    await page.getByLabel("New project").fill(projectName);
     await page.getByRole("button", { name: "Create project" }).click();
 
     await expect(page).toHaveURL(/\/map\//, { timeout: 30000 });
@@ -36,10 +43,9 @@ test.describe("Workflow Management", () => {
 
     // Should see workflows panel
     await expect(page.getByRole("heading", { name: "Workflows" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Add Workflow" })).toBeVisible();
 
-    // Create a new workflow
-    await page.getByRole("button", { name: "Add Workflow" }).click();
+    // Create a new workflow: "New" opens a menu, "From scratch" starts empty.
+    await newWorkflow(page);
 
     // Should see the workflow canvas with toolbar
     await expect(page.getByRole("button", { name: "Run" })).toBeVisible({ timeout: 5000 });
@@ -52,79 +58,22 @@ test.describe("Workflow Management", () => {
     await expect(page.getByText("Accessibility Indicators")).toBeVisible();
   });
 
-  // Skip: ReactFlow drag-and-drop uses a ref (dragDataRef) set by React's onDragStart
-  // which doesn't trigger from synthetic DOM DragEvents. Use codegen/manual recording instead.
-  test.skip("add tool nodes to workflow via drag and drop", async ({ page }) => {
+  test("add a tool node by dragging it onto the canvas", async ({ page }) => {
     await page.getByText("Workflows").click();
-    await page.getByRole("button", { name: "Add Workflow" }).click();
+    await newWorkflow(page);
     await expect(page.getByRole("button", { name: "Run" })).toBeVisible({ timeout: 5000 });
 
-    // Get the canvas area and the source tool element
-    const canvas = page.locator(".react-flow");
-    await expect(canvas).toBeVisible();
-    const canvasBounds = await canvas.boundingBox();
-    expect(canvasBounds).toBeTruthy();
-
-    const bufferTool = page.getByText("Buffer").first();
-    const toolBounds = await bufferTool.boundingBox();
-    expect(toolBounds).toBeTruthy();
-
-    const startX = toolBounds!.x + toolBounds!.width / 2;
-    const startY = toolBounds!.y + toolBounds!.height / 2;
-    const endX = canvasBounds!.x + canvasBounds!.width / 2;
-    const endY = canvasBounds!.y + canvasBounds!.height / 2;
-
-    // ReactFlow requires custom dataTransfer data during drag/drop.
-    // We use page.evaluate to create proper DragEvent with DataTransfer.
-    await page.evaluate(
-      ({ sx, sy, ex, ey }) => {
-        const source = document.elementFromPoint(sx, sy);
-        const target = document.elementFromPoint(ex, ey);
-        if (!source || !target) return;
-
-        // Create a DataTransfer with the required data
-        const dt = new DataTransfer();
-        dt.setData("application/reactflow", "tool");
-
-        // Dispatch dragstart on the tool
-        source.dispatchEvent(
-          new DragEvent("dragstart", { bubbles: true, dataTransfer: dt })
-        );
-
-        // Dispatch dragover on the canvas
-        target.dispatchEvent(
-          new DragEvent("dragover", {
-            bubbles: true,
-            cancelable: true,
-            clientX: ex,
-            clientY: ey,
-            dataTransfer: dt,
-          })
-        );
-
-        // Dispatch drop on the canvas
-        target.dispatchEvent(
-          new DragEvent("drop", {
-            bubbles: true,
-            cancelable: true,
-            clientX: ex,
-            clientY: ey,
-            dataTransfer: dt,
-          })
-        );
-      },
-      { sx: startX, sy: startY, ex: endX, ey: endY }
-    );
-
-    // Verify a Buffer node appeared on the canvas
-    await expect(
-      page.locator('[roledescription="node"]').filter({ hasText: "Buffer" })
-    ).toBeVisible({ timeout: 10000 });
+    // A real pointer drag: the palette reads what is dragged in React's
+    // onDragStart, which synthetic DragEvents never reach.
+    await page.getByText("Buffer", { exact: true }).first().dragTo(page.locator(".react-flow__pane"));
+    await expect(page.locator(".react-flow__node").filter({ hasText: "Buffer" })).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("tools panel search works", async ({ page }) => {
     await page.getByText("Workflows").click();
-    await page.getByRole("button", { name: "Add Workflow" }).click();
+    await newWorkflow(page);
     await expect(page.getByRole("button", { name: "Run" })).toBeVisible({ timeout: 5000 });
 
     // Search for a tool

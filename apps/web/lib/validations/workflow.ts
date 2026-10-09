@@ -7,14 +7,7 @@ import * as z from "zod";
 /**
  * Status of a workflow node during execution
  */
-export const nodeStatusSchema = z.enum([
-  "idle",
-  "pending",
-  "running",
-  "completed",
-  "error",
-  "skipped",
-]);
+export const nodeStatusSchema = z.enum(["idle", "pending", "running", "completed", "error", "skipped"]);
 
 export type NodeStatus = z.infer<typeof nodeStatusSchema>;
 
@@ -99,6 +92,9 @@ export const exportNodeDataSchema = z.object({
   // Execution state
   status: nodeStatusSchema.default("idle"),
   exportedLayerId: z.string().uuid().optional(), // Resulting permanent layer ID after export
+  // The author's style for the result, from a workflow template: applied when
+  // the export creates a new layer; an overwritten result keeps its own style
+  outputStyle: z.record(z.unknown()).optional(),
   jobId: z.string().optional(), // Windmill job ID during finalization
   error: z.string().optional(), // Error message if status is "error"
 });

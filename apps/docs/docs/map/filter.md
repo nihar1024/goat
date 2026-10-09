@@ -107,10 +107,8 @@ For the expressions **"Includes"** and **"Excludes"**, multiple values can be se
 
 <Tabs>
   <TabItem value="Map extent" label="Map extent" default className="tabItemBox">
-<div class="step">
-  <div class="step-number">5</div>
-  <div class="content">With <code>Map Extent</code>, the layer <strong>automatically crops to the current map extent</strong>. To change the filter, zoom in/out and click the refresh icon (<code>Use current map extent</code>).</div>
-</div>
+
+With <code>Map Extent</code>, the layer <strong>automatically crops to the current map extent</strong>. To change the filter, zoom in/out and click the refresh icon (<code>Use current map extent</code>).
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
 
@@ -150,7 +148,7 @@ This feature is currently under development. 🧑🏻‍💻
 
 **Remove whole filter**: Click <code>Clear Filter</code> at the bottom of the <code>Filter</code> tab to **remove all filters**.
 
-### Save as New Layer
+### Save as new layer
 
-Once the filter is applied, click <code>Save as New Layer</code> at the bottom of the <code>Filter</code> tab to **save the filtered result as a new dataset** in your workspace. This allows you to work with the filtered data independently.
+Once the filter is applied, click <code>Save as new layer</code> at the bottom of the <code>Filter</code> tab to **save the filtered result as a new dataset** in your workspace. This allows you to work with the filtered data independently.
 

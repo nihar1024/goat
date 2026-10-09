@@ -17,7 +17,7 @@ from core.db.models.invitation import Invitation, InvitationStatusEnum, Invitati
 from core.db.models.organization import OrganizationRolesEnum
 from core.db.models.user import User
 from core.deps import keycloak as keycloak_deps
-from core.deps.auth import auth_z, is_superuser, user_token
+from core.deps.auth import auth_z, require_superuser, token_is_superuser, user_token
 from core.endpoints.deps import get_db
 from core.schemas.email import EmailTemplateContent
 from core.schemas.invitations import (
@@ -45,7 +45,7 @@ router = APIRouter()
     "",
     summary="Get all organizations",
     response_model=Page[OrganizationRead],
-    dependencies=[Depends(is_superuser)],
+    dependencies=[Depends(require_superuser)],
 )
 async def get_organizations(
     *,
@@ -86,7 +86,6 @@ async def create_organization(
     *,
     db: AsyncSession = Depends(get_db),
     user_token: dict = Depends(user_token),
-    user_id: str | None = None,
     organization: OrganizationCreate = Body(
         ..., examples=[request_examples["organization"]["create"]]
     ),
@@ -95,14 +94,14 @@ async def create_organization(
     """
     Create a new organization
     """
-    user_id = user_id or user_token["sub"]
+    user_id = user_token["sub"]  # always the caller
     db_user = await crud_user.get(db=db, id=user_id)
     if db_user and db_user.organization_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User has already an organization",
         )
-    _is_superuser = is_superuser(user_token, False)
+    _is_superuser = token_is_superuser(user_token)
     organization = await crud_organization.create_organization(
         db=db,
         organization_obj=organization,
@@ -123,7 +122,6 @@ async def update_organization(
     *,
     db: AsyncSession = Depends(get_db),
     user_token: dict = Depends(user_token),
-    user_id: str | None = None,
     organization_id: str,
     organization: OrganizationUpdate = Body(
         ..., examples=[request_examples["organization"]["update"]]
@@ -132,7 +130,6 @@ async def update_organization(
     """
     Update an organization
     """
-    user_id = user_id or user_token["sub"]
     db_obj = await crud_organization.get(db=db, id=organization_id)
     if not db_obj:
         raise HTTPException(
@@ -154,13 +151,11 @@ async def delete_organization(
     *,
     db: AsyncSession = Depends(get_db),
     user_token: dict = Depends(user_token),
-    user_id: str | None = None,
     organization_id: str,
 ) -> None:
     """
     Delete an organization
     """
-    user_id = user_id or user_token["sub"]
     organization_obj = await crud_organization.get(db=db, id=organization_id)
     if not organization_obj:
         raise HTTPException(
@@ -287,7 +282,6 @@ async def invite_user_to_organization(
     db: AsyncSession = Depends(get_db),
     organization_id: str,
     user_token: dict = Depends(user_token),
-    user_id: str | None = None,
     payload: InvitationOrgCreate = Body(
         ..., examples=[request_examples["organization"]["invite"]]
     ),
@@ -296,7 +290,7 @@ async def invite_user_to_organization(
     Add a user to an organization
     """
     # - check if email is already registered and has another org
-    user_id = user_id or user_token["sub"]
+    user_id = user_token["sub"]  # always the caller
     invited_user = await crud_user.get_by_key(
         db=db, key="email", value=payload.user_email
     )
@@ -413,7 +407,6 @@ async def update_organization_invitation(
     db: AsyncSession = Depends(get_db),
     organization_id: str,
     user_token: dict = Depends(user_token),
-    user_id: str | None = None,
     invitation_id: str,
     payload: InvitationOrgUpdate = Body(
         ..., examples=[request_examples["organization"]["invite_update"]]
@@ -422,7 +415,6 @@ async def update_organization_invitation(
     """
     Update an invitation
     """
-    user_id = user_id or user_token["sub"]
 
     invitation = await crud_invitation.get(db=db, id=invitation_id)
 

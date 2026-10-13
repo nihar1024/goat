@@ -91,6 +91,10 @@ async def trial_lifecycle(
         organization.suspended = True
         await db.commit()
 
+    # With the Odoo sync on, Odoo's trial campaign sends the reminders; GOAT
+    # sends only the account email that the organization is suspended.
+    if stage == "expiring" and settings.accounts_sync_enabled:
+        return {"status": "ok", "stage": stage}
     contact = await crud_user.get(db=db, id=organization.contact_user_id)
     if contact and contact.email:
         if stage == "expiring":

@@ -11,6 +11,7 @@ from keycloak.exceptions import KeycloakError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.accounts import report_join
 from core.core.config import settings
 from core.crud.crud_invitation import invitation as crud_invitation
 from core.crud.crud_onboarding import onboarding as crud_onboarding
@@ -137,6 +138,7 @@ async def accept_invitation(
         await crud_role.remove_organization_roles(db, user.id)
         db.add(UserRoleLink(role=roles[0], user=user))
         await db.commit()
+        report_join(user.id, organization_obj, invitation.payload["role"])
 
     await crud_invitation.update(
         db=db,

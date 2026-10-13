@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 from sqlalchemy.orm.attributes import flag_modified
 
+from core.accounts import report_trial
 from core.core.config import settings
 from core.crud.base import CRUDBase
 from core.crud.crud_folder import folder as crud_folder
@@ -131,6 +132,16 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         await db.commit()
         assert organization.id is not None
         await crud_space.ensure_organization(db, organization.id)
+
+        if settings.accounts_sync_enabled:
+            # Odoo's trial campaign sends the welcome and everything after it.
+            report_trial(organization, user.id)
+            await db.refresh(organization)
+            return organization
+        if not saas_mode:
+            # Self-hosted: no trial, no "free demo" email.
+            await db.refresh(organization)
+            return organization
 
         # Send email
         email_content = EmailTemplateContent(

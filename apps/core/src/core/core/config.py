@@ -394,12 +394,17 @@ class Settings(BaseSettings):
     ODOO_SUPPORT_API_KEY: str | None = None
     ODOO_SUPPORT_TEAM_ID: int | None = None
     ODOO_SUPPORT_POST_ACTION: str = "GOAT: post message as ticket participant"
+    # Sign-ups, organizations and trials as Odoo contacts (billing only), through
+    # the bridge portal user ("GOAT Accounts Bot") of the goat_accounts module.
+    ODOO_BILLING_API_KEY: str | None = None
+    ODOO_ACCOUNTS_ACTION: str = "GOAT: accounts"
 
     @field_validator(
         "ODOO_URL",
         "ODOO_DB",
         "ODOO_SUPPORT_API_KEY",
         "ODOO_SUPPORT_TEAM_ID",
+        "ODOO_BILLING_API_KEY",
         mode="before",
     )
     @classmethod
@@ -412,6 +417,12 @@ class Settings(BaseSettings):
         subscriptions. Off on self-hosted installs: organizations get the
         DEFAULT_QUOTA_* values and nothing is metered. Independent of support."""
         return all((self.ODOO_URL, self.ODOO_DB, self.ODOO_WEBHOOK_SECRET))
+
+    @property
+    def accounts_sync_enabled(self) -> bool:
+        """Billing on and the bridge's key set: sign-ups and organizations are
+        reported to Odoo (core.accounts)."""
+        return self.billing_enabled and bool(self.ODOO_BILLING_API_KEY)
 
     @property
     def support_enabled(self) -> bool:

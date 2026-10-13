@@ -23,7 +23,7 @@ import AuthContainer from "@p4b/ui/components/AuthContainer";
 import AuthLayout from "@p4b/ui/components/AuthLayout";
 
 import { createOrganization } from "@/lib/api/organizations";
-import { useOrganizationCreation } from "@/lib/api/users";
+import { useFeatures, useOrganizationCreation } from "@/lib/api/users";
 import { ORG_DEFAULT_AVATAR } from "@/lib/constants";
 import { postOrganizationSchema } from "@/lib/validations/organization";
 
@@ -44,6 +44,8 @@ export default function OrganizationOnBoarding() {
   // an invitation. Without an answer the form is shown; core refuses the
   // creation itself.
   const { organizationCreation, isError: creationError } = useOrganizationCreation();
+  // Trial and newsletter belong to the SaaS (billing on); self-hosted shows neither.
+  const { features } = useFeatures();
   const mayCreate = organizationCreation?.allowed === true || !!creationError;
 
   useEffect(() => {
@@ -129,21 +131,25 @@ export default function OrganizationOnBoarding() {
                   label={t("common:organization_type_label")}
                 />
 
-                <Controller
-                  name="newsletter_subscribe"
-                  control={control}
-                  defaultValue={false}
-                  render={({ field: { onChange, value } }) => {
-                    return (
-                      <FormControlLabel
-                        control={<Checkbox sx={{ ml: -3 }} onChange={onChange} checked={value} />}
-                        label={t("common:organization_subscribe_to_newsletter")}
-                      />
-                    );
-                  }}
-                />
+                {features?.billing && (
+                  <Controller
+                    name="newsletter_subscribe"
+                    control={control}
+                    defaultValue={false}
+                    render={({ field: { onChange, value } }) => {
+                      return (
+                        <FormControlLabel
+                          control={<Checkbox sx={{ ml: -3 }} onChange={onChange} checked={value} />}
+                          label={t("common:organization_subscribe_to_newsletter")}
+                        />
+                      );
+                    }}
+                  />
+                )}
                 <Stack spacing={3}>
-                  <Typography variant="body1">{t("common:organization_onboarding_trial_note")}</Typography>
+                  {features?.billing && (
+                    <Typography variant="body1">{t("common:organization_onboarding_trial_note")}</Typography>
+                  )}
                   <Typography variant="body2">{t("common:organization_accept_terms")}</Typography>
                 </Stack>
               </Stack>

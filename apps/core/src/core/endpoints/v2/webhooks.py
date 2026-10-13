@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,12 +7,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.core.config import settings
 from core.crud.crud_organization import organization as crud_organization
 from core.crud.crud_user import user as crud_user
+from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db
 from core.schemas.email import EmailTemplateContent
 from core.utils.email import send_email
 from core.utils.i18n import trans as _
 
-router = APIRouter()
+
+def require_webhook_secret(
+    x_webhook_secret: str | None = Header(default=None),
+) -> None:
+    """The shared secret Odoo's side sends, compared in constant time."""
+    expected = settings.ODOO_WEBHOOK_SECRET or ""
+    if not x_webhook_secret or not hmac.compare_digest(
+        x_webhook_secret.encode(), expected.encode()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="bad secret"
+        )
+
+
+# Billing off (self-hosted): the webhooks do not exist (404).
+router = APIRouter(
+    dependencies=[Depends(require_billing_enabled), Depends(require_webhook_secret)]
+)
 
 
 @router.post("/odoo/entitlement", response_class=JSONResponse)
@@ -18,16 +38,7 @@ async def odoo_entitlement(
     *,
     db: AsyncSession = Depends(get_db),
     payload: dict,
-    x_webhook_secret: str | None = Header(default=None),
 ) -> dict:
-    if (
-        not settings.ODOO_WEBHOOK_SECRET
-        or x_webhook_secret != settings.ODOO_WEBHOOK_SECRET
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="bad secret"
-        )
-
     org_id = payload.get("organization_id")
     organization = await crud_organization.get(db=db, id=org_id) if org_id else None
     if organization is None:
@@ -55,7 +66,6 @@ async def trial_lifecycle(
     *,
     db: AsyncSession = Depends(get_db),
     payload: dict,
-    x_webhook_secret: str | None = Header(default=None),
 ) -> dict:
     """GOAT-managed trial lifecycle, driven by the trial_expiry task.
 
@@ -63,14 +73,6 @@ async def trial_lifecycle(
     The org stays on_trial either way — conversion (an entitlement push from
     a real subscription) is what ends the trial.
     """
-    if (
-        not settings.ODOO_WEBHOOK_SECRET
-        or x_webhook_secret != settings.ODOO_WEBHOOK_SECRET
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="bad secret"
-        )
-
     stage = payload.get("stage")
     if stage not in ("expiring", "expired"):
         raise HTTPException(

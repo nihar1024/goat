@@ -334,7 +334,8 @@ class Settings(BaseSettings):
         return self.SMTP_FROM or self.SMTP_USER
 
     # ------------------------------------------------------------------
-    # Billing / Odoo
+    # Billing / Odoo: shared secret of the entitlement and trial webhooks.
+    # With ODOO_URL and ODOO_DB it switches billing on (`billing_enabled`).
     # ------------------------------------------------------------------
     ODOO_WEBHOOK_SECRET: str | None = None
 
@@ -404,6 +405,13 @@ class Settings(BaseSettings):
     @classmethod
     def _odoo_empty_is_unset(cls: type["Settings"], value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @property
+    def billing_enabled(self) -> bool:
+        """Trials, credits and usage metering, quotas pushed from Odoo
+        subscriptions. Off on self-hosted installs: organizations get the
+        DEFAULT_QUOTA_* values and nothing is metered. Independent of support."""
+        return all((self.ODOO_URL, self.ODOO_DB, self.ODOO_WEBHOOK_SECRET))
 
     @property
     def support_enabled(self) -> bool:

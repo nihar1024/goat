@@ -163,9 +163,10 @@ app.add_middleware(
 # responses level 9 costs ~2x the CPU for ~4% smaller output.
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
-# Egress metering for credits: counts response bytes per organization and
-# layer in Redis; the traffic_rollup task charges them.
-app.add_middleware(CreditMeteringMiddleware)
+# Egress metering for credits (billing on only): counts response bytes per
+# organization and layer in Redis; the traffic_rollup task charges them.
+if settings.BILLING_ENABLED:
+    app.add_middleware(CreditMeteringMiddleware)
 
 # Include routers
 app.include_router(metadata_router)

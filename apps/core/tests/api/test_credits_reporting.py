@@ -2,7 +2,13 @@ import pytest
 from core.core.config import settings
 from core.db.models.credit_usage import CreditUsage
 from core.db.models.user import User
+from tests.billing import enable_billing
 from tests.utils import make_organization
+
+
+@pytest.fixture(autouse=True)
+def billing_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    enable_billing(monkeypatch)
 
 
 async def _org_with_default_user(db_session):

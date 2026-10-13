@@ -1,11 +1,12 @@
 import pytest
 from core.core.config import settings
+from tests.billing import enable_billing
 from tests.utils import make_organization
 
 
 @pytest.mark.asyncio
 async def test_odoo_entitlement_applies_and_resets(client, db_session, monkeypatch):
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    enable_billing(monkeypatch)
     org = make_organization(total_credits=1000, used_credits=900)
     db_session.add(org)
     await db_session.commit()
@@ -31,7 +32,7 @@ async def test_odoo_entitlement_applies_and_resets(client, db_session, monkeypat
 
 @pytest.mark.asyncio
 async def test_trial_webhook_expired_suspends(client, db_session, monkeypatch):
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    enable_billing(monkeypatch)
     org = make_organization(on_trial=True)
     db_session.add(org)
     await db_session.commit()
@@ -50,7 +51,7 @@ async def test_trial_webhook_expired_suspends(client, db_session, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_trial_webhook_expiring_does_not_suspend(client, db_session, monkeypatch):
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    enable_billing(monkeypatch)
     org = make_organization(on_trial=True)
     db_session.add(org)
     await db_session.commit()
@@ -68,7 +69,7 @@ async def test_trial_webhook_expiring_does_not_suspend(client, db_session, monke
 
 @pytest.mark.asyncio
 async def test_trial_webhook_rejects_unknown_stage(client, monkeypatch):
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    enable_billing(monkeypatch)
     resp = await client.post(
         f"{settings.API_V2_STR}/webhooks/trial",
         headers={"X-Webhook-Secret": "shh"},
@@ -79,10 +80,46 @@ async def test_trial_webhook_rejects_unknown_stage(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_odoo_entitlement_bad_secret(client, monkeypatch):
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    enable_billing(monkeypatch)
     resp = await client.post(
         f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
         headers={"X-Webhook-Secret": "wrong"},
         json={"organization_id": "x"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_webhooks_do_not_exist_without_billing(client, db_session, monkeypatch):
+    # Self-hosted: no Odoo settings, the routes answer 404 even with a secret.
+    monkeypatch.setattr(settings, "ODOO_URL", None)
+    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    org = make_organization(on_trial=True)
+    db_session.add(org)
+    await db_session.commit()
+
+    for path, body in (
+        ("/webhooks/odoo/entitlement", {"organization_id": str(org.id)}),
+        ("/webhooks/trial", {"organization_id": str(org.id), "stage": "expired"}),
+    ):
+        resp = await client.post(
+            f"{settings.API_V2_STR}{path}",
+            headers={"X-Webhook-Secret": "shh"},
+            json=body,
+        )
+        assert resp.status_code == 404, path
+
+
+@pytest.mark.asyncio
+async def test_webhook_refuses_a_wrong_secret(client, db_session, monkeypatch):
+    enable_billing(monkeypatch)
+    org = make_organization(on_trial=True)
+    db_session.add(org)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"{settings.API_V2_STR}/webhooks/trial",
+        headers={"X-Webhook-Secret": "wrong"},
+        json={"organization_id": str(org.id), "stage": "expired"},
     )
     assert resp.status_code == 401

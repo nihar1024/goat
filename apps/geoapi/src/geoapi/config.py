@@ -172,6 +172,10 @@ class Settings(BaseSettings):
     # from its bundle page.
     PROCESSES_URL: str = os.getenv("GOAT_PROCESSES_URL", "")
 
+    # SaaS: meter outbound bytes for credits and refuse downloads of an
+    # organization over its budget. Self-hosted installs leave it unset.
+    BILLING_ENABLED: bool = False
+
     # Redis settings for distributed tile caching
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
     # Tile cache TTL in seconds (default 1 hour)

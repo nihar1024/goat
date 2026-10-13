@@ -17,3 +17,23 @@ def test_advance_renewal_jumps_past_now_in_month_steps():
     assert out > now
     # day clamps for short months along the way; result is a real date after now
     assert out.year == 2026 and out.month in (7, 8)  # next boundary after Jul 15
+
+
+def test_billing_tasks_do_nothing_with_billing_off(monkeypatch):
+    # Self-hosted workers: no metering, no trials, no Odoo pushes.
+    import asyncio
+
+    from goatlib.tasks import (
+        compute_rollup,
+        credit_reset,
+        odoo_entitlement,
+        traffic_rollup,
+        trial_expiry,
+    )
+    from goatlib.tasks._db import SKIPPED
+
+    monkeypatch.delenv("BILLING_ENABLED", raising=False)
+    for task in (compute_rollup, traffic_rollup, credit_reset):
+        assert asyncio.run(task.main()) == SKIPPED
+    for task in (trial_expiry, odoo_entitlement):
+        assert task.main() == SKIPPED

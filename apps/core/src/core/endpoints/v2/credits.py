@@ -8,11 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.core.config import settings as core_settings
 from core.crud.crud_organization import organization as crud_organization
 from core.deps.auth import auth_z
+from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db, get_user_id
 
 # The routes read the caller's own organization only (get_user_id); auth_z
-# verifies the token like every other route.
-router = APIRouter(dependencies=[Depends(auth_z)])
+# verifies the token like every other route. They exist only with billing on.
+router = APIRouter(dependencies=[Depends(require_billing_enabled), Depends(auth_z)])
 
 
 def _num(value: "Decimal | float | int | None") -> float:

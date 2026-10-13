@@ -4,6 +4,11 @@ from fastapi import HTTPException
 from processes.services import credit_gate
 
 
+@pytest.fixture(autouse=True)
+def billing_on(monkeypatch):
+    monkeypatch.setattr(credit_gate.settings, "BILLING_ENABLED", True)
+
+
 class _Resp:
     def __init__(self, status_code, payload):
         self.status_code = status_code
@@ -59,3 +64,15 @@ async def test_fails_open_on_error(monkeypatch):
         lambda *a, **k: _Client(exc=RuntimeError("core down")),
     )
     await credit_gate.assert_credits_available("tok")  # must NOT raise
+
+
+@pytest.mark.asyncio
+async def test_checks_nothing_with_billing_off(monkeypatch):
+    # Self-hosted: core is not even asked, so an over-budget answer can't block.
+    monkeypatch.setattr(credit_gate.settings, "BILLING_ENABLED", False)
+    monkeypatch.setattr(
+        credit_gate.httpx,
+        "AsyncClient",
+        lambda *a, **k: _Client(_Resp(200, {"over_budget": True})),
+    )
+    await credit_gate.assert_credits_available("tok")  # no raise

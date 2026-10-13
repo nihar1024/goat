@@ -171,6 +171,10 @@ async def _resolve_orgs(
 
 async def main(params: ComputeRollupParams = ComputeRollupParams()) -> dict:
     """Windmill entry point: charge completed leaf tool jobs."""
+    from goatlib.tasks._db import SKIPPED, billing_enabled
+
+    if not billing_enabled():
+        return SKIPPED
     import json
 
     import asyncpg

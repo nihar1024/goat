@@ -11,5 +11,15 @@ def core_dsn() -> str:
     )
 
 
+def billing_enabled() -> bool:
+    """BILLING_ENABLED on the worker: the SaaS install meters credits and runs
+    trials. Self-hosted installs leave it unset, and the billing and metering
+    tasks then do nothing (core's switch is its Odoo settings)."""
+    return os.getenv("BILLING_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
+
+SKIPPED = {"skipped": "billing is off (BILLING_ENABLED unset)"}
+
+
 def customer_schema() -> str:
     return os.getenv("CUSTOMER_SCHEMA", "customer")

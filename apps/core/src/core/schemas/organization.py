@@ -49,6 +49,16 @@ class OrganizationUpdateMemberRole(SQLModel):
     role: OrganizationMemberRoleUpdateEnum
 
 
+class FeaturesRead(BaseModel):
+    """Which SaaS integrations this installation runs. Both are off on a
+    self-hosted install, and the web app shows none of their pages then."""
+
+    # Support tickets (Odoo Helpdesk).
+    support: bool
+    # Trials, credits and usage, quotas from Odoo subscriptions.
+    billing: bool
+
+
 class OrganizationCreationRead(BaseModel):
     """Whether the caller may set up an organization
     (`ALLOW_ORGANIZATION_CREATION`, superusers always may)."""

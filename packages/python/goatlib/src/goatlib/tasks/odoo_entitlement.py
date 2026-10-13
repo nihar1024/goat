@@ -280,6 +280,10 @@ class OdooEntitlementTask:
 def main(
     params: OdooEntitlementPushParams = OdooEntitlementPushParams(),
 ) -> dict[str, Any]:
+    from goatlib.tasks._db import SKIPPED, billing_enabled
+
+    if not billing_enabled():
+        return dict(SKIPPED)
     task = OdooEntitlementTask()
     if params.order_id:
         return task.push_order(params.order_id)

@@ -14,8 +14,11 @@ async def assert_credits_available(access_token: str | None) -> None:
     """Raise 402 only when core clearly reports the org is over budget.
 
     Fail-open on timeout / network / unexpected response — charging is post-hoc
-    anyway, so a failed gate must never block tool execution.
+    anyway, so a failed gate must never block tool execution. Nothing to
+    check with billing off (self-hosted).
     """
+    if not settings.BILLING_ENABLED:
+        return
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     url = f"{settings.CORE_URL}/api/v2/credits/balance"
     try:

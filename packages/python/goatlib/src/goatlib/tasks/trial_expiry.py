@@ -140,5 +140,9 @@ class TrialExpiryTask:
 
 
 def main(params: TrialExpiryParams = TrialExpiryParams()) -> dict[str, Any]:
+    from goatlib.tasks._db import SKIPPED, billing_enabled
+
+    if not billing_enabled():
+        return dict(SKIPPED)
     task = TrialExpiryTask()
     return asyncio.run(task.run(params))

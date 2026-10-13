@@ -86,6 +86,12 @@ export const organizationCreationSchema = z.object({
   allowed: z.boolean(),
 });
 
+// Which SaaS integrations the installation runs; both off when self-hosted.
+export const featuresSchema = z.object({
+  support: z.boolean(),
+  billing: z.boolean(),
+});
+
 export type Organization = z.infer<typeof organizationSchema>;
 export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
 export type OrganizationUpdate = z.infer<typeof organizationUpdateSchema>;
@@ -93,3 +99,4 @@ export type InvitationCreate = z.infer<typeof invitationCreateSchema>;
 export type PostOrganization = z.infer<typeof postOrganizationSchema>;
 export type OrganizationMemberQueryParams = z.infer<typeof organizationMemberQueryParams>;
 export type OrganizationCreation = z.infer<typeof organizationCreationSchema>;
+export type Features = z.infer<typeof featuresSchema>;

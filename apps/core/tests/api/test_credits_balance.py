@@ -1,7 +1,13 @@
 import pytest
 from core.core.config import settings
 from core.db.models.user import User
+from tests.billing import enable_billing
 from tests.utils import make_organization
+
+
+@pytest.fixture(autouse=True)
+def billing_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    enable_billing(monkeypatch)
 
 
 @pytest.mark.asyncio
@@ -59,3 +65,12 @@ async def test_balance_unlimited_is_never_over_budget(client, db_session):
     body = resp.json()
     assert body["total_credits"] is None
     assert body["over_budget"] is False
+
+
+@pytest.mark.asyncio
+async def test_credits_do_not_exist_without_billing(client, monkeypatch):
+    # Self-hosted: no Usage page, so no credit routes either.
+    monkeypatch.setattr(settings, "ODOO_URL", None)
+    for path in ("balance", "usage", "breakdown"):
+        resp = await client.get(f"{settings.API_V2_STR}/credits/{path}")
+        assert resp.status_code == 404, path

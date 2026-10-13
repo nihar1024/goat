@@ -32,7 +32,7 @@ from core.deps.keycloak import get_keycloak_user, keycloak_admin
 from core.endpoints.deps import get_db, get_user_id
 from core.schemas.common import OrderEnum
 from core.schemas.onboarding import OnboardingFacts
-from core.schemas.organization import OrganizationCreationRead
+from core.schemas.organization import FeaturesRead, OrganizationCreationRead
 from core.schemas.user import UserProfileUpdate, UserRead, UserUpdate, request_examples
 from core.services.s3 import s3_service
 from core.utils.other import decode_base64_file, get_image_extension_from_base64
@@ -276,6 +276,22 @@ async def get_onboarding(
     """Facts Home derives its stage and checklist from, over every space
     the caller is a member of."""
     return await crud_onboarding.facts(async_session, user_id)
+
+
+@router.get(
+    "/me/features",
+    summary="Which SaaS features this installation runs",
+    response_model=FeaturesRead,
+)
+async def get_features(
+    user_token: dict = Depends(user_token),
+) -> FeaturesRead:
+    """Support and billing are separate switches: each is on only when its
+    Odoo settings are set. No `auth_z`: also asked before the caller has an
+    organization (the trial note on the setup form)."""
+    return FeaturesRead(
+        support=settings.support_enabled, billing=settings.billing_enabled
+    )
 
 
 @router.get(

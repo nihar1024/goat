@@ -100,6 +100,10 @@ def _redis() -> "redis.Redis":
 
 async def main(params: TrafficRollupParams = TrafficRollupParams()) -> dict:
     """Windmill entry point: charge egress per dimension; refresh over-budget flags."""
+    from goatlib.tasks._db import SKIPPED, billing_enabled
+
+    if not billing_enabled():
+        return SKIPPED
     import asyncpg
 
     schema = customer_schema()

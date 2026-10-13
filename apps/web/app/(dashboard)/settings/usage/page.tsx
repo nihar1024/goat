@@ -1,8 +1,11 @@
 "use client";
 
 import { Box, Card, Tab, Tabs } from "@mui/material";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { useFeatures } from "@/lib/api/users";
 
 import { UsageActivity } from "@/components/settings/usage/UsageActivity";
 import { UsageOverview } from "@/components/settings/usage/UsageOverview";
@@ -10,6 +13,16 @@ import { UsageOverview } from "@/components/settings/usage/UsageOverview";
 export default function UsagePage() {
   const { t } = useTranslation("common");
   const [tab, setTab] = useState(0);
+  const router = useRouter();
+  const { features } = useFeatures();
+  // Self-hosted (billing off): there is no usage to show.
+  const billingOff = features?.billing === false;
+
+  useEffect(() => {
+    if (billingOff) router.replace("/settings/account");
+  }, [billingOff, router]);
+
+  if (!features?.billing) return null;
 
   return (
     <Card variant="outlined" sx={{ borderRadius: 2 }}>

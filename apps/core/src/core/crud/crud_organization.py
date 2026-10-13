@@ -49,7 +49,7 @@ from .crud_user import user as crud_user
 
 # Quotas applied when no billing is configured (self-hosted deployments).
 SELF_HOSTED_QUOTAS = {
-    "credits": 1000000,
+    "credits": settings.DEFAULT_QUOTA_CREDITS,
     "storage": settings.DEFAULT_QUOTA_STORAGE_MB,
     "projects": settings.DEFAULT_QUOTA_PROJECTS,
     "editors": settings.DEFAULT_QUOTA_EDITORS,
@@ -87,9 +87,9 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
     ) -> Organization:
         # Create user
         user = await crud_user.create_if_not_exists(user_id=user_id, db_session=db)
-        # SaaS (ODOO_WEBHOOK_SECRET set): GOAT-managed trial; the entitlement
-        # webhook takes over on conversion. Otherwise self-hosted: no trial.
-        saas_mode = bool(settings.ODOO_WEBHOOK_SECRET)
+        # SaaS (billing on): GOAT-managed trial; the entitlement webhook takes
+        # over on conversion. Otherwise self-hosted: no trial.
+        saas_mode = settings.billing_enabled
         quotas = TRIAL_QUOTAS if saas_mode else SELF_HOSTED_QUOTAS
 
         # Create organization

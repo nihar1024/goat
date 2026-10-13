@@ -43,6 +43,10 @@ def advance_renewal(current: datetime, now: datetime) -> datetime:
 
 async def main(params: CreditResetParams = CreditResetParams()) -> dict:
     """Windmill entry point: roll any org whose renewal boundary has passed."""
+    from goatlib.tasks._db import SKIPPED, billing_enabled
+
+    if not billing_enabled():
+        return SKIPPED
     import asyncpg
 
     schema = customer_schema()

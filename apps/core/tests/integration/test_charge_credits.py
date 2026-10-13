@@ -13,14 +13,18 @@ _S = settings.SCHEMA
 
 async def _seed_rates(db_session):
     # Production seeds these in the migration; tests build tables via create_all,
-    # so insert the two rate rows directly. Idempotent — the session-scoped test
+    # so insert the rate rows directly. Idempotent — the session-scoped test
     # DB persists rows across tests and category is the PK.
     from sqlalchemy import select
 
     existing = {
         c for (c,) in (await db_session.execute(select(CreditRate.category))).all()
     }
-    for cat, basis, rate in [("compute", "minute", 10), ("egress", "GB", 20)]:
+    for cat, basis, rate in [
+        ("compute", "minute", 10),
+        ("egress", "GB", 20),
+        ("ai", "1k_tokens", 1),
+    ]:
         if cat not in existing:
             db_session.add(
                 CreditRate(category=cat, unit_basis=basis, rate=rate, source="default")
@@ -150,3 +154,32 @@ async def test_unlimited_org_still_records(db_session):
     ).scalar_one()
     # unlimited (total NULL) still tracks usage for transparency
     assert float(used) == pytest.approx(10.0)
+
+
+@pytest.mark.asyncio
+async def test_ai_charge_counts_thousand_tokens(db_session):
+    org, user = await _setup(db_session)
+    # 25,000 tokens at 1 cr per 1,000 tokens => 25.0 credits
+    row_id = (
+        await db_session.execute(
+            text(f"SELECT {_S}.charge_credits(:o, :u, :a, :c, :unit, :p)"),
+            {
+                "o": str(org.id),
+                "u": str(user.id),
+                "a": "assistant",
+                "c": "ai",
+                "unit": 25000,
+                "p": "{}",
+            },
+        )
+    ).scalar_one()
+    await db_session.commit()
+
+    cost = (
+        await db_session.execute(
+            text(f"SELECT cost, unit_type FROM {_S}.credit_usage WHERE id = :i"),
+            {"i": row_id},
+        )
+    ).one()
+    assert float(cost.cost) == pytest.approx(25.0)
+    assert cost.unit_type == "tokens"

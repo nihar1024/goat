@@ -1,6 +1,9 @@
 """credit_reset: self-hosted period roll — zero used_credits and advance
 plan_renewal_date when the boundary passes. SaaS uses the Odoo webhook instead.
-See spec §8."""
+See spec §8.
+
+Trials are left alone: their plan_renewal_date is the trial's end, which
+trial_expiry acts on; rolling it forward would extend the trial every month."""
 
 from __future__ import annotations
 
@@ -49,7 +52,8 @@ async def main(params: CreditResetParams = CreditResetParams()) -> dict:
     try:
         rows = await core.fetch(
             f"SELECT id, plan_renewal_date FROM {schema}.organization "
-            f"WHERE plan_renewal_date IS NOT NULL AND plan_renewal_date <= $1",
+            f"WHERE plan_renewal_date IS NOT NULL AND plan_renewal_date <= $1 "
+            f"AND on_trial IS NOT TRUE",
             now,
         )
         for r in rows:

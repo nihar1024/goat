@@ -8,7 +8,7 @@ from core.core.config import settings
 
 
 class CreditRate(SQLModel, table=True):
-    """Global credit conversion rates — exactly two rows (compute, egress).
+    """Global credit conversion rates — one row per category (compute, egress, ai).
 
     Not per-org / per-subscription. cost = native_unit (normalized to
     unit_basis) * rate. Operator-edited; seeded from settings.
@@ -19,9 +19,11 @@ class CreditRate(SQLModel, table=True):
 
     category: str = Field(
         sa_column=Column(Text, primary_key=True)
-    )  # 'compute' | 'egress'
+    )  # 'compute' | 'egress' | 'ai'
     rate: float = Field(sa_column=Column(Numeric, nullable=False))
-    unit_basis: str = Field(sa_column=Column(Text, nullable=False))  # 'minute' | 'GB'
+    unit_basis: str = Field(
+        sa_column=Column(Text, nullable=False)
+    )  # 'minute' | 'GB' | '1k_tokens'
     updated_at: Optional[datetime] = Field(
         sa_column=Column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     )

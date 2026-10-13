@@ -60,7 +60,7 @@ SELF_HOSTED_QUOTAS = {
 # exists until sales converts the org; expiry is enforced by the trial_expiry
 # Windmill task. See docs/odoo-entitlement-contract.md.
 TRIAL_QUOTAS = {
-    "credits": None,
+    "credits": settings.TRIAL_QUOTA_CREDITS,
     "storage": settings.TRIAL_QUOTA_STORAGE_MB,
     "projects": settings.TRIAL_QUOTA_PROJECTS,
     "editors": settings.TRIAL_QUOTA_EDITORS,

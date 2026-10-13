@@ -213,7 +213,8 @@ def _upgrade_ledger() -> None:
         )
     op.execute(
         f"INSERT INTO {SCHEMA}.credit_rate (category, rate, unit_basis, source) VALUES "
-        "('compute', 10, 'minute', 'default'), ('egress', 20, 'GB', 'default') "
+        "('compute', 10, 'minute', 'default'), ('egress', 20, 'GB', 'default'), "
+        "('ai', 1, '1k_tokens', 'default') "
         "ON CONFLICT (category) DO NOTHING"
     )
 

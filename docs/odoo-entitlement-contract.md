@@ -155,7 +155,7 @@ first real entitlement.
 
 - **Start:** SaaS signup (`ODOO_WEBHOOK_SECRET` set) creates the org with
   `on_trial=true`, `plan_renewal_date = now + TRIAL_DAYS` (config, default
-  14) and the `TRIAL_QUOTA_*` config quotas (default = the GOAT base product
+  30) and the `TRIAL_QUOTA_*` config quotas (default = the GOAT base product
   floor: 3 editors / 2 viewers / 5 GB / 50 projects), `extras = []`.
 - **Enforcement:** the `trial_expiry` Windmill task (daily 03:00) classifies
   trials and calls `POST /api/v2/webhooks/trial` (same secret):

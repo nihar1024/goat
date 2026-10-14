@@ -7,16 +7,6 @@ import type { I18n } from "./i18n";
 import { ColorModeContext, type KcContext } from "./kcContext";
 import type { TemplateProps } from "keycloakify/login/TemplateProps";
 import { useContext } from "react";
-
-import clip1 from "../assets/clips/slide-1.mp4";
-import clip2 from "../assets/clips/slide-2.mp4";
-import clip3 from "../assets/clips/slide-3.mp4";
-import clip4 from "../assets/clips/slide-4.mp4";
-import clip5 from "../assets/clips/slide-5.mp4";
-import clip6 from "../assets/clips/slide-6.mp4";
-
-/** GOAT in motion, from the website's GOAT page (shortened, silent, 960 px). */
-const CLIPS = [clip1, clip2, clip3, clip4, clip5, clip6];
 export default function Template(props: TemplateProps<KcContext, I18n>) {
   const theme = useTheme();
   const colorMode = useContext(ColorModeContext);
@@ -31,7 +21,6 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
   } = props;
   const { realm, locale, message, isAppInitiatedAction } = kcContext;
   const {
-    msg,
     msgStr,
     changeLocale,
     labelBySupportedLanguageTag,
@@ -42,8 +31,6 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
       sx={{
         fontFamily: "'Mulish', sans-serif",
       }}
-      aside={{ title: msg("authAsideTitle"), text: msg("authAsideText") }}
-      clips={CLIPS}
     >
       <AuthContainer
         headerTitle={<Typography variant="h5">{headerNode}</Typography>}

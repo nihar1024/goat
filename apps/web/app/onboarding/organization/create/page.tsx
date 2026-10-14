@@ -6,8 +6,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
-  FormControlLabel,
   Stack,
   TextField,
   Typography,
@@ -16,7 +14,7 @@ import {
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import type * as z from "zod";
 
 import AuthContainer from "@p4b/ui/components/AuthContainer";
@@ -44,7 +42,7 @@ export default function OrganizationOnBoarding() {
   // an invitation. Without an answer the form is shown; core refuses the
   // creation itself.
   const { organizationCreation, isError: creationError } = useOrganizationCreation();
-  // Trial and newsletter belong to the SaaS (billing on); self-hosted shows neither.
+  // The trial note belongs to the SaaS (billing on); the newsletter is asked at sign-up.
   const { features } = useFeatures();
   const mayCreate = organizationCreation?.allowed === true || !!creationError;
 
@@ -71,6 +69,8 @@ export default function OrganizationOnBoarding() {
     resolver: zodResolver(postOrganizationSchema),
     defaultValues: {
       avatar: ORG_DEFAULT_AVATAR,
+      // Asked at sign-up (Keycloak), not here.
+      newsletter_subscribe: false,
     },
   });
 
@@ -131,21 +131,6 @@ export default function OrganizationOnBoarding() {
                   label={t("common:organization_type_label")}
                 />
 
-                {features?.billing && (
-                  <Controller
-                    name="newsletter_subscribe"
-                    control={control}
-                    defaultValue={false}
-                    render={({ field: { onChange, value } }) => {
-                      return (
-                        <FormControlLabel
-                          control={<Checkbox sx={{ ml: -3 }} onChange={onChange} checked={value} />}
-                          label={t("common:organization_subscribe_to_newsletter")}
-                        />
-                      );
-                    }}
-                  />
-                )}
                 <Stack spacing={3}>
                   {features?.billing && (
                     <Typography variant="body1">{t("common:organization_onboarding_trial_note")}</Typography>

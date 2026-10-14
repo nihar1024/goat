@@ -10,7 +10,9 @@ from processes.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def assert_credits_available(access_token: str | None) -> None:
+async def assert_credits_available(
+    access_token: str | None, process_id: str | None = None
+) -> None:
     """Raise 402 only when core clearly reports the org is over budget.
 
     Fail-open on timeout / network / unexpected response — charging is post-hoc
@@ -18,6 +20,10 @@ async def assert_credits_available(access_token: str | None) -> None:
     check with billing off (self-hosted).
     """
     if not settings.BILLING_ENABLED:
+        return
+    from goatlib.tasks.compute_rollup import FREE_TOOLS
+
+    if process_id in FREE_TOOLS:  # deleting data is always allowed
         return
     headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
     url = f"{settings.CORE_URL}/api/v2/credits/balance"

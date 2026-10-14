@@ -828,7 +828,7 @@ async def execute_process(
 
     from processes.services.credit_gate import assert_credits_available
 
-    await assert_credits_available(access_token)
+    await assert_credits_available(access_token, process_id)
 
     # Submit job to Windmill
     # Note: Worker tag is configured on the script during sync, not per-job

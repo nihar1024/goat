@@ -76,3 +76,17 @@ async def test_checks_nothing_with_billing_off(monkeypatch):
         lambda *a, **k: _Client(_Resp(200, {"over_budget": True})),
     )
     await credit_gate.assert_credits_available("tok")  # no raise
+
+
+@pytest.mark.asyncio
+async def test_deleting_data_is_never_refused(monkeypatch):
+    # Out of credits, an organization must still be able to free space.
+    monkeypatch.setattr(
+        credit_gate.httpx,
+        "AsyncClient",
+        lambda *a, **k: _Client(_Resp(200, {"over_budget": True})),
+    )
+    for process_id in ("layer_delete", "layer_delete_multi", "bundle_artifact_delete"):
+        await credit_gate.assert_credits_available("tok", process_id)  # no raise
+    with pytest.raises(HTTPException):
+        await credit_gate.assert_credits_available("tok", "buffer")

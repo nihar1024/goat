@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 
 WORKFLOW_RUNNER_PATH = "f/goat/tools/workflow_runner"
 
+# Housekeeping that frees space or cleans up: never charged, and the credit
+# check in processes never refuses it (an organization out of credits must
+# still be able to delete its data).
+FREE_TOOLS = frozenset({"layer_delete", "layer_delete_multi", "bundle_artifact_delete"})
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +71,8 @@ def select_chargeable(jobs: list[dict], already_charged: set[str]) -> list[Charg
         if j.get("has_children"):
             continue
         if j.get("runnable_path") == WORKFLOW_RUNNER_PATH:
+            continue
+        if tool_from_path(j.get("runnable_path")) in FREE_TOOLS:
             continue
         job_id = j["job_id"]
         if job_id in already_charged:

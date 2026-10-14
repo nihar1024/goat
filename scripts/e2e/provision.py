@@ -66,15 +66,10 @@ MEMBERS = {
     "viewer": "organization-viewer",
 }
 ORGANIZATION = {
-    "department": "Planning",
-    "industry": "urban_planning",
-    "location": "Munich",
+    # What the one-step onboarding form sends; the CRM fields (industry,
+    # department, use case, location, phone) are gone with migration 0012.
     "type": "government",
-    "use_case": "site_analysis_and_design_decision_support",
     "region": "EU",
-    # Optional in the API schema but NOT NULL in the table; without it core
-    # answers 409. The onboarding form always sends one.
-    "phone_number": "+49 89 0000000",
 }
 
 

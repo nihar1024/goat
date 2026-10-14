@@ -68,3 +68,23 @@ def test_workflow_node_tags_run_workflow_node_and_project():
 
 def test_skips_job_without_user():
     assert select_chargeable([_job(user_id=None)], set()) == []
+
+
+def test_housekeeping_jobs_are_free():
+    from goatlib.tasks.compute_rollup import select_chargeable
+
+    job = {
+        "job_id": "j1",
+        "user_id": "u1",
+        "args": {},
+        "runnable_path": "f/goat/tools/layer_delete",
+        "trigger_kind": None,
+        "status": "success",
+        "has_children": False,
+        "duration_ms": 4000,
+    }
+    assert select_chargeable([job], set()) == []
+    assert (
+        len(select_chargeable([{**job, "runnable_path": "f/goat/tools/buffer"}], set()))
+        == 1
+    )

@@ -26,6 +26,9 @@ export const { useI18n } = createUseI18n({
     terms: "Terms & conditions",
     subscribeToNewsletter:
       "Subscribe to the GOAT newsletter (optional, unsubscribe at any time)",
+    authAsideTitle: "Analyze, map and publish in one WebGIS",
+    authAsideText:
+      "Bring your spatial data together, run accessibility analyses and turn them into interactive maps and reports.",
     trialEmailsNote:
       "During your trial we send you tips for getting started and reminders about your trial. You can unsubscribe from them in every email.",
     formNotFilledProperly: "Form not filled properly",
@@ -79,6 +82,9 @@ export const { useI18n } = createUseI18n({
     terms: "Nutzungsbedingungen",
     subscribeToNewsletter:
       "GOAT-Newsletter abonnieren (optional, jederzeit abbestellbar)",
+    authAsideTitle: "Analysieren, Kartieren, Teilen: ein WebGIS",
+    authAsideText:
+      "Bringen Sie Ihre Geodaten zusammen, führen Sie Erreichbarkeitsanalysen durch und machen Sie daraus interaktive Karten und Berichte.",
     trialEmailsNote:
       "Während Ihres Testzeitraums schicken wir Ihnen Tipps für den Einstieg und Hinweise zum Testzeitraum. Abbestellen können Sie diese in jeder E-Mail.",
     formNotFilledProperly: "Formular nicht richtig ausgefüllt",

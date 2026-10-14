@@ -21,6 +21,7 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
   } = props;
   const { realm, locale, message, isAppInitiatedAction } = kcContext;
   const {
+    msg,
     msgStr,
     changeLocale,
     labelBySupportedLanguageTag,
@@ -31,6 +32,7 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
       sx={{
         fontFamily: "'Mulish', sans-serif",
       }}
+      aside={{ title: msg("authAsideTitle"), text: msg("authAsideText") }}
     >
       <AuthContainer
         headerTitle={<Typography variant="h5">{headerNode}</Typography>}

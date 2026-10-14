@@ -17,8 +17,20 @@ import type { I18n } from "../i18n";
 import type { KcContext } from "../kcContext";
 import { UserProfileFormFields } from "./shared/UserProfileFormFields";
 
-// One step: the fields come from the realm's user profile (realm/user-profile.json):
-// first and last name, email, password, terms and the optional newsletter.
+// One step: the fields come from the realm's user profile (realm/user-profile.json),
+// shown in this order (no stepper: there is a single list and no active step).
+const fieldOrder = {
+  1: [
+    "firstName",
+    "lastName",
+    "username",
+    "email",
+    "password",
+    "password-confirm",
+    "terms_and_conditions",
+    "subscribe_to_newsletter",
+  ],
+};
 
 export default function RegisterUserProfile(
   props: PageProps<
@@ -65,6 +77,7 @@ export default function RegisterUserProfile(
         <UserProfileFormFields
           kcContext={kcContext}
           onIsFormSubmittableValueChange={setIsFormSubmittable}
+          steps={fieldOrder}
           i18n={i18n}
           getIncrementedTabIndex={getIncrementedTabIndex}
         />

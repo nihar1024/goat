@@ -22,6 +22,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { format } from "date-fns";
+import prettyBytes from "pretty-bytes";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -38,6 +39,15 @@ const GROUP_BY_OPTIONS = [
 ] as const;
 
 type GroupByValue = (typeof GROUP_BY_OPTIONS)[number]["value"];
+
+/** A ledger row's native amount as people read it: run time, data, tokens. */
+function formatUnit(unit: number, unitType: string, locale?: string): string {
+  if (unitType === "seconds") {
+    return unit < 60 ? `${Math.round(unit)} s` : `${Math.round(unit / 60)} min`;
+  }
+  if (unitType === "bytes") return prettyBytes(unit, { locale, maximumFractionDigits: 1 });
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(unit);
+}
 
 /** Groups whose credits represent compute (primary color) */
 const COMPUTE_GROUPS = new Set<GroupByValue>(["tool", "workflow"]);
@@ -207,7 +217,9 @@ export function UsageActivity() {
                         <TableCell>{format(new Date(item.created_at), "yyyy-MM-dd HH:mm")}</TableCell>
                         <TableCell>{item.member ?? "—"}</TableCell>
                         <TableCell>{item.action}</TableCell>
-                        <TableCell align="right">{item.unit}</TableCell>
+                        <TableCell align="right">
+                          {formatUnit(item.unit, item.unit_type, i18n?.language)}
+                        </TableCell>
                         <TableCell align="right">{formatCredits(item.cost, i18n?.language)}</TableCell>
                       </TableRow>
                     ))}

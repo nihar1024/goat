@@ -17,9 +17,15 @@ function secondsToMinutes(seconds: number): string {
   return Math.round(seconds / 60).toString();
 }
 
-/** Convert bytes → display GB */
-function bytesToGB(bytes: number): string {
-  return (bytes / 1_000_000_000).toFixed(2);
+/** Traffic in the unit that fits: kB and MB while small, GB later (decimal, as charged). */
+function formatTraffic(bytes: number, locale?: string): string {
+  return prettyBytes(bytes, { locale, maximumFractionDigits: 1 });
+}
+
+/** Storage quotas are kept in MB: MB below a GB, GB above, one decimal at most. */
+function formatMegabytes(mb: number, locale?: string): string {
+  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
+  return mb >= 1024 ? `${number.format(mb / 1024)} GB` : `${number.format(mb)} MB`;
 }
 
 interface ColorDotProps {
@@ -116,7 +122,7 @@ export function UsageOverview() {
                     {t("traffic")}
                   </Typography>
                   <Typography variant="h5" fontWeight="bold" sx={{ fontSize: "26px", lineHeight: 1.2 }}>
-                    {bytesToGB(egressBytes)}
+                    {formatTraffic(egressBytes, i18n?.language)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {formatCredits(egressCredits, i18n?.language)} {t("credits")} · {t("traffic_this_period")}
@@ -134,7 +140,9 @@ export function UsageOverview() {
                 {total !== null && (
                   <Typography variant="body2" color="primary">
                     {formatCredits(usedCredits, i18n?.language)} {t("out_of")}{" "}
-                    {formatCredits(total, i18n?.language)} {t("credits")} / {t("month")}
+                    {formatCredits(total, i18n?.language)} {t("credits")}
+                    {/* A trial's credits last the whole trial; a subscription's reset monthly. */}
+                    {!balance?.on_trial && ` / ${t("month")}`}
                   </Typography>
                 )}
               </Stack>
@@ -253,8 +261,8 @@ export function UsageOverview() {
                       <Trans
                         i18nKey="common:current_storage_out_of_total_quota"
                         values={{
-                          current: `${balance.used_storage} MB`,
-                          total: `${balance.total_storage} MB`,
+                          current: formatMegabytes(balance.used_storage, i18n?.language),
+                          total: formatMegabytes(balance.total_storage, i18n?.language),
                         }}
                         components={{
                           highlight: (

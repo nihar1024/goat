@@ -91,7 +91,7 @@ describe("UsageOverview", () => {
 
   it("renders capacity labels for storage and projects", () => {
     render(<UsageOverview />);
-    expect(screen.getByText(/512 MB out of 10240 MB/i)).toBeInTheDocument();
+    expect(screen.getByText(/512 MB out of 10 GB/i)).toBeInTheDocument();
     expect(screen.getByText(/3 out of 20 projects/i)).toBeInTheDocument();
   });
 
@@ -100,8 +100,8 @@ describe("UsageOverview", () => {
     // 4200 seconds / 60 = 70 min — rendered as the h5 stat value
     const computeEls = screen.getAllByText(/^70$/);
     expect(computeEls.length).toBeGreaterThan(0);
-    // 5368709120 bytes / 1_000_000_000 = 5.37 GB
-    const trafficEls = screen.getAllByText(/5\.37/);
+    // 5368709120 bytes = 5.4 GB (decimal, as charged)
+    const trafficEls = screen.getAllByText(/5\.4 GB/);
     expect(trafficEls.length).toBeGreaterThan(0);
   });
 

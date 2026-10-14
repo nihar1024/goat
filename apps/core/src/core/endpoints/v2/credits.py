@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.core.config import settings as core_settings
 from core.crud.crud_organization import organization as crud_organization
+from core.crud.crud_user import user as crud_user
+from core.db.models.organization import OrganizationRolesEnum
 from core.deps.auth import auth_z
 from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db, get_user_id
@@ -14,6 +16,19 @@ from core.endpoints.deps import get_db, get_user_id
 # The routes read the caller's own organization only (get_user_id); auth_z
 # verifies the token like every other route. They exist only with billing on.
 router = APIRouter(dependencies=[Depends(require_billing_enabled), Depends(auth_z)])
+
+
+async def _member_scope(
+    db: AsyncSession, user_id: UUID, member: UUID | None
+) -> UUID | None:
+    """Whose ledger rows the caller sees. The organization's owners and admins
+    see everyone's and may narrow it to one member; everyone else sees only
+    their own, whatever they ask for."""
+    user = await crud_user.get_user_with_roles(db_session=db, user_id=str(user_id))
+    roles = {link.role.name for link in user.role_links} if user else set()
+    if roles & {OrganizationRolesEnum.owner, OrganizationRolesEnum.admin}:
+        return member
+    return user_id
 
 
 def _num(value: "Decimal | float | int | None") -> float:
@@ -69,6 +84,7 @@ async def get_balance(
 async def get_usage(
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
+    member: UUID | None = Query(None, description="Only this member's rows (admins)"),
     user_id: UUID = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -76,12 +92,16 @@ async def get_usage(
     if org is None:
         raise HTTPException(status_code=404, detail="No organization for user")
     schema = core_settings.SCHEMA
+    scope = await _member_scope(db, user_id, member)
+    member_filter = " AND cu.user_id = :m" if scope else ""
+    params = {"o": str(org.id), **({"m": str(scope)} if scope else {})}
     total = (
         await db.execute(
             text(
-                f"SELECT count(*) FROM {schema}.credit_usage WHERE organization_id = :o"
+                f"SELECT count(*) FROM {schema}.credit_usage cu "
+                f"WHERE cu.organization_id = :o{member_filter}"
             ),
-            {"o": str(org.id)},
+            params,
         )
     ).scalar_one()
     rows = (
@@ -93,17 +113,20 @@ async def get_usage(
                    NULLIF(trim(concat(u.firstname, ' ', u.lastname)), '') AS member
             FROM {schema}.credit_usage cu
             LEFT JOIN {schema}."user" u ON u.id = cu.user_id
-            WHERE cu.organization_id = :o
+            WHERE cu.organization_id = :o{member_filter}
             ORDER BY cu.created_at DESC
             LIMIT :lim OFFSET :off
         """),
-                {"o": str(org.id), "lim": size, "off": (page - 1) * size},
+                {**params, "lim": size, "off": (page - 1) * size},
             )
         )
         .mappings()
         .all()
     )
-    return {"total": total, "items": [dict(r) for r in rows]}
+    return {
+        "total": total,
+        "items": [{k: _coerce(v) for k, v in dict(r).items()} for r in rows],
+    }
 
 
 _STD_BREAKDOWN = {
@@ -121,6 +144,7 @@ def _coerce(v: object) -> object:
 @router.get("/breakdown", summary="Aggregated usage by dimension")
 async def get_breakdown(
     group_by: str = Query("category"),
+    member: UUID | None = Query(None, description="Only this member's usage (admins)"),
     user_id: UUID = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -128,8 +152,11 @@ async def get_breakdown(
     if org is None:
         raise HTTPException(status_code=404, detail="No organization for user")
     schema = core_settings.SCHEMA
-    base = f"FROM {schema}.credit_usage WHERE organization_id = :o"
-    params = {"o": str(org.id)}
+    scope = await _member_scope(db, user_id, member)
+    base = f"FROM {schema}.credit_usage WHERE organization_id = :o" + (
+        " AND user_id = :m" if scope else ""
+    )
+    params = {"o": str(org.id), **({"m": str(scope)} if scope else {})}
 
     if group_by in _STD_BREAKDOWN:
         key_expr, filt = _STD_BREAKDOWN[group_by]
@@ -146,11 +173,16 @@ async def get_breakdown(
             f"GROUP BY payload->>'workflow_id' ORDER BY credits DESC"
         )
     elif group_by == "member":
+        # Traffic of public pages has no user: it is the organization's own.
         sql = (
-            f"SELECT user_id::text AS key, "
+            f"SELECT b.key, b.compute, b.traffic, b.credits, "
+            f"NULLIF(trim(concat(u.firstname, ' ', u.lastname)), '') AS name "
+            f"FROM (SELECT user_id::text AS key, "
             f"sum(cost) FILTER (WHERE category='compute') AS compute, "
             f"sum(cost) FILTER (WHERE category='egress') AS traffic, "
-            f"sum(cost) AS credits {base} GROUP BY user_id ORDER BY credits DESC"
+            f"sum(cost) AS credits {base} GROUP BY user_id) b "
+            f'LEFT JOIN {schema}."user" u ON u.id::text = b.key '
+            f"ORDER BY b.credits DESC"
         )
     elif group_by == "month":
         sql = (

@@ -347,7 +347,7 @@ class Settings(BaseSettings):
     TRIAL_DAYS: int = 30
     TRIAL_QUOTA_STORAGE_MB: float = 5120
     TRIAL_QUOTA_PROJECTS: int = 50
-    TRIAL_QUOTA_EDITORS: int = 3
+    TRIAL_QUOTA_EDITORS: int = 5
     TRIAL_QUOTA_VIEWERS: int = 2
     # Credits for the whole trial (it gets no monthly reset). None == unlimited.
     TRIAL_QUOTA_CREDITS: float | None = 10000

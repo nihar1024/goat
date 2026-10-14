@@ -12,9 +12,9 @@ import { formatCredits } from "@/lib/utils/credits";
 
 import QuotaStatus from "@/components/common/QuotaStatus";
 
-/** Convert compute units (seconds) → display minutes */
-function secondsToMinutes(seconds: number): string {
-  return Math.round(seconds / 60).toString();
+/** Compute time as people read it: seconds below a minute, whole minutes above. */
+function formatComputeTime(seconds: number, units: { s: string; min: string }): string {
+  return seconds < 60 ? `${Math.round(seconds)} ${units.s}` : `${Math.round(seconds / 60)} ${units.min}`;
 }
 
 /** Traffic in the unit that fits: kB and MB while small, GB later (decimal, as charged). */
@@ -103,7 +103,7 @@ export function UsageOverview() {
                     {t("compute")}
                   </Typography>
                   <Typography variant="h5" fontWeight="bold" sx={{ fontSize: "26px", lineHeight: 1.2 }}>
-                    {secondsToMinutes(computeSeconds)}
+                    {formatComputeTime(computeSeconds, { s: t("seconds_abbr"), min: t("minutes_abbr") })}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {formatCredits(computeCredits, i18n?.language)} {t("credits")} ·{" "}
@@ -222,9 +222,11 @@ export function UsageOverview() {
                   {/* Approximation caption */}
                   {remainingCredits !== null && remainingCredits > 0 && (
                     <Typography variant="caption" color="text.secondary">
-                      {t("credits_remaining", { remaining: formatCredits(remainingCredits, i18n?.language) })}
-                      {" · "}≈ {Math.round(remainingCredits / 20)} {t("gb_abbr")} {t("or")}{" "}
-                      {Math.round(remainingCredits / 10)} {t("minutes_abbr")} {t("remaining")}
+                      {t("credits_remaining", {
+                        remaining: formatCredits(remainingCredits, i18n?.language),
+                        gb: formatCredits(remainingCredits / 20, i18n?.language),
+                        minutes: formatCredits(remainingCredits / 10, i18n?.language),
+                      })}
                     </Typography>
                   )}
                 </>

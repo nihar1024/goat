@@ -11,6 +11,18 @@ def billing_on(monkeypatch: pytest.MonkeyPatch) -> None:
     enable_billing(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def as_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests read the organization's totals, as its admins do; who sees
+    what is tested in tests/authz/test_credit_usage_scope.py."""
+    from core.endpoints.v2 import credits
+
+    async def admin_scope(db, user_id, member):
+        return member
+
+    monkeypatch.setattr(credits, "_member_scope", admin_scope)
+
+
 async def _org_with_default_user(db_session):
     org = make_organization()
     db_session.add(org)

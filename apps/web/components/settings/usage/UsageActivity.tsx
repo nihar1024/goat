@@ -29,6 +29,8 @@ import { useTranslation } from "react-i18next";
 import { useCreditBreakdown, useCreditUsage } from "@/lib/api/usage";
 import { formatCredits } from "@/lib/utils/credits";
 
+import { useAuthZ } from "@/hooks/auth/AuthZ";
+
 const GROUP_BY_OPTIONS = [
   { value: "tool", label: "group_by_tool" },
   { value: "workflow", label: "group_by_workflow" },
@@ -41,9 +43,15 @@ const GROUP_BY_OPTIONS = [
 type GroupByValue = (typeof GROUP_BY_OPTIONS)[number]["value"];
 
 /** A ledger row's native amount as people read it: run time, data, tokens. */
-function formatUnit(unit: number, unitType: string, locale?: string): string {
+function formatUnit(
+  value: number | string,
+  unitType: string,
+  labels: { s: string; min: string },
+  locale?: string
+): string {
+  const unit = Number(value) || 0; // the API may send numerics as strings
   if (unitType === "seconds") {
-    return unit < 60 ? `${Math.round(unit)} s` : `${Math.round(unit / 60)} min`;
+    return unit < 60 ? `${Math.round(unit)} ${labels.s}` : `${Math.round(unit / 60)} ${labels.min}`;
   }
   if (unitType === "bytes") return prettyBytes(unit, { locale, maximumFractionDigits: 1 });
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(unit);
@@ -61,9 +69,14 @@ export function UsageActivity() {
   const theme = useTheme();
   const [groupBy, setGroupBy] = useState<GroupByValue>("tool");
   const [page, setPage] = useState(1);
+  // Organization admins see everyone's usage and can narrow it to one member.
+  const { isOrgAdmin } = useAuthZ();
+  const [member, setMember] = useState<string>("");
 
-  const { breakdown, isLoading: breakdownLoading } = useCreditBreakdown(groupBy);
-  const { usage, isLoading: usageLoading } = useCreditUsage(page, PAGE_SIZE);
+  const { breakdown, isLoading: breakdownLoading } = useCreditBreakdown(groupBy, member || undefined);
+  const { usage, isLoading: usageLoading } = useCreditUsage(page, PAGE_SIZE, member || undefined);
+  const { breakdown: members } = useCreditBreakdown("member");
+  const memberOptions = (members?.rows ?? []).filter((row) => row.key);
 
   const totalPages = usage ? Math.ceil(usage.total / PAGE_SIZE) : 0;
 
@@ -107,6 +120,27 @@ export function UsageActivity() {
                 ))}
               </Select>
             </FormControl>
+            {isOrgAdmin && memberOptions.length > 0 && (
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel id="member-filter-label">{t("filter_by_member")}</InputLabel>
+                <Select
+                  labelId="member-filter-label"
+                  label={t("filter_by_member")}
+                  value={member}
+                  displayEmpty
+                  onChange={(e) => {
+                    setMember(e.target.value as string);
+                    setPage(1);
+                  }}>
+                  <MenuItem value="">{t("all_members")}</MenuItem>
+                  {memberOptions.map((row) => (
+                    <MenuItem key={row.key as string} value={row.key as string}>
+                      {row.name ?? t("unknown")}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             {breakdownLoading && <CircularProgress size={18} />}
           </Stack>
 
@@ -140,7 +174,11 @@ export function UsageActivity() {
                 <TableBody>
                   {breakdown.rows.map((row, idx) => (
                     <TableRow key={`${row.key ?? "null"}-${idx}`}>
-                      <TableCell>{row.key ?? t("unknown")}</TableCell>
+                      <TableCell>
+                        {groupBy === "member"
+                          ? (row.name ?? (row.key ? t("unknown") : t("public_traffic")))
+                          : (row.key ?? t("unknown"))}
+                      </TableCell>
                       {groupBy === "workflow" && (
                         <TableCell align="right">{(row.runs ?? 0) as number}</TableCell>
                       )}
@@ -218,7 +256,12 @@ export function UsageActivity() {
                         <TableCell>{item.member ?? "—"}</TableCell>
                         <TableCell>{item.action}</TableCell>
                         <TableCell align="right">
-                          {formatUnit(item.unit, item.unit_type, i18n?.language)}
+                          {formatUnit(
+                            item.unit,
+                            item.unit_type,
+                            { s: t("seconds_abbr"), min: t("minutes_abbr") },
+                            i18n?.language
+                          )}
                         </TableCell>
                         <TableCell align="right">{formatCredits(item.cost, i18n?.language)}</TableCell>
                       </TableRow>

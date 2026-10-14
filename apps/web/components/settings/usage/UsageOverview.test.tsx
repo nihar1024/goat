@@ -97,8 +97,8 @@ describe("UsageOverview", () => {
 
   it("renders compute and traffic native stats", () => {
     render(<UsageOverview />);
-    // 4200 seconds / 60 = 70 min — rendered as the h5 stat value
-    const computeEls = screen.getAllByText(/^70$/);
+    // 4200 seconds = 70 minutes, with its unit (t() returns the key)
+    const computeEls = screen.getAllByText(/^70 minutes_abbr$/);
     expect(computeEls.length).toBeGreaterThan(0);
     // 5368709120 bytes = 5.4 GB (decimal, as charged)
     const trafficEls = screen.getAllByText(/5\.4 GB/);

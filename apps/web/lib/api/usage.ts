@@ -28,7 +28,7 @@ export interface CreditUsageItem {
   created_at: string;
   category: string;
   action: string;
-  unit: number;
+  unit: number | string;
   unit_type: string;
   rate: number;
   cost: number;
@@ -48,6 +48,8 @@ export interface BreakdownRow {
   runs?: number;
   compute?: number;
   traffic?: number;
+  /** group_by=member: the member's name (null for traffic of public pages) */
+  name?: string | null;
 }
 
 export interface CreditBreakdown {
@@ -77,17 +79,18 @@ export const useCreditBalance = () => {
   return { balance: data, isLoading, isError: error, mutate };
 };
 
-export const useCreditUsage = (page: number, size: number) => {
+/** `member`: only that member's rows (organization admins; others always get their own). */
+export const useCreditUsage = (page: number, size: number, member?: string) => {
   const { data, isLoading, error, mutate } = useSWR<CreditUsagePage>(
-    [`${CREDITS_API_BASE_URL}/usage`, { page, size }],
+    [`${CREDITS_API_BASE_URL}/usage`, { page, size, ...(member ? { member } : {}) }],
     fetcher
   );
   return { usage: data, isLoading, isError: error, mutate };
 };
 
-export const useCreditBreakdown = (groupBy: string) => {
+export const useCreditBreakdown = (groupBy: string, member?: string) => {
   const { data, isLoading, error, mutate } = useSWR<CreditBreakdown>(
-    [`${CREDITS_API_BASE_URL}/breakdown`, { group_by: groupBy }],
+    [`${CREDITS_API_BASE_URL}/breakdown`, { group_by: groupBy, ...(member ? { member } : {}) }],
     fetcher
   );
   return { breakdown: data, isLoading, isError: error, mutate };

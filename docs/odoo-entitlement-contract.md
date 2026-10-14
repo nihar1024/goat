@@ -12,8 +12,9 @@ One base product plus per-unit add-ons — no tiers:
 
 | Odoo product | Meaning | `x_goat_*` values |
 |---|---|---|
-| GOAT (id 8) | base subscription | editors 3, viewers 2, storage_mb 5120, projects 50 |
-| GOAT Extra Editor User (id 9) | +1 editor per qty | editors 1 |
+| GOAT (id 8) | base subscription | editors 5, viewers 2, storage_mb 5120, projects 50, credits 25,000/month |
+| GOAT Extra Editor User (id 9) | +1 editor per qty (2,000 EUR/year, 2026-10-14) | editors 1, credits 5,000/month |
+| GOAT Extra Credits | +10,000 credits/month per qty | credits 10,000 |
 | GOAT Extra Viewer User (id 13) | +1 viewer per qty | viewers 1 |
 | GOAT Extra Project (id 14) | +1 project per qty | projects 1 |
 | GOAT Extra Storage (GB) (id 15) | +1 GB per qty | storage_mb 1024 |

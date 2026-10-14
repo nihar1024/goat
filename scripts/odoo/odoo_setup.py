@@ -56,7 +56,7 @@ PRODUCT_SPECS: list[dict] = [
         "adopt_names": ("GOAT", "GOAT Starter"),
         "values": {
             "name": "GOAT",
-            "x_goat_editors": 3,
+            "x_goat_editors": 5,  # decided 2026-10-14 (was 3)
             "x_goat_viewers": 2,
             "x_goat_storage_mb": 5 * GB,
             "x_goat_projects": 50,
@@ -68,7 +68,12 @@ PRODUCT_SPECS: list[dict] = [
     {
         "xid": "product_goat_extra_editor",
         "adopt_names": ("GOAT Extra Editor User",),
-        "values": {"name": "GOAT Extra Editor User", "x_goat_editors": 1},
+        # an editor brings their share of credits (5 editors : 25,000), 2026-10-14
+        "values": {
+            "name": "GOAT Extra Editor User",
+            "x_goat_editors": 1,
+            "x_goat_credits": 5000,
+        },
         "create": True,
     },
     {

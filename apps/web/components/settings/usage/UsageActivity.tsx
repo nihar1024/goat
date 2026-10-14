@@ -26,6 +26,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useCreditBreakdown, useCreditUsage } from "@/lib/api/usage";
+import { formatCredits } from "@/lib/utils/credits";
 
 const GROUP_BY_OPTIONS = [
   { value: "tool", label: "group_by_tool" },
@@ -46,7 +47,7 @@ const TRAFFIC_GROUPS = new Set<GroupByValue>(["service", "layer"]);
 const PAGE_SIZE = 20;
 
 export function UsageActivity() {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const theme = useTheme();
   const [groupBy, setGroupBy] = useState<GroupByValue>("tool");
   const [page, setPage] = useState(1);
@@ -137,16 +138,18 @@ export function UsageActivity() {
                       {groupBy === "member" ? (
                         <>
                           <TableCell align="right" sx={{ color: theme.palette.primary.main }}>
-                            {((row.compute ?? 0) as number).toFixed(4)}
+                            {formatCredits(row.compute as number, i18n?.language)}
                           </TableCell>
                           <TableCell align="right" sx={{ color: theme.palette.info.main }}>
-                            {((row.traffic ?? 0) as number).toFixed(4)}
+                            {formatCredits(row.traffic as number, i18n?.language)}
                           </TableCell>
-                          <TableCell align="right">{((row.credits ?? 0) as number).toFixed(4)}</TableCell>
+                          <TableCell align="right">
+                            {formatCredits(row.credits as number, i18n?.language)}
+                          </TableCell>
                         </>
                       ) : (
                         <TableCell align="right" sx={{ color: creditColor }}>
-                          {((row.credits ?? 0) as number).toFixed(4)}
+                          {formatCredits(row.credits as number, i18n?.language)}
                         </TableCell>
                       )}
                     </TableRow>
@@ -205,7 +208,7 @@ export function UsageActivity() {
                         <TableCell>{item.member ?? "—"}</TableCell>
                         <TableCell>{item.action}</TableCell>
                         <TableCell align="right">{item.unit}</TableCell>
-                        <TableCell align="right">{item.cost.toFixed(4)}</TableCell>
+                        <TableCell align="right">{formatCredits(item.cost, i18n?.language)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

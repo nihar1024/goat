@@ -8,6 +8,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useDateFnsLocale } from "@/i18n/utils";
 
 import { useCreditBalance, useCreditBreakdown, useStorageByLayer } from "@/lib/api/usage";
+import { formatCredits } from "@/lib/utils/credits";
 
 import QuotaStatus from "@/components/common/QuotaStatus";
 
@@ -42,7 +43,7 @@ function ColorDot({ color }: ColorDotProps) {
 }
 
 export function UsageOverview() {
-  const { t } = useTranslation("common");
+  const { t, i18n } = useTranslation("common");
   const dateLocale = useDateFnsLocale();
   const theme = useTheme();
   const { balance, isLoading: balanceLoading } = useCreditBalance();
@@ -99,7 +100,8 @@ export function UsageOverview() {
                     {secondsToMinutes(computeSeconds)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {computeCredits.toFixed(2)} {t("credits")} · {t("compute_this_period")}
+                    {formatCredits(computeCredits, i18n?.language)} {t("credits")} ·{" "}
+                    {t("compute_this_period")}
                   </Typography>
                 </Stack>
               </Stack>
@@ -117,7 +119,7 @@ export function UsageOverview() {
                     {bytesToGB(egressBytes)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {egressCredits.toFixed(2)} {t("credits")} · {t("traffic_this_period")}
+                    {formatCredits(egressCredits, i18n?.language)} {t("credits")} · {t("traffic_this_period")}
                   </Typography>
                 </Stack>
               </Stack>
@@ -131,7 +133,8 @@ export function UsageOverview() {
                 </Typography>
                 {total !== null && (
                   <Typography variant="body2" color="primary">
-                    {usedCredits.toFixed(2)} {t("out_of")} {total.toFixed(2)} {t("credits")} / {t("month")}
+                    {formatCredits(usedCredits, i18n?.language)} {t("out_of")}{" "}
+                    {formatCredits(total, i18n?.language)} {t("credits")} / {t("month")}
                   </Typography>
                 )}
               </Stack>
@@ -179,18 +182,18 @@ export function UsageOverview() {
                       <Stack direction="row" spacing={1} alignItems="center">
                         <ColorDot color={theme.palette.primary.main} />
                         <Typography variant="caption">
-                          {t("compute")} {computeCredits.toFixed(2)}
+                          {t("compute")} {formatCredits(computeCredits, i18n?.language)}
                         </Typography>
                       </Stack>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <ColorDot color={theme.palette.info.main} />
                         <Typography variant="caption">
-                          {t("traffic")} {egressCredits.toFixed(2)}
+                          {t("traffic")} {formatCredits(egressCredits, i18n?.language)}
                         </Typography>
                       </Stack>
                       {remainingCredits !== null && (
                         <Typography variant="caption" color="text.secondary">
-                          · {remainingCredits.toFixed(2)} {t("remaining")}
+                          · {formatCredits(remainingCredits, i18n?.language)} {t("remaining")}
                         </Typography>
                       )}
                     </Stack>
@@ -211,7 +214,7 @@ export function UsageOverview() {
                   {/* Approximation caption */}
                   {remainingCredits !== null && remainingCredits > 0 && (
                     <Typography variant="caption" color="text.secondary">
-                      {t("credits_remaining", { remaining: remainingCredits.toFixed(2) })}
+                      {t("credits_remaining", { remaining: formatCredits(remainingCredits, i18n?.language) })}
                       {" · "}≈ {Math.round(remainingCredits / 20)} {t("gb_abbr")} {t("or")}{" "}
                       {Math.round(remainingCredits / 10)} {t("minutes_abbr")} {t("remaining")}
                     </Typography>

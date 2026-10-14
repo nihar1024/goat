@@ -44,7 +44,7 @@ vi.mock("@mui/material", async () => {
 });
 
 const mockBalance = {
-  used_credits: 3030,
+  used_credits: 3030.4,
   total_credits: 5000,
   over_budget: false,
   plan_renewal_date: "2026-07-01T00:00:00",
@@ -83,9 +83,10 @@ vi.mock("@/lib/api/usage", () => ({
 describe("UsageOverview", () => {
   it("renders the credit budget used value", () => {
     render(<UsageOverview />);
-    // Budget row renders used/total as adjacent text nodes in one element; t() returns keys as-is
-    expect(screen.getByText(/3030\.00/)).toBeInTheDocument();
-    expect(screen.getByText(/5000\.00/)).toBeInTheDocument();
+    // Budget row renders used/total as adjacent text nodes in one element; t() returns keys as-is.
+    // Credits are shown as whole numbers, the ledger's fractions rounded away.
+    expect(screen.getByText(/3,030 out_of 5,000/)).toBeInTheDocument();
+    expect(screen.queryByText(/3030\.4/)).not.toBeInTheDocument();
   });
 
   it("renders capacity labels for storage and projects", () => {

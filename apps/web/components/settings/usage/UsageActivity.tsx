@@ -122,12 +122,13 @@ export function UsageActivity() {
             </FormControl>
             {isOrgAdmin && memberOptions.length > 0 && (
               <FormControl size="small" sx={{ minWidth: 200 }}>
-                <InputLabel id="member-filter-label">{t("filter_by_member")}</InputLabel>
+                <InputLabel id="member-filter-label" shrink>{t("filter_by_member")}</InputLabel>
                 <Select
                   labelId="member-filter-label"
                   label={t("filter_by_member")}
                   value={member}
                   displayEmpty
+                  notched
                   onChange={(e) => {
                     setMember(e.target.value as string);
                     setPage(1);

@@ -9,6 +9,8 @@ Odoo's side is the goat_accounts module: GOAT calls its server action
   creates the company (organization.odoo_company_id), the person goes under
   it with the trial tag, and the trial's dates are set; the campaign starts.
 - join: an invited member joined an organization.
+- status: GOAT suspended an organization itself (its trial ended), so the
+  company in Odoo shows it.
 
 Nothing here blocks GOAT: the calls run after the request's own work is
 committed, in the background, and a failure is logged only. A user without
@@ -17,6 +19,11 @@ RETRY_SECONDS per process), so Odoo being down delays the sync, nothing more.
 Off without billing or without ODOO_BILLING_API_KEY (settings.accounts_sync_enabled).
 """
 
-from core.accounts.sync import report_join, report_sign_up, report_trial
+from core.accounts.sync import (
+    report_join,
+    report_sign_up,
+    report_suspension,
+    report_trial,
+)
 
-__all__ = ["report_join", "report_sign_up", "report_trial"]
+__all__ = ["report_join", "report_sign_up", "report_suspension", "report_trial"]

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.accounts import report_suspension
 from core.core.config import settings
 from core.crud.crud_organization import organization as crud_organization
 from core.crud.crud_user import user as crud_user
@@ -90,6 +91,7 @@ async def trial_lifecycle(
     if stage == "expired":
         organization.suspended = True
         await db.commit()
+        report_suspension(organization)
 
     # With the Odoo sync on, Odoo's trial campaign sends the reminders; GOAT
     # sends only the account email that the organization is suspended.

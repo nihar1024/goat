@@ -46,6 +46,18 @@ def advance_renewal(current: datetime, now: datetime) -> datetime:
     return d
 
 
+def _redis() -> "object | None":
+    """The Redis geoapi keeps its over-budget flags in; None when unreachable."""
+    try:
+        import os
+
+        import redis
+
+        return redis.Redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379/0"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 DUE_SQL = (
     "SELECT id, credits_reset_at FROM {schema}.organization "
     "WHERE credits_reset_at IS NOT NULL AND credits_reset_at <= $1 "
@@ -64,6 +76,7 @@ async def main(params: CreditResetParams = CreditResetParams()) -> dict:
     schema = customer_schema()
     now = datetime.utcnow()
     core = await asyncpg.connect(dsn=core_dsn(), timeout=10)
+    redis_client = _redis()
     reset = 0
     try:
         rows = await core.fetch(DUE_SQL.format(schema=schema), now)
@@ -77,6 +90,14 @@ async def main(params: CreditResetParams = CreditResetParams()) -> dict:
                 r["id"],
                 advance_renewal(r["credits_reset_at"], now),
             )
+            # geoapi refuses downloads while this flag is set; new credits lift it.
+            if redis_client is not None:
+                try:
+                    redis_client.delete(f"meter:over_budget:{r['id']}")
+                except Exception as exc:  # noqa: BLE001 - the reset itself is done
+                    logger.warning(
+                        "credit_reset: flag of %s not cleared (%s)", r["id"], exc
+                    )
             reset += 1
     finally:
         await core.close()

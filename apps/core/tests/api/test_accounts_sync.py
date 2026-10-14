@@ -135,3 +135,20 @@ async def test_a_failing_odoo_never_reaches_the_caller(db_session, odoo, monkeyp
     await _settle()  # logged, not raised
     await db_session.refresh(user)
     assert user.odoo_contact_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_suspension_is_reported_to_odoo(db_session, odoo):
+    org = make_organization(on_trial=True, suspended=True)
+    db_session.add(org)
+    await db_session.commit()
+
+    sync.report_suspension(org)
+    await _settle()
+
+    (op,) = odoo.ops
+    assert op == {
+        "goat_op": "status",
+        "goat_organization_id": str(org.id),
+        "goat_suspended": True,
+    }

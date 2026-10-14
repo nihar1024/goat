@@ -53,6 +53,10 @@ def _app(monkeypatch, *, org, owner, over_budget, recorder):
     def items(cid: str):
         return Response(content=b"x" * 200, media_type="application/json")
 
+    @app.get("/collections/{cid}/download")
+    def download(cid: str):
+        return Response(content=b"x" * 300, media_type="application/octet-stream")
+
     return app
 
 
@@ -77,11 +81,23 @@ def test_authenticated_request_not_anonymous(monkeypatch):
     assert anonymous is False
 
 
-def test_blocks_when_over_budget(monkeypatch):
+def test_blocks_downloads_when_over_budget(monkeypatch):
+    rec = []
+    client = TestClient(
+        _app(monkeypatch, org="org1", owner="own1", over_budget=True, recorder=rec)
+    )
+    resp = client.get("/collections/lyr9/download")
+    assert resp.status_code == 402
+    assert rec == []  # blocked before serving
+
+
+def test_maps_keep_working_when_over_budget(monkeypatch):
+    # A published map or dashboard must not go dark: features and tiles are
+    # served (and still metered) when the organization is out of credits.
     rec = []
     client = TestClient(
         _app(monkeypatch, org="org1", owner="own1", over_budget=True, recorder=rec)
     )
     resp = client.get("/collections/lyr9/items")
-    assert resp.status_code == 402
-    assert rec == []  # blocked before serving
+    assert resp.status_code == 200
+    assert rec == [("org1", "own1", "lyr9", "features", 200, True)]

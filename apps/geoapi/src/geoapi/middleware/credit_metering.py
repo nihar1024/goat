@@ -117,7 +117,13 @@ class CreditMeteringMiddleware(BaseHTTPMiddleware):
             await _resolve_layer_org(collection_id) if collection_id else (None, None)
         )
 
-        if org_id and await _is_over_budget(org_id):
+        # Out of credits: downloads stop, viewing does not. Maps and dashboards
+        # (tiles, features) keep working, so a published map never goes dark.
+        if (
+            org_id
+            and _service_from_path(request.url.path) == "downloads"
+            and await _is_over_budget(org_id)
+        ):
             return Response(
                 status_code=402,
                 content=b"Organization is out of credits for this period.",

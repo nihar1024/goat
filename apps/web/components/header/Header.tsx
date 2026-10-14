@@ -3,9 +3,9 @@
 import Info from "@mui/icons-material/Info";
 import { Box, Button, Chip, Link, Stack, Typography, useMediaQuery, useTheme } from "@mui/material";
 import Divider from "@mui/material/Divider";
-import { format, formatDistance, parseISO } from "date-fns";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { useMemo, useState } from "react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { useMap } from "react-map-gl/maplibre";
 
 import { GOATLogoIconOnlyGreen } from "@p4b/ui/assets/svg/GOATLogoIconOnlyGreen";
@@ -333,16 +333,17 @@ export default function Header(props: HeaderProps) {
                     variant="outlined"
                     color="warning"
                     size="small"
-                    label={
-                      <Trans
-                        i18nKey="common:your_trial_will_end_in"
-                        values={{
-                          expire_date: formatDistance(new Date(organization.plan_renewal_date), new Date(), {
-                            locale: dateLocale,
-                          }),
-                        }}
-                      />
-                    }
+                    // Exact days, not "about a month": an extension shows at once.
+                    label={(() => {
+                      const days = differenceInCalendarDays(
+                        new Date(organization.plan_renewal_date),
+                        new Date()
+                      );
+                      return days > 0 ? t("trial_days_left", { count: days }) : t("trial_ends_today");
+                    })()}
+                    title={t("trial_ends_on", {
+                      date: format(new Date(organization.plan_renewal_date), "PP", { locale: dateLocale }),
+                    })}
                     sx={{
                       "& .MuiChip-label": {
                         fontWeight: "bold",

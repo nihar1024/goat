@@ -235,6 +235,33 @@ export function UsageOverview() {
 
             <Divider />
 
+            {/* How credits are counted: the prices, from the server */}
+            {balance.rates && balance.rates.some((r) => r.category !== "ai") && (
+              <>
+                <Stack spacing={2}>
+                  <Typography variant="body1" fontWeight="bold">
+                    {t("credit_pricing_title")}
+                  </Typography>
+                  <Stack component="ul" spacing={1} sx={{ m: 0, pl: 5 }}>
+                    {balance.rates
+                      .filter((r) => r.category !== "ai") // no AI assistant yet
+                      .map((r) => (
+                        <Typography component="li" variant="body2" key={r.category}>
+                          {t(`credit_pricing_${r.category}`, {
+                            rate: formatCredits(r.rate, i18n?.language),
+                            defaultValue: `${r.category}: ${r.rate} / ${r.unit_basis}`,
+                          })}
+                        </Typography>
+                      ))}
+                    <Typography component="li" variant="body2" color="text.secondary">
+                      {t("credit_pricing_free")}
+                    </Typography>
+                  </Stack>
+                </Stack>
+                <Divider />
+              </>
+            )}
+
             {/* Capacity section */}
             <Stack spacing={2}>
               <Typography variant="body1" fontWeight="bold">

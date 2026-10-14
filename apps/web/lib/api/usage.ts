@@ -7,7 +7,15 @@ export const CREDITS_API_BASE_URL = new URL("api/v2/credits", API_BASE_URL).href
 
 // --- Response types ---
 
+export interface CreditRate {
+  category: string;
+  rate: number;
+  unit_basis: "minute" | "GB" | "1k_tokens" | string;
+}
+
 export interface CreditBalance {
+  /** What a credit buys, per category (compute, egress, ai). */
+  rates?: CreditRate[];
   used_credits: number;
   total_credits: number | null;
   over_budget: boolean;

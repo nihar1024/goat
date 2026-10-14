@@ -44,11 +44,32 @@ async def get_balance(
     if org is None:
         raise HTTPException(status_code=404, detail="No organization for user")
 
+    # The prices, so the Usage page can explain what a credit buys.
+    rates = (
+        (
+            await db.execute(
+                text(
+                    f"SELECT category, rate, unit_basis FROM {core_settings.SCHEMA}.credit_rate "
+                    "ORDER BY category"
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
     used_credits = _num(org.used_credits)
     total_credits = None if org.total_credits is None else float(org.total_credits)
     over_budget = total_credits is not None and used_credits >= total_credits
 
     return {
+        "rates": [
+            {
+                "category": r["category"],
+                "rate": float(r["rate"]),
+                "unit_basis": r["unit_basis"],
+            }
+            for r in rates
+        ],
         "used_credits": used_credits,
         "total_credits": total_credits,
         "over_budget": over_budget,

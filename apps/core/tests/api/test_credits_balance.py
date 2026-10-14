@@ -38,6 +38,8 @@ async def test_balance_reports_over_budget(client, db_session):
     assert body["used_credits"] == 100.0
     assert body["total_credits"] == 100.0
     assert body["over_budget"] is True
+    # the prices come along, for the page that explains them
+    assert isinstance(body["rates"], list)
 
 
 @pytest.mark.asyncio

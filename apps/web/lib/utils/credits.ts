@@ -3,3 +3,11 @@
  * happens only for display, never per charge. */
 export const formatCredits = (value: number | null | undefined, locale?: string): string =>
   new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(value ?? 0));
+
+/** A run refused because the organization has used up its credits (HTTP 402). */
+export class OutOfCreditsError extends Error {
+  constructor() {
+    super("Out of credits");
+    this.name = "OutOfCreditsError";
+  }
+}

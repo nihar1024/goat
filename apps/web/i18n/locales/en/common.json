@@ -2816,7 +2816,7 @@
   "trial_days_left_other": "Trial: {{count}} days left",
   "trial_ends_today": "Trial ends today",
   "trial_ends_on": "Your trial ends on {{date}}",
-  "out_of_credits_tool": "No credits left: your organization has used up its credits for this period. You can find details under Settings > Usage.",
+  "out_of_credits_tool": "You have run out of credits.",
   "your_trial_will_end_in": "Your trial will expire in {{expire_date}}",
   "zoom": "Zoom",
   "zoom_controls": "Zoom controls",

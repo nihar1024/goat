@@ -13,7 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from processes.deps.auth import get_user_id
+from processes.deps.auth import get_user_id, oauth2_scheme
 from processes.ducklake import ducklake_manager
 from processes.services.access import (
     References,
@@ -101,6 +101,7 @@ async def execute_workflow(
     workflow_id: str,
     request: WorkflowExecuteRequest,
     user_id: UUID = Depends(get_user_id),
+    access_token: str | None = Depends(oauth2_scheme),
 ) -> WorkflowExecuteResponse:
     """Execute a workflow via Windmill.
 
@@ -124,6 +125,11 @@ async def execute_workflow(
         ),
         request.nodes,
     )
+
+    # Out of credits: a workflow runs tools too, so it is refused like one (402).
+    from processes.services.credit_gate import assert_credits_available
+
+    await assert_credits_available(access_token)
 
     # Build job inputs
     job_inputs: dict[str, Any] = {

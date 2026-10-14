@@ -368,6 +368,13 @@ export function UserProfileFormFields(props: UserProfileFormFieldsProps) {
             }
           />
         )}
+      {/* The trial emails are part of the trial; the newsletter above is not. */}
+      {subscribeToNewsletter &&
+        (activeStep == 1 || activeStep === undefined) && (
+          <Typography variant="caption" color="text.secondary" component="p">
+            {msg("trialEmailsNote")}
+          </Typography>
+        )}
     </>
   );
 }

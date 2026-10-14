@@ -51,6 +51,9 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
             firstname=firstname,
             lastname=lastname,
             avatar=settings.USER_DEFAULT_AVATAR,
+            # The sign-up's newsletter box: Keycloak's `newsletter` claim holds
+            # the time of consent (packages/js/keycloak-theme/realm/README.md).
+            newsletter_subscribe=bool(str(token.get("newsletter") or "").strip()),
         )
         db_session.add(new_user)
         await db_session.commit()

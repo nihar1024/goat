@@ -160,14 +160,22 @@ def report_trial(organization: Organization, owner_id: UUID) -> None:
 
 
 def report_suspension(organization: Organization) -> None:
-    """GOAT suspended or reactivated the organization (e.g. its trial ended):
-    Odoo shows it on the company, without sending it back."""
+    """GOAT changed the organization's state itself: suspended or reactivated
+    (its trial ended), or converted from trial to subscription. Odoo shows it
+    on the company, without sending it back; a converted organization's
+    people leave the trial campaign."""
     if not settings.accounts_sync_enabled:
         return
-    org_id, suspended = organization.id, bool(organization.suspended)
+    org_id = organization.id
+    suspended, on_trial = bool(organization.suspended), bool(organization.on_trial)
 
     async def work() -> None:
-        await _run("status", goat_organization_id=str(org_id), goat_suspended=suspended)
+        await _run(
+            "status",
+            goat_organization_id=str(org_id),
+            goat_suspended=suspended,
+            goat_on_trial=on_trial,
+        )
 
     _in_background(work())
 

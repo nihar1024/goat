@@ -60,6 +60,8 @@ PRODUCT_SPECS: list[dict] = [
             "x_goat_viewers": 2,
             "x_goat_storage_mb": 5 * GB,
             "x_goat_projects": 50,
+            # monthly credits (compute, traffic, AI), decided 2026-10-14
+            "x_goat_credits": 25000,
         },
         "create": True,
     },
@@ -67,6 +69,12 @@ PRODUCT_SPECS: list[dict] = [
         "xid": "product_goat_extra_editor",
         "adopt_names": ("GOAT Extra Editor User",),
         "values": {"name": "GOAT Extra Editor User", "x_goat_editors": 1},
+        "create": True,
+    },
+    {
+        "xid": "product_goat_extra_credits",
+        "adopt_names": ("GOAT Extra Credits",),
+        "values": {"name": "GOAT Extra Credits", "x_goat_credits": 10000},
         "create": True,
     },
     {
@@ -113,6 +121,7 @@ PRODUCT_FIELDS = [
     "x_goat_viewers",
     "x_goat_storage_mb",
     "x_goat_projects",
+    "x_goat_credits",
 ]
 
 # --- white-label checkbox ----------------------------------------------------
@@ -283,7 +292,39 @@ def _bind_xid(c: OdooClient, xid: str, product_id: int) -> None:
         )
 
 
+# Credits are newer than the Studio fields the other quotas use: the catalog
+# creates them where they are missing (product: per unit; subscription: a
+# negotiated override, like the other x_goat_* fields).
+CREDIT_FIELDS = (
+    ("product.template", "x_goat_credits", "GOAT Credits / month"),
+    ("sale.order", "x_goat_credits", "GOAT Credits / month"),
+)
+
+
+def _ensure_integer_field(c: OdooClient, model: str, name: str, label: str) -> None:
+    if c.kw("ir.model.fields", "search", [("model", "=", model), ("name", "=", name)]):
+        print(f"field {model}.{name}: already exists")
+        return
+    print(f"field {model}.{name}: will create")
+    if c.apply:
+        model_id = c.kw("ir.model", "search", [("model", "=", model)], limit=1)[0]
+        c.kw(
+            "ir.model.fields",
+            "create",
+            {
+                "name": name,
+                "model": model,
+                "model_id": model_id,
+                "field_description": label,
+                "ttype": "integer",
+                "state": "manual",
+            },
+        )
+
+
 def cmd_catalog(c: OdooClient, _args: argparse.Namespace) -> int:
+    for model, name, label in CREDIT_FIELDS:
+        _ensure_integer_field(c, model, name, label)
     failures = 0
     for spec in PRODUCT_SPECS:
         xid = spec["xid"]

@@ -151,4 +151,5 @@ async def test_a_suspension_is_reported_to_odoo(db_session, odoo):
         "goat_op": "status",
         "goat_organization_id": str(org.id),
         "goat_suspended": True,
+        "goat_on_trial": True,
     }

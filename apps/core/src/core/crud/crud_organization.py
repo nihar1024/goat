@@ -829,8 +829,10 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         organization: Organization,
         entitlement: dict,
         reset_usage: bool = True,
-    ) -> None:
+    ) -> bool:
         """Apply a billing entitlement (caps + renewal). Zeroes used_credits on renewal.
+
+        Returns whether this push converted a trial into a subscription.
 
         Provider-agnostic: `entitlement` is a plain dict; absent keys are left as-is.
         """
@@ -863,6 +865,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             converted or organization.credits_reset_at is None
         ):
             organization.credits_reset_at = add_month(datetime.now())
+        return converted
 
 
 organization = CRUDOrganization(Organization)

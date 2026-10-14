@@ -95,3 +95,23 @@ def test_missing_feature_field_means_not_granted():
     del stripped["x_goat_white_label"]  # checkbox not yet created in Odoo
     payload = compute_entitlement(stripped, [BASE_LINE])
     assert payload["extras"] == []
+
+
+def test_monthly_credits_from_products_and_packs():
+    base = {**BASE_LINE, "x_goat_credits": 25000}
+    pack = {**EXTRA_EDITOR, "qty": 2.0, "x_goat_editors": 0, "x_goat_credits": 10000}
+    payload = compute_entitlement(order(), [base, pack])
+    assert payload["total_credits"] == 45000  # 25,000 + 2 x 10,000
+
+
+def test_credits_override_on_the_subscription_wins():
+    base = {**BASE_LINE, "x_goat_credits": 25000}
+    payload = compute_entitlement(order(x_goat_credits=60000), [base])
+    assert payload["total_credits"] == 60000
+
+
+def test_no_credits_in_the_catalogue_leaves_the_allowance_alone():
+    # An Odoo without the field (or products without credits) must not send 0,
+    # which would block every tool run.
+    payload = compute_entitlement(order(), [BASE_LINE])
+    assert "total_credits" not in payload

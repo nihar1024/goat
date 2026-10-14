@@ -54,6 +54,11 @@ PUSHABLE_STATES = {"3_progress", "4_paused", "6_churn"}
 SUSPENDED_STATES = {"4_paused", "6_churn"}
 
 # payload quota key -> x_goat field name (on products AND on the order)
+# Monthly credits: same sum/override rule, but only sent when the catalogue
+# grants some (an Odoo without the field, or products without credits, leave
+# the organization's allowance as it is instead of setting it to 0).
+CREDIT_FIELD = "x_goat_credits"
+
 QUOTA_FIELDS = {
     "total_editors": "x_goat_editors",
     "total_viewers": "x_goat_viewers",
@@ -111,6 +116,13 @@ def compute_entitlement(
                 line["qty"] * (line.get(field) or 0) for line in lines
             )
 
+    credits_override = order.get(CREDIT_FIELD) or 0
+    credits = credits_override or sum(
+        line["qty"] * (line.get(CREDIT_FIELD) or 0) for line in lines
+    )
+    if credits > 0:
+        payload["total_credits"] = credits
+
     payload["extras"] = [
         feature for field, feature in FEATURE_FIELDS.items() if order.get(field)
     ]
@@ -140,6 +152,7 @@ class OdooEntitlementTask:
         "x_goat_organization_id",
         "order_line",
         *QUOTA_FIELDS.values(),
+        CREDIT_FIELD,
         *FEATURE_FIELDS.keys(),
     ]
 
@@ -197,11 +210,13 @@ class OdooEntitlementTask:
             )
             template_by_variant = {v["id"]: v["product_tmpl_id"][0] for v in variants}
             template_ids = sorted(set(template_by_variant.values()))
+            wanted = [*QUOTA_FIELDS.values(), CREDIT_FIELD]
+            existing = self._kw("product.template", "fields_get", wanted)
             templates = self._kw(
                 "product.template",
                 "read",
                 template_ids,
-                fields=list(QUOTA_FIELDS.values()),
+                fields=[f for f in wanted if f in existing],
             )
             quotas_by_template = {t["id"]: t for t in templates}
             for line in raw_lines:
@@ -214,6 +229,7 @@ class OdooEntitlementTask:
                     {
                         "qty": line["product_uom_qty"],
                         **{f: template.get(f) or 0 for f in QUOTA_FIELDS.values()},
+                        CREDIT_FIELD: template.get(CREDIT_FIELD) or 0,
                     }
                 )
         return order, lines

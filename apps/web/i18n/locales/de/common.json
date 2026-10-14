@@ -2948,6 +2948,7 @@
   "trial_days_left_other": "Testversion: noch {{count}} Tage",
   "trial_ends_today": "Testversion endet heute",
   "trial_ends_on": "Ihre Testversion endet am {{date}}",
+  "out_of_credits_tool": "Keine Credits mehr: Ihre Organisation hat ihre Credits für diesen Zeitraum aufgebraucht. Details finden Sie unter Einstellungen > Nutzung.",
   "your_trial_will_end_in": "Ihre Testversion läuft in {{expire_date}} ab.",
   "zoom": "Zoom",
   "zoom_behavior": "Zoom-Verhalten",

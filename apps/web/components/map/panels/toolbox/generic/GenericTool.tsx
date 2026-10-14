@@ -33,7 +33,11 @@ import type { ProcessedInput, ProcessedSection } from "@/types/map/ogc-processes
 import type { IndicatorBaseProps } from "@/types/map/toolbox";
 
 import { useFilteredProjectLayers } from "@/hooks/map/LayerPanelHooks";
-import { useProcessDescription, useProcessExecution } from "@/hooks/map/useOgcProcesses";
+import {
+  ProcessExecutionError,
+  useProcessDescription,
+  useProcessExecution,
+} from "@/hooks/map/useOgcProcesses";
 import { useProjectBundleKinds } from "@/hooks/map/useProjectBundleKinds";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -644,6 +648,10 @@ export default function GenericTool({ processId, onBack, onClose }: GenericToolP
       handleReset();
     } catch (error) {
       console.error("Process execution error:", error);
+      if (error instanceof ProcessExecutionError && error.status === 402) {
+        toast.error(t("out_of_credits_tool"), { autoClose: 10000 });
+        return;
+      }
       toast.error(t("error_running_tool"));
     }
   };

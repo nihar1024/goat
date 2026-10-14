@@ -12,6 +12,8 @@ export interface CreditBalance {
   total_credits: number | null;
   over_budget: boolean;
   plan_renewal_date: string | null;
+  on_trial: boolean;
+  credits_reset_at: string | null;
   used_storage: number;
   total_storage: number | null;
   used_projects: number;

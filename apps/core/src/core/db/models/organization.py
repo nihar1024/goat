@@ -94,6 +94,11 @@ class OrganizationBase(SQLModel):
         default=None, sa_column=Column(ARRAY(Text), nullable=True)
     )
     plan_renewal_date: datetime | None = Field(default=None, sa_column=Column(DateTime))
+    # Next monthly credit reset (used_credits back to 0), whatever the
+    # subscription's term. None: no monthly reset (trials, self-hosted).
+    credits_reset_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True)
+    )
     on_trial: bool = Field(sa_column=Column(Boolean, nullable=False))
     type: OrganizationTypeEnum = Field(sa_column=Column(Text, nullable=False))
     contact_user_id: UUID = Field(

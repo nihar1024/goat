@@ -113,6 +113,16 @@ def _upgrade_organization() -> None:
             schema=SCHEMA,
         )
 
+    # --- monthly credit period, independent of the subscription's term:
+    # credit_reset zeroes used_credits and moves this a month on. NULL = no
+    # monthly reset (trials, self-hosted).
+    if "credits_reset_at" not in org_columns:
+        op.add_column(
+            "organization",
+            sa.Column("credits_reset_at", sa.DateTime(), nullable=True),
+            schema=SCHEMA,
+        )
+
     # --- plan names + Stripe are gone (single-product model, Odoo billing).
     # Entitlement state is purely numeric quotas + extras; there is no plan
     # label and no Stripe customer to reference anymore.
@@ -292,6 +302,8 @@ def _downgrade_organization() -> None:
     org_columns = _columns("organization")
     if "extras" in org_columns:
         op.drop_column("organization", "extras", schema=SCHEMA)
+    if "credits_reset_at" in org_columns:
+        op.drop_column("organization", "credits_reset_at", schema=SCHEMA)
 
     # Recreate the CRM columns with their original constraints. The dropped
     # data is unrecoverable — NOT NULL columns come back as neutral

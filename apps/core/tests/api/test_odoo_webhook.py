@@ -123,3 +123,62 @@ async def test_webhook_refuses_a_wrong_secret(client, db_session, monkeypatch):
         json={"organization_id": str(org.id), "stage": "expired"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_conversion_starts_the_monthly_credit_period(
+    client, db_session, monkeypatch
+):
+    from datetime import datetime, timedelta
+
+    enable_billing(monkeypatch)
+    org = make_organization(on_trial=True, total_credits=10000, used_credits=8000)
+    db_session.add(org)
+    await db_session.commit()
+    await db_session.refresh(org)
+
+    resp = await client.post(
+        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        headers={"X-Webhook-Secret": "shh"},
+        json={
+            "organization_id": str(org.id),
+            "on_trial": False,
+            "total_credits": 25000,
+            "plan_renewal_date": "2027-10-14T00:00:00",
+            "reset_usage": False,
+        },
+    )
+    assert resp.status_code == 200
+    await db_session.refresh(org)
+    assert org.on_trial is False
+    assert float(org.used_credits) == 0
+    # monthly, not with the yearly renewal
+    assert (
+        timedelta(days=27) < org.credits_reset_at - datetime.now() < timedelta(days=32)
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_trial_change_from_odoo_starts_no_credit_period(
+    client, db_session, monkeypatch
+):
+    enable_billing(monkeypatch)
+    org = make_organization(on_trial=True, total_credits=10000, used_credits=300)
+    db_session.add(org)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        headers={"X-Webhook-Secret": "shh"},
+        json={
+            "organization_id": str(org.id),
+            "plan_renewal_date": "2026-12-01T23:59:59",
+            "suspended": False,
+            "reset_usage": False,
+        },
+    )
+    assert resp.status_code == 200
+    await db_session.refresh(org)
+    assert org.on_trial is True
+    assert org.credits_reset_at is None
+    assert float(org.used_credits) == 300

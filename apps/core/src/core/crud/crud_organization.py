@@ -1,3 +1,4 @@
+import calendar
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 from uuid import UUID
@@ -75,6 +76,14 @@ class OrganizationNotDeletableError(Exception):
 
     def __init__(self, found: list[str]) -> None:
         super().__init__(", ".join(found))
+
+
+def add_month(moment: datetime) -> datetime:
+    """The same day and time one month later (the month's last day when shorter)."""
+    month = moment.month % 12 + 1
+    year = moment.year + (moment.month == 12)
+    day = min(moment.day, calendar.monthrange(year, month)[1])
+    return moment.replace(year=year, month=month, day=day)
 
 
 class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUpdate]):
@@ -835,7 +844,9 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             )
         if "suspended" in entitlement:
             organization.suspended = bool(entitlement["suspended"])
+        converted = False
         if "on_trial" in entitlement:
+            converted = organization.on_trial and not entitlement["on_trial"]
             organization.on_trial = bool(entitlement["on_trial"])
         renewal = entitlement.get("plan_renewal_date")
         if renewal:
@@ -844,8 +855,14 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
                 if isinstance(renewal, datetime)
                 else datetime.fromisoformat(renewal)
             )
-        if reset_usage:
+        if reset_usage or converted:
             organization.used_credits = 0
+        # A subscription's credits reset monthly, from its first push on
+        # (credit_reset moves the date on); a trial's credits last the trial.
+        if not organization.on_trial and (
+            converted or organization.credits_reset_at is None
+        ):
+            organization.credits_reset_at = add_month(datetime.now())
 
 
 organization = CRUDOrganization(Organization)

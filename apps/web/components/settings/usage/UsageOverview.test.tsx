@@ -48,6 +48,8 @@ const mockBalance = {
   total_credits: 5000,
   over_budget: false,
   plan_renewal_date: "2026-07-01T00:00:00",
+  on_trial: false,
+  credits_reset_at: "2026-07-01T00:00:00",
   used_storage: 512,
   total_storage: 10240,
   used_projects: 3,

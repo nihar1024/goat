@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import prettyBytes from "pretty-bytes";
 import { Trans, useTranslation } from "react-i18next";
 
+import { useDateFnsLocale } from "@/i18n/utils";
+
 import { useCreditBalance, useCreditBreakdown, useStorageByLayer } from "@/lib/api/usage";
 
 import QuotaStatus from "@/components/common/QuotaStatus";
@@ -41,6 +43,7 @@ function ColorDot({ color }: ColorDotProps) {
 
 export function UsageOverview() {
   const { t } = useTranslation("common");
+  const dateLocale = useDateFnsLocale();
   const theme = useTheme();
   const { balance, isLoading: balanceLoading } = useCreditBalance();
   const { breakdown, isLoading: breakdownLoading } = useCreditBreakdown("category");
@@ -191,9 +194,16 @@ export function UsageOverview() {
                         </Typography>
                       )}
                     </Stack>
-                    {balance.plan_renewal_date && (
+                    {balance.on_trial && balance.plan_renewal_date && (
                       <Typography variant="caption" color="text.secondary">
-                        {t("resets_on")}: {format(new Date(balance.plan_renewal_date), "MMM d, yyyy")}
+                        {t("trial_credits_until")}:{" "}
+                        {format(new Date(balance.plan_renewal_date), "PP", { locale: dateLocale })}
+                      </Typography>
+                    )}
+                    {!balance.on_trial && balance.credits_reset_at && (
+                      <Typography variant="caption" color="text.secondary">
+                        {t("resets_on")}:{" "}
+                        {format(new Date(balance.credits_reset_at), "PP", { locale: dateLocale })}
                       </Typography>
                     )}
                   </Stack>

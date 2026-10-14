@@ -40,6 +40,12 @@ async def get_balance(
         "plan_renewal_date": org.plan_renewal_date.isoformat()
         if org.plan_renewal_date
         else None,
+        # A trial's credits last until the trial ends (plan_renewal_date); a
+        # subscription's are reset monthly, next at credits_reset_at.
+        "on_trial": bool(org.on_trial),
+        "credits_reset_at": org.credits_reset_at.isoformat()
+        if org.credits_reset_at
+        else None,
         "used_storage": _num(org.used_storage),
         "total_storage": None
         if org.total_storage is None

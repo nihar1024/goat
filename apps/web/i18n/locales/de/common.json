@@ -2189,6 +2189,7 @@
   "reset_dashboard_title": "Dashboard zurücksetzen",
   "reset_dashboard_body": "Dadurch werden alle Widgets entfernt und alle Einstellungen zurückgesetzt. Diese Aktion kann nicht rückgängig gemacht werden.",
   "reset_order": "Zurücksetzen",
+  "trial_credits_until": "Test-Credits bis",
   "resets_on": "Wird zurückgesetzt",
   "result": "Ergebnis",
   "result_column_name": "Name der Ergebnisspalte",

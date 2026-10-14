@@ -1,9 +1,13 @@
-"""credit_reset: self-hosted period roll — zero used_credits and advance
-plan_renewal_date when the boundary passes. SaaS uses the Odoo webhook instead.
-See spec §8.
+"""credit_reset: the monthly credit period of subscribed organizations.
 
-Trials are left alone: their plan_renewal_date is the trial's end, which
-trial_expiry acts on; rolling it forward would extend the trial every month."""
+An organization with a subscription gets its credits every month, whatever the
+subscription's term (a yearly contract too): when credits_reset_at has passed,
+used_credits goes back to 0 and credits_reset_at moves on by whole months.
+Core sets the first date when a subscription arrives from Odoo.
+
+Trials are left alone: a trial's credits last the whole trial, and its end
+(plan_renewal_date) belongs to trial_expiry. Organizations without a reset date
+(self-hosted, trials) are never touched. Off with billing off."""
 
 from __future__ import annotations
 
@@ -22,8 +26,8 @@ class CreditResetParams(BaseModel):
     dry_run: bool = Field(default=False)
 
 
-def should_reset(plan_renewal_date: datetime | None, now: datetime) -> bool:
-    return plan_renewal_date is not None and plan_renewal_date <= now
+def should_reset(credits_reset_at: datetime | None, now: datetime) -> bool:
+    return credits_reset_at is not None and credits_reset_at <= now
 
 
 def _add_month(d: datetime) -> datetime:
@@ -35,14 +39,22 @@ def _add_month(d: datetime) -> datetime:
 
 
 def advance_renewal(current: datetime, now: datetime) -> datetime:
+    """The first monthly boundary after now, counted from current."""
     d = current
     while d <= now:
         d = _add_month(d)
     return d
 
 
+DUE_SQL = (
+    "SELECT id, credits_reset_at FROM {schema}.organization "
+    "WHERE credits_reset_at IS NOT NULL AND credits_reset_at <= $1 "
+    "AND on_trial IS NOT TRUE"
+)
+
+
 async def main(params: CreditResetParams = CreditResetParams()) -> dict:
-    """Windmill entry point: roll any org whose renewal boundary has passed."""
+    """Windmill entry point: start a new credit month where one is due."""
     from goatlib.tasks._db import SKIPPED, billing_enabled
 
     if not billing_enabled():
@@ -54,22 +66,16 @@ async def main(params: CreditResetParams = CreditResetParams()) -> dict:
     core = await asyncpg.connect(dsn=core_dsn(), timeout=10)
     reset = 0
     try:
-        rows = await core.fetch(
-            f"SELECT id, plan_renewal_date FROM {schema}.organization "
-            f"WHERE plan_renewal_date IS NOT NULL AND plan_renewal_date <= $1 "
-            f"AND on_trial IS NOT TRUE",
-            now,
-        )
+        rows = await core.fetch(DUE_SQL.format(schema=schema), now)
         for r in rows:
             if params.dry_run:
                 reset += 1
                 continue
-            new_date = advance_renewal(r["plan_renewal_date"], now)
             await core.execute(
                 f"UPDATE {schema}.organization "
-                f"SET used_credits = 0, plan_renewal_date = $2 WHERE id = $1",
+                f"SET used_credits = 0, credits_reset_at = $2 WHERE id = $1",
                 r["id"],
-                new_date,
+                advance_renewal(r["credits_reset_at"], now),
             )
             reset += 1
     finally:

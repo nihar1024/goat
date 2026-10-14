@@ -2087,6 +2087,7 @@
   "reset_dashboard_title": "Reset dashboard",
   "reset_dashboard_body": "This will remove all widgets and reset all settings. This action cannot be undone.",
   "reset_order": "Reset",
+  "trial_credits_until": "Trial credits until",
   "resets_on": "Resets on",
   "result": "Result",
   "result_column_name": "Result column name",

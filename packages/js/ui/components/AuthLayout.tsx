@@ -1,7 +1,7 @@
 import type { SxProps } from "@mui/material";
 import { Box, Typography } from "@mui/material";
 import Grid from "@mui/material/Unstable_Grid2";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import slide1 from "../assets/img/auth-slide-1.webp";
 import slide2 from "../assets/img/auth-slide-2.webp";
@@ -22,16 +22,76 @@ const SLIDES = [slide1, slide2, slide3, slide4, slide5, slide6].map(importedUrl)
 const SLIDE_SECONDS = 6;
 
 /** Cross-fades through the slides; holds still for people who prefer less motion. */
-function useSlide(count: number): [number, (index: number) => void] {
+function useSlide(count: number, clipsAdvance = false): [number, (index: number) => void] {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     const reduced =
       typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduced || count < 2) return;
+    // With clips, a slide moves on when its clip ends (see the video's onEnded).
+    if (reduced || count < 2 || clipsAdvance) return;
     const timer = window.setInterval(() => setIndex((i) => (i + 1) % count), SLIDE_SECONDS * 1000);
     return () => window.clearInterval(timer);
-  }, [count]);
+  }, [count, clipsAdvance]);
   return [index, setIndex];
+}
+
+/** One slide as a clip: loads only once shown, plays from the start while it is
+ * the active slide, stays on its poster for people who prefer less motion. */
+function SlideClip({
+  src,
+  poster,
+  active,
+  onEnded,
+}: {
+  src: string;
+  poster: string;
+  active: boolean;
+  onEnded: () => void;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [loaded, setLoaded] = useState(active);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (active) {
+      setLoaded(true);
+      if (reduced) return;
+      video.currentTime = 0;
+      video.play().catch(() => {
+        // Autoplay refused: show the poster and move on after a while.
+        window.setTimeout(onEnded, SLIDE_SECONDS * 1000);
+      });
+    } else {
+      video.pause();
+    }
+    // onEnded is recreated per render; the slide index is what matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+  return (
+    <Box
+      component="video"
+      ref={ref}
+      src={loaded ? src : undefined}
+      poster={poster}
+      muted
+      playsInline
+      preload="none"
+      onEnded={onEnded}
+      aria-hidden
+      sx={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        objectPosition: "left top",
+        opacity: active ? 1 : 0,
+        transition: "opacity 900ms ease",
+        "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+      }}
+    />
+  );
 }
 
 export interface AuthAside {
@@ -46,12 +106,16 @@ export default function AuthLayout({
   children,
   sx,
   aside,
+  clips,
 }: {
   children: React.ReactNode;
   sx?: SxProps;
   aside?: AuthAside;
+  /** Short silent clips, one per slide (same order); a slide then plays its clip
+   * and moves on when it ends. Apps that cannot bundle video leave it out. */
+  clips?: string[];
 }) {
-  const [slide, setSlide] = useSlide(SLIDES.length);
+  const [slide, setSlide] = useSlide(SLIDES.length, !!clips);
   return (
     <Box
       component="main"
@@ -117,7 +181,16 @@ export default function AuthLayout({
                 boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
                 backgroundColor: "#0f1622",
               }}>
-              {SLIDES.map((src, i) => (
+              {SLIDES.map((src, i) =>
+                clips?.[i] ? (
+                  <SlideClip
+                    key={src}
+                    poster={src}
+                    src={clips[i]}
+                    active={i === slide}
+                    onEnded={() => setSlide((i + 1) % SLIDES.length)}
+                  />
+                ) : (
                 <Box
                   key={src}
                   component="img"
@@ -136,7 +209,8 @@ export default function AuthLayout({
                     "@media (prefers-reduced-motion: reduce)": { transition: "none" },
                   }}
                 />
-              ))}
+                )
+              )}
             </Box>
             <Box sx={{ display: "flex", gap: 1, mt: 3 }}>
               {SLIDES.map((src, i) => (

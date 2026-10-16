@@ -81,7 +81,18 @@ def _in_background(work: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(_tasks.discard)
 
 
-async def _language(session: Any, user_id: UUID) -> str:
+def _odoo_language(value: object) -> str | None:
+    """'de', 'de-DE' or 'de_DE' -> 'de_DE'; None when unknown."""
+    code = str(value or "").strip().lower().replace("-", "_").split("_")[0]
+    return LANGUAGES.get(code)
+
+
+async def _language(session: Any, user_id: UUID, hint: str | None) -> str | None:
+    """The person's language for Odoo's mails: chosen on the sign-up page
+    (Keycloak's `locale` claim), else set in GOAT, else unknown (None: Odoo
+    keeps what it has, nothing is guessed)."""
+    if _odoo_language(hint):
+        return _odoo_language(hint)
     setting = (
         await session.execute(
             select(SystemSetting.preferred_language).where(
@@ -89,24 +100,24 @@ async def _language(session: Any, user_id: UUID) -> str:
             )
         )
     ).scalar_one_or_none()
-    value = getattr(setting, "value", setting)
-    return LANGUAGES.get(str(value or "en"), "en_US")
+    return _odoo_language(getattr(setting, "value", setting))
 
 
-async def _sign_up(user_id: UUID) -> int | None:
+async def _sign_up(user_id: UUID, locale: str | None = None) -> int | None:
     """Report the user; returns their contact id in Odoo."""
     async with session_manager.session() as session:
         user = await session.get(User, user_id)
         if user is None:
             return None
         name = " ".join(p for p in (user.firstname, user.lastname) if p) or user.email
+        lang = await _language(session, user.id, locale)
         result = await _run(
             "sign_up",
             goat_user_id=str(user.id),
             goat_name=name,
             goat_email=user.email,
-            goat_lang=await _language(session, user.id),
             goat_marketing_consent=bool(user.newsletter_subscribe),
+            **({"goat_lang": lang} if lang else {}),
         )
         contact_id = result.get("goat_contact_id")
         if contact_id and user.odoo_contact_id != contact_id:
@@ -129,8 +140,10 @@ def report_sign_up(user: User, token: dict) -> None:
         return
     _last_try[user.id] = now
 
+    locale = token.get("locale")
+
     async def work() -> None:
-        await _sign_up(user.id)
+        await _sign_up(user.id, locale)
 
     _in_background(work())
 

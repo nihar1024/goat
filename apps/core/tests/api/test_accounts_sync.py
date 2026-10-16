@@ -153,3 +153,19 @@ async def test_a_suspension_is_reported_to_odoo(db_session, odoo):
         "goat_suspended": True,
         "goat_on_trial": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_the_sign_up_language_reaches_odoo(db_session, odoo):
+    user = await _user(db_session)
+    sync.report_sign_up(user, {"email_verified": True, "locale": "de"})
+    await _settle()
+    assert odoo.ops[0]["goat_lang"] == "de_DE"
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_language_is_not_guessed(db_session, odoo):
+    user = await _user(db_session)
+    sync.report_sign_up(user, {"email_verified": True})
+    await _settle()
+    assert "goat_lang" not in odoo.ops[0]

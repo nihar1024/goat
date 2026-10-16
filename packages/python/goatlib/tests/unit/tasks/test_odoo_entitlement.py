@@ -115,3 +115,46 @@ def test_no_credits_in_the_catalogue_leaves_the_allowance_alone():
     # which would block every tool run.
     payload = compute_entitlement(order(), [BASE_LINE])
     assert "total_credits" not in payload
+
+
+class _FakeOdoo:
+    """Just enough of Odoo's XML-RPC for the customer lookup."""
+
+    def __init__(self, partners: dict[int, dict]) -> None:
+        self.partners = partners
+
+    def __call__(self, model, method, ids, fields=None):
+        assert (model, method) == ("res.partner", "read")
+        return [self.partners[i] for i in ids if i in self.partners]
+
+
+def _task(partners: dict[int, dict], linked: bool = True):
+    from goatlib.tasks.odoo_entitlement import OdooEntitlementTask
+
+    task = object.__new__(OdooEntitlementTask)
+    task._kw = _FakeOdoo(partners)
+    task._partners_linked = linked
+    return task
+
+
+def test_a_subscription_without_organization_takes_its_customers():
+    task = _task(
+        {
+            5: {"id": 5, "commercial_partner_id": [9, "Stadt Beispiel"]},
+            9: {"id": 9, "x_goat_organization_id": "org-9"},
+        }
+    )
+    assert task._organization_of_customer({"partner_id": [5, "Anna"]}) == "org-9"
+
+
+def test_a_customer_without_organization_leaves_it_unlinked():
+    task = _task(
+        {
+            5: {"id": 5, "commercial_partner_id": [5, "Firma"]},
+        }
+    )
+    assert task._organization_of_customer({"partner_id": [5, "Firma"]}) is None
+    assert (
+        _task({}, linked=False)._organization_of_customer({"partner_id": [5, "x"]})
+        is None
+    )

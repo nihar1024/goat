@@ -150,6 +150,7 @@ class OdooEntitlementTask:
         "subscription_state",
         "next_invoice_date",
         "x_goat_organization_id",
+        "partner_id",
         "order_line",
         *QUOTA_FIELDS.values(),
         CREDIT_FIELD,
@@ -172,6 +173,10 @@ class OdooEntitlementTask:
             raise RuntimeError(f"Odoo authentication failed against {self.odoo_url}")
         self._models = xmlrpc.client.ServerProxy(f"{self.odoo_url}/xmlrpc/2/object")
         self._order_fields = self._available_order_fields()
+        # goat_accounts links each customer company to its GOAT organization.
+        self._partners_linked = bool(
+            self._kw("res.partner", "fields_get", ["x_goat_organization_id"])
+        )
 
     def _kw(self: Self, model: str, method: str, *args: Any, **kwargs: Any) -> Any:
         return self._models.execute_kw(
@@ -187,11 +192,34 @@ class OdooEntitlementTask:
             logger.warning("sale.order is missing fields: %s", sorted(missing))
         return [f for f in self.ORDER_FIELDS if f in existing]
 
+    def _organization_of_customer(self: Self, order: dict) -> str | None:
+        """A subscription made in Odoo's form has no GOAT organization of its
+        own: it belongs to its customer company's (set by goat_accounts)."""
+        if not self._partners_linked or not order.get("partner_id"):
+            return None
+        partner = self._kw(
+            "res.partner",
+            "read",
+            [order["partner_id"][0]],
+            fields=["commercial_partner_id"],
+        )
+        if not partner or not partner[0].get("commercial_partner_id"):
+            return None
+        company = self._kw(
+            "res.partner",
+            "read",
+            [partner[0]["commercial_partner_id"][0]],
+            fields=["x_goat_organization_id"],
+        )
+        return (company[0].get("x_goat_organization_id") or None) if company else None
+
     def _fetch(self: Self, order_id: int) -> tuple[dict, list[dict]]:
         orders = self._kw("sale.order", "read", [order_id], fields=self._order_fields)
         if not orders:
             raise ValueError(f"sale.order {order_id} not found")
         order = orders[0]
+        if not order.get("x_goat_organization_id"):
+            order["x_goat_organization_id"] = self._organization_of_customer(order)
 
         lines: list[dict[str, Any]] = []
         line_ids = order.get("order_line") or []
@@ -278,7 +306,19 @@ class OdooEntitlementTask:
             [
                 ("is_subscription", "=", True),
                 ("subscription_state", "in", sorted(PUSHABLE_STATES)),
-                ("x_goat_organization_id", "!=", False),
+                *(
+                    [
+                        "|",
+                        ("x_goat_organization_id", "!=", False),
+                        (
+                            "partner_id.commercial_partner_id.x_goat_organization_id",
+                            "!=",
+                            False,
+                        ),
+                    ]
+                    if self._partners_linked
+                    else [("x_goat_organization_id", "!=", False)]
+                ),
             ],
         )
         handle = self.compute_order if dry_run else self.push_order

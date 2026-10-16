@@ -182,3 +182,24 @@ async def test_a_trial_change_from_odoo_starts_no_credit_period(
     assert org.on_trial is True
     assert org.credits_reset_at is None
     assert float(org.used_credits) == 300
+
+
+@pytest.mark.asyncio
+async def test_every_push_confirms_the_state_to_odoo(client, db_session, monkeypatch):
+    from core.endpoints.v2 import webhooks
+
+    enable_billing(monkeypatch)
+    reported = []
+    monkeypatch.setattr(webhooks, "report_suspension", reported.append)
+    org = make_organization(on_trial=False, total_credits=25000)
+    db_session.add(org)
+    await db_session.commit()
+    await db_session.refresh(org)
+
+    resp = await client.post(
+        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        headers={"X-Webhook-Secret": "shh"},
+        json={"organization_id": str(org.id), "on_trial": False, "reset_usage": False},
+    )
+    assert resp.status_code == 200
+    assert [o.id for o in reported] == [org.id]

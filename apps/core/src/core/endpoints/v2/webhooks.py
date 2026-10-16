@@ -53,15 +53,16 @@ async def odoo_entitlement(
         if isinstance(raw_reset, bool)
         else str(raw_reset).strip().lower() not in ("false", "0", "no", "")
     )
-    converted = crud_organization.apply_entitlement(
+    crud_organization.apply_entitlement(
         organization=organization,
         entitlement=payload,
         reset_usage=reset_usage,
     )
     await db.commit()
-    if converted:
-        # Odoo ends the trial on the company and stops the trial campaign.
-        report_suspension(organization)
+    # Odoo's company shows the state every time, not only on a conversion: a
+    # missed report heals with the next push (Odoo writes only what changed).
+    # A converted organization's people leave the trial campaign there.
+    report_suspension(organization)
     return {"status": "ok"}
 
 

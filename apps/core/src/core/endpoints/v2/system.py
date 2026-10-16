@@ -2,6 +2,7 @@ from fastapi import APIRouter, Body, Depends
 from pydantic import UUID4
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.accounts.sync import report_language
 from core.crud.crud_system_setting import system_setting as crud_system_setting
 from core.deps.auth import auth_z
 from core.endpoints.deps import get_db, get_user_id
@@ -69,6 +70,9 @@ async def update_system_settings(
     ),
 ) -> SystemSettingsRead:
     """Update system settings"""
+
+    if system_settings_in.preferred_language:
+        report_language(user_id, system_settings_in.preferred_language)
 
     existing_settings = await crud_system_setting.get_by_multi_keys(
         async_session, keys={"user_id": user_id}

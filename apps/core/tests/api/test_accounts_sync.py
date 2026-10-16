@@ -164,8 +164,33 @@ async def test_the_sign_up_language_reaches_odoo(db_session, odoo):
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_language_is_not_guessed(db_session, odoo):
+async def test_without_a_choice_odoo_gets_goats_default_language(db_session, odoo):
     user = await _user(db_session)
     sync.report_sign_up(user, {"email_verified": True})
     await _settle()
+    assert odoo.ops[0]["goat_lang"] == "de_DE"
+
+
+@pytest.mark.asyncio
+async def test_later_reports_leave_the_language_alone(db_session, odoo):
+    user = await _user(db_session, odoo_contact_id=7)
+    org = make_organization(
+        on_trial=True, plan_renewal_date=datetime.now() + timedelta(days=30)
+    )
+    db_session.add(org)
+    await db_session.commit()
+    sync.report_trial(org, user.id)
+    await _settle()
     assert "goat_lang" not in odoo.ops[0]
+
+
+@pytest.mark.asyncio
+async def test_a_language_change_in_goat_reaches_odoo(db_session, odoo):
+    known = await _user(db_session, odoo_contact_id=7)
+    unknown = await _user(db_session)
+    sync.report_language(known.id, "en")
+    sync.report_language(unknown.id, "en")
+    await _settle()
+    (op,) = odoo.ops
+    assert op["goat_user_id"] == str(known.id)
+    assert op["goat_lang"] == "en_US"

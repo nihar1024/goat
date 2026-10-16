@@ -14,6 +14,7 @@ from core.db.models.organization import Organization
 from core.db.models.system_setting import SystemSetting
 from core.db.models.user import User
 from core.db.session import session_manager
+from core.schemas.system_setting import default_system_settings
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +89,9 @@ def _odoo_language(value: object) -> str | None:
 
 
 async def _language(session: Any, user_id: UUID, hint: str | None) -> str | None:
-    """The person's language for Odoo's mails: chosen on the sign-up page
-    (Keycloak's `locale` claim), else set in GOAT, else unknown (None: Odoo
-    keeps what it has, nothing is guessed)."""
+    """The person's language for Odoo's mails, the one GOAT shows them: chosen
+    on the sign-up page (Keycloak's `locale` claim), else their GOAT setting,
+    else GOAT's default."""
     if _odoo_language(hint):
         return _odoo_language(hint)
     setting = (
@@ -100,17 +101,26 @@ async def _language(session: Any, user_id: UUID, hint: str | None) -> str | None
             )
         )
     ).scalar_one_or_none()
-    return _odoo_language(getattr(setting, "value", setting))
+    return _odoo_language(getattr(setting, "value", setting)) or _odoo_language(
+        default_system_settings.preferred_language.value
+    )
 
 
 async def _sign_up(user_id: UUID, locale: str | None = None) -> int | None:
-    """Report the user; returns their contact id in Odoo."""
+    """Report the user; returns their contact id in Odoo. The language goes
+    along the first time and when a locale is given (sign-up page, a change
+    in GOAT's settings); later reports leave Odoo's alone."""
     async with session_manager.session() as session:
         user = await session.get(User, user_id)
         if user is None:
             return None
         name = " ".join(p for p in (user.firstname, user.lastname) if p) or user.email
-        lang = await _language(session, user.id, locale)
+        lang = (
+            None
+            if user.odoo_contact_id and locale is None
+            else await _language(session, user.id, locale)
+        )
+        logger.info("Odoo: reporting user %s, language %s", user.id, lang or "-")
         result = await _run(
             "sign_up",
             goat_user_id=str(user.id),
@@ -144,6 +154,23 @@ def report_sign_up(user: User, token: dict) -> None:
 
     async def work() -> None:
         await _sign_up(user.id, locale)
+
+    _in_background(work())
+
+
+def report_language(user_id: UUID, language: object) -> None:
+    """The user changed GOAT's language: Odoo's mails follow, once Odoo knows
+    the user (the sign-up report itself needs a verified email)."""
+    locale = str(getattr(language, "value", language) or "")
+    if not settings.accounts_sync_enabled or not _odoo_language(locale):
+        return
+
+    async def work() -> None:
+        async with session_manager.session() as session:
+            user = await session.get(User, user_id)
+            known = user is not None and user.odoo_contact_id
+        if known:
+            await _sign_up(user_id, locale)
 
     _in_background(work())
 

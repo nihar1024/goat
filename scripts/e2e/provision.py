@@ -116,7 +116,15 @@ def ensure_keycloak_user(client: httpx.Client, token: str, role: str) -> str:
     )
     found.raise_for_status()
     if found.json():
-        return str(found.json()[0]["id"])
+        user_id = str(found.json()[0]["id"])
+        # A user left by an earlier run may have another password: reset it,
+        # so a rerun can always log in.
+        client.put(
+            f"{users}/{user_id}/reset-password",
+            headers=headers,
+            json={"type": "password", "value": PASSWORD, "temporary": False},
+        ).raise_for_status()
+        return user_id
     created = client.post(
         users,
         headers=headers,

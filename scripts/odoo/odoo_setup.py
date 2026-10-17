@@ -24,7 +24,7 @@ Usage:
     python3 scripts/odoo/odoo_setup.py <subcommand>            # dry-run
     python3 scripts/odoo/odoo_setup.py <subcommand> --apply    # write
 
-Safety: refuses non-staging hosts unless --allow-prod. Every subcommand is
+Safety: refuses hosts other than staging or localhost unless --allow-prod. Every subcommand is
 idempotent — rerunning after --apply reports "already up to date". Nothing is
 ever deleted except the legacy plan-name field; tier products are archived,
 not removed. Staging rebuilds wipe all of this: rerun `all` afterwards.
@@ -56,23 +56,28 @@ PRODUCT_SPECS: list[dict] = [
         "adopt_names": ("GOAT", "GOAT Starter"),
         "values": {
             "name": "GOAT",
-            "x_goat_editors": 5,  # decided 2026-10-14 (was 3)
-            "x_goat_viewers": 2,
-            "x_goat_storage_mb": 5 * GB,
-            "x_goat_projects": 50,
-            # monthly credits (compute, traffic, AI), decided 2026-10-14
-            "x_goat_credits": 25000,
+            # the "Team" plan, decided 2026-10-17: EUR 10,000 a year, 5 editors,
+            # 50 viewers, 10 GB, 250 projects, 75,000 credits a month
+            # (compute, traffic, AI), software training included
+            "list_price": 10000.0,
+            "x_goat_editors": 5,
+            "x_goat_viewers": 50,
+            "x_goat_storage_mb": 10 * GB,
+            "x_goat_projects": 250,
+            "x_goat_credits": 75000,
         },
         "create": True,
     },
     {
         "xid": "product_goat_extra_editor",
         "adopt_names": ("GOAT Extra Editor User",),
-        # an editor brings their share of credits (5 editors : 25,000), 2026-10-14
+        # EUR 1,500 a year; an editor brings their share of credits
+        # (5 editors : 75,000), decided 2026-10-17
         "values": {
             "name": "GOAT Extra Editor User",
+            "list_price": 1500.0,
             "x_goat_editors": 1,
-            "x_goat_credits": 5000,
+            "x_goat_credits": 15000,
         },
         "create": True,
     },
@@ -122,6 +127,7 @@ PRODUCT_CREATE_DEFAULTS = {
 PRODUCT_FIELDS = [
     "name",
     "active",
+    "list_price",
     "x_goat_editors",
     "x_goat_viewers",
     "x_goat_storage_mb",
@@ -614,7 +620,9 @@ def main() -> int:
     args = parser.parse_args()
 
     url = os.environ["ODOO_URL"]
-    if "staging" not in url and not args.allow_prod:
+    host = re.sub(r"^\w+://", "", url).split("/")[0].split(":")[0]
+    local = host in ("localhost", "127.0.0.1")  # a developer's own Odoo
+    if "staging" not in url and not local and not args.allow_prod:
         print(f"ABORT: {url} does not look like staging (use --allow-prod).")
         return 1
 

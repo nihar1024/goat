@@ -6,15 +6,15 @@ dunning lifecycle and pushes **entitlement state** into core through one
 service-protected endpoint. Core stores and enforces that state; it never
 talks to Odoo.
 
-## Commercial model (decided 2026-07-16)
+## Commercial model (decided 2026-07-16, prices and quotas 2026-10-17)
 
 One base product plus per-unit add-ons — no tiers:
 
 | Odoo product | Meaning | `x_goat_*` values |
 |---|---|---|
-| GOAT (id 8) | base subscription | editors 5, viewers 2, storage_mb 5120, projects 50, credits 25,000/month |
-| GOAT Extra Editor User (id 9) | +1 editor per qty (2,000 EUR/year, 2026-10-14) | editors 1, credits 5,000/month |
-| GOAT Extra Credits | +10,000 credits/month per qty | credits 10,000 |
+| GOAT (id 8) | base subscription, the "Team" plan: 10,000 EUR/year incl. software training (2026-10-17) | editors 5, viewers 50, storage_mb 10240, projects 250, credits 75,000/month |
+| GOAT Extra Editor User (id 9) | +1 editor per qty (1,500 EUR/year, 2026-10-17) | editors 1, credits 15,000/month |
+| GOAT Extra Credits | +10,000 credits/month per qty (internal, for the rare heavy user; not on the website) | credits 10,000 |
 | GOAT Extra Viewer User (id 13) | +1 viewer per qty | viewers 1 |
 | GOAT Extra Project (id 14) | +1 project per qty | projects 1 |
 | GOAT Extra Storage (GB) (id 15) | +1 GB per qty | storage_mb 1024 |

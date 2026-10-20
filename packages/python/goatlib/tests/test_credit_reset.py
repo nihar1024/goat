@@ -20,13 +20,12 @@ def test_advance_renewal_jumps_past_now_in_month_steps():
 
 
 def test_billing_tasks_do_nothing_with_billing_off(monkeypatch):
-    # Self-hosted workers: no metering, no trials, no Odoo pushes.
+    # Self-hosted workers: no metering, no trials.
     import asyncio
 
     from goatlib.tasks import (
         compute_rollup,
         credit_reset,
-        odoo_entitlement,
         traffic_rollup,
         trial_expiry,
     )
@@ -35,8 +34,7 @@ def test_billing_tasks_do_nothing_with_billing_off(monkeypatch):
     monkeypatch.delenv("BILLING_ENABLED", raising=False)
     for task in (compute_rollup, traffic_rollup, credit_reset):
         assert asyncio.run(task.main()) == SKIPPED
-    for task in (trial_expiry, odoo_entitlement):
-        assert task.main() == SKIPPED
+    assert trial_expiry.main() == SKIPPED
 
 
 def test_one_failing_organization_does_not_stop_the_others(monkeypatch):

@@ -197,21 +197,6 @@ TASK_REGISTRY: tuple[TaskDefinition, ...] = (
         worker_tag="tools",
     ),
     TaskDefinition(
-        name="odoo_entitlement_push",
-        display_name="Odoo Entitlement Push",
-        description=(
-            "Push subscription entitlements (quotas + extras) from Odoo to "
-            "GOAT core. order_id > 0 = one subscription (webhook path); "
-            "order_id = 0 = reconcile all pushable subscriptions."
-        ),
-        module_path="goatlib.tasks.odoo_entitlement",
-        params_class_name="OdooEntitlementPushParams",
-        windmill_path="f/goat/tasks/odoo_entitlement_push",
-        # Nightly reconcile heals missed webhooks and serves as backfill.
-        schedule="0 0 2 * * *",
-        worker_tag="tools",
-    ),
-    TaskDefinition(
         name="trial_expiry",
         display_name="Trial Expiry",
         description=(

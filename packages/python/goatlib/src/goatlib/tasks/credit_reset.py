@@ -3,7 +3,7 @@
 An organization with a subscription gets its credits every month, whatever the
 subscription's term (a yearly contract too): when credits_reset_at has passed,
 used_credits goes back to 0 and credits_reset_at moves on by whole months.
-Core sets the first date when a subscription arrives from Odoo.
+Core sets the first date when a subscription arrives from the billing system.
 
 Trials are left alone: a trial's credits last the whole trial, and its end
 (plan_renewal_date) belongs to trial_expiry. Organizations without a reset date

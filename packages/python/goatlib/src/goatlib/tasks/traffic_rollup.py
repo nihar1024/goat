@@ -231,7 +231,7 @@ async def refresh_over_budget_flags(
     """Recompute meter:over_budget:{org} for every org that has a flag or is
     over budget: set it for the over-budget ones, delete it for the rest.
 
-    Not just orgs with new egress: a top-up (Odoo raises total_credits or
+    Not just orgs with new egress: a top-up (the billing system raises total_credits or
     resets usage) must lift the flag, and an org over budget through compute
     alone must get one. Core has no Redis, so this task is the only place."""
     flagged: set[str] = set()

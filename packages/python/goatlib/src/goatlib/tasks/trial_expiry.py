@@ -1,9 +1,9 @@
 """Trial expiry enforcement (GOAT-managed trials).
 
 Trials never touch the billing system: signup starts one (see
-core `create_organization`), conversion ends it (the Odoo entitlement push
-clears `on_trial`), and THIS task is what makes the end date real — nothing
-else in the platform expires a trial.
+core `create_organization`), conversion ends it (the billing system's
+entitlement push clears `on_trial`), and THIS task is what makes the end date
+real — nothing else in the platform expires a trial.
 
 Daily run, over every organization with ``on_trial AND NOT suspended``:
 
@@ -20,7 +20,7 @@ sent-flag is needed for idempotency.
 Required environment:
     POSTGRES_* (ToolSettings)  — read-only candidate query
     CORE_URL                   — GOAT core base URL
-    ODOO_WEBHOOK_SECRET        — shared secret for core's webhook endpoints
+    BILLING_WEBHOOK_SECRET     — shared secret for core's webhook endpoints
 
 Windmill path: f/goat/tasks/trial_expiry
 """
@@ -73,7 +73,7 @@ class TrialExpiryTask:
 
         self.settings = ToolSettings.from_env()
         self.core_url = (os.environ.get("CORE_URL") or "").rstrip("/")
-        self.webhook_secret = os.environ.get("ODOO_WEBHOOK_SECRET") or ""
+        self.webhook_secret = os.environ.get("BILLING_WEBHOOK_SECRET") or ""
 
     async def _candidates(self: Self) -> list[dict[str, Any]]:
         import asyncpg
@@ -102,7 +102,7 @@ class TrialExpiryTask:
     def _notify(self: Self, organization_id: str, stage: str) -> None:
         if not self.core_url or not self.webhook_secret:
             raise RuntimeError(
-                "CORE_URL and ODOO_WEBHOOK_SECRET are required to notify core"
+                "CORE_URL and BILLING_WEBHOOK_SECRET are required to notify core"
             )
         response = httpx.post(
             f"{self.core_url}/api/v2/webhooks/trial",

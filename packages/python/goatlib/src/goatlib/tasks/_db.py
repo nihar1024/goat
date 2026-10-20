@@ -14,7 +14,7 @@ def core_dsn() -> str:
 def billing_enabled() -> bool:
     """BILLING_ENABLED on the worker: the SaaS install meters credits and runs
     trials. Self-hosted installs leave it unset, and the billing and metering
-    tasks then do nothing (core's switch is its Odoo settings)."""
+    tasks then do nothing (core reads the same BILLING_ENABLED)."""
     return os.getenv("BILLING_ENABLED", "").strip().lower() in ("1", "true", "yes")
 
 

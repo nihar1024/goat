@@ -110,7 +110,7 @@ class OrganizationBase(SQLModel):
     region: AvailableRegionsEnum = Field(sa_column=Column(Text, nullable=False))
     hubspot_id: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     # Odoo company (res.partner, is_company) this org is (see core.odoo).
-    # Written by staff or the billing integration, never by the support bridge,
+    # Written by staff or the accounts sync, never by the support bridge,
     # which only reads it; optional.
     odoo_company_id: int | None = Field(
         default=None, sa_column=Column(Integer, nullable=True)
@@ -139,7 +139,7 @@ class Organization(UUIDServerDefaultBase, OrganizationBase, table=True):
     __table_args__ = {"schema": settings.SCHEMA}
 
     # Kept off OrganizationBase: billing/sync bookkeeping, not part of the API schemas.
-    # Odoo-side time of the last applied entitlement push (naive UTC); an
+    # The billing system's time of the last applied entitlement push (naive UTC); an
     # older push is stale and ignored.
     entitlement_as_of: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=True)
@@ -149,7 +149,8 @@ class Organization(UUIDServerDefaultBase, OrganizationBase, table=True):
     deleted_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=True)
     )
-    # A report to Odoo (trial, join, status) failed; the retry loop in
+    # "Accounts sync pending" (the name predates the provider split): a report
+    # to the accounts provider (trial, join, status) failed; the retry loop in
     # core.accounts.sync re-sends it and clears the flag.
     odoo_sync_pending: bool = Field(
         default=False,

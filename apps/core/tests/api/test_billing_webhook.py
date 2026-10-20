@@ -2,12 +2,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from core.core.config import settings
-from tests.billing import enable_billing
+from tests.billing import enable_accounts_sync, enable_billing
 from tests.utils import make_organization
 
 
 @pytest.mark.asyncio
-async def test_odoo_entitlement_applies_and_resets(client, db_session, monkeypatch):
+async def test_billing_entitlement_applies_and_resets(client, db_session, monkeypatch):
     enable_billing(monkeypatch)
     org = make_organization(total_credits=1000, used_credits=900)
     db_session.add(org)
@@ -15,7 +15,7 @@ async def test_odoo_entitlement_applies_and_resets(client, db_session, monkeypat
     await db_session.refresh(org)
 
     resp = await client.post(
-        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        f"{settings.API_V2_STR}/webhooks/billing/entitlement",
         headers={"X-Webhook-Secret": "shh"},
         json={
             "organization_id": str(org.id),
@@ -83,10 +83,10 @@ async def test_trial_webhook_rejects_unknown_stage(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_odoo_entitlement_bad_secret(client, monkeypatch):
+async def test_billing_entitlement_bad_secret(client, monkeypatch):
     enable_billing(monkeypatch)
     resp = await client.post(
-        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        f"{settings.API_V2_STR}/webhooks/billing/entitlement",
         headers={"X-Webhook-Secret": "wrong"},
         json={"organization_id": "x"},
     )
@@ -95,15 +95,15 @@ async def test_odoo_entitlement_bad_secret(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_webhooks_do_not_exist_without_billing(client, db_session, monkeypatch):
-    # Self-hosted: no Odoo settings, the routes answer 404 even with a secret.
-    monkeypatch.setattr(settings, "ODOO_URL", None)
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", "shh")
+    # Self-hosted: billing is off, the routes answer 404 even with a secret.
+    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
+    monkeypatch.setattr(settings, "BILLING_WEBHOOK_SECRET", "shh")
     org = make_organization(on_trial=True)
     db_session.add(org)
     await db_session.commit()
 
     for path, body in (
-        ("/webhooks/odoo/entitlement", {"organization_id": str(org.id)}),
+        ("/webhooks/billing/entitlement", {"organization_id": str(org.id)}),
         ("/webhooks/trial", {"organization_id": str(org.id), "stage": "expired"}),
     ):
         resp = await client.post(
@@ -142,7 +142,7 @@ async def test_conversion_starts_the_monthly_credit_period(
     await db_session.refresh(org)
 
     resp = await client.post(
-        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        f"{settings.API_V2_STR}/webhooks/billing/entitlement",
         headers={"X-Webhook-Secret": "shh"},
         json={
             "organization_id": str(org.id),
@@ -163,7 +163,7 @@ async def test_conversion_starts_the_monthly_credit_period(
 
 
 @pytest.mark.asyncio
-async def test_a_trial_change_from_odoo_starts_no_credit_period(
+async def test_a_trial_change_from_billing_starts_no_credit_period(
     client, db_session, monkeypatch
 ):
     enable_billing(monkeypatch)
@@ -172,7 +172,7 @@ async def test_a_trial_change_from_odoo_starts_no_credit_period(
     await db_session.commit()
 
     resp = await client.post(
-        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        f"{settings.API_V2_STR}/webhooks/billing/entitlement",
         headers={"X-Webhook-Secret": "shh"},
         json={
             "organization_id": str(org.id),
@@ -189,7 +189,9 @@ async def test_a_trial_change_from_odoo_starts_no_credit_period(
 
 
 @pytest.mark.asyncio
-async def test_every_push_confirms_the_state_to_odoo(client, db_session, monkeypatch):
+async def test_every_push_confirms_the_state_to_the_accounts_provider(
+    client, db_session, monkeypatch
+):
     from core.endpoints.v2 import webhooks
 
     enable_billing(monkeypatch)
@@ -201,7 +203,7 @@ async def test_every_push_confirms_the_state_to_odoo(client, db_session, monkeyp
     await db_session.refresh(org)
 
     resp = await client.post(
-        f"{settings.API_V2_STR}/webhooks/odoo/entitlement",
+        f"{settings.API_V2_STR}/webhooks/billing/entitlement",
         headers={"X-Webhook-Secret": "shh"},
         json={"organization_id": str(org.id), "on_trial": False, "reset_usage": False},
     )
@@ -209,7 +211,7 @@ async def test_every_push_confirms_the_state_to_odoo(client, db_session, monkeyp
     assert [o.id for o in reported] == [org.id]
 
 
-URL = f"{settings.API_V2_STR}/webhooks/odoo/entitlement"
+URL = f"{settings.API_V2_STR}/webhooks/billing/entitlement"
 TRIAL_URL = f"{settings.API_V2_STR}/webhooks/trial"
 HEADERS = {"X-Webhook-Secret": "shh"}
 
@@ -505,7 +507,7 @@ async def test_expiring_is_sent_only_to_an_active_trial(
     from core.endpoints.v2 import webhooks
 
     enable_billing(monkeypatch)
-    monkeypatch.setattr(settings, "ODOO_BILLING_API_KEY", None)  # GOAT's own mail
+    monkeypatch.setattr(settings, "ODOO_ACCOUNTS_API_KEY", None)  # GOAT's own mail
     mails = []
     monkeypatch.setattr(webhooks, "send_email", lambda **kw: mails.append(kw))
     org = await _org(db_session, **{"on_trial": True, **values})
@@ -518,8 +520,7 @@ async def test_expiring_is_sent_only_to_an_active_trial(
 
 @pytest.mark.asyncio
 async def test_expiring_reaches_an_active_trial(client, db_session, monkeypatch):
-    enable_billing(monkeypatch)
-    monkeypatch.setattr(settings, "ODOO_BILLING_API_KEY", "key")  # Odoo mails
+    enable_accounts_sync(monkeypatch)  # the provider's campaign mails
     org = await _org(db_session, on_trial=True)
     resp = await _trial(client, org.id, "expiring")
     assert resp.json() == {"status": "ok", "stage": "expiring"}

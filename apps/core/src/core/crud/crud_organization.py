@@ -59,16 +59,19 @@ SELF_HOSTED_QUOTAS = {
     "viewers": settings.DEFAULT_QUOTA_VIEWERS,
 }
 
-# GOAT-managed trial for SaaS signups (Odoo billing mode): no billing record
-# exists until sales converts the org; expiry is enforced by the trial_expiry
-# Windmill task. See docs/odoo-entitlement-contract.md.
-TRIAL_QUOTAS = {
-    "credits": settings.TRIAL_QUOTA_CREDITS,
-    "storage": settings.TRIAL_QUOTA_STORAGE_MB,
-    "projects": settings.TRIAL_QUOTA_PROJECTS,
-    "editors": settings.TRIAL_QUOTA_EDITORS,
-    "viewers": settings.TRIAL_QUOTA_VIEWERS,
-}
+
+def trial_quotas() -> dict:
+    """GOAT-managed trial for SaaS signups (billing on): no entitlement exists
+    until the billing system converts the organization; expiry is enforced by
+    the trial_expiry Windmill task. The values are the operator's
+    (settings.TRIAL_*, required with billing), read per call."""
+    return {
+        "credits": settings.TRIAL_QUOTA_CREDITS,
+        "storage": settings.TRIAL_QUOTA_STORAGE_MB,
+        "projects": settings.TRIAL_QUOTA_PROJECTS,
+        "editors": settings.TRIAL_QUOTA_EDITORS,
+        "viewers": settings.TRIAL_QUOTA_VIEWERS,
+    }
 
 
 class OrganizationNotDeletableError(Exception):
@@ -111,7 +114,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         # SaaS (billing on): GOAT-managed trial; the entitlement webhook takes
         # over on conversion. Otherwise self-hosted: no trial.
         saas_mode = settings.billing_enabled
-        quotas = TRIAL_QUOTAS if saas_mode else SELF_HOSTED_QUOTAS
+        quotas = trial_quotas() if saas_mode else SELF_HOSTED_QUOTAS
 
         # Create organization
         organization = Organization(
@@ -124,7 +127,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             total_editors=quotas.get("editors"),
             total_viewers=quotas.get("viewers"),
             extras=[] if saas_mode else None,
-            plan_renewal_date=datetime.now() + timedelta(days=settings.TRIAL_DAYS)
+            plan_renewal_date=datetime.now() + timedelta(days=settings.TRIAL_DAYS or 0)
             if saas_mode
             else None,
             type=organization_obj.type,
@@ -851,7 +854,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         Returns whether this push converted a trial into a subscription.
 
         Provider-agnostic: `entitlement` is a plain dict (validated by
-        OdooEntitlement at the webhook); absent keys are left as-is.
+        EntitlementPush at the webhook); absent keys are left as-is.
         """
         for cap in self._ENTITLEMENT_CAPS:
             if cap in entitlement:

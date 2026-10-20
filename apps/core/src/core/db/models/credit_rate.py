@@ -11,7 +11,8 @@ class CreditRate(SQLModel, table=True):
     """Global credit conversion rates — one row per category (compute, egress, ai).
 
     Not per-org / per-subscription. cost = native_unit (normalized to
-    unit_basis) * rate. Operator-edited; seeded from settings.
+    unit_basis) * rate. Written from the CREDIT_RATE_* settings when core starts: the settings are
+    the source of truth, edits in the table are overwritten.
     """
 
     __tablename__ = "credit_rate"

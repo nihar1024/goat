@@ -15,8 +15,8 @@ def naive_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
-class OdooEntitlement(BaseModel):
-    """What Odoo pushes for an organization (docs/odoo-entitlement-contract.md).
+class EntitlementPush(BaseModel):
+    """What the billing system pushes for an organization (docs/billing-interface.md).
 
     Absent fields leave the organization as is; a cap of null means unlimited.
     """
@@ -33,7 +33,7 @@ class OdooEntitlement(BaseModel):
     total_viewers: _Cap | None = None
     extras: list[str] | None = None
     plan_renewal_date: datetime | None = None
-    # Odoo-side time of this data: an older push than the applied one is stale.
+    # The billing system's time of this data: an older push than the applied one is stale.
     as_of: datetime | None = None
     reset_usage: StrictBool = False
 
@@ -74,7 +74,7 @@ class OdooEntitlement(BaseModel):
         return naive_utc(value) if value is not None else None
 
     def entitlement(self) -> dict:
-        """The fields Odoo sent, for CRUDOrganization.apply_entitlement."""
+        """The fields the push carried, for CRUDOrganization.apply_entitlement."""
         return self.model_dump(
             exclude_unset=True, exclude={"organization_id", "reset_usage"}
         )

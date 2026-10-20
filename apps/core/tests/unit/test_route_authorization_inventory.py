@@ -32,12 +32,12 @@ VERIFYING = {
 ANONYMOUS = {
     (
         "POST",
-        "webhooks/odoo/entitlement",
-    ): "billing pushes it with the shared ODOO_WEBHOOK_SECRET; the route checks it",
+        "webhooks/billing/entitlement",
+    ): "billing pushes it with the shared BILLING_WEBHOOK_SECRET; the route checks it",
     (
         "POST",
         "webhooks/trial",
-    ): "the trial_expiry task calls it with the shared ODOO_WEBHOOK_SECRET; the route checks it",
+    ): "the trial_expiry task calls it with the shared BILLING_WEBHOOK_SECRET; the route checks it",
     ("GET", "project/{project_id}/public"): "the published, public view of a project",
     (
         "GET",

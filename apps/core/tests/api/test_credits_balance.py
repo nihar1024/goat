@@ -72,7 +72,7 @@ async def test_balance_unlimited_is_never_over_budget(client, db_session):
 @pytest.mark.asyncio
 async def test_credits_do_not_exist_without_billing(client, monkeypatch):
     # Self-hosted: no Usage page, so no credit routes either.
-    monkeypatch.setattr(settings, "ODOO_URL", None)
+    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
     for path in ("balance", "usage", "breakdown"):
         resp = await client.get(f"{settings.API_V2_STR}/credits/{path}")
         assert resp.status_code == 404, path

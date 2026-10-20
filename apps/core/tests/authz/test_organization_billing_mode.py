@@ -48,7 +48,7 @@ async def test_self_hosted_organization_has_no_trial_and_no_credit_limit(
     make_user: Callable[..., Awaitable[User]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "ODOO_URL", None)
+    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
     org = await _create(db_session, auth_on, make_user)
     assert org.on_trial is False
     assert org.total_credits is None

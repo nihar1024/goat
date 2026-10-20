@@ -55,7 +55,7 @@ class FeaturesRead(BaseModel):
 
     # Support tickets (Odoo Helpdesk).
     support: bool
-    # Trials, credits and usage, quotas from Odoo subscriptions.
+    # Trials, credits and usage, quotas pushed by the billing system.
     billing: bool
 
 

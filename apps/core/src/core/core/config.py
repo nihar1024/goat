@@ -137,9 +137,9 @@ class Settings(BaseSettings):
     DEFAULT_QUOTA_PROJECTS: int = 10000
     DEFAULT_QUOTA_EDITORS: int = 1000
     DEFAULT_QUOTA_VIEWERS: int = 1000
-    # Credit metering. Conversion rates are NOT config — they are billing data
-    # in the customer.credit_rate table (seeded in the migration; operator/Odoo
-    # editable). Only operational knobs live here.
+    # Credit metering. Conversion rates live in the customer.credit_rate table
+    # (the metering SQL reads them there); with billing on, core writes them
+    # from CREDIT_RATE_* below at startup. Only operational knobs live here.
     MAX_TOOL_RUNTIME_SECONDS: int = 1800
     # Self-hosted credit allowance. None == unlimited (gate skipped).
     DEFAULT_QUOTA_CREDITS: float | None = None
@@ -334,23 +334,85 @@ class Settings(BaseSettings):
         return self.SMTP_FROM or self.SMTP_USER
 
     # ------------------------------------------------------------------
-    # Billing / Odoo: shared secret of the entitlement and trial webhooks.
-    # With ODOO_URL and ODOO_DB it switches billing on (`billing_enabled`).
+    # Billing (SaaS only). A switch of its own, read the same way by geoapi,
+    # processes and the workers; independent of which CRM/billing system
+    # (if any) pushes entitlements or receives account reports. On, new
+    # organizations start a GOAT-managed trial and the billing webhooks accept
+    # calls carrying BILLING_WEBHOOK_SECRET (X-Webhook-Secret header). The
+    # trial and credit-rate values are the operator's business terms: there are
+    # no defaults, so billing refuses to start with any of them missing.
     # ------------------------------------------------------------------
-    ODOO_WEBHOOK_SECRET: str | None = None
+    BILLING_ENABLED: bool = False
+    BILLING_WEBHOOK_SECRET: str | None = None
+    TRIAL_DAYS: int | None = None
+    TRIAL_QUOTA_STORAGE_MB: float | None = None
+    TRIAL_QUOTA_PROJECTS: int | None = None
+    TRIAL_QUOTA_EDITORS: int | None = None
+    TRIAL_QUOTA_VIEWERS: int | None = None
+    # Credits for the whole trial (it gets no monthly reset).
+    TRIAL_QUOTA_CREDITS: float | None = None
+    # Credits per unit, written to customer.credit_rate when core starts:
+    # compute per minute, egress per GB, AI per 1000 tokens.
+    CREDIT_RATE_COMPUTE_PER_MINUTE: float | None = None
+    CREDIT_RATE_EGRESS_PER_GB: float | None = None
+    CREDIT_RATE_AI_PER_1K_TOKENS: float | None = None
 
-    # ------------------------------------------------------------------
-    # Trial (SaaS signup). GOAT-managed: no billing record until sales
-    # converts the org (docs/odoo-entitlement-contract.md). Self-hosted
-    # deployments never start trials — orgs get DEFAULT_QUOTA_*.
-    # ------------------------------------------------------------------
-    TRIAL_DAYS: int = 30
-    TRIAL_QUOTA_STORAGE_MB: float = 5120
-    TRIAL_QUOTA_PROJECTS: int = 50
-    TRIAL_QUOTA_EDITORS: int = 5
-    TRIAL_QUOTA_VIEWERS: int = 2
-    # Credits for the whole trial (it gets no monthly reset). None == unlimited.
-    TRIAL_QUOTA_CREDITS: float | None = 10000
+    @field_validator("BILLING_ENABLED", mode="before")
+    @classmethod
+    def _billing_empty_is_off(cls: type["Settings"], value: object) -> object:
+        # `BILLING_ENABLED: ${BILLING_ENABLED:-}` in a compose file means off.
+        return False if isinstance(value, str) and not value.strip() else value
+
+    @field_validator(
+        "BILLING_WEBHOOK_SECRET",
+        "TRIAL_DAYS",
+        "TRIAL_QUOTA_STORAGE_MB",
+        "TRIAL_QUOTA_PROJECTS",
+        "TRIAL_QUOTA_EDITORS",
+        "TRIAL_QUOTA_VIEWERS",
+        "TRIAL_QUOTA_CREDITS",
+        "CREDIT_RATE_COMPUTE_PER_MINUTE",
+        "CREDIT_RATE_EGRESS_PER_GB",
+        "CREDIT_RATE_AI_PER_1K_TOKENS",
+        mode="before",
+    )
+    @classmethod
+    def _billing_empty_is_unset(cls: type["Settings"], value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _require_billing_terms(self) -> "Settings":
+        if not self.BILLING_ENABLED:
+            return self
+        missing = [
+            name
+            for name in (
+                "BILLING_WEBHOOK_SECRET",
+                "TRIAL_DAYS",
+                "TRIAL_QUOTA_STORAGE_MB",
+                "TRIAL_QUOTA_PROJECTS",
+                "TRIAL_QUOTA_EDITORS",
+                "TRIAL_QUOTA_VIEWERS",
+                "TRIAL_QUOTA_CREDITS",
+                "CREDIT_RATE_COMPUTE_PER_MINUTE",
+                "CREDIT_RATE_EGRESS_PER_GB",
+                "CREDIT_RATE_AI_PER_1K_TOKENS",
+            )
+            if getattr(self, name) is None
+        ]
+        if missing:
+            raise ValueError(
+                "BILLING_ENABLED is set but these settings are missing: "
+                + ", ".join(missing)
+            )
+        return self
+
+    @property
+    def billing_enabled(self) -> bool:
+        """Trials, credits and usage metering, quotas pushed by the billing
+        system. Off on self-hosted installs: organizations get the
+        DEFAULT_QUOTA_* values and nothing is metered. Independent of support."""
+        return self.BILLING_ENABLED and bool(self.BILLING_WEBHOOK_SECRET)
 
     # ------------------------------------------------------------------
     # Processes service (OGC API - Processes front for Windmill). Core posts
@@ -386,7 +448,8 @@ class Settings(BaseSettings):
     # Plan4Better's Odoo (SaaS only; see core.odoo). The connection is
     # shared; each integration has its own key, from its own least-privilege
     # Odoo user, and is on only when the connection and its settings are set.
-    # Self-hosted installs set none of them.
+    # Self-hosted installs set none of them. Billing (BILLING_ENABLED) does not
+    # depend on Odoo: the account reports below are one provider of it.
     # ------------------------------------------------------------------
     ODOO_URL: str | None = None
     ODOO_DB: str | None = None
@@ -396,7 +459,7 @@ class Settings(BaseSettings):
     ODOO_SUPPORT_POST_ACTION: str = "GOAT: post message as ticket participant"
     # Sign-ups, organizations and trials as Odoo contacts (billing only), through
     # the bridge portal user ("GOAT Accounts Bot") of the goat_accounts module.
-    ODOO_BILLING_API_KEY: str | None = None
+    ODOO_ACCOUNTS_API_KEY: str | None = None
     ODOO_ACCOUNTS_ACTION: str = "GOAT: accounts"
     # How often reports to Odoo that failed (trial, join, status) are re-sent.
     ODOO_SYNC_RETRY_SECONDS: int = 600
@@ -406,7 +469,7 @@ class Settings(BaseSettings):
         "ODOO_DB",
         "ODOO_SUPPORT_API_KEY",
         "ODOO_SUPPORT_TEAM_ID",
-        "ODOO_BILLING_API_KEY",
+        "ODOO_ACCOUNTS_API_KEY",
         mode="before",
     )
     @classmethod
@@ -414,17 +477,12 @@ class Settings(BaseSettings):
         return None if isinstance(value, str) and not value.strip() else value
 
     @property
-    def billing_enabled(self) -> bool:
-        """Trials, credits and usage metering, quotas pushed from Odoo
-        subscriptions. Off on self-hosted installs: organizations get the
-        DEFAULT_QUOTA_* values and nothing is metered. Independent of support."""
-        return all((self.ODOO_URL, self.ODOO_DB, self.ODOO_WEBHOOK_SECRET))
-
-    @property
     def accounts_sync_enabled(self) -> bool:
-        """Billing on and the bridge's key set: sign-ups and organizations are
-        reported to Odoo (core.accounts)."""
-        return self.billing_enabled and bool(self.ODOO_BILLING_API_KEY)
+        """Billing on and the Odoo connection with the accounts bridge's key
+        set: sign-ups and organizations are reported to Odoo (core.accounts)."""
+        return self.billing_enabled and all(
+            (self.ODOO_URL, self.ODOO_DB, self.ODOO_ACCOUNTS_API_KEY)
+        )
 
     @property
     def support_enabled(self) -> bool:
@@ -445,7 +503,8 @@ class Settings(BaseSettings):
         )
         return self
 
-    model_config = SettingsConfigDict(case_sensitive=True)
+    # A settings error names the setting, never echoes the environment (secrets).
+    model_config = SettingsConfigDict(case_sensitive=True, hide_input_in_errors=True)
 
 
 settings = Settings()

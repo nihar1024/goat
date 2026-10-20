@@ -1,17 +1,18 @@
-"""Billing and usage: Odoo entitlements on the organization and the credit
+"""Billing and usage: entitlements on the organization and the credit
 metering ledger.
 
 Organization: nullable caps (NULL = unlimited), numeric credits, the
 `extras` grant list, resource plan gating -> feature gating; plan_name,
 stripe_id and the CRM columns the slimmed signup no longer collects are
 dropped, so check the production schema and data before it runs. Usage: the
-credit_usage ledger columns and indexes, the global credit_rate table, and
-the dead cost table dropped.
+credit_usage ledger columns and indexes, the global credit_rate table (empty:
+core fills it from the CREDIT_RATE_* settings at startup), and the dead cost
+table dropped.
 
 Every step checks the catalog first (a fresh database gets the end state from
 `init`). check_organization() and charge_credits() are installed by
 scripts/initial_data.py, which every deploy runs after the migrations. See
-docs/odoo-entitlement-contract.md.
+docs/billing-interface.md.
 
 Revision ID: 0012_billing_and_usage
 Revises: 0011_layer_serial_counter
@@ -205,8 +206,8 @@ def _upgrade_ledger() -> None:
             SCHEMA,
         )
 
-    # Global rate config (replaces the cost table): billing data, editable by
-    # the operator (later from Odoo), not an app setting.
+    # Global rate config (replaces the cost table): billing data. Empty here:
+    # core's initial data step writes it from the CREDIT_RATE_* settings.
     if not h.table_exists("credit_rate", SCHEMA):
         op.create_table(
             "credit_rate",
@@ -221,12 +222,6 @@ def _upgrade_ledger() -> None:
             sa.Column("source", sa.Text(), nullable=True),
             schema=SCHEMA,
         )
-    op.execute(
-        f"INSERT INTO {SCHEMA}.credit_rate (category, rate, unit_basis, source) VALUES "
-        "('compute', 10, 'minute', 'default'), ('egress', 20, 'GB', 'default'), "
-        "('ai', 1, '1k_tokens', 'default') "
-        "ON CONFLICT (category) DO NOTHING"
-    )
 
     h.drop_table_if_present("cost", SCHEMA)
 

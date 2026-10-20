@@ -100,7 +100,7 @@ async def ensure_home_folder(
 
     user = await crud_user.upsert_from_token(token=claims, db_session=async_session)
     assert user.id is not None
-    # SaaS: a verified user Odoo does not know yet becomes a contact there.
+    # SaaS: a verified user the accounts provider does not know yet is reported.
     report_sign_up(user, claims)
 
     existing = await crud_folder.get_by_multi_keys(

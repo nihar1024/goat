@@ -289,7 +289,7 @@ async def get_features(
     user_token: dict = Depends(user_token),
 ) -> FeaturesRead:
     """Support and billing are separate switches: each is on only when its
-    Odoo settings are set. No `auth_z`: also asked before the caller has an
+    own settings are set. No `auth_z`: also asked before the caller has an
     organization (the trial note on the setup form)."""
     return FeaturesRead(
         support=settings.support_enabled, billing=settings.billing_enabled

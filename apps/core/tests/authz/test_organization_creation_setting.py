@@ -29,8 +29,8 @@ NEW_ORGANIZATION = {
 
 @pytest.fixture(autouse=True)
 def no_billing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Creating an organization starts a trial when Odoo billing is configured."""
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", None)
+    """Creating an organization starts a trial when billing is on."""
+    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
 
 
 async def _organization_of(db: AsyncSession, user_id: UUID) -> Any:

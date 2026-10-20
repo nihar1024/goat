@@ -8,7 +8,8 @@ from uuid import UUID
 
 from sqlalchemy import select, update
 
-from core import odoo
+from core.accounts.factory import get_provider
+from core.accounts.provider import AccountsError, AccountsProvider, Language
 from core.core.config import settings
 from core.db.models._link_model import UserRoleLink
 from core.db.models.organization import Organization
@@ -20,67 +21,34 @@ from core.schemas.system_setting import default_system_settings
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_CALLS = frozenset(
-    {("ir.actions.server", "search"), ("ir.actions.server", "run")}
-)
-LANGUAGES = {"de": "de_DE", "en": "en_US"}
+LANGUAGES: tuple[Language, ...] = ("de", "en")
 RETRY_SECONDS = 600
 
-_client: odoo.OdooClient | None = None
-_action_id: int | None = None
 _tasks: set[asyncio.Task[None]] = set()
 _last_try: dict[UUID, float] = {}
 
 
-def _odoo() -> odoo.OdooClient:
-    global _client
-    if _client is None:
-        assert settings.ODOO_URL and settings.ODOO_DB and settings.ODOO_BILLING_API_KEY
-        _client = odoo.OdooClient(
-            settings.ODOO_URL,
-            settings.ODOO_DB,
-            settings.ODOO_BILLING_API_KEY,
-            allowed_calls=ALLOWED_CALLS,
-            ca_bundle=settings.GOAT_CA_BUNDLE,
-        )
-    return _client
-
-
-async def _run(op: str, **context: Any) -> dict[str, Any]:
-    """Run one operation of the server action as the bridge user."""
-    global _action_id
-    client = _odoo()
-    if _action_id is None:
-        found = await client.call(
-            "ir.actions.server",
-            "search",
-            domain=[("name", "=", settings.ODOO_ACCOUNTS_ACTION)],
-            limit=1,
-        )
-        if not found:
-            raise odoo.OdooRejected(
-                f"no server action {settings.ODOO_ACCOUNTS_ACTION!r}"
-            )
-        _action_id = int(found[0])
-    result = await client.call(
-        "ir.actions.server", "run", ids=[_action_id], context={"goat_op": op, **context}
-    )
-    return result or {}
+def _provider() -> AccountsProvider:
+    provider = get_provider()
+    if provider is None:  # the report_* entry points check the switch first
+        raise AccountsError("accounts sync is not configured")
+    return provider
 
 
 def _in_background(work: Coroutine[Any, Any, None], org_id: UUID | None = None) -> None:
     """Run after the caller's request; failures are logged, never raised.
 
-    With `org_id` the outcome is kept on the organization (odoo_sync_pending):
-    a report that did not arrive is re-sent by `retry_loop`."""
+    With `org_id` the outcome is kept on the organization (the column is still
+    called odoo_sync_pending, read it as "accounts sync pending"): a report
+    that did not arrive is re-sent by `retry_loop`."""
 
     async def guarded() -> None:
         failed = True
         try:
             await work
             failed = False
-        except odoo.OdooError as exc:
-            logger.warning("accounts sync: Odoo refused or is down: %s", exc)
+        except AccountsError as exc:
+            logger.warning("accounts sync: provider refused or is down: %s", exc)
         except Exception:  # noqa: BLE001 - the sync must never break GOAT
             logger.exception("accounts sync failed")
         if org_id is not None:
@@ -102,21 +70,21 @@ async def _mark_pending(org_id: UUID, pending: bool) -> None:
             await session.execute(statement.values(odoo_sync_pending=pending))
             await session.commit()
     except Exception:  # noqa: BLE001 - bookkeeping must not break the sync
-        logger.exception("accounts sync: cannot update odoo_sync_pending")
+        logger.exception("accounts sync: cannot update the pending flag")
 
 
-def _odoo_language(value: object) -> str | None:
-    """'de', 'de-DE' or 'de_DE' -> 'de_DE'; None when unknown."""
+def _goat_language(value: object) -> Language | None:
+    """'de', 'de-DE' or 'de_DE' -> 'de'; None when GOAT has no such language."""
     code = str(value or "").strip().lower().replace("-", "_").split("_")[0]
-    return LANGUAGES.get(code)
+    return next((language for language in LANGUAGES if language == code), None)
 
 
-async def _language(session: Any, user_id: UUID, hint: str | None) -> str | None:
-    """The person's language for Odoo's mails, the one GOAT shows them: chosen
+async def _language(session: Any, user_id: UUID, hint: str | None) -> Language | None:
+    """The person's language for the provider's mails, the one GOAT shows them: chosen
     on the sign-up page (Keycloak's `locale` claim), else their GOAT setting,
     else GOAT's default."""
-    if _odoo_language(hint):
-        return _odoo_language(hint)
+    if _goat_language(hint):
+        return _goat_language(hint)
     setting = (
         await session.execute(
             select(SystemSetting.preferred_language).where(
@@ -124,15 +92,15 @@ async def _language(session: Any, user_id: UUID, hint: str | None) -> str | None
             )
         )
     ).scalar_one_or_none()
-    return _odoo_language(getattr(setting, "value", setting)) or _odoo_language(
+    return _goat_language(getattr(setting, "value", setting)) or _goat_language(
         default_system_settings.preferred_language.value
     )
 
 
 async def _sign_up(user_id: UUID, locale: str | None = None) -> int | None:
-    """Report the user; returns their contact id in Odoo. The language goes
-    along the first time and when a locale is given (sign-up page, a change
-    in GOAT's settings); later reports leave Odoo's alone."""
+    """Report the user; returns their contact id at the provider. The language
+    goes along the first time and when a locale is given (sign-up page, a
+    change in GOAT's settings); later reports leave the provider's alone."""
     async with session_manager.session() as session:
         user = await session.get(User, user_id)
         if user is None:
@@ -143,16 +111,16 @@ async def _sign_up(user_id: UUID, locale: str | None = None) -> int | None:
             if user.odoo_contact_id and locale is None
             else await _language(session, user.id, locale)
         )
-        logger.info("Odoo: reporting user %s, language %s", user.id, lang or "-")
-        result = await _run(
-            "sign_up",
-            goat_user_id=str(user.id),
-            goat_name=name,
-            goat_email=user.email,
-            goat_marketing_consent=bool(user.newsletter_subscribe),
-            **({"goat_lang": lang} if lang else {}),
+        logger.info(
+            "accounts sync: reporting user %s, language %s", user.id, lang or "-"
         )
-        contact_id = result.get("goat_contact_id")
+        contact_id = await _provider().sign_up(
+            user_id=str(user.id),
+            name=name,
+            email=user.email,
+            marketing_consent=bool(user.newsletter_subscribe),
+            language=lang,
+        )
         if contact_id and user.odoo_contact_id != contact_id:
             user.odoo_contact_id = int(contact_id)
             await session.commit()
@@ -160,7 +128,7 @@ async def _sign_up(user_id: UUID, locale: str | None = None) -> int | None:
 
 
 def report_sign_up(user: User, token: dict) -> None:
-    """On a request of a user Odoo does not know yet, with a verified email."""
+    """On a request of a user the provider does not know yet, with a verified email."""
     if (
         not settings.accounts_sync_enabled
         or user.odoo_contact_id
@@ -182,10 +150,10 @@ def report_sign_up(user: User, token: dict) -> None:
 
 
 def report_language(user_id: UUID, language: object) -> None:
-    """The user changed GOAT's language: Odoo's mails follow, once Odoo knows
-    the user (the sign-up report itself needs a verified email)."""
+    """The user changed GOAT's language: the provider's mails follow, once it
+    knows the user (the sign-up report itself needs a verified email)."""
     locale = str(getattr(language, "value", language) or "")
-    if not settings.accounts_sync_enabled or not _odoo_language(locale):
+    if not settings.accounts_sync_enabled or not _goat_language(locale):
         return
 
     async def work() -> None:
@@ -200,37 +168,32 @@ def report_language(user_id: UUID, language: object) -> None:
 
 async def _start_trial(org_id: UUID, name: str, end: datetime, owner_id: UUID) -> None:
     await _sign_up(owner_id)  # newsletter consent comes with the organization form
-    result = await _run(
-        "start_trial",
-        goat_user_id=str(owner_id),
-        goat_organization_id=str(org_id),
-        goat_organization_name=name,
-        goat_trial_start=date.today().isoformat(),
-        goat_trial_end=end.date().isoformat(),
+    company_id = await _provider().start_trial(
+        user_id=str(owner_id),
+        organization_id=str(org_id),
+        organization_name=name,
+        trial_start=date.today(),
+        trial_end=end.date(),
     )
-    await _store_company(org_id, result.get("goat_company_id"))
+    await _store_company(org_id, company_id)
 
 
 async def _status(org_id: UUID, suspended: bool, on_trial: bool) -> None:
-    await _run(
-        "status",
-        goat_organization_id=str(org_id),
-        goat_suspended=suspended,
-        goat_on_trial=on_trial,
+    await _provider().status(
+        organization_id=str(org_id), suspended=suspended, on_trial=on_trial
     )
 
 
 async def _join(user_id: UUID, org_id: UUID, name: str, role: str) -> None:
     if await _sign_up(user_id) is None:
         return
-    result = await _run(
-        "join",
-        goat_user_id=str(user_id),
-        goat_organization_id=str(org_id),
-        goat_organization_name=name,
-        goat_role=role if role in ("owner", "admin", "editor", "viewer") else "editor",
+    company_id = await _provider().join(
+        user_id=str(user_id),
+        organization_id=str(org_id),
+        organization_name=name,
+        role=role if role in ("owner", "admin", "editor", "viewer") else "editor",
     )
-    await _store_company(org_id, result.get("goat_company_id"))
+    await _store_company(org_id, company_id)
 
 
 def report_trial(organization: Organization, owner_id: UUID) -> None:
@@ -247,9 +210,9 @@ def report_trial(organization: Organization, owner_id: UUID) -> None:
 
 def report_suspension(organization: Organization) -> None:
     """GOAT changed the organization's state itself: suspended or reactivated
-    (its trial ended), or converted from trial to subscription. Odoo shows it
-    on the company, without sending it back; a converted organization's
-    people leave the trial campaign."""
+    (its trial ended), or converted from trial to subscription. The provider
+    shows it on the company, without sending it back; a converted
+    organization's people leave the trial campaign."""
     if not settings.accounts_sync_enabled:
         return
     org_id = organization.id
@@ -259,7 +222,7 @@ def report_suspension(organization: Organization) -> None:
 
 
 def report_join(user_id: UUID, organization: Organization, role: str) -> None:
-    """An invited member joined an organization Odoo knows."""
+    """An invited member joined an organization the provider knows."""
     if not settings.accounts_sync_enabled:
         return
     org_id, name = organization.id, organization.name
@@ -274,8 +237,8 @@ MEMBERS_PER_RUN = 200
 
 
 async def _retry_organization(org_id: UUID) -> bool:
-    """Re-send everything Odoo may have missed for one flagged organization.
-    Odoo's operations are idempotent. True when all of it went through."""
+    """Re-send everything the provider may have missed for one flagged
+    organization. The operations are idempotent. True when all of it went through."""
     async with session_manager.session() as session:
         organization = await session.get(Organization, org_id)
         if organization is None:
@@ -312,7 +275,7 @@ async def _retry_organization(org_id: UUID) -> bool:
 
 
 async def retry_pending() -> int:
-    """One pass over the organizations whose report to Odoo failed; returns how
+    """One pass over the organizations whose report failed; returns how
     many are done. Replicas may run it at the same time: the operations are
     idempotent, so that only costs a duplicate call."""
     async with session_manager.session() as session:
@@ -331,8 +294,8 @@ async def retry_pending() -> int:
     for org_id in org_ids:
         try:
             await _retry_organization(org_id)
-        except odoo.OdooError as exc:
-            logger.warning("accounts sync retry: Odoo refused or is down: %s", exc)
+        except AccountsError as exc:
+            logger.warning("accounts sync retry: provider refused or is down: %s", exc)
             continue
         except Exception:  # noqa: BLE001 - one organization must not stop the rest
             logger.exception("accounts sync retry failed for %s", org_id)

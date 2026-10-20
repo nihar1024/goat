@@ -1,4 +1,5 @@
-"""Sign-ups and trials reported to Odoo's goat_accounts module (a fake Odoo here)."""
+"""Sign-ups and trials reported through the accounts provider (Odoo's
+goat_accounts module, a fake Odoo here)."""
 
 import asyncio
 import uuid
@@ -7,12 +8,13 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from core.accounts import sync
+from core.accounts import factory, sync
+from core.accounts.odoo_provider import OdooAccountsProvider
 from core.core.config import settings
 from core.db.models.organization import Organization
 from core.db.models.user import User
 from sqlalchemy import update
-from tests.billing import enable_billing
+from tests.billing import enable_accounts_sync
 from tests.utils import make_organization
 
 
@@ -30,13 +32,19 @@ class FakeOdoo:
         return {"goat_company_id": 9, "goat_contact_id": 7}
 
 
+def _provider_on(monkeypatch: pytest.MonkeyPatch, client: Any) -> None:
+    monkeypatch.setattr(
+        factory,
+        "_provider",
+        OdooAccountsProvider(client, settings.ODOO_ACCOUNTS_ACTION),
+    )
+
+
 @pytest.fixture
 def odoo(monkeypatch: pytest.MonkeyPatch) -> FakeOdoo:
-    enable_billing(monkeypatch)
-    monkeypatch.setattr(settings, "ODOO_BILLING_API_KEY", "key")
+    enable_accounts_sync(monkeypatch)
     fake = FakeOdoo()
-    monkeypatch.setattr(sync, "_odoo", lambda: fake)
-    monkeypatch.setattr(sync, "_action_id", None)
+    _provider_on(monkeypatch, fake)
     sync._last_try.clear()
     return fake
 
@@ -97,7 +105,7 @@ async def test_a_user_is_tried_once_per_retry_window(db_session, odoo):
 async def test_nothing_is_reported_without_the_bridge_key(
     db_session, odoo, monkeypatch
 ):
-    monkeypatch.setattr(settings, "ODOO_BILLING_API_KEY", None)
+    monkeypatch.setattr(settings, "ODOO_ACCOUNTS_API_KEY", None)
     user = await _user(db_session)
     sync.report_sign_up(user, {"email_verified": True})
     await _settle()
@@ -229,7 +237,7 @@ async def _pending(db_session, org) -> bool:
 def _failing(monkeypatch, error: Exception | None = None) -> None:
     from core.odoo import OdooUnavailable
 
-    monkeypatch.setattr(sync, "_odoo", lambda: Down(error or OdooUnavailable("down")))
+    _provider_on(monkeypatch, Down(error or OdooUnavailable("down")))
 
 
 @pytest.mark.asyncio

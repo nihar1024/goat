@@ -7,7 +7,12 @@ URL = f"{settings.API_V2_STR}/users/me/features"
 
 @pytest.mark.asyncio
 async def test_self_hosted_runs_neither(client, monkeypatch):
-    for name in ("ODOO_URL", "ODOO_DB", "ODOO_WEBHOOK_SECRET", "ODOO_SUPPORT_API_KEY"):
+    for name in (
+        "ODOO_URL",
+        "ODOO_DB",
+        "BILLING_WEBHOOK_SECRET",
+        "ODOO_SUPPORT_API_KEY",
+    ):
         monkeypatch.setattr(settings, name, None)
     resp = await client.get(URL)
     assert resp.status_code == 200
@@ -28,6 +33,6 @@ async def test_support_without_billing(client, monkeypatch):
     monkeypatch.setattr(settings, "ODOO_DB", "test")
     monkeypatch.setattr(settings, "ODOO_SUPPORT_API_KEY", "key")
     monkeypatch.setattr(settings, "ODOO_SUPPORT_TEAM_ID", 1)
-    monkeypatch.setattr(settings, "ODOO_WEBHOOK_SECRET", None)
+    monkeypatch.setattr(settings, "BILLING_ENABLED", False)
     resp = await client.get(URL)
     assert resp.json() == {"support": True, "billing": False}

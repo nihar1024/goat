@@ -16,7 +16,7 @@ from core.db.models.organization import Organization
 from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db
 from core.schemas.email import EmailTemplateContent
-from core.schemas.entitlement import OdooEntitlement, TrialStage
+from core.schemas.entitlement import EntitlementPush, TrialStage
 from core.utils.email import send_email
 from core.utils.i18n import trans as _
 
@@ -24,8 +24,9 @@ from core.utils.i18n import trans as _
 def require_webhook_secret(
     x_webhook_secret: str | None = Header(default=None),
 ) -> None:
-    """The shared secret Odoo's side sends, compared in constant time."""
-    expected = settings.ODOO_WEBHOOK_SECRET or ""
+    """The shared secret the billing system (or a worker task) sends, compared
+    in constant time."""
+    expected = settings.BILLING_WEBHOOK_SECRET or ""
     if not x_webhook_secret or not hmac.compare_digest(
         x_webhook_secret.encode(), expected.encode()
     ):
@@ -62,15 +63,16 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-@router.post("/odoo/entitlement", response_class=JSONResponse)
-async def odoo_entitlement(
+@router.post("/billing/entitlement", response_class=JSONResponse)
+async def billing_entitlement(
     *,
     db: AsyncSession = Depends(get_db),
-    payload: OdooEntitlement,
+    payload: EntitlementPush,
 ) -> dict:
     organization = await _locked_organization(db, payload.organization_id)
     if organization.deleted_at is not None:
-        # A deleted organization stays deleted, whatever Odoo still believes.
+        # A deleted organization stays deleted, whatever the billing system
+        # still believes.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="org is deleted"
         )
@@ -88,9 +90,9 @@ async def odoo_entitlement(
         reset_usage=payload.reset_usage,
     )
     await db.commit()
-    # Odoo's company shows the state every time, not only on a conversion: a
-    # missed report heals with the next push (Odoo writes only what changed).
-    # A converted organization's people leave the trial campaign there.
+    # The accounts provider shows the state every time, not only on a
+    # conversion: a missed report heals with the next push (it writes only what
+    # changed). A converted organization's people leave the trial campaign.
     report_suspension(organization)
     return {"status": "ok"}
 
@@ -127,8 +129,9 @@ async def trial_lifecycle(
     elif not active_trial:
         return {"status": "noop"}
 
-    # With the Odoo sync on, Odoo's trial campaign sends the reminders; GOAT
-    # sends only the account email that the organization is suspended.
+    # With the accounts sync on, the provider's trial campaign sends the
+    # reminders; GOAT sends only the account email that the organization is
+    # suspended.
     if stage == "expiring" and settings.accounts_sync_enabled:
         return {"status": "ok", "stage": stage}
     contact = await crud_user.get(db=db, id=organization.contact_user_id)

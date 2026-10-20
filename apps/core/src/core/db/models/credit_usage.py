@@ -62,3 +62,10 @@ Index(
     CreditUsage.__table__.c.category,
     CreditUsage.__table__.c.created_at,
 )
+# One compute charge per job: a retried rollup cannot bill the same job twice.
+Index(
+    "uq_credit_usage_compute_job",
+    CreditUsage.__table__.c.payload.op("->>")("job_id"),
+    unique=True,
+    postgresql_where=CreditUsage.__table__.c.category == "compute",
+)

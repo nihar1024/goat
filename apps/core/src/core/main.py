@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.middleware.cors import CORSMiddleware
 
 import core._dotenv  # noqa: E402, F401, I001
+from core.accounts.sync import retry_loop
 from core.core.config import settings
 from core.db.session import session_manager
 from core.endpoints.v2.api import router as api_router_v2
@@ -32,9 +33,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         prober.register_gauge()
         probing = asyncio.create_task(prober.run_forever())
 
+    # Reports to Odoo that failed are re-sent from here; every replica runs it,
+    # which is harmless (the operations are idempotent).
+    syncing = (
+        asyncio.create_task(retry_loop()) if settings.accounts_sync_enabled else None
+    )
+
     yield
 
     print("Shutting down...")
+    if syncing is not None:
+        syncing.cancel()
+        await asyncio.gather(syncing, return_exceptions=True)
     if probing is not None:
         probing.cancel()
         await asyncio.gather(probing, return_exceptions=True)

@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -7,15 +8,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.core.config import settings as core_settings
 from core.crud.crud_organization import organization as crud_organization
+from core.crud.crud_organization import sub_month
 from core.crud.crud_user import user as crud_user
-from core.db.models.organization import OrganizationRolesEnum
+from core.db.models.organization import Organization, OrganizationRolesEnum
 from core.deps.auth import auth_z
 from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db, get_user_id
+from core.schemas.entitlement import naive_utc
 
 # The routes read the caller's own organization only (get_user_id); auth_z
 # verifies the token like every other route. They exist only with billing on.
 router = APIRouter(dependencies=[Depends(require_billing_enabled), Depends(auth_z)])
+
+
+async def _is_admin(db: AsyncSession, user_id: UUID) -> bool:
+    """Whether the caller is an owner or admin of their organization."""
+    user = await crud_user.get_user_with_roles(db_session=db, user_id=str(user_id))
+    roles = {link.role.name for link in user.role_links} if user else set()
+    return bool(roles & {OrganizationRolesEnum.owner, OrganizationRolesEnum.admin})
 
 
 async def _member_scope(
@@ -24,11 +34,18 @@ async def _member_scope(
     """Whose ledger rows the caller sees. The organization's owners and admins
     see everyone's and may narrow it to one member; everyone else sees only
     their own, whatever they ask for."""
-    user = await crud_user.get_user_with_roles(db_session=db, user_id=str(user_id))
-    roles = {link.role.name for link in user.role_links} if user else set()
-    if roles & {OrganizationRolesEnum.owner, OrganizationRolesEnum.admin}:
-        return member
-    return user_id
+    return member if await _is_admin(db, user_id) else user_id
+
+
+def _period_start(org: Organization) -> datetime | None:
+    """Where the current credit period began: a trial's credits last the whole
+    trial, a subscription's run a month up to credits_reset_at. None: the
+    whole ledger (no monthly period known)."""
+    if org.on_trial:
+        return org.created_at
+    if org.credits_reset_at:
+        return sub_month(org.credits_reset_at)
+    return None
 
 
 def _num(value: "Decimal | float | int | None") -> float:
@@ -60,6 +77,7 @@ async def get_balance(
     used_credits = _num(org.used_credits)
     total_credits = None if org.total_credits is None else float(org.total_credits)
     over_budget = total_credits is not None and used_credits >= total_credits
+    period_start = _period_start(org)
 
     return {
         "rates": [
@@ -72,6 +90,8 @@ async def get_balance(
         ],
         "used_credits": used_credits,
         "total_credits": total_credits,
+        # What the usage figures count from by default (see /breakdown).
+        "period_start": period_start.isoformat() if period_start else None,
         "over_budget": over_budget,
         "plan_renewal_date": org.plan_renewal_date.isoformat()
         if org.plan_renewal_date
@@ -166,6 +186,12 @@ def _coerce(v: object) -> object:
 async def get_breakdown(
     group_by: str = Query("category"),
     member: UUID | None = Query(None, description="Only this member's usage (admins)"),
+    since: datetime | None = Query(
+        None,
+        description="Only usage from this time on (UTC). Default: the start of the "
+        "current credit period (see period_start of /balance); group_by=month "
+        "defaults to the whole ledger.",
+    ),
     user_id: UUID = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -174,10 +200,20 @@ async def get_breakdown(
         raise HTTPException(status_code=404, detail="No organization for user")
     schema = core_settings.SCHEMA
     scope = await _member_scope(db, user_id, member)
-    base = f"FROM {schema}.credit_usage WHERE organization_id = :o" + (
-        " AND user_id = :m" if scope else ""
+    if since is not None:
+        since = naive_utc(since)
+    elif group_by != "month":
+        since = _period_start(org)
+    base = (
+        f"FROM {schema}.credit_usage WHERE organization_id = :o"
+        + (" AND user_id = :m" if scope else "")
+        + (" AND created_at >= :since" if since else "")
     )
-    params = {"o": str(org.id), **({"m": str(scope)} if scope else {})}
+    params = {
+        "o": str(org.id),
+        **({"m": str(scope)} if scope else {}),
+        **({"since": since} if since else {}),
+    }
 
     if group_by in _STD_BREAKDOWN:
         key_expr, filt = _STD_BREAKDOWN[group_by]
@@ -217,6 +253,7 @@ async def get_breakdown(
     rows = (await db.execute(text(sql), params)).mappings().all()
     return {
         "group_by": group_by,
+        "since": since.isoformat() if since else None,
         "rows": [{k: _coerce(v) for k, v in dict(r).items()} for r in rows],
     }
 
@@ -231,6 +268,11 @@ async def get_storage_by_layer(
     org = await crud_organization.get_by_user(db, user_id)
     if org is None:
         raise HTTPException(status_code=404, detail="No organization for user")
+    # Names, owners and sizes of everyone's layers: not for every member.
+    if not await _is_admin(db, user_id):
+        raise HTTPException(
+            status_code=403, detail="Only organization owners and admins"
+        )
     schema = core_settings.SCHEMA
     rows = (
         (

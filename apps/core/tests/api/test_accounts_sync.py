@@ -6,9 +6,12 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from core.accounts import sync
 from core.core.config import settings
+from core.db.models.organization import Organization
 from core.db.models.user import User
+from sqlalchemy import update
 from tests.billing import enable_billing
 from tests.utils import make_organization
 
@@ -194,3 +197,198 @@ async def test_a_language_change_in_goat_reaches_odoo(db_session, odoo):
     (op,) = odoo.ops
     assert op["goat_user_id"] == str(known.id)
     assert op["goat_lang"] == "en_US"
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def no_flagged_leftovers(db_session):
+    """The retry scans every flagged organization: start each test without
+    the ones earlier tests left behind."""
+    await db_session.execute(
+        update(Organization)
+        .where(Organization.odoo_sync_pending)
+        .values(odoo_sync_pending=False)
+    )
+    await db_session.commit()
+
+
+class Down:
+    """Odoo failing every call, the way a down or refusing server does."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    async def call(self, *args: Any, **kwargs: Any) -> Any:
+        raise self.error
+
+
+async def _pending(db_session, org) -> bool:
+    await db_session.refresh(org)
+    return org.odoo_sync_pending
+
+
+def _failing(monkeypatch, error: Exception | None = None) -> None:
+    from core.odoo import OdooUnavailable
+
+    monkeypatch.setattr(sync, "_odoo", lambda: Down(error or OdooUnavailable("down")))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["down", "refused", "bug"])
+async def test_a_lost_report_marks_the_organization_pending(
+    db_session, odoo, monkeypatch, failure
+):
+    from core.odoo import OdooRejected, OdooUnavailable
+
+    error = {
+        "down": OdooUnavailable("down"),
+        "refused": OdooRejected(403, "AccessError", "no"),
+        "bug": RuntimeError("boom"),
+    }[failure]
+    user = await _user(db_session)
+    org = make_organization(
+        on_trial=True, plan_renewal_date=datetime.now() + timedelta(days=30)
+    )
+    db_session.add(org)
+    await db_session.commit()
+    _failing(monkeypatch, error)
+
+    for report in (
+        lambda: sync.report_trial(org, user.id),
+        lambda: sync.report_suspension(org),
+        lambda: sync.report_join(user.id, org, "editor"),
+    ):
+        org.odoo_sync_pending = False
+        await db_session.commit()
+        report()
+        await _settle()
+        assert await _pending(db_session, org) is True
+
+
+@pytest.mark.asyncio
+async def test_a_report_that_arrives_clears_the_mark(db_session, odoo):
+    org = make_organization(on_trial=True, odoo_sync_pending=True)
+    db_session.add(org)
+    await db_session.commit()
+
+    sync.report_suspension(org)
+    await _settle()
+
+    assert await _pending(db_session, org) is False
+
+
+@pytest.mark.asyncio
+async def test_an_unflagged_organization_stays_unflagged_on_success(db_session, odoo):
+    org = make_organization(on_trial=True)
+    db_session.add(org)
+    await db_session.commit()
+    sync.report_suspension(org)
+    await _settle()
+    assert await _pending(db_session, org) is False
+
+
+@pytest.mark.asyncio
+async def test_the_retry_re_reports_everything_odoo_missed(db_session, odoo):
+    owner = await _user(db_session)
+    member = await _user(db_session)
+    known = await _user(db_session, odoo_contact_id=3)
+    org = make_organization(
+        on_trial=True,
+        suspended=True,
+        plan_renewal_date=datetime.now() - timedelta(days=1),
+        name="Stadt Beispiel",
+        contact_user_id=owner.id,
+        odoo_sync_pending=True,
+    )
+    db_session.add(org)
+    await db_session.commit()
+    for user in (owner, member, known):
+        user.organization_id = org.id
+    await db_session.commit()
+    other = make_organization(on_trial=True)  # not flagged: left alone
+    db_session.add(other)
+    await db_session.commit()
+
+    assert await sync.retry_pending() == 1
+
+    ops = [(o["goat_op"], o.get("goat_user_id")) for o in odoo.ops]
+    assert ("start_trial", str(owner.id)) in ops
+    status = [o for o in odoo.ops if o["goat_op"] == "status"]
+    assert status == [
+        {
+            "goat_op": "status",
+            "goat_organization_id": str(org.id),
+            "goat_suspended": True,
+            "goat_on_trial": True,
+        }
+    ]
+    joined = {u for op, u in ops if op == "join"}
+    assert joined <= {str(owner.id), str(member.id)}  # never the known one
+    assert str(member.id) in joined
+    assert all(o.get("goat_organization_id") != str(other.id) for o in odoo.ops)
+    await db_session.refresh(org)
+    assert org.odoo_sync_pending is False
+    assert org.odoo_company_id == 9
+
+
+@pytest.mark.asyncio
+async def test_the_retry_skips_the_trial_when_odoo_knows_the_company(db_session, odoo):
+    org = make_organization(
+        on_trial=True,
+        odoo_company_id=5,
+        plan_renewal_date=datetime.now() + timedelta(days=5),
+        odoo_sync_pending=True,
+    )
+    db_session.add(org)
+    await db_session.commit()
+
+    await sync.retry_pending()
+
+    assert [o["goat_op"] for o in odoo.ops] == ["status"]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_retry_keeps_the_mark_and_carries_on(
+    db_session, odoo, monkeypatch
+):
+    first = make_organization(on_trial=False, odoo_sync_pending=True)
+    second = make_organization(on_trial=False, odoo_sync_pending=True)
+    db_session.add_all([first, second])
+    await db_session.commit()
+    ok = odoo.call
+
+    async def refuse_first(model, method, **kwargs):
+        if kwargs.get("context", {}).get("goat_organization_id") == str(first.id):
+            raise RuntimeError("boom")
+        return await ok(model, method, **kwargs)
+
+    monkeypatch.setattr(odoo, "call", refuse_first)
+
+    assert await sync.retry_pending() == 1
+
+    assert await _pending(db_session, first) is True
+    assert await _pending(db_session, second) is False
+
+
+@pytest.mark.asyncio
+async def test_the_retry_loop_survives_failures_and_stops_when_cancelled(
+    monkeypatch,
+):
+    calls = []
+
+    async def broken() -> int:
+        calls.append(1)
+        raise RuntimeError("database gone")
+
+    monkeypatch.setattr(sync, "retry_pending", broken)
+    monkeypatch.setattr(settings, "ODOO_SYNC_RETRY_SECONDS", 0)
+    loop = asyncio.create_task(sync.retry_loop())
+    while len(calls) < 3:
+        await asyncio.sleep(0)
+    assert not loop.done()  # still alive after failing
+    loop.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await loop
+
+
+def test_the_retry_interval_defaults_to_ten_minutes():
+    assert settings.model_fields["ODOO_SYNC_RETRY_SECONDS"].default == 600

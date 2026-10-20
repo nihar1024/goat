@@ -17,10 +17,10 @@ def as_admin(monkeypatch: pytest.MonkeyPatch) -> None:
     what is tested in tests/authz/test_credit_usage_scope.py."""
     from core.endpoints.v2 import credits
 
-    async def admin_scope(db, user_id, member):
-        return member
+    async def admin(db, user_id):
+        return True
 
-    monkeypatch.setattr(credits, "_member_scope", admin_scope)
+    monkeypatch.setattr(credits, "_is_admin", admin)
 
 
 async def _org_with_default_user(db_session):
@@ -175,3 +175,149 @@ async def test_storage_by_layer_lists_largest_first(client, db_session):
     rows = resp.json()["rows"]
     assert [r["name"] for r in rows[:2]] == ["big", "small"]  # largest first
     assert rows[0]["owner"] == "Rep Orter"
+
+
+def _ledger_row(user, cost, created_at, category="compute", **payload):
+    return {
+        "user_id": user.id,
+        "category": category,
+        "action": "buffer",
+        "unit": 6,
+        "unit_type": "seconds",
+        "rate": 10,
+        "cost": cost,
+        "payload": payload,
+        "created_at": created_at,
+    }
+
+
+@pytest.mark.asyncio
+async def test_breakdown_counts_from_the_start_of_the_credit_period(client, db_session):
+    from datetime import datetime, timedelta
+
+    org, user = await _org_with_default_user(db_session)
+    reset = datetime.now() + timedelta(days=10)
+    org.credits_reset_at = reset
+    await db_session.commit()
+    await _add_rows(
+        db_session,
+        org,
+        user,
+        [
+            _ledger_row(user, 1, datetime.now() - timedelta(days=60)),  # last periods
+            _ledger_row(user, 2, datetime.now() - timedelta(days=5)),  # this one
+        ],
+    )
+
+    def credits_of(body):
+        return {r["key"]: round(r["credits"], 2) for r in body["rows"]}
+
+    api = f"{settings.API_V2_STR}/credits"
+    balance = (await client.get(f"{api}/balance")).json()
+    assert balance["period_start"] is not None
+    assert datetime.fromisoformat(balance["period_start"]) < datetime.now()
+
+    default = (await client.get(f"{api}/breakdown?group_by=category")).json()
+    assert credits_of(default) == {"compute": 2.0}
+    assert default["since"] == balance["period_start"]
+
+    since = (datetime.now() - timedelta(days=90)).isoformat()
+    explicit = (
+        await client.get(
+            f"{api}/breakdown", params={"group_by": "category", "since": since}
+        )
+    ).json()
+    assert credits_of(explicit) == {"compute": 3.0}
+
+    # the monthly history is the point of group_by=month: no default bound
+    months = (await client.get(f"{api}/breakdown?group_by=month")).json()
+    assert round(sum(r["credits"] for r in months["rows"]), 2) == 3.0
+
+
+@pytest.mark.asyncio
+async def test_a_trials_usage_counts_from_its_start(client, db_session):
+    from datetime import datetime, timedelta
+
+    org, user = await _org_with_default_user(db_session)
+    org.on_trial = True
+    org.created_at = datetime.now() - timedelta(days=3)
+    await db_session.commit()
+    await _add_rows(
+        db_session,
+        org,
+        user,
+        [
+            _ledger_row(user, 5, datetime.now() - timedelta(days=10)),
+            _ledger_row(user, 1, datetime.now() - timedelta(days=1)),
+        ],
+    )
+    api = f"{settings.API_V2_STR}/credits"
+    balance = (await client.get(f"{api}/balance")).json()
+    assert balance["period_start"] == org.created_at.isoformat()
+    body = (await client.get(f"{api}/breakdown?group_by=category")).json()
+    assert [round(r["credits"], 2) for r in body["rows"]] == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_without_a_period_the_whole_ledger_counts(client, db_session):
+    from datetime import datetime, timedelta
+
+    org, user = await _org_with_default_user(db_session)
+    await _add_rows(
+        db_session,
+        org,
+        user,
+        [_ledger_row(user, 4, datetime.now() - timedelta(days=400))],
+    )
+    api = f"{settings.API_V2_STR}/credits"
+    assert (await client.get(f"{api}/balance")).json()["period_start"] is None
+    body = (await client.get(f"{api}/breakdown?group_by=category")).json()
+    assert [round(r["credits"], 2) for r in body["rows"]] == [4.0]
+
+
+@pytest.mark.asyncio
+async def test_a_compute_job_is_charged_once_but_other_categories_repeat(
+    db_session,
+):
+    from datetime import datetime
+
+    from sqlalchemy.exc import IntegrityError
+
+    org, user = await _org_with_default_user(db_session)
+    now = datetime.now()
+    await _add_rows(
+        db_session,
+        org,
+        user,
+        [
+            _ledger_row(user, 1, now, job_id="job-1"),
+            _ledger_row(user, 1, now, job_id="job-2"),
+            # egress is per request, not per job: the same id may repeat
+            _ledger_row(user, 1, now, "egress", job_id="job-1"),
+            _ledger_row(user, 1, now, "egress", job_id="job-1"),
+            # a compute row without a job id (no key) is not constrained
+            _ledger_row(user, 1, now),
+            _ledger_row(user, 1, now),
+        ],
+    )
+    db_session.add(
+        CreditUsage(organization_id=org.id, **_ledger_row(user, 1, now, job_id="job-1"))
+    )
+    with pytest.raises(IntegrityError, match="uq_credit_usage_compute_job"):
+        await db_session.commit()
+    await db_session.rollback()
+
+
+def test_sub_month_inverts_add_month():
+    from datetime import datetime
+
+    from core.crud.crud_organization import add_month, sub_month
+
+    assert sub_month(datetime(2026, 3, 15, 8, 30)) == datetime(2026, 2, 15, 8, 30)
+    assert sub_month(datetime(2026, 1, 15)) == datetime(2025, 12, 15)
+    # a month's end: the previous month's last day when it is shorter
+    assert sub_month(datetime(2026, 3, 31)) == datetime(2026, 2, 28)
+    assert sub_month(datetime(2028, 3, 31)) == datetime(2028, 2, 29)
+    assert sub_month(datetime(2026, 2, 28)) == datetime(2026, 1, 28)
+    for day in (datetime(2026, 5, 31), datetime(2026, 12, 10), datetime(2027, 1, 30)):
+        assert sub_month(add_month(day)).day <= day.day

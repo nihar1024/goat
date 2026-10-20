@@ -1,5 +1,5 @@
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 from uuid import UUID
 
@@ -36,6 +36,7 @@ from core.db.session import session_manager
 from core.deps.keycloak import get_keycloak_user
 from core.schemas import OrganizationUpdate
 from core.schemas.email import EmailTemplateContent
+from core.schemas.entitlement import naive_utc
 from core.schemas.organization import (
     OrganizationCreate,
     OrganizationMemberRoleUpdateEnum,
@@ -82,6 +83,16 @@ def add_month(moment: datetime) -> datetime:
     """The same day and time one month later (the month's last day when shorter)."""
     month = moment.month % 12 + 1
     year = moment.year + (moment.month == 12)
+    day = min(moment.day, calendar.monthrange(year, month)[1])
+    return moment.replace(year=year, month=month, day=day)
+
+
+def sub_month(moment: datetime) -> datetime:
+    """The inverse of add_month: the same day and time one month earlier (the
+    month's last day when shorter). A reset date that add_month shortened
+    (Jan 31 -> Feb 28) comes back as Jan 28, a few days late at worst."""
+    month = (moment.month - 2) % 12 + 1
+    year = moment.year - (moment.month == 1)
     day = min(moment.day, calendar.monthrange(year, month)[1])
     return moment.replace(year=year, month=month, day=day)
 
@@ -178,6 +189,11 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         # todo: send email also to all members
         keycloak_user = await get_keycloak_user(organization_obj.contact_user_id)
         organization_obj.suspended = True
+        # Suspension alone can be undone by an entitlement push; this cannot.
+        if organization_obj.deleted_at is None:
+            organization_obj.deleted_at = datetime.now(timezone.utc).replace(
+                tzinfo=None
+            )
         db.add(organization_obj)
         await db.commit()
 
@@ -834,7 +850,8 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
 
         Returns whether this push converted a trial into a subscription.
 
-        Provider-agnostic: `entitlement` is a plain dict; absent keys are left as-is.
+        Provider-agnostic: `entitlement` is a plain dict (validated by
+        OdooEntitlement at the webhook); absent keys are left as-is.
         """
         for cap in self._ENTITLEMENT_CAPS:
             if cap in entitlement:
@@ -850,13 +867,16 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         if "on_trial" in entitlement:
             converted = organization.on_trial and not entitlement["on_trial"]
             organization.on_trial = bool(entitlement["on_trial"])
-        renewal = entitlement.get("plan_renewal_date")
-        if renewal:
-            organization.plan_renewal_date = (
-                renewal
-                if isinstance(renewal, datetime)
-                else datetime.fromisoformat(renewal)
+
+        def moment(value: datetime | str) -> datetime:
+            return naive_utc(
+                value if isinstance(value, datetime) else datetime.fromisoformat(value)
             )
+
+        if entitlement.get("plan_renewal_date"):
+            organization.plan_renewal_date = moment(entitlement["plan_renewal_date"])
+        if entitlement.get("as_of"):
+            organization.entitlement_as_of = moment(entitlement["as_of"])
         if reset_usage or converted:
             organization.used_credits = 0
         # A subscription's credits reset monthly, from its first push on

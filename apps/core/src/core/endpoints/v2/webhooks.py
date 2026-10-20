@@ -1,16 +1,22 @@
 import hmac
+from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col
 
 from core.accounts import report_suspension
 from core.core.config import settings
 from core.crud.crud_organization import organization as crud_organization
 from core.crud.crud_user import user as crud_user
+from core.db.models.organization import Organization
 from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db
 from core.schemas.email import EmailTemplateContent
+from core.schemas.entitlement import OdooEntitlement, TrialStage
 from core.utils.email import send_email
 from core.utils.i18n import trans as _
 
@@ -34,29 +40,52 @@ router = APIRouter(
 )
 
 
-@router.post("/odoo/entitlement", response_class=JSONResponse)
-async def odoo_entitlement(
-    *,
-    db: AsyncSession = Depends(get_db),
-    payload: dict,
-) -> dict:
-    org_id = payload.get("organization_id")
-    organization = await crud_organization.get(db=db, id=org_id) if org_id else None
+async def _locked_organization(db: AsyncSession, org_id: UUID) -> Organization:
+    """The organization, row-locked: concurrent pushes and trial calls take
+    turns, so the stale and idempotency checks below cannot race."""
+    organization = (
+        await db.execute(
+            select(Organization)
+            .where(col(Organization.id) == org_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
     if organization is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="org not found"
         )
+    return organization
 
-    raw_reset = payload.get("reset_usage", True)
-    reset_usage = (
-        raw_reset
-        if isinstance(raw_reset, bool)
-        else str(raw_reset).strip().lower() not in ("false", "0", "no", "")
-    )
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+@router.post("/odoo/entitlement", response_class=JSONResponse)
+async def odoo_entitlement(
+    *,
+    db: AsyncSession = Depends(get_db),
+    payload: OdooEntitlement,
+) -> dict:
+    organization = await _locked_organization(db, payload.organization_id)
+    if organization.deleted_at is not None:
+        # A deleted organization stays deleted, whatever Odoo still believes.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="org is deleted"
+        )
+    if (
+        payload.as_of is not None
+        and organization.entitlement_as_of is not None
+        and payload.as_of < organization.entitlement_as_of
+    ):
+        # A delayed or retried push must not undo a newer one.
+        return {"status": "stale"}
+
     crud_organization.apply_entitlement(
         organization=organization,
-        entitlement=payload,
-        reset_usage=reset_usage,
+        entitlement=payload.entitlement(),
+        reset_usage=payload.reset_usage,
     )
     await db.commit()
     # Odoo's company shows the state every time, not only on a conversion: a
@@ -70,32 +99,33 @@ async def odoo_entitlement(
 async def trial_lifecycle(
     *,
     db: AsyncSession = Depends(get_db),
-    payload: dict,
+    payload: TrialStage,
 ) -> dict:
     """GOAT-managed trial lifecycle, driven by the trial_expiry task.
 
     stage=expiring -> warning email only; stage=expired -> suspend + email.
     The org stays on_trial either way — conversion (an entitlement push from
     a real subscription) is what ends the trial.
+
+    Idempotent: the task may repeat a call or arrive after a conversion, a
+    suspension or a deletion, and then nothing happens ({"status": "noop"}).
     """
-    stage = payload.get("stage")
-    if stage not in ("expiring", "expired"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="stage must be 'expiring' or 'expired'",
-        )
-
-    org_id = payload.get("organization_id")
-    organization = await crud_organization.get(db=db, id=org_id) if org_id else None
-    if organization is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="org not found"
-        )
-
+    stage = payload.stage
+    organization = await _locked_organization(db, payload.organization_id)
+    active_trial = (
+        organization.on_trial
+        and not organization.suspended
+        and organization.deleted_at is None
+    )
     if stage == "expired":
+        renewal = organization.plan_renewal_date
+        if not (active_trial and renewal is not None and renewal <= _utcnow()):
+            return {"status": "noop"}
         organization.suspended = True
         await db.commit()
         report_suspension(organization)
+    elif not active_trial:
+        return {"status": "noop"}
 
     # With the Odoo sync on, Odoo's trial campaign sends the reminders; GOAT
     # sends only the account email that the organization is suspended.

@@ -34,6 +34,14 @@ BEGIN
         RAISE EXCEPTION 'Organization is suspended';
     END IF;
 
+    /*A trial that has run out is refused at once, same as suspended: the daily
+      trial_expiry task only gets to suspend it later. plan_renewal_date is naive UTC.*/
+    IF rec_organization.on_trial IS TRUE
+       AND rec_organization.plan_renewal_date IS NOT NULL
+       AND rec_organization.plan_renewal_date < (now() AT TIME ZONE 'UTC') THEN
+        RAISE EXCEPTION 'Organization is suspended';
+    END IF;
+
     /*Check premium features: resource.extras lists required features, organization.extras
       the granted ones. NULL organization.extras = all features enabled (self-hosted).*/
     IF rec_resource.extras IS NOT NULL THEN

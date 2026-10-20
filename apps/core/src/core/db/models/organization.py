@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID
 
 from pydantic import field_serializer, field_validator
-from sqlalchemy import Numeric
+from sqlalchemy import Index, Numeric
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as UUID_PG
 from sqlmodel import (
@@ -138,6 +138,34 @@ class Organization(UUIDServerDefaultBase, OrganizationBase, table=True):
     __tablename__ = "organization"
     __table_args__ = {"schema": settings.SCHEMA}
 
+    # Kept off OrganizationBase: billing/sync bookkeeping, not part of the API schemas.
+    # Odoo-side time of the last applied entitlement push (naive UTC); an
+    # older push is stale and ignored.
+    entitlement_as_of: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True)
+    )
+    # Set by DELETE /organizations/{id}; a deleted organization is never
+    # revived by an entitlement push.
+    deleted_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True)
+    )
+    # A report to Odoo (trial, join, status) failed; the retry loop in
+    # core.accounts.sync re-sends it and clears the flag.
+    odoo_sync_pending: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean, nullable=False, server_default=text("false"), default=False
+        ),
+    )
+
     # Relationships
     users: List["User"] = Relationship(back_populates="organization")
     teams: List["Team"] = Relationship(back_populates="organization")
+
+
+# The retry loop scans only the few pending rows.
+Index(
+    "idx_organization_odoo_sync_pending",
+    Organization.__table__.c.id,
+    postgresql_where=Organization.__table__.c.odoo_sync_pending,
+)

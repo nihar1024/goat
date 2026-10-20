@@ -398,6 +398,8 @@ class Settings(BaseSettings):
     # the bridge portal user ("GOAT Accounts Bot") of the goat_accounts module.
     ODOO_BILLING_API_KEY: str | None = None
     ODOO_ACCOUNTS_ACTION: str = "GOAT: accounts"
+    # How often reports to Odoo that failed (trial, join, status) are re-sent.
+    ODOO_SYNC_RETRY_SECONDS: int = 600
 
     @field_validator(
         "ODOO_URL",

@@ -23,6 +23,22 @@ WORKFLOW_RUNNER_PATH = "f/goat/tools/workflow_runner"
 # still be able to delete its data).
 FREE_TOOLS = frozenset({"layer_delete", "layer_delete_multi", "bundle_artifact_delete"})
 
+# Exports hand the browser a file straight from object storage, past geoapi's
+# traffic metering: their size is charged as data transfer ("downloads") with
+# the job, by the size field each export puts in its result.
+EXPORT_SIZE_FIELDS = {
+    "f/goat/tools/layer_export": "file_size_bytes",
+    "f/goat/tools/project_export": "file_size",
+}
+_EXPORT_SIZE_SQL = (
+    "CASE j.runnable_path "
+    + " ".join(
+        f"WHEN '{path}' THEN c.result->>'{field}'"
+        for path, field in EXPORT_SIZE_FIELDS.items()
+    )
+    + " END"
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +61,7 @@ class ChargeItem:
     action: str
     duration_seconds: float
     payload: dict
+    export_bytes: int = 0
 
 
 def tool_from_path(path: str | None) -> str:
@@ -97,9 +114,19 @@ def select_chargeable(jobs: list[dict], already_charged: set[str]) -> list[Charg
                 action=tool_from_path(j.get("runnable_path")),
                 duration_seconds=max(0.0, (j.get("duration_ms") or 0) / 1000.0),
                 payload=payload,
+                export_bytes=_export_bytes(j),
             )
         )
     return items
+
+
+def _export_bytes(job: dict) -> int:
+    if job.get("runnable_path") not in EXPORT_SIZE_FIELDS:
+        return 0
+    try:
+        return max(0, int(job.get("export_size") or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _windmill_dsn() -> str:
@@ -113,7 +140,7 @@ async def _fetch_completed_jobs(
     wm_conn: "asyncpg.Connection", lookback_minutes: int
 ) -> list[dict]:
     rows = await wm_conn.fetch(
-        """
+        f"""
         SELECT
             j.id::text                                   AS job_id,
             j.args->>'user_id'                           AS user_id,
@@ -123,6 +150,7 @@ async def _fetch_completed_jobs(
             j.parent_job::text                           AS parent_job,
             c.status::text                               AS status,
             c.duration_ms                                AS duration_ms,
+            {_EXPORT_SIZE_SQL}                           AS export_size,
             EXISTS (SELECT 1 FROM v2_job ch WHERE ch.parent_job = j.id) AS has_children
         FROM v2_job_completed c
         JOIN v2_job j ON j.id = c.id
@@ -201,14 +229,25 @@ async def main(params: ComputeRollupParams = ComputeRollupParams()) -> dict:
             if org_id is None:
                 continue  # user has no org — skip
             if not params.dry_run:
-                await core.execute(
-                    f"SELECT {schema}.charge_credits($1, $2, $3, 'compute', $4, $5::jsonb)",
-                    org_id,
-                    item.user_id,
-                    item.action,
-                    item.duration_seconds,
-                    json.dumps(item.payload),
-                )
+                # One transaction: the compute charge marks the job as charged,
+                # so its data transfer must be booked with it or not at all.
+                async with core.transaction():
+                    await core.execute(
+                        f"SELECT {schema}.charge_credits($1, $2, $3, 'compute', $4, $5::jsonb)",
+                        org_id,
+                        item.user_id,
+                        item.action,
+                        item.duration_seconds,
+                        json.dumps(item.payload),
+                    )
+                    if item.export_bytes:
+                        await core.execute(
+                            f"SELECT {schema}.charge_credits($1, $2, 'downloads', 'egress', $3, $4::jsonb)",
+                            org_id,
+                            item.user_id,
+                            item.export_bytes,
+                            json.dumps({**item.payload, "export": item.action}),
+                        )
             charged += 1
         summary = {
             "considered": len(jobs),

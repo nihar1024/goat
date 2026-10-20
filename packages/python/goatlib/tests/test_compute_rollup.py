@@ -88,3 +88,23 @@ def test_housekeeping_jobs_are_free():
         len(select_chargeable([{**job, "runnable_path": "f/goat/tools/buffer"}], set()))
         == 1
     )
+
+
+def test_an_export_carries_its_file_size_for_data_transfer():
+    layer = _job(runnable_path="f/goat/tools/layer_export", export_size="6746")
+    project = _job(
+        job_id="p1", runnable_path="f/goat/tools/project_export", export_size="42989205"
+    )
+    items = select_chargeable([layer, project], set())
+    assert [i.export_bytes for i in items] == [6746, 42989205]
+
+
+def test_other_tools_and_odd_sizes_carry_no_data_transfer():
+    other = _job(export_size="999")  # not an export: ignored even with a size
+    broken = _job(
+        job_id="b1", runnable_path="f/goat/tools/layer_export", export_size="n/a"
+    )
+    missing = _job(job_id="m1", runnable_path="f/goat/tools/layer_export")
+    assert [
+        i.export_bytes for i in select_chargeable([other, broken, missing], set())
+    ] == [0, 0, 0]

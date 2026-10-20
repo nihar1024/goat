@@ -43,6 +43,7 @@ export const { getKcContext } = createGetKcContext({
             value: undefined,
             name: "subscribe_to_newsletter",
             required: false,
+            annotations: { trialEmailsNote: "true" },
           },
         ],
       },

@@ -372,8 +372,10 @@ export function UserProfileFormFields(props: UserProfileFormFieldsProps) {
             }
           />
         )}
-      {/* The trial emails are part of the trial; the newsletter above is not. */}
-      {subscribeToNewsletter &&
+      {/* The trial emails are part of the trial; the newsletter above is not.
+          Only a realm whose operator sends such emails says so, with the
+          annotation trialEmailsNote: "true" on the attribute (realm/README.md). */}
+      {subscribeToNewsletter?.annotations?.trialEmailsNote === "true" &&
         (activeStep == 1 || activeStep === undefined) && (
           <Typography variant="caption" color="text.secondary" component="p">
             {msg("trialEmailsNote")}

@@ -13,6 +13,16 @@ stored value, so resubmitting the form does not clear an earlier consent. Countr
 longer asked: existing users keep their old values as unmanaged attributes,
 nothing reads them. Students apply separately for a longer trial.
 
+## The trial emails note
+
+Under the newsletter box the sign-up page can say that the operator sends
+emails during the trial (tips, reminders, an offer to keep using GOAT; the
+texts are `trialEmailsNote` in `src/login/i18n.ts`). It is shown only when the
+`subscribe_to_newsletter` attribute carries the annotation
+`"trialEmailsNote": "true"` in the realm's user profile, as `user-profile.json`
+here does for Plan4Better's hosted realm. Without the annotation (self-hosted
+realms, or any realm that sends no trial emails) there is no note.
+
 ## Applying it to a realm
 
 1. Realm settings → User profile → JSON editor: paste `user-profile.json`, save.
@@ -21,7 +31,7 @@ nothing reads them. Students apply separately for a longer trial.
    `subscribe_to_newsletter`, token claim name `newsletter`, claim JSON type
    String, added to the ID token and access token. GOAT core reads the claim when
    it first sees the user (`user.newsletter_subscribe`) and passes the consent on
-   to Odoo.
+   to the accounts provider (Odoo, when configured).
 3. Realm settings → Login: "User registration" and "Verify email" on (SaaS only;
    self-hosted realms keep registration off).
 

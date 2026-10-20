@@ -40,7 +40,8 @@
     {
       "name": "subscribe_to_newsletter",
       "displayName": "${subscribe_to_newsletter}",
-      "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] }
+      "permissions": { "view": ["admin", "user"], "edit": ["admin", "user"] },
+      "annotations": { "trialEmailsNote": "true" }
     }
   ],
   "groups": []

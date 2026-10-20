@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Card, Tab, Tabs } from "@mui/material";
+import { Alert, Box, Card, Tab, Tabs } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +14,7 @@ export default function UsagePage() {
   const { t } = useTranslation("common");
   const [tab, setTab] = useState(0);
   const router = useRouter();
-  const { features } = useFeatures();
+  const { features, isError: featuresError } = useFeatures();
   // Self-hosted (billing off): there is no usage to show.
   const billingOff = features?.billing === false;
 
@@ -22,6 +22,9 @@ export default function UsagePage() {
     if (billingOff) router.replace("/settings/account");
   }, [billingOff, router]);
 
+  // Without the feature flags we cannot tell billing on from off: say so
+  // instead of leaving the page blank.
+  if (!features && featuresError) return <Alert severity="error">{t("usage_load_error")}</Alert>;
   if (!features?.billing) return null;
 
   return (

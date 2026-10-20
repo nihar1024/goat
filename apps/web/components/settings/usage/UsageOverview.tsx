@@ -8,7 +8,9 @@ import { Trans, useTranslation } from "react-i18next";
 import { useDateFnsLocale } from "@/i18n/utils";
 
 import { useCreditBalance, useCreditBreakdown, useStorageByLayer } from "@/lib/api/usage";
-import { formatCredits } from "@/lib/utils/credits";
+import { formatCredits, formatRate, parseApiDate } from "@/lib/utils/credits";
+
+import { useAuthZ } from "@/hooks/auth/AuthZ";
 
 import QuotaStatus from "@/components/common/QuotaStatus";
 
@@ -54,9 +56,12 @@ export function UsageOverview() {
   const theme = useTheme();
   const { balance, isLoading: balanceLoading } = useCreditBalance();
   const { breakdown, isLoading: breakdownLoading } = useCreditBreakdown("category");
-  const { storage: storageByLayer, isLoading: storageLoading } = useStorageByLayer();
+  // Every layer's name, owner and size: for organization owners and admins only.
+  // A 403 (or any failure) just hides the list, with no error shown.
+  const { isOrgAdmin } = useAuthZ();
+  const { storage: storageByLayer, isError: storageError } = useStorageByLayer(isOrgAdmin);
 
-  const isLoading = balanceLoading || breakdownLoading || storageLoading;
+  const isLoading = balanceLoading || breakdownLoading;
 
   const computeRow = breakdown?.rows.find((r) => r.key === "compute");
   const egressRow = breakdown?.rows.find((r) => r.key === "egress");
@@ -68,12 +73,21 @@ export function UsageOverview() {
 
   const total = balance?.total_credits ?? null;
   const usedCredits = balance?.used_credits ?? 0;
-  const remainingCredits = total !== null ? total - usedCredits : null;
+  // Never negative: runs in flight can take the ledger past the budget.
+  const remainingCredits = total !== null ? Math.max(0, total - usedCredits) : null;
+  const outOfCredits = total !== null && usedCredits >= total;
+
+  // What a credit buys, from the server: credits per minute of compute / per GB of traffic.
+  const computeRate = balance?.rates?.find((r) => r.category === "compute")?.rate;
+  const egressRate = balance?.rates?.find((r) => r.category === "egress")?.rate;
 
   const computePct = total && total > 0 ? (computeCredits / total) * 100 : 0;
   const egressPct = total && total > 0 ? (egressCredits / total) * 100 : 0;
 
-  const sortedLayers = [...(storageByLayer?.rows ?? [])].sort((a, b) => (b.size_mb ?? 0) - (a.size_mb ?? 0));
+  const showStorageList = isOrgAdmin && !storageError;
+  const sortedLayers = [...(showStorageList ? (storageByLayer?.rows ?? []) : [])].sort(
+    (a, b) => (b.size_mb ?? 0) - (a.size_mb ?? 0)
+  );
 
   return (
     <Box sx={{ p: 4 }}>
@@ -200,7 +214,9 @@ export function UsageOverview() {
                         </Typography>
                       </Stack>
                       {remainingCredits !== null && (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography
+                          variant="caption"
+                          color={outOfCredits ? "warning.main" : "text.secondary"}>
                           · {formatCredits(remainingCredits, i18n?.language)} {t("remaining")}
                         </Typography>
                       )}
@@ -208,24 +224,29 @@ export function UsageOverview() {
                     {balance.on_trial && balance.plan_renewal_date && (
                       <Typography variant="caption" color="text.secondary">
                         {t("trial_credits_until")}:{" "}
-                        {format(new Date(balance.plan_renewal_date), "PP", { locale: dateLocale })}
+                        {format(parseApiDate(balance.plan_renewal_date), "PP", { locale: dateLocale })}
                       </Typography>
                     )}
                     {!balance.on_trial && balance.credits_reset_at && (
                       <Typography variant="caption" color="text.secondary">
                         {t("resets_on")}:{" "}
-                        {format(new Date(balance.credits_reset_at), "PP", { locale: dateLocale })}
+                        {format(parseApiDate(balance.credits_reset_at), "PP", { locale: dateLocale })}
                       </Typography>
                     )}
                   </Stack>
 
                   {/* Approximation caption */}
-                  {remainingCredits !== null && remainingCredits > 0 && (
+                  {outOfCredits && (
+                    <Typography variant="caption" color="warning.main" fontWeight="bold">
+                      {t("credits_used_up")}
+                    </Typography>
+                  )}
+                  {!outOfCredits && remainingCredits !== null && !!computeRate && !!egressRate && (
                     <Typography variant="caption" color="text.secondary">
                       {t("credits_remaining", {
                         remaining: formatCredits(remainingCredits, i18n?.language),
-                        gb: formatCredits(remainingCredits / 20, i18n?.language),
-                        minutes: formatCredits(remainingCredits / 10, i18n?.language),
+                        gb: formatCredits(remainingCredits / egressRate, i18n?.language),
+                        minutes: formatCredits(remainingCredits / computeRate, i18n?.language),
                       })}
                     </Typography>
                   )}
@@ -248,7 +269,7 @@ export function UsageOverview() {
                       .map((r) => (
                         <Typography component="li" variant="body2" key={r.category}>
                           {t(`credit_pricing_${r.category}`, {
-                            rate: formatCredits(r.rate, i18n?.language),
+                            rate: formatRate(r.rate, i18n?.language),
                             defaultValue: `${r.category}: ${r.rate} / ${r.unit_basis}`,
                           })}
                         </Typography>
@@ -314,8 +335,8 @@ export function UsageOverview() {
                   {t("storage_quota_information")}
                 </Typography>
 
-                {/* Storage by layer list */}
-                {sortedLayers.length > 0 && (
+                {/* Storage by layer list (admins only) */}
+                {showStorageList && sortedLayers.length > 0 && (
                   <Stack spacing={0.5} sx={{ mt: 2 }}>
                     {sortedLayers.map((layer) => (
                       <Stack

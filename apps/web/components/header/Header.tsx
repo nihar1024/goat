@@ -18,6 +18,7 @@ import { CONTACT_URL, privacyPolicyUrl } from "@/lib/constants";
 import { setSelectedLayers } from "@/lib/store/layer/slice";
 import { setMapMode } from "@/lib/store/map/slice";
 import { setActiveRightPanel } from "@/lib/store/map/slice";
+import { parseApiDate } from "@/lib/utils/credits";
 import type { Project } from "@/lib/validations/project";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
@@ -341,13 +342,16 @@ export default function Header(props: HeaderProps) {
                       // Exact days, not "about a month": an extension shows at once.
                       label={(() => {
                         const days = differenceInCalendarDays(
-                          new Date(organization.plan_renewal_date),
+                          parseApiDate(organization.plan_renewal_date),
                           new Date()
                         );
+                        if (days < 0) return t("trial_expired");
                         return days > 0 ? t("trial_days_left", { count: days }) : t("trial_ends_today");
                       })()}
                       title={t("trial_ends_on", {
-                        date: format(new Date(organization.plan_renewal_date), "PP", { locale: dateLocale }),
+                        date: format(parseApiDate(organization.plan_renewal_date), "PP", {
+                          locale: dateLocale,
+                        }),
                       })}
                       sx={{
                         "& .MuiChip-label": {

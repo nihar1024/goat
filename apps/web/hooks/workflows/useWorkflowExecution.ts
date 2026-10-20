@@ -16,7 +16,7 @@ import {
 import type { AppDispatch } from "@/lib/store";
 import { setRunningJobIds } from "@/lib/store/jobs/slice";
 import { selectEdges, selectNodes, selectVariables } from "@/lib/store/workflow/selectors";
-import { OutOfCreditsError } from "@/lib/utils/credits";
+import { creditsErrorMessage } from "@/lib/utils/credits";
 import { claimJobAnnouncement } from "@/lib/utils/jobAnnouncement";
 
 import { useAppSelector } from "@/hooks/store/ContextHooks";
@@ -376,11 +376,7 @@ export function useWorkflowExecution({ workflow, projectId, folderId }: UseWorkf
       toast.success(t("workflow_started"));
     } catch (error) {
       let message =
-        error instanceof OutOfCreditsError
-          ? t("out_of_credits_tool")
-          : error instanceof Error
-            ? error.message
-            : t("execution_failed");
+        creditsErrorMessage(error, t) ?? (error instanceof Error ? error.message : t("execution_failed"));
       let refusedStatuses: Record<string, NodeExecutionStatus> = {};
       if (error instanceof WorkflowRefusedError) {
         // Name the nodes as the canvas shows them, and mark them there.

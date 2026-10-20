@@ -27,7 +27,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useCreditBreakdown, useCreditUsage } from "@/lib/api/usage";
-import { formatCredits } from "@/lib/utils/credits";
+import { formatCredits, parseApiDate } from "@/lib/utils/credits";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
 
@@ -253,7 +253,7 @@ export function UsageActivity() {
                   <TableBody>
                     {usage.items.map((item, idx) => (
                       <TableRow key={idx}>
-                        <TableCell>{format(new Date(item.created_at), "yyyy-MM-dd HH:mm")}</TableCell>
+                        <TableCell>{format(parseApiDate(item.created_at), "yyyy-MM-dd HH:mm")}</TableCell>
                         <TableCell>{item.member ?? "—"}</TableCell>
                         <TableCell>{item.action}</TableCell>
                         <TableCell align="right">

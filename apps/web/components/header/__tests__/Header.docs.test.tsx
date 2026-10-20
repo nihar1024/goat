@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Header from "@/components/header/Header";
 
@@ -142,5 +142,40 @@ describe("Header trial chip", () => {
     features.value = { billing: false, support: false };
     render(<Header />);
     expect(screen.queryByText("trial_days_left")).toBeNull();
+  });
+});
+
+// The API sends naive UTC datetimes; the chip counts calendar days from "now".
+describe("Header trial chip by date", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
+    support.value = { summary: undefined, enabled: false };
+    profile.value = { id: "u1" };
+    admin.value = true;
+    features.value = { billing: true, support: false };
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const chip = (renewal: string) => {
+    org.value = { on_trial: true, plan_renewal_date: renewal };
+    render(<Header />);
+  };
+
+  it("shows the days left for a future end date", () => {
+    chip("2026-10-25T12:00:00");
+    expect(screen.getByText("trial_days_left")).toBeTruthy();
+    expect(screen.queryByText("trial_expired")).toBeNull();
+  });
+
+  it("says the trial ends today on the last day", () => {
+    chip("2026-10-20T18:00:00");
+    expect(screen.getByText("trial_ends_today")).toBeTruthy();
+  });
+
+  it("says the trial expired once the end date is past", () => {
+    chip("2026-10-18T12:00:00");
+    expect(screen.getByText("trial_expired")).toBeTruthy();
+    expect(screen.queryByText("trial_ends_today")).toBeNull();
   });
 });

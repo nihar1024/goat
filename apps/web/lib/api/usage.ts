@@ -104,10 +104,14 @@ export const useCreditBreakdown = (groupBy: string, member?: string) => {
   return { breakdown: data, isLoading, isError: error, mutate };
 };
 
-export const useStorageByLayer = () => {
+/** `enabled: false` skips the request (the endpoint answers 403 to anyone but
+ * organization owners and admins); a failed request stays quiet, the caller
+ * hides the list. */
+export const useStorageByLayer = (enabled = true) => {
   const { data, isLoading, error, mutate } = useSWR<StorageByLayer>(
-    `${CREDITS_API_BASE_URL}/storage-by-layer`,
-    fetcher
+    enabled ? `${CREDITS_API_BASE_URL}/storage-by-layer` : null,
+    fetcher,
+    { shouldRetryOnError: false }
   );
   return { storage: data, isLoading, isError: error, mutate };
 };

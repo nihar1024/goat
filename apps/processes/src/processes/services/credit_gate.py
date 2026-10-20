@@ -34,9 +34,20 @@ async def assert_credits_available(
         logger.warning("credit gate: balance check failed, allowing (%s)", exc)
         return
     if resp.status_code != 200:
-        logger.warning("credit gate: balance returned %s, allowing", resp.status_code)
+        # Allowed for availability, but loud: a 401/500 from core means the
+        # gate is blind, and nobody notices unless it is in the logs.
+        logger.warning(
+            "credit gate: balance returned %s, allowing (process %s)",
+            resp.status_code,
+            process_id,
+        )
         return
-    if resp.json().get("over_budget") is True:
+    try:
+        over_budget = resp.json().get("over_budget") is True
+    except Exception as exc:  # noqa: BLE001 — non-JSON / non-object answer
+        logger.warning("credit gate: balance answer unreadable, allowing (%s)", exc)
+        return
+    if over_budget:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Organization is out of credits for this period.",

@@ -78,18 +78,24 @@ async def main(params: CreditResetParams = CreditResetParams()) -> dict:
     core = await asyncpg.connect(dsn=core_dsn(), timeout=10)
     redis_client = _redis()
     reset = 0
+    errors: list[dict] = []
     try:
         rows = await core.fetch(DUE_SQL.format(schema=schema), now)
         for r in rows:
             if params.dry_run:
                 reset += 1
                 continue
-            await core.execute(
-                f"UPDATE {schema}.organization "
-                f"SET used_credits = 0, credits_reset_at = $2 WHERE id = $1",
-                r["id"],
-                advance_renewal(r["credits_reset_at"], now),
-            )
+            try:
+                await core.execute(
+                    f"UPDATE {schema}.organization "
+                    f"SET used_credits = 0, credits_reset_at = $2 WHERE id = $1",
+                    r["id"],
+                    advance_renewal(r["credits_reset_at"], now),
+                )
+            except Exception as exc:  # noqa: BLE001 - the others still reset
+                logger.exception("credit_reset: %s failed", r["id"])
+                errors.append({"organization_id": str(r["id"]), "error": str(exc)})
+                continue
             # geoapi refuses downloads while this flag is set; new credits lift it.
             if redis_client is not None:
                 try:
@@ -101,6 +107,6 @@ async def main(params: CreditResetParams = CreditResetParams()) -> dict:
             reset += 1
     finally:
         await core.close()
-    summary = {"reset": reset}
+    summary = {"reset": reset, "errors": errors}
     logger.info("credit_reset: %s", summary)
     return summary

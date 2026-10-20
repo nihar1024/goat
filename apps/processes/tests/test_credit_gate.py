@@ -90,3 +90,43 @@ async def test_deleting_data_is_never_refused(monkeypatch):
         await credit_gate.assert_credits_available("tok", process_id)  # no raise
     with pytest.raises(HTTPException):
         await credit_gate.assert_credits_available("tok", "buffer")
+
+
+@pytest.mark.asyncio
+async def test_non_200_answers_are_allowed_but_logged(monkeypatch, caplog):
+    for code in (401, 404, 500, 503):
+        monkeypatch.setattr(
+            credit_gate.httpx,
+            "AsyncClient",
+            lambda *a, code=code, **k: _Client(_Resp(code, {"over_budget": True})),
+        )
+        caplog.clear()
+        with caplog.at_level("WARNING", logger=credit_gate.logger.name):
+            await credit_gate.assert_credits_available("tok", "buffer")  # no raise
+        assert any(str(code) in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_a_non_json_200_fails_open_with_a_warning(monkeypatch, caplog):
+    class _Html(_Resp):
+        def json(self):
+            raise ValueError("not json")
+
+    monkeypatch.setattr(
+        credit_gate.httpx,
+        "AsyncClient",
+        lambda *a, **k: _Client(_Html(200, None)),
+    )
+    with caplog.at_level("WARNING", logger=credit_gate.logger.name):
+        await credit_gate.assert_credits_available("tok")  # no 500
+    assert any("unreadable" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_a_json_200_that_is_not_an_object_fails_open(monkeypatch):
+    monkeypatch.setattr(
+        credit_gate.httpx,
+        "AsyncClient",
+        lambda *a, **k: _Client(_Resp(200, ["over_budget"])),
+    )
+    await credit_gate.assert_credits_available("tok")  # list has no .get: no raise

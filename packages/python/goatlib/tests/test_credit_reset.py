@@ -37,3 +37,41 @@ def test_billing_tasks_do_nothing_with_billing_off(monkeypatch):
         assert asyncio.run(task.main()) == SKIPPED
     for task in (trial_expiry, odoo_entitlement):
         assert task.main() == SKIPPED
+
+
+def test_one_failing_organization_does_not_stop_the_others(monkeypatch):
+    import asyncio
+
+    import asyncpg
+    from goatlib.tasks import credit_reset
+
+    due = [{"id": i, "credits_reset_at": datetime(2026, 7, 1)} for i in ("a", "b", "c")]
+
+    class Core:
+        def __init__(self):
+            self.updated = []
+
+        async def fetch(self, sql, now):
+            return due
+
+        async def execute(self, sql, org_id, when):
+            if org_id == "b":
+                raise RuntimeError("locked")
+            self.updated.append(org_id)
+
+        async def close(self):
+            pass
+
+    core = Core()
+
+    async def connect(dsn, timeout=None):
+        return core
+
+    monkeypatch.setenv("BILLING_ENABLED", "1")
+    monkeypatch.setattr(asyncpg, "connect", connect)
+    monkeypatch.setattr(credit_reset, "core_dsn", lambda: "core")
+    monkeypatch.setattr(credit_reset, "_redis", lambda: None)
+    result = asyncio.run(credit_reset.main())
+    assert core.updated == ["a", "c"]
+    assert result["reset"] == 2
+    assert [e["organization_id"] for e in result["errors"]] == ["b"]

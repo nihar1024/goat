@@ -46,10 +46,11 @@ class ComputeRollupParams(BaseModel):
     """Parameters for the compute rollup task."""
 
     lookback_minutes: int = Field(
-        default=15,
+        default=1440,
         ge=1,
-        description="Window of completed jobs to consider (overlaps the schedule; "
-        "job_id dedup makes overlap safe).",
+        description="Window of jobs, by completion time, to consider. Wide on "
+        "purpose: it overlaps many runs, and job_id dedup makes overlap safe, "
+        "so jobs that ran long or fell into an outage are still charged.",
     )
     dry_run: bool = Field(default=False, description="Select but do not charge.")
 
@@ -154,7 +155,7 @@ async def _fetch_completed_jobs(
             EXISTS (SELECT 1 FROM v2_job ch WHERE ch.parent_job = j.id) AS has_children
         FROM v2_job_completed c
         JOIN v2_job j ON j.id = c.id
-        WHERE c.started_at >= now() - ($1 || ' minutes')::interval
+        WHERE c.completed_at >= now() - ($1 || ' minutes')::interval
           AND j.runnable_path LIKE 'f/goat/tools/%'
         """,
         str(lookback_minutes),
@@ -210,8 +211,6 @@ async def main(params: ComputeRollupParams = ComputeRollupParams()) -> dict:
 
     if not billing_enabled():
         return SKIPPED
-    import json
-
     import asyncpg
 
     schema = customer_schema()
@@ -224,38 +223,64 @@ async def main(params: ComputeRollupParams = ComputeRollupParams()) -> dict:
         orgs = await _resolve_orgs(core, schema, list({it.user_id for it in items}))
 
         charged = 0
+        failed = 0
         for item in items:
             org_id = orgs.get(item.user_id)
             if org_id is None:
                 continue  # user has no org — skip
-            if not params.dry_run:
-                # One transaction: the compute charge marks the job as charged,
-                # so its data transfer must be booked with it or not at all.
-                async with core.transaction():
-                    await core.execute(
-                        f"SELECT {schema}.charge_credits($1, $2, $3, 'compute', $4, $5::jsonb)",
-                        org_id,
-                        item.user_id,
-                        item.action,
-                        item.duration_seconds,
-                        json.dumps(item.payload),
-                    )
-                    if item.export_bytes:
-                        await core.execute(
-                            f"SELECT {schema}.charge_credits($1, $2, 'downloads', 'egress', $3, $4::jsonb)",
-                            org_id,
-                            item.user_id,
-                            item.export_bytes,
-                            json.dumps({**item.payload, "export": item.action}),
-                        )
+            if params.dry_run:
+                charged += 1
+                continue
+            try:
+                await _charge_item(core, schema, org_id, item)
+            except asyncpg.UniqueViolationError:
+                # An overlapping run charged this job first (unique index on
+                # the job id): it is charged, not failed.
+                logger.info("compute_rollup: job %s already charged", item.job_id)
+                continue
+            except Exception:
+                # One bad job must not stop the rest; it is retried next run.
+                failed += 1
+                logger.exception("compute_rollup: charging job %s failed", item.job_id)
+                continue
             charged += 1
         summary = {
             "considered": len(jobs),
             "charged": 0 if params.dry_run else charged,
-            "skipped": len(jobs) - (0 if params.dry_run else charged),
+            "skipped": len(jobs) - (0 if params.dry_run else charged) - failed,
+            "failed": failed,
         }
         logger.info("compute_rollup: %s", summary)
         return summary
     finally:
         await wm.close()
         await core.close()
+
+
+async def _charge_item(
+    core: "asyncpg.Connection", schema: str, org_id: str, item: ChargeItem
+) -> None:
+    """Charge one job in its own transaction.
+
+    The compute charge marks the job as charged, so its data transfer must be
+    booked with it or not at all.
+    """
+    import json
+
+    async with core.transaction():
+        await core.execute(
+            f"SELECT {schema}.charge_credits($1, $2, $3, 'compute', $4, $5::jsonb)",
+            org_id,
+            item.user_id,
+            item.action,
+            item.duration_seconds,
+            json.dumps(item.payload),
+        )
+        if item.export_bytes:
+            await core.execute(
+                f"SELECT {schema}.charge_credits($1, $2, 'downloads', 'egress', $3, $4::jsonb)",
+                org_id,
+                item.user_id,
+                item.export_bytes,
+                json.dumps({**item.payload, "export": item.action}),
+            )

@@ -31,3 +31,33 @@ def test_healthy_trial_left_alone():
 def test_custom_warning_window():
     assert classify_trial(NOW + timedelta(days=7), NOW, 7) == "expiring"
     assert classify_trial(NOW + timedelta(days=3), NOW, 7) is None
+
+
+def test_one_failing_organization_does_not_stop_the_others():
+    import asyncio
+
+    from goatlib.tasks.trial_expiry import TrialExpiryParams, TrialExpiryTask
+
+    task = object.__new__(TrialExpiryTask)
+    past = datetime.now() - timedelta(days=1)
+
+    async def candidates():
+        return [
+            {"id": i, "name": f"org {i}", "plan_renewal_date": past}
+            for i in ("a", "b", "c")
+        ]
+
+    notified = []
+
+    def notify(org_id, stage):
+        if org_id == "b":
+            raise RuntimeError("core down")
+        notified.append((org_id, stage))
+
+    task._candidates = candidates
+    task._notify = notify
+    result = asyncio.run(task.run(TrialExpiryParams()))
+    assert notified == [("a", "expired"), ("c", "expired")]
+    assert result["status"] == "partial"
+    assert result["expired"] == 2
+    assert [e["organization_id"] for e in result["errors"]] == ["b"]

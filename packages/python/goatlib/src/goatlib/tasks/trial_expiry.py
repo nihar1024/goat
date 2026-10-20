@@ -115,12 +115,26 @@ class TrialExpiryTask:
     async def run(self: Self, params: TrialExpiryParams) -> dict[str, Any]:
         now = datetime.now()
         results = []
+        errors = []
         for org in await self._candidates():
             stage = classify_trial(org["plan_renewal_date"], now, params.expiring_days)
             if stage is None:
                 continue
             if not params.dry_run:
-                self._notify(str(org["id"]), stage)
+                try:
+                    self._notify(str(org["id"]), stage)
+                except Exception as exc:
+                    # One organization must not stop the others; an expired
+                    # trial is picked up again by the next daily run.
+                    logger.exception("trial %s failed for %s", stage, org["id"])
+                    errors.append(
+                        {
+                            "organization_id": str(org["id"]),
+                            "stage": stage,
+                            "error": str(exc),
+                        }
+                    )
+                    continue
             results.append(
                 {
                     "organization_id": str(org["id"]),
@@ -131,10 +145,11 @@ class TrialExpiryTask:
             )
             logger.info("trial %s: %s (%s)", stage, org["name"], org["id"])
         return {
-            "status": "ok",
+            "status": "partial" if errors else "ok",
             "dry_run": params.dry_run,
             "expired": sum(1 for r in results if r["stage"] == "expired"),
             "expiring": sum(1 for r in results if r["stage"] == "expiring"),
+            "errors": errors,
             "results": results,
         }
 

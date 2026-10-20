@@ -203,6 +203,10 @@ async def finalize_workflow_layer(
         refs.add("project", request.project_id, "write")
         await ensure_allowed(user_id, refs)
 
+    # Deliberately not credit-gated: finalize_layer only saves the result of a
+    # workflow that already ran (and was gated), so refusing it would throw
+    # that work away. Its compute is still charged post-hoc by compute_rollup.
+
     # Build job inputs for finalize_layer tool
     job_inputs = {
         "user_id": str(user_id),

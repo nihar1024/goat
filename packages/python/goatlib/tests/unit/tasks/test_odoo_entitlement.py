@@ -158,3 +158,227 @@ def test_a_customer_without_organization_leaves_it_unlinked():
         _task({}, linked=False)._organization_of_customer({"partner_id": [5, "x"]})
         is None
     )
+
+
+# --- per-organization entitlement ---------------------------------------------
+
+ORG = "b65e040a-f8f0-453f-9888-baa2b9342cce"
+
+
+def sub(oid, state="3_progress", write_date="2026-10-01 10:00:00", **kw):
+    return (
+        order(
+            id=oid,
+            name=f"S{oid}",
+            subscription_state=state,
+            write_date=write_date,
+            **kw,
+        ),
+        [BASE_LINE],
+    )
+
+
+def test_active_subscription_beats_a_newer_cancelled_one():
+    from goatlib.tasks.odoo_entitlement import merge_entitlements
+
+    payload = merge_entitlements(
+        [
+            sub(1, "3_progress", "2026-09-01 08:00:00"),
+            sub(2, "6_churn", "2026-10-15 08:00:00"),  # edited later, still loses
+        ]
+    )
+    assert payload["suspended"] is False
+    assert payload["total_editors"] == 3  # only the active one counts
+    # the push reflects both subscriptions: its time is the later change
+    assert payload["as_of"] == "2026-10-15T08:00:00+00:00"
+
+
+def test_active_subscriptions_add_up_with_per_order_overrides():
+    from goatlib.tasks.odoo_entitlement import merge_entitlements
+
+    a = sub(1, write_date="2026-09-01 08:00:00", x_goat_white_label=True)
+    b = sub(
+        2,
+        write_date="2026-10-02 09:30:00",
+        x_goat_editors=10,
+        next_invoice_date="2026-07-01",
+    )
+    payload = merge_entitlements([a, b])
+    assert payload["total_editors"] == 3 + 10  # override replaces order b's lines
+    assert payload["total_viewers"] == 4
+    assert payload["extras"] == ["white_label"]
+    assert payload["plan_renewal_date"] == "2026-07-01"  # the earlier renewal
+    assert payload["as_of"] == "2026-10-02T09:30:00+00:00"
+
+
+def test_credits_only_when_an_active_subscription_grants_some():
+    from goatlib.tasks.odoo_entitlement import merge_entitlements
+
+    credit_line = {**BASE_LINE, "x_goat_credits": 1000}
+    a = (order(subscription_state="3_progress"), [credit_line])
+    b = (order(subscription_state="3_progress"), [credit_line])
+    c = (order(subscription_state="3_progress"), [BASE_LINE])
+    assert merge_entitlements([a, b, c])["total_credits"] == 2000
+    assert "total_credits" not in merge_entitlements([c])
+
+
+def test_without_an_active_subscription_the_latest_one_suspends():
+    from goatlib.tasks.odoo_entitlement import merge_entitlements
+
+    payload = merge_entitlements(
+        [
+            sub(1, "6_churn", "2026-05-01 08:00:00", x_goat_editors=9),
+            sub(2, "4_paused", "2026-08-01 08:00:00", x_goat_editors=4),
+        ]
+    )
+    assert payload["suspended"] is True
+    assert payload["total_editors"] == 4  # from the most recent one
+    assert payload["as_of"] == "2026-08-01T08:00:00+00:00"
+
+
+def test_nothing_pushable_gives_no_payload():
+    from goatlib.tasks.odoo_entitlement import merge_entitlements
+
+    assert merge_entitlements([]) is None
+    assert merge_entitlements([sub(1, "1_draft")]) is None
+
+
+def test_as_of_is_iso_utc_and_absent_without_write_date():
+    from goatlib.tasks.odoo_entitlement import to_iso_utc
+
+    assert to_iso_utc("2026-10-20 12:34:56") == "2026-10-20T12:34:56+00:00"
+    assert to_iso_utc(False) is None
+    payload = compute_entitlement(order(), [BASE_LINE])
+    assert "as_of" not in payload
+
+
+class _Pusher:
+    """A task with subscriptions held in memory instead of Odoo."""
+
+    def __init__(self, subs_by_org, fail=(), gone=()):
+        from goatlib.tasks.odoo_entitlement import OdooEntitlementTask
+
+        self.task = object.__new__(OdooEntitlementTask)
+        self.subs_by_org = subs_by_org
+        self.by_id = {
+            o["id"]: (o, lines) for subs in subs_by_org.values() for o, lines in subs
+        }
+        self.fail, self.gone = set(fail), set(gone)
+        self.posted: list[dict] = []
+        t = self.task
+        t.core_url, t.webhook_secret = "http://core", "s"
+        t._partners_linked = False
+        t._kw = self._kw
+        t._fetch = lambda oid: self.by_id[oid]
+        t._organization_subscriptions = lambda org: self.subs_by_org[org]
+
+    def _kw(self, model, method, *args, **kw):
+        assert (model, method) == ("sale.order", "search")
+        return list(self.by_id)
+
+    def patch_httpx(self, monkeypatch):
+        import httpx
+
+        def post(url, headers, json, timeout):
+            org = json["organization_id"]
+            if org in self.fail:
+                return httpx.Response(500, request=httpx.Request("POST", url))
+            if org in self.gone:
+                return httpx.Response(409, request=httpx.Request("POST", url))
+            self.posted.append(json)
+            return httpx.Response(200, request=httpx.Request("POST", url))
+
+        monkeypatch.setattr(httpx, "post", post)
+
+
+def _orgs():
+    def s(oid, org, state="3_progress"):
+        o, lines = sub(oid, state, x_goat_organization_id=org)
+        return o, lines
+
+    return {
+        "orgA": [s(1, "orgA", "6_churn"), s(2, "orgA")],
+        "orgB": [s(3, "orgB")],
+        "orgC": [s(4, "orgC")],
+        "orgD": [s(5, "orgD")],
+    }
+
+
+def test_reconcile_pushes_each_organization_once(monkeypatch):
+    p = _Pusher(_orgs())
+    p.patch_httpx(monkeypatch)
+    result = p.task.reconcile()
+    assert sorted(x["organization_id"] for x in p.posted) == [
+        "orgA",
+        "orgB",
+        "orgC",
+        "orgD",
+    ]
+    assert result["pushed"] == 4
+    assert result["status"] == "ok"
+    assert result["errors"] == []
+    org_a = next(x for x in p.posted if x["organization_id"] == "orgA")
+    assert org_a["suspended"] is False  # the cancelled one did not overwrite
+
+
+def test_reconcile_continues_after_a_failure_and_skips_deleted_orgs(monkeypatch):
+    p = _Pusher(_orgs(), fail={"orgB"}, gone={"orgC"})
+    p.patch_httpx(monkeypatch)
+    result = p.task.reconcile()
+    assert sorted(x["organization_id"] for x in p.posted) == ["orgA", "orgD"]
+    assert result["status"] == "partial"
+    assert [e["organization_id"] for e in result["errors"]] == ["orgB"]
+    assert result["pushed"] == 2
+    assert result["skipped"] == 1  # the 409
+
+
+def test_reconcile_dry_run_posts_nothing(monkeypatch):
+    p = _Pusher(_orgs())
+    p.patch_httpx(monkeypatch)
+    result = p.task.reconcile(dry_run=True)
+    assert p.posted == []
+    assert result["computed"] == 4
+
+
+def test_push_order_pushes_the_whole_organization(monkeypatch):
+    p = _Pusher(_orgs())
+    p.patch_httpx(monkeypatch)
+    # the live trigger is the OLD cancelled order of orgA
+    result = p.task.push_order(1)
+    assert result["status"] == "pushed"
+    assert result["orders"] == ["S1", "S2"]
+    assert p.posted[0]["suspended"] is False
+
+
+def test_push_order_reports_a_deleted_organization_as_skipped(monkeypatch):
+    p = _Pusher(_orgs(), gone={"orgB"})
+    p.patch_httpx(monkeypatch)
+    assert p.task.push_order(3)["status"] == "skipped"
+
+
+def test_non_https_odoo_url_is_refused_except_localhost():
+    import pytest
+    from goatlib.tasks.odoo_entitlement import check_odoo_url
+
+    assert check_odoo_url("https://odoo.example.com")
+    assert check_odoo_url("http://localhost:8069")
+    assert check_odoo_url("http://127.0.0.1:8069")
+    with pytest.raises(RuntimeError):
+        check_odoo_url("http://odoo.example.com")
+
+
+def test_xmlrpc_transports_carry_a_timeout():
+    from goatlib.tasks.odoo_entitlement import (
+        XMLRPC_TIMEOUT_SECONDS,
+        _proxy,
+        _SafeTransport,
+        _Transport,
+    )
+
+    for cls, url in (
+        (_Transport, "http://localhost/x"),
+        (_SafeTransport, "https://h/x"),
+    ):
+        t = cls()
+        assert t.make_connection(url.split("/")[2]).timeout == XMLRPC_TIMEOUT_SECONDS
+    assert _proxy("https://odoo.example.com/xmlrpc/2/common") is not None

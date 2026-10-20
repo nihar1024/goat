@@ -9,6 +9,7 @@ import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -21,10 +22,27 @@ logger = logging.getLogger(__name__)
 
 _COLLECTION_RE = re.compile(r"/collections/([^/]+)")
 
+# Counter hashes expire if the rollup does not drain them, so junk (and a
+# stalled rollup) cannot make Redis grow without bound.
+_COUNTER_TTL_SECONDS = 7 * 24 * 3600
+# Only a delivered body is metered: not HEAD, not redirects, not errors.
+_METERED_STATUS = (200, 206)
+
 
 def _collection_id_from_path(path: str) -> str | None:
     m = _COLLECTION_RE.search(path or "")
     return m.group(1) if m else None
+
+
+def _normalized_layer_id(collection_id: str) -> str | None:
+    """Canonical layer id, so case/dash/urn variants of one layer share one
+    counter key; None when the path segment is not a layer id at all."""
+    from goatlib.utils.layer import normalize_layer_id
+
+    try:
+        return normalize_layer_id(str(UUID(collection_id)))
+    except ValueError:  # includes InvalidLayerIdError
+        return None
 
 
 def _service_from_path(path: str) -> str:
@@ -44,8 +62,6 @@ def _redis() -> "redis.Redis | None":
 async def _resolve_layer_org(collection_id: str) -> tuple[str | None, str | None]:
     """Return (organization_id, owner_user_id) for a collection, or (None, None)."""
     try:
-        from uuid import UUID
-
         from geoapi.services.layer_service import layer_service
 
         meta = await layer_service.get_metadata_by_id(UUID(collection_id))
@@ -74,6 +90,7 @@ def _record_sync(
         pipe.hincrby(key, "anon_count", 1)
     if owner:
         pipe.hset(key, "owner", owner)
+    pipe.expire(key, _COUNTER_TTL_SECONDS)
     pipe.execute()  # type: ignore[no-untyped-call]
 
 
@@ -112,9 +129,10 @@ class CreditMeteringMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        collection_id = _collection_id_from_path(request.url.path)
+        raw_id = _collection_id_from_path(request.url.path)
+        layer_id = _normalized_layer_id(raw_id) if raw_id else None
         org_id, owner_id = (
-            await _resolve_layer_org(collection_id) if collection_id else (None, None)
+            await _resolve_layer_org(layer_id) if layer_id else (None, None)
         )
 
         # Out of credits: downloads stop, viewing does not. Maps and dashboards
@@ -131,7 +149,12 @@ class CreditMeteringMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        if org_id and collection_id:
+        if (
+            org_id
+            and layer_id
+            and request.method == "GET"
+            and response.status_code in _METERED_STATUS
+        ):
             try:
                 size = int(response.headers.get("content-length") or 0)
             except (TypeError, ValueError):
@@ -139,5 +162,5 @@ class CreditMeteringMiddleware(BaseHTTPMiddleware):
             if size > 0:
                 service = _service_from_path(request.url.path)
                 anonymous = "authorization" not in request.headers
-                await _record(org_id, owner_id, collection_id, service, size, anonymous)
+                await _record(org_id, owner_id, layer_id, service, size, anonymous)
         return response

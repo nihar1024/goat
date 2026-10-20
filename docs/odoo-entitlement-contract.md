@@ -80,7 +80,35 @@ org row untouched):
 | `plan_renewal_date` | ISO datetime | next renewal, informational + shown in UI |
 | `suspended` | bool | suspend (churn) / reactivate the organization |
 | `on_trial` | bool | the adapter always sends `false`: a real subscription ends any trial (conversion) |
-| `reset_usage` | bool (default true) | zero `used_credits` (renewal semantics). Send `false` for mid-cycle plan changes. |
+| `reset_usage` | bool (default **false**) | zero `used_credits` (renewal semantics). Send `true` on a renewal. |
+| `as_of` | ISO 8601 datetime (UTC) | the newest Odoo `write_date` among the subscriptions the payload was computed from. Core ignores a push whose `as_of` is older than the one it already applied (HTTP 200 `{"status": "stale"}`, nothing changes), so a delayed or replayed push cannot undo a newer one. Absent when Odoo gave no `write_date`: the push is applied. Stored in `organization.entitlement_as_of`. |
+
+**Validation.** The payload is a typed model; unknown keys and wrong types
+are refused with HTTP 422 and change nothing. `organization_id` must be a
+UUID. `suspended`, `on_trial` and `reset_usage` must be JSON booleans (the
+string `"false"` is refused, never read as true). Caps are non-negative
+numbers (`null` = unlimited; the count caps must be whole numbers). `extras`
+is a list of strings. `plan_renewal_date` and `as_of` are ISO 8601 with or
+without offset; an offset is converted to UTC and stored as naive UTC.
+
+**Responses.** `200 {"status": "ok"}` applied, `200 {"status": "stale"}`
+ignored (older `as_of`), `404` unknown organization, `409` the organization
+was deleted in GOAT (`DELETE /organizations/{id}` sets `deleted_at`): a push
+never revives it, and the adapter reports it as skipped.
+
+**One payload per organization.** An organization can have several
+subscriptions (e.g. an old cancelled one next to the active one), so the
+adapter never pushes subscriptions individually. It collects every
+subscription of the organization in a pushable state (organization =
+`sale.order.x_goat_organization_id`, else the customer company's) and sends one
+payload:
+
+- at least one active (`3_progress`) subscription: only the active ones count.
+  Their per-line quotas add up (subscription-level overrides apply per order),
+  `extras` is the union, `plan_renewal_date` the earliest renewal,
+  `suspended: false`;
+- none active: the most recently changed paused/churned subscription
+  suspends the organization (`suspended: true`, zero quotas as before).
 
 Not in the payload (deliberately): `plan_name` — plan names (and Stripe) are
 REMOVED on this branch: no `PlanTypeEnum`, no `plan_name`/`stripe_id`
@@ -108,9 +136,15 @@ watching subscription_state / order_line / x_goat_*)
   → core /webhooks/odoo/entitlement → apply_entitlement()
 ```
 
-- Task modes: `order_id > 0` = push one (webhook path); `order_id = 0` =
-  reconcile every pushable subscription (nightly 02:00 schedule — heals
-  missed webhooks, and running it manually is the initial backfill).
+- Task modes: `order_id > 0` = push the whole organization of that order
+  (webhook path); `order_id = 0` = reconcile every organization with a
+  pushable subscription, each once (nightly 02:00 schedule — heals missed
+  webhooks, and running it manually is the initial backfill). Reconcile
+  handles each organization on its own: a failure is collected in the result
+  (`errors`, status `partial`) and never stops the others; a `409` from core
+  (organization deleted) is reported as skipped.
+- Transport: XML-RPC calls time out after 30 s; `ODOO_URL` must be `https`
+  (plain `http` only for `localhost` / `127.0.0.1`).
 - Pushable states: `3_progress` (active), `4_paused` / `6_churn` (both push
   `suspended: true`). Quotation states (draft/renewal/renewed/upsell) are
   skipped — the confirmed subscription pushes.
@@ -131,8 +165,9 @@ Windmill script (or a thin wrapper script) mapping `_id` → `order_id`.
 | Odoo event | Payload |
 |---|---|
 | subscription confirmed / changed / renewed | full quotas + extras, `suspended: false` |
-| subscription paused / churned | full quotas + extras, `suspended: true` |
-| nightly reconcile | same as above, for every pushable subscription |
+| subscription paused / churned (no active one left) | full quotas + extras, `suspended: true` |
+| subscription paused / churned while another is active | the active ones only, `suspended: false` |
+| nightly reconcile | same as above, once per organization |
 
 ## Enforcement in core
 
@@ -163,13 +198,30 @@ first real entitlement.
   `stage=expiring` (default 3 days before the end — warning email to the
   org contact) and `stage=expired` (suspend + email). The warning window is
   exactly one day wide, so a daily run fires it once. The org stays
-  `on_trial` when suspended — expiry is not conversion.
+  `on_trial` when suspended — expiry is not conversion. Both stages are
+  idempotent: `expired` acts only on an organization that is on trial, not
+  suspended, not deleted and past `plan_renewal_date`, `expiring` only on one
+  that is on trial and not suspended or deleted; otherwise core answers
+  `200 {"status": "noop"}` without mail or report to Odoo.
+- **Access:** an ended trial is also refused on access, without waiting for
+  the daily task: `customer.check_organization()` rejects an organization that
+  is `on_trial` with `plan_renewal_date` in the past like a suspended one.
 - **Conversion:** sales links + confirms the Odoo subscription; the
   entitlement push carries `on_trial: false` and `suspended: false`, which
   both ends the trial and reactivates an expired-suspended org.
 - **Extension:** superuser bumps `plan_renewal_date` (manual admin action).
 - The web UI (trial chip, days-left) reads only `on_trial` +
   `plan_renewal_date` — no changes needed.
+
+## Reports to Odoo and their retry
+
+core reports trials, joins and status to Odoo in the background
+(`core.accounts`, only with `ODOO_BILLING_API_KEY`). A report that fails sets
+`organization.odoo_sync_pending`; a loop in every core replica
+(`ODOO_SYNC_RETRY_SECONDS`, default 600) re-sends the trial (when Odoo has no
+company yet), the status and the joins of members without `odoo_contact_id`
+for the flagged organizations, then clears the flag. Odoo's operations are
+idempotent, so replicas doing it at once is harmless.
 
 ## Self-hosted
 
@@ -192,6 +244,13 @@ All steps are existence-guarded: the `init` baseline builds fresh DBs from
 current models (already the end state), so the migration no-ops there.
 
 The migration is `0012_billing_and_usage` (after `0011_layer_serial_counter`), together with usage metering.
+
+`0013_billing_hardening` adds `organization.entitlement_as_of`,
+`organization.deleted_at`, `organization.odoo_sync_pending` (with a partial
+index) and the unique partial index `uq_credit_usage_compute_job` on
+`credit_usage ((payload->>'job_id')) WHERE category = 'compute'`, which makes a
+compute charge idempotent per job. It refuses to run, naming the count, if the
+ledger already holds a job charged twice: resolve those rows first.
 
 ## Odoo instances
 

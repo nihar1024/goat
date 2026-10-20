@@ -19,18 +19,20 @@ import { UserProfileFormFields } from "./shared/UserProfileFormFields";
 
 // One step: the fields come from the realm's user profile (realm/user-profile.json),
 // shown in this order (no stepper: there is a single list and no active step).
-const fieldOrder = {
+// The username is only asked for when the realm does not use the email as the
+// username (registrationEmailAsUsername): the GOAT realm does, so it is left out.
+const fieldOrder = (registrationEmailAsUsername: boolean) => ({
   1: [
     "firstName",
     "lastName",
-    "username",
+    ...(registrationEmailAsUsername ? [] : ["username"]),
     "email",
     "password",
     "password-confirm",
     "terms_and_conditions",
     "subscribe_to_newsletter",
   ],
-};
+});
 
 export default function RegisterUserProfile(
   props: PageProps<
@@ -40,7 +42,7 @@ export default function RegisterUserProfile(
 ) {
   const theme = useTheme();
   const { kcContext, i18n, doUseDefaultCss, Template } = props;
-  const { url, messagesPerField, recaptchaRequired, recaptchaSiteKey } =
+  const { url, messagesPerField, recaptchaRequired, recaptchaSiteKey, realm } =
     kcContext;
   const { msg, msgStr } = i18n;
   const [isFormSubmittable, setIsFormSubmittable] = useState(false);
@@ -77,7 +79,7 @@ export default function RegisterUserProfile(
         <UserProfileFormFields
           kcContext={kcContext}
           onIsFormSubmittableValueChange={setIsFormSubmittable}
-          steps={fieldOrder}
+          steps={fieldOrder(realm.registrationEmailAsUsername)}
           i18n={i18n}
           getIncrementedTabIndex={getIncrementedTabIndex}
         />

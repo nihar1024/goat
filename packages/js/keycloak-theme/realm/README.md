@@ -4,9 +4,12 @@
 feature `declarative-user-profile`): what the sign-up page asks for. It lived
 only in the live realm before; this file is the source now.
 
-One step: first name, last name, email, password, the terms (required, stored
-as the time they were accepted) and the newsletter (optional, stored as the
-time of consent, empty without). Country, profession, domain and phone are no
+One step: first name, last name, email, password (no username field while the
+realm has "Email as username" on, as the GOAT realm has), the terms (required)
+and the newsletter (optional). Both are stored as the ISO timestamp of the
+moment the box was ticked (the checkbox posts it as its value), empty when not
+ticked. On the profile update and IdP review pages the boxes start from the
+stored value, so resubmitting the form does not clear an earlier consent. Country, profession, domain and phone are no
 longer asked: existing users keep their old values as unmanaged attributes,
 nothing reads them. Students apply separately for a longer trial.
 

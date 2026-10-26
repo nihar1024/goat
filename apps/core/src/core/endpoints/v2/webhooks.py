@@ -17,7 +17,8 @@ from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db
 from core.schemas.email import EmailTemplateContent
 from core.schemas.entitlement import EntitlementPush, TrialStage
-from core.utils.email import send_email
+from core.utils.email import send_email, user_language
+from core.utils.i18n import language
 from core.utils.i18n import trans as _
 
 
@@ -136,28 +137,38 @@ async def trial_lifecycle(
         return {"status": "ok", "stage": stage}
     contact = await crud_user.get(db=db, id=organization.contact_user_id)
     if contact and contact.email:
-        if stage == "expiring":
-            email_content = EmailTemplateContent(
-                artwork_url=f"{settings.email_artwork_url}/img/email/subscription_about_to_end.png",
-                title=_("Your trial is about to end"),
-                message=_("Please reach out to us to continue using GOAT."),
-                action_label=(_("Contact us") if settings.EMAIL_CONTACT_URL else None),
-                action_url=settings.EMAIL_CONTACT_URL,
+        lang = await user_language(db, contact.id)
+        with language(lang):
+            if stage == "expiring":
+                email_content = EmailTemplateContent(
+                    artwork_url=f"{settings.email_artwork_url}/img/email/subscription_about_to_end.png",
+                    title=_("Your GOAT trial ends soon"),
+                    message=_(
+                        "Your organization's projects and data stay as they are. Get in touch with us to keep using GOAT after the trial."
+                    ),
+                    action_label=(
+                        _("Get in touch") if settings.EMAIL_CONTACT_URL else None
+                    ),
+                    action_url=settings.EMAIL_CONTACT_URL,
+                )
+                subject = _("GOAT - Your trial ends soon")
+            else:
+                email_content = EmailTemplateContent(
+                    artwork_url=f"{settings.email_artwork_url}/img/email/organization_suspended.png",
+                    title=_("Your GOAT trial has ended"),
+                    message=_(
+                        "Your organization's projects and data are kept. Get in touch with us to continue with GOAT."
+                    ),
+                    action_label=(
+                        _("Get in touch") if settings.EMAIL_CONTACT_URL else None
+                    ),
+                    action_url=settings.EMAIL_CONTACT_URL,
+                )
+                subject = _("GOAT - Your trial has ended")
+            send_email(
+                email_to=contact.email,
+                subject=subject,
+                environment=email_content.model_dump(),
             )
-            subject = _("GOAT - Your trial is about to end")
-        else:
-            email_content = EmailTemplateContent(
-                artwork_url=f"{settings.email_artwork_url}/img/email/organization_suspended.png",
-                title=_("Your trial has expired"),
-                message=_("Please reach out to us to reactivate your account."),
-                action_label=(_("Contact us") if settings.EMAIL_CONTACT_URL else None),
-                action_url=settings.EMAIL_CONTACT_URL,
-            )
-            subject = _("GOAT - Your trial has expired")
-        send_email(
-            email_to=contact.email,
-            subject=subject,
-            environment=email_content.model_dump(),
-        )
 
     return {"status": "ok", "stage": stage}

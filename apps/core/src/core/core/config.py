@@ -306,6 +306,9 @@ class Settings(BaseSettings):
     EMAIL_LOGO_URL: str | None = None
     EMAIL_CONTACT_URL: str | None = None
     EMAIL_PRIVACY_URL: str | None = None
+    # Who runs this GOAT, as a footer line (name, address), linked to the URL.
+    EMAIL_COMPANY_NAME: str | None = None
+    EMAIL_COMPANY_URL: str | None = None
 
     @field_validator(
         "SMTP_HOST",
@@ -317,6 +320,8 @@ class Settings(BaseSettings):
         "EMAIL_LOGO_URL",
         "EMAIL_CONTACT_URL",
         "EMAIL_PRIVACY_URL",
+        "EMAIL_COMPANY_NAME",
+        "EMAIL_COMPANY_URL",
         mode="before",
     )
     @classmethod

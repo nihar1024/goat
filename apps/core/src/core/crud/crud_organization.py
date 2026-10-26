@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 from sqlalchemy.orm.attributes import flag_modified
 
-from core.accounts import report_trial
+from core.accounts import report_suspension, report_trial
 from core.core.config import settings
 from core.crud.base import CRUDBase
 from core.crud.crud_folder import folder as crud_folder
@@ -44,7 +44,8 @@ from core.schemas.organization import (
     OrganizationUser,
 )
 from core.services.s3 import s3_service
-from core.utils.email import send_email
+from core.utils.email import send_email, user_language
+from core.utils.i18n import language
 from core.utils.i18n import trans as _
 from core.utils.other import decode_base64_file, get_image_extension_from_base64
 
@@ -199,18 +200,25 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             )
         db.add(organization_obj)
         await db.commit()
+        # The provider ends its trial too: no more trial mails to its people.
+        report_suspension(organization_obj)
 
         if keycloak_user.get("email"):
-            email_content = EmailTemplateContent(
-                artwork_url=f"{settings.email_artwork_url}/img/email/organization_suspended.png",
-                title=_("Organization has been deleted"),
-                message=_("Your organization has been deleted."),
-            )
-            send_email(
-                email_to=keycloak_user.get("email"),
-                subject="GOAT - Organization deleted",
-                environment=email_content.model_dump(),
-            )
+            lang = await user_language(db, organization_obj.contact_user_id)
+            with language(lang):
+                names = {"organization": organization_obj.name}
+                email_content = EmailTemplateContent(
+                    artwork_url=f"{settings.email_artwork_url}/img/email/organization_suspended.png",
+                    title=_("%(organization)s has been deleted") % names,
+                    message=_(
+                        "The organization and all its projects, layers and teams have been deleted for good."
+                    ),
+                )
+                send_email(
+                    email_to=keycloak_user.get("email"),
+                    subject=_("GOAT - Organization deleted"),
+                    environment=email_content.model_dump(),
+                )
 
         return organization_obj
 
@@ -603,6 +611,9 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         reassign_to: str | None = None,
     ) -> Any:
         user = await crud_user.get_user_with_roles(db_session=db, user_id=user_id)
+        # Read before the user is removed: their settings go with them.
+        lang = await user_language(db, user.id)
+        organization = await self.get(db, id=organization_id)
         if str(user.organization_id) != str(organization_id):
             raise Exception(_("User is not part of the organization"))
         # find organization role of user
@@ -679,16 +690,21 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         if len(invitations_ids_to_remove) > 0:
             await crud_invitations.remove_multi(db, ids=invitations_ids_to_remove)
 
-        email_content = EmailTemplateContent(
-            artwork_url=f"{settings.email_artwork_url}/img/email/user_removed_from_organization.png",
-            title=_("You have been removed from the organization"),
-            message=_("You have been removed from the organization."),
-        )
-        send_email(
-            email_to=user.email,
-            subject=_("GOAT - Removed from organization"),
-            environment=email_content.model_dump(),
-        )
+        with language(lang):
+            names = {"organization": organization.name if organization else ""}
+            email_content = EmailTemplateContent(
+                artwork_url=f"{settings.email_artwork_url}/img/email/user_removed_from_organization.png",
+                title=_("You have been removed from %(organization)s") % names,
+                message=_(
+                    "You no longer have access to the projects and data of %(organization)s in GOAT. If you think this is a mistake, contact the administrators of the organization."
+                )
+                % names,
+            )
+            send_email(
+                email_to=user.email,
+                subject=_("GOAT - Removed from organization"),
+                environment=email_content.model_dump(),
+            )
 
         return user
 

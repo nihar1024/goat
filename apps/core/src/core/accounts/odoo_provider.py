@@ -1,6 +1,6 @@
 """AccountsProvider on Odoo: the goat_accounts module's server action.
 
-GOAT calls the server action named ODOO_ACCOUNTS_ACTION as the bridge user
+GOAT calls the server action named ACTION_NAME as the bridge user
 ("GOAT Accounts Bot", ODOO_ACCOUNTS_API_KEY), with the operation and its
 arguments in the context. The module is in Plan4Better's Odoo repository and
 released together with this code.
@@ -12,6 +12,8 @@ from typing import Any
 from core import odoo
 from core.accounts.provider import AccountsError, Language, Role
 
+# The goat_accounts module's server action (data/ir_actions_server.xml there).
+ACTION_NAME = "GOAT: accounts"
 ALLOWED_CALLS = frozenset(
     {("ir.actions.server", "search"), ("ir.actions.server", "run")}
 )

@@ -11,8 +11,9 @@ class CreditRate(SQLModel, table=True):
     """Global credit conversion rates — one row per category (compute, egress, ai).
 
     Not per-org / per-subscription. cost = native_unit (normalized to
-    unit_basis) * rate. Written from the CREDIT_RATE_* settings when core starts: the settings are
-    the source of truth, edits in the table are overwritten.
+    unit_basis) * rate. Pushed by the billing system with its terms (source
+    'billing', POST /webhooks/billing/terms); until then core's defaults (source
+    'default', written at startup). A push overwrites edits in the table.
     """
 
     __tablename__ = "credit_rate"

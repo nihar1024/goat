@@ -312,9 +312,9 @@ async def retry_pending() -> int:
 
 
 async def retry_loop() -> None:
-    """Re-report lost reports every ODOO_SYNC_RETRY_SECONDS, until cancelled."""
+    """Re-report lost reports every RETRY_SECONDS, until cancelled."""
     while True:
-        await asyncio.sleep(settings.ODOO_SYNC_RETRY_SECONDS)
+        await asyncio.sleep(RETRY_SECONDS)
         try:
             await retry_pending()
         except asyncio.CancelledError:

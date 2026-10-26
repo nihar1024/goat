@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from core.core.config import settings
+from core.crud.crud_billing_terms import DEFAULT_TRIAL
 from core.db.models.user import User
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +65,7 @@ async def test_with_billing_an_organization_starts_a_one_month_trial(
     enable_billing(monkeypatch)
     org = await _create(db_session, auth_on, make_user)
     assert org.on_trial is True
-    assert float(org.total_credits) == settings.TRIAL_QUOTA_CREDITS
-    expected = datetime.now() + timedelta(days=settings.TRIAL_DAYS)
+    # No terms pushed yet: core's defaults.
+    assert float(org.total_credits) == DEFAULT_TRIAL["credits"]
+    expected = datetime.now() + timedelta(days=DEFAULT_TRIAL["days"])
     assert abs(org.plan_renewal_date - expected) < timedelta(minutes=5)

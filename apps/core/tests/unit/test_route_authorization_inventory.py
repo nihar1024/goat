@@ -36,6 +36,10 @@ ANONYMOUS = {
     ): "billing pushes it with the shared BILLING_WEBHOOK_SECRET; the route checks it",
     (
         "POST",
+        "webhooks/billing/terms",
+    ): "billing pushes its terms with the shared BILLING_WEBHOOK_SECRET; the route checks it",
+    (
+        "POST",
         "webhooks/trial",
     ): "the trial_expiry task calls it with the shared BILLING_WEBHOOK_SECRET; the route checks it",
     ("GET", "project/{project_id}/public"): "the published, public view of a project",

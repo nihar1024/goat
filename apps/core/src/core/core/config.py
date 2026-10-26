@@ -138,8 +138,8 @@ class Settings(BaseSettings):
     DEFAULT_QUOTA_EDITORS: int = 1000
     DEFAULT_QUOTA_VIEWERS: int = 1000
     # Credit metering. Conversion rates live in the customer.credit_rate table
-    # (the metering SQL reads them there); with billing on, core writes them
-    # from CREDIT_RATE_* below at startup. Only operational knobs live here.
+    # (the metering SQL reads them there), pushed by the billing system with
+    # its terms. Only operational knobs live here.
     MAX_TOOL_RUNTIME_SECONDS: int = 1800
     # Self-hosted credit allowance. None == unlimited (gate skipped).
     DEFAULT_QUOTA_CREDITS: float | None = None
@@ -344,23 +344,11 @@ class Settings(BaseSettings):
     # (if any) pushes entitlements or receives account reports. On, new
     # organizations start a GOAT-managed trial and the billing webhooks accept
     # calls carrying BILLING_WEBHOOK_SECRET (X-Webhook-Secret header). The
-    # trial and credit-rate values are the operator's business terms: there are
-    # no defaults, so billing refuses to start with any of them missing.
+    # trial's terms and the credit rates are the billing system's: it pushes
+    # them (POST /webhooks/billing/terms), core keeps them in the database.
     # ------------------------------------------------------------------
     BILLING_ENABLED: bool = False
     BILLING_WEBHOOK_SECRET: str | None = None
-    TRIAL_DAYS: int | None = None
-    TRIAL_QUOTA_STORAGE_MB: float | None = None
-    TRIAL_QUOTA_PROJECTS: int | None = None
-    TRIAL_QUOTA_EDITORS: int | None = None
-    TRIAL_QUOTA_VIEWERS: int | None = None
-    # Credits for the whole trial (it gets no monthly reset).
-    TRIAL_QUOTA_CREDITS: float | None = None
-    # Credits per unit, written to customer.credit_rate when core starts:
-    # compute per minute, egress per GB, AI per 1000 tokens.
-    CREDIT_RATE_COMPUTE_PER_MINUTE: float | None = None
-    CREDIT_RATE_EGRESS_PER_GB: float | None = None
-    CREDIT_RATE_AI_PER_1K_TOKENS: float | None = None
 
     @field_validator("BILLING_ENABLED", mode="before")
     @classmethod
@@ -368,47 +356,16 @@ class Settings(BaseSettings):
         # `BILLING_ENABLED: ${BILLING_ENABLED:-}` in a compose file means off.
         return False if isinstance(value, str) and not value.strip() else value
 
-    @field_validator(
-        "BILLING_WEBHOOK_SECRET",
-        "TRIAL_DAYS",
-        "TRIAL_QUOTA_STORAGE_MB",
-        "TRIAL_QUOTA_PROJECTS",
-        "TRIAL_QUOTA_EDITORS",
-        "TRIAL_QUOTA_VIEWERS",
-        "TRIAL_QUOTA_CREDITS",
-        "CREDIT_RATE_COMPUTE_PER_MINUTE",
-        "CREDIT_RATE_EGRESS_PER_GB",
-        "CREDIT_RATE_AI_PER_1K_TOKENS",
-        mode="before",
-    )
+    @field_validator("BILLING_WEBHOOK_SECRET", mode="before")
     @classmethod
     def _billing_empty_is_unset(cls: type["Settings"], value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
-    def _require_billing_terms(self) -> "Settings":
-        if not self.BILLING_ENABLED:
-            return self
-        missing = [
-            name
-            for name in (
-                "BILLING_WEBHOOK_SECRET",
-                "TRIAL_DAYS",
-                "TRIAL_QUOTA_STORAGE_MB",
-                "TRIAL_QUOTA_PROJECTS",
-                "TRIAL_QUOTA_EDITORS",
-                "TRIAL_QUOTA_VIEWERS",
-                "TRIAL_QUOTA_CREDITS",
-                "CREDIT_RATE_COMPUTE_PER_MINUTE",
-                "CREDIT_RATE_EGRESS_PER_GB",
-                "CREDIT_RATE_AI_PER_1K_TOKENS",
-            )
-            if getattr(self, name) is None
-        ]
-        if missing:
+    def _require_billing_secret(self) -> "Settings":
+        if self.BILLING_ENABLED and self.BILLING_WEBHOOK_SECRET is None:
             raise ValueError(
-                "BILLING_ENABLED is set but these settings are missing: "
-                + ", ".join(missing)
+                "BILLING_ENABLED is set but BILLING_WEBHOOK_SECRET is missing"
             )
         return self
 
@@ -465,9 +422,6 @@ class Settings(BaseSettings):
     # Sign-ups, organizations and trials as Odoo contacts (billing only), through
     # the bridge portal user ("GOAT Accounts Bot") of the goat_accounts module.
     ODOO_ACCOUNTS_API_KEY: str | None = None
-    ODOO_ACCOUNTS_ACTION: str = "GOAT: accounts"
-    # How often reports to Odoo that failed (trial, join, status) are re-sent.
-    ODOO_SYNC_RETRY_SECONDS: int = 600
 
     @field_validator(
         "ODOO_URL",

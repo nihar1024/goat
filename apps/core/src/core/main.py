@@ -12,7 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 import core._dotenv  # noqa: E402, F401, I001
 from core.accounts.sync import retry_loop
 from core.core.config import settings
-from core.db.seed_credit_rates import seed_credit_rates
+from core.crud.crud_billing_terms import seed_default_credit_rates
 from core.db.session import session_manager
 from core.endpoints.v2.api import router as api_router_v2
 from core.health import build_prober
@@ -25,11 +25,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     print("Starting up...")
     session_manager.init(settings.ASYNC_SQLALCHEMY_DATABASE_URI)
 
-    # The metering SQL reads its rates from customer.credit_rate. Written here,
-    # where core runs with its whole configuration (the migrate job may not).
+    # The metering SQL reads its rates from customer.credit_rate: until the
+    # billing system pushes its terms, it charges at the default rates. Written
+    # here, where core runs with its whole configuration (the migrate job may not).
     if settings.billing_enabled:
         async with session_manager.session() as session:
-            await seed_credit_rates(session)
+            await seed_default_credit_rates(session)
 
     # Object-storage probing. Reports goat_dependency_up through the OTLP path
     # goatobs already set up; nothing here is wired to a readiness probe, so a

@@ -1,7 +1,11 @@
 """The accounts provider this deployment is configured for, or None."""
 
 from core import odoo
-from core.accounts.odoo_provider import ALLOWED_CALLS, OdooAccountsProvider
+from core.accounts.odoo_provider import (
+    ACTION_NAME,
+    ALLOWED_CALLS,
+    OdooAccountsProvider,
+)
 from core.accounts.provider import AccountsProvider
 from core.core.config import settings
 
@@ -25,6 +29,6 @@ def get_provider() -> AccountsProvider | None:
                 allowed_calls=ALLOWED_CALLS,
                 ca_bundle=settings.GOAT_CA_BUNDLE,
             ),
-            settings.ODOO_ACCOUNTS_ACTION,
+            ACTION_NAME,
         )
     return _provider

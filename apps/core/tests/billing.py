@@ -1,30 +1,29 @@
-"""Billing switched on for a test: the switch, the webhook secret and the
-operator's trial and credit-rate terms (core has no defaults for them)."""
+"""Billing switched on for a test: the switch and the webhook secret. The
+trial's terms and the credit rates come from the billing system (or core's
+defaults until it pushes them), not from settings."""
 
 import pytest
 from core.core.config import settings
 
 WEBHOOK_SECRET = "shh"
 
-# Arbitrary values; tests that care read them back from `settings`.
-TERMS = {
-    "TRIAL_DAYS": 14,
-    "TRIAL_QUOTA_STORAGE_MB": 1000,
-    "TRIAL_QUOTA_PROJECTS": 20,
-    "TRIAL_QUOTA_EDITORS": 3,
-    "TRIAL_QUOTA_VIEWERS": 4,
-    "TRIAL_QUOTA_CREDITS": 500,
-    "CREDIT_RATE_COMPUTE_PER_MINUTE": 10,
-    "CREDIT_RATE_EGRESS_PER_GB": 20,
-    "CREDIT_RATE_AI_PER_1K_TOKENS": 1,
+# A push of the billing system's terms (POST /webhooks/billing/terms).
+TERMS_PUSH = {
+    "trial": {
+        "days": 14,
+        "credits": 500,
+        "storage_mb": 1000,
+        "projects": 20,
+        "editors": 3,
+        "viewers": 4,
+    },
+    "credit_rates": {"compute": 12, "egress": 25, "ai": 2},
 }
 
 
 def enable_billing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "BILLING_ENABLED", True)
     monkeypatch.setattr(settings, "BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
-    for name, value in TERMS.items():
-        monkeypatch.setattr(settings, name, value)
 
 
 def enable_accounts_sync(monkeypatch: pytest.MonkeyPatch) -> None:

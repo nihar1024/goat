@@ -10,13 +10,14 @@ from sqlmodel import col
 
 from core.accounts import report_suspension
 from core.core.config import settings
+from core.crud.crud_billing_terms import apply_terms
 from core.crud.crud_organization import organization as crud_organization
 from core.crud.crud_user import user as crud_user
 from core.db.models.organization import Organization
 from core.deps.billing import require_billing_enabled
 from core.endpoints.deps import get_db
 from core.schemas.email import EmailTemplateContent
-from core.schemas.entitlement import EntitlementPush, TrialStage
+from core.schemas.entitlement import BillingTermsPush, EntitlementPush, TrialStage
 from core.utils.email import send_email, user_language
 from core.utils.i18n import language
 from core.utils.i18n import trans as _
@@ -95,6 +96,19 @@ async def billing_entitlement(
     # conversion: a missed report heals with the next push (it writes only what
     # changed). A converted organization's people leave the trial campaign.
     report_suspension(organization)
+    return {"status": "ok"}
+
+
+@router.post("/billing/terms", response_class=JSONResponse)
+async def billing_terms(
+    *,
+    db: AsyncSession = Depends(get_db),
+    payload: BillingTermsPush,
+) -> dict:
+    """The billing system's terms: the trial new organizations start with and
+    the credit rates. Running trials keep what they started with."""
+    if not await apply_terms(db, payload):
+        return {"status": "stale"}
     return {"status": "ok"}
 
 

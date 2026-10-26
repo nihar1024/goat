@@ -11,6 +11,7 @@ from ._link_model import (
     UserRoleLink,
 )
 from .asset import UploadedAsset
+from .billing_terms import BillingTerms  # noqa: F401
 from .bundle import Bundle
 from .bundle_artifact import BundleArtifact
 from .credit_rate import CreditRate  # noqa: F401

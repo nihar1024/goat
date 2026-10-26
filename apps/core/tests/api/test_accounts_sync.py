@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from core.accounts import factory, sync
-from core.accounts.odoo_provider import OdooAccountsProvider
+from core.accounts.odoo_provider import ACTION_NAME, OdooAccountsProvider
 from core.core.config import settings
 from core.crud import crud_organization as crud_organization_module
 from core.crud.crud_organization import organization as crud_organization
@@ -38,7 +38,7 @@ def _provider_on(monkeypatch: pytest.MonkeyPatch, client: Any) -> None:
     monkeypatch.setattr(
         factory,
         "_provider",
-        OdooAccountsProvider(client, settings.ODOO_ACCOUNTS_ACTION),
+        OdooAccountsProvider(client, ACTION_NAME),
     )
 
 
@@ -412,7 +412,7 @@ async def test_the_retry_loop_survives_failures_and_stops_when_cancelled(
         raise RuntimeError("database gone")
 
     monkeypatch.setattr(sync, "retry_pending", broken)
-    monkeypatch.setattr(settings, "ODOO_SYNC_RETRY_SECONDS", 0)
+    monkeypatch.setattr(sync, "RETRY_SECONDS", 0)
     loop = asyncio.create_task(sync.retry_loop())
     while len(calls) < 3:
         await asyncio.sleep(0)
@@ -422,5 +422,5 @@ async def test_the_retry_loop_survives_failures_and_stops_when_cancelled(
         await loop
 
 
-def test_the_retry_interval_defaults_to_ten_minutes():
-    assert settings.model_fields["ODOO_SYNC_RETRY_SECONDS"].default == 600
+def test_the_retry_interval_is_ten_minutes():
+    assert sync.RETRY_SECONDS == 600

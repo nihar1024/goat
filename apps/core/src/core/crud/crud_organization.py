@@ -13,6 +13,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from core.accounts import report_suspension, report_trial
 from core.core.config import settings
 from core.crud.base import CRUDBase
+from core.crud.crud_billing_terms import trial_terms
 from core.crud.crud_folder import folder as crud_folder
 from core.crud.crud_invitation import invitation as crud_invitations
 from core.crud.crud_role import role as crud_role
@@ -61,18 +62,20 @@ SELF_HOSTED_QUOTAS = {
 }
 
 
-def trial_quotas() -> dict:
-    """GOAT-managed trial for SaaS signups (billing on): no entitlement exists
-    until the billing system converts the organization; expiry is enforced by
-    the trial_expiry Windmill task. The values are the operator's
-    (settings.TRIAL_*, required with billing), read per call."""
-    return {
-        "credits": settings.TRIAL_QUOTA_CREDITS,
-        "storage": settings.TRIAL_QUOTA_STORAGE_MB,
-        "projects": settings.TRIAL_QUOTA_PROJECTS,
-        "editors": settings.TRIAL_QUOTA_EDITORS,
-        "viewers": settings.TRIAL_QUOTA_VIEWERS,
+async def trial_quotas(db: AsyncSession) -> tuple[dict, int]:
+    """GOAT-managed trial for SaaS signups (billing on): its quotas and length
+    in days. No entitlement exists until the billing system converts the
+    organization; expiry is enforced by the trial_expiry Windmill task. The
+    terms are the billing system's (crud_billing_terms), read per call."""
+    terms = await trial_terms(db)
+    quotas = {
+        "credits": terms["credits"],
+        "storage": terms["storage_mb"],
+        "projects": terms["projects"],
+        "editors": terms["editors"],
+        "viewers": terms["viewers"],
     }
+    return quotas, terms["days"]
 
 
 class OrganizationNotDeletableError(Exception):
@@ -115,7 +118,9 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         # SaaS (billing on): GOAT-managed trial; the entitlement webhook takes
         # over on conversion. Otherwise self-hosted: no trial.
         saas_mode = settings.billing_enabled
-        quotas = trial_quotas() if saas_mode else SELF_HOSTED_QUOTAS
+        quotas, trial_days = (
+            await trial_quotas(db) if saas_mode else (SELF_HOSTED_QUOTAS, 0)
+        )
 
         # Create organization
         organization = Organization(
@@ -128,7 +133,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             total_editors=quotas.get("editors"),
             total_viewers=quotas.get("viewers"),
             extras=[] if saas_mode else None,
-            plan_renewal_date=datetime.now() + timedelta(days=settings.TRIAL_DAYS or 0)
+            plan_renewal_date=datetime.now() + timedelta(days=trial_days)
             if saas_mode
             else None,
             type=organization_obj.type,

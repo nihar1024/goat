@@ -14,20 +14,44 @@ Billing is a switch of its own, independent of support tickets and of any CRM:
 | Setting | Meaning |
 |---|---|
 | `BILLING_ENABLED` | default `false`. Read by core, geoapi, processes and the workers. |
-| `BILLING_WEBHOOK_SECRET` | shared secret of the webhooks below. |
-| `TRIAL_DAYS`, `TRIAL_QUOTA_STORAGE_MB`, `TRIAL_QUOTA_PROJECTS`, `TRIAL_QUOTA_EDITORS`, `TRIAL_QUOTA_VIEWERS`, `TRIAL_QUOTA_CREDITS` | what a new organization gets for its trial. |
-| `CREDIT_RATE_COMPUTE_PER_MINUTE`, `CREDIT_RATE_EGRESS_PER_GB`, `CREDIT_RATE_AI_PER_1K_TOKENS` | credits charged per unit. |
+| `BILLING_WEBHOOK_SECRET` | shared secret of the webhooks below; required with billing on. |
 
 Core's billing is on when `BILLING_ENABLED` is true and the secret is set.
-There are no defaults for the trial and the rates: they are the operator's
-terms, and core refuses to start with billing enabled and any of them missing
-(the error names them). Core writes the rates to the `credit_rate` table when
-it starts (one row per category, updated when a setting changed; past charges
-keep the rate they were made at).
+The commercial terms (the trial and the credit rates) are no settings: the
+billing system pushes them (see "Terms push").
 
 With billing off (self-hosted) both webhooks answer 404, organizations get no
 trial and the `DEFAULT_QUOTA_*` values, credits are unlimited and nothing is
 metered.
+
+## Terms push
+
+`POST /api/v2/webhooks/billing/terms`, same secret. The trial a new
+organization starts with and the credit rates, always all of them:
+
+```json
+{
+  "trial": {"days": 30, "credits": 10000, "storage_mb": 5120,
+            "projects": 50, "editors": 5, "viewers": 2},
+  "credit_rates": {"compute": 10, "egress": 20, "ai": 1},
+  "as_of": "2026-10-26T12:00:00+00:00"
+}
+```
+
+`days`, `projects`, `editors` and `viewers` are whole numbers (`days` and
+`editors` at least 1), everything is at least 0; an invalid push is refused
+with 422 and changes nothing. Rates are credits per minute of compute, per GB
+of egress and per 1000 AI tokens. Core keeps the last push
+(`customer.billing_terms`, `customer.credit_rate` with source `billing`): new
+trials and new charges use it, running trials keep their quotas and past
+charges their rate. A push with an `as_of` older than the stored one answers
+`200 {"status": "stale"}` and changes nothing.
+
+Until the first push core starts trials and charges with its own defaults
+(`core/crud/crud_billing_terms.py`, rates written at startup with source
+`default`), so a sign-up never waits for the billing system. Send the terms
+when the billing side is set up and whenever they change; sending them
+regularly heals a lost push.
 
 ## Entitlement push
 
@@ -95,7 +119,8 @@ GOAT manages the trial itself, the billing system is not involved until it
 converts the organization.
 
 - **Start:** with billing on, a new organization is created with `on_trial`,
-  `plan_renewal_date` = now + `TRIAL_DAYS`, and the `TRIAL_QUOTA_*` caps.
+  `plan_renewal_date` = now + the trial's `days`, and its quotas as caps
+  (the last terms push, else core's defaults).
 - **Enforcement:** the `trial_expiry` task (daily) calls
   `POST /api/v2/webhooks/trial`, same secret, with
   `{"organization_id": "<uuid>", "stage": "expiring" | "expired"}`. `expiring`
@@ -127,7 +152,7 @@ GOAT keeps the returned ids (`user.odoo_contact_id`,
 The calls run in the background after the request and never fail it. A report
 that did not arrive flags the organization (`organization.odoo_sync_pending`,
 "accounts sync pending") and a loop in every core replica re-sends the trial,
-the status and the joins every `ODOO_SYNC_RETRY_SECONDS` (default 600). A
+the status and the joins every 10 minutes. A
 provider raises `AccountsError` when it refuses or cannot be reached.
 
 The provider shipped with core is Odoo's (`odoo_provider.py`): it runs a

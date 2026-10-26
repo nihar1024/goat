@@ -11,6 +11,8 @@ import pytest_asyncio
 from core.accounts import factory, sync
 from core.accounts.odoo_provider import OdooAccountsProvider
 from core.core.config import settings
+from core.crud import crud_organization as crud_organization_module
+from core.crud.crud_organization import organization as crud_organization
 from core.db.models.organization import Organization
 from core.db.models.user import User
 from sqlalchemy import update
@@ -164,6 +166,28 @@ async def test_a_suspension_is_reported_to_odoo(db_session, odoo):
         "goat_suspended": True,
         "goat_on_trial": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_organization_ends_its_trial_in_odoo(
+    db_session, odoo, monkeypatch
+):
+    """Deleting the organization reports it off trial, so the provider's trial
+    campaign stops mailing its people."""
+    org = make_organization(on_trial=True, suspended=False)
+    db_session.add(org)
+    await db_session.commit()
+
+    async def no_keycloak_user(_user_id: Any) -> dict:
+        return {}
+
+    monkeypatch.setattr(crud_organization_module, "get_keycloak_user", no_keycloak_user)
+    await crud_organization.delete_organization(organization_obj=org, db=db_session)
+    await _settle()
+
+    (op,) = odoo.ops
+    assert op["goat_op"] == "status"
+    assert op["goat_suspended"] is True and op["goat_on_trial"] is False
 
 
 @pytest.mark.asyncio

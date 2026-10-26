@@ -210,15 +210,21 @@ def report_trial(organization: Organization, owner_id: UUID) -> None:
 
 def report_suspension(organization: Organization) -> None:
     """GOAT changed the organization's state itself: suspended or reactivated
-    (its trial ended), or converted from trial to subscription. The provider
-    shows it on the company, without sending it back; a converted
-    organization's people leave the trial campaign."""
+    (its trial ended), converted from trial to subscription, or deleted. The
+    provider shows it on the company, without sending it back; the people of
+    an organization no longer on trial leave the trial campaign."""
     if not settings.accounts_sync_enabled:
         return
     org_id = organization.id
-    suspended, on_trial = bool(organization.suspended), bool(organization.on_trial)
+    suspended, on_trial = bool(organization.suspended), _on_trial(organization)
 
     _in_background(_status(org_id, suspended, on_trial), org_id)
+
+
+def _on_trial(organization: Organization) -> bool:
+    """On trial as the provider sees it: a deleted organization's trial is over,
+    so its people get no more trial mails."""
+    return bool(organization.on_trial) and organization.deleted_at is None
 
 
 def report_join(user_id: UUID, organization: Organization, role: str) -> None:
@@ -246,7 +252,7 @@ async def _retry_organization(org_id: UUID) -> bool:
         name, owner_id = organization.name, organization.contact_user_id
         end = organization.plan_renewal_date
         suspended = bool(organization.suspended)
-        on_trial = bool(organization.on_trial)
+        on_trial = _on_trial(organization)
         needs_trial = on_trial and organization.odoo_company_id is None
 
     if needs_trial and end is not None:

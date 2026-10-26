@@ -68,11 +68,11 @@ const OrganizationMembers = () => {
       organization.total_editors != null && organization.used_editors >= organization.total_editors;
 
     const statuses = [] as string[];
-    if (isViewerQuotaFull) statuses.push("Viewers");
-    if (isEditorQuotaFull) statuses.push("Editors");
+    if (isViewerQuotaFull) statuses.push(t("viewer"));
+    if (isEditorQuotaFull) statuses.push(t("editor"));
 
-    return statuses.join(", ");
-  }, [organization]);
+    return statuses.join(" / ");
+  }, [organization, t]);
 
   const disabledRoles = useMemo(() => {
     const roles = [] as string[];

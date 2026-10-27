@@ -404,8 +404,9 @@ class LayerService:
             bounds=bounds,
             columns=columns,
             user_id=str(row["user_id"]).replace("-", "") if row["user_id"] else None,
-            organization_id=str(row["organization_id"])
-            if row["organization_id"]
+            # Metering's owner; a row without the column (an older query) has none.
+            organization_id=str(row.get("organization_id"))
+            if row.get("organization_id")
             else None,
             geometry_column=geometry_column,
         )

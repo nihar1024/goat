@@ -108,6 +108,16 @@ every trip without a usable one, a line through its stops
 Explorer's snapshot gives those trips the same line as their shape. Like any
 derived member it is never written back to the feed.
 
+The Explorer saves its edits as a change set of GTFS rows, keyed by GTFS ids
+(`bundles/explorer/changeset.py`, applied by geoapi in its own transaction).
+Values come as GTFS text and are typed by the import's rules; consecutive
+writes to one row are squashed into one, since updating a row inserted in the
+same DuckLake transaction breaks its tile id; a stop's geometry and
+`shape_lines` are redrawn for what the change touches. Integrity is checked on
+the touched rows and the rows referring to them, with the MobilityData
+validator's notice codes, and only problems the change brings count: a feed's
+own old faults do not block an unrelated edit.
+
 ## Copies behind a project entry
 
 Two tools replace the layer a `layer_project` entry shows instead of adding a

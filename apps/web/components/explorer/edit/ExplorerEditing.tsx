@@ -12,6 +12,7 @@ import { useAppSelector } from "@/hooks/store/ContextHooks";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { EditBar } from "@/components/explorer/edit/EditBar";
 import { ExitDialog } from "@/components/explorer/edit/ExitDialog";
+import { SelectionResolver } from "@/components/explorer/edit/SelectionResolver";
 
 export function ExplorerEditing({ compact, barHidden }: { compact: boolean; barHidden: boolean }) {
   const { session } = useExplorer();
@@ -25,6 +26,7 @@ export function ExplorerEditing({ compact, barHidden }: { compact: boolean; barH
       {session && onExplorerTab && !barHidden && (
         <EditBar compact={compact} undo={actions.undo} redo={actions.redo} />
       )}
+      <SelectionResolver />
       <ExitDialog />
     </>
   );

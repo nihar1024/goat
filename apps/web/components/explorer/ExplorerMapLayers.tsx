@@ -29,7 +29,9 @@ import { mapColor, mapPalette } from "@/lib/explorer/mapPalette";
 import { tint } from "@/lib/explorer/modes";
 import { networkStore, shapeColorExpression } from "@/lib/explorer/network";
 import { playbackClock } from "@/lib/explorer/playback";
+import { selectionStore } from "@/lib/explorer/selectionStore";
 import {
+  clickExplorerPath,
   closeExplorerPanel,
   openExplorerPanel,
   panelItem,
@@ -37,6 +39,7 @@ import {
   pickedStop,
   selectExplorerRoute,
   selectExplorerRouteAt,
+  setExplorerPath,
 } from "@/lib/store/explorer/slice";
 
 import type { RouteRow } from "@/hooks/explorer/useExplorerData";
@@ -174,7 +177,10 @@ const DRAW_ORDER = [
   "explorer-pattern-section-casing",
   "explorer-pattern-section-line",
   "explorer-pattern-section-arrows",
+  "explorer-selection-casing",
+  "explorer-selection-line",
   "explorer-route-stop",
+  "explorer-selection-ends",
   "explorer-picked-station-edge",
   VEHICLE_LAYER_ID,
   "explorer-picked-stop-halo",
@@ -270,10 +276,42 @@ export function ExplorerMapLayers() {
   // handlers again for every change of it.
   const drawingNow = useRef(drawing);
   drawingNow.current = drawing;
+  const patternNow = useRef(pattern);
+  patternNow.current = pattern;
+  // What is selected below a direction (a path, the open trip's pattern),
+  // drawn over the route for an editor (the selection resolver).
+  const selection = useSyncExternalStore(selectionStore.subscribe, selectionStore.getSnapshot, () => null);
+  const [selectionLines, selectionEnds] = useMemo((): [FeatureCollection, FeatureCollection] => {
+    const lines = selection ?? [];
+    return [
+      {
+        type: "FeatureCollection",
+        features: lines.map((geometry) => ({ type: "Feature", properties: {}, geometry })),
+      },
+      {
+        type: "FeatureCollection",
+        features: lines.flatMap((l) =>
+          l.coordinates.length < 2
+            ? []
+            : [l.coordinates[0], l.coordinates[l.coordinates.length - 1]].map((coordinates) => ({
+                type: "Feature" as const,
+                properties: {},
+                geometry: { type: "Point" as const, coordinates },
+              }))
+        ),
+      },
+    ];
+  }, [selection]);
   // What a click on nothing lets go of, as it is when the click lands.
   const panelShown = useAppSelector((s) => s.explorer.active && s.explorer.panel.stack.length > 0);
-  const open = useRef({ choice: false, panel: false, route: false });
-  open.current = { choice: choice !== null, panel: panelShown, route: selectedRouteId !== null };
+  const pathSelected = useAppSelector((s) => s.explorer.active && s.explorer.path !== null);
+  const open = useRef({ choice: false, path: false, panel: false, route: false });
+  open.current = {
+    choice: choice !== null,
+    path: pathSelected,
+    panel: panelShown,
+    route: selectedRouteId !== null,
+  };
 
   // Playback's vehicles, drawn by a layer of their own (vehicleLayer.ts).
   // Frames reach it directly, not through React: many a second, and nothing
@@ -443,6 +481,15 @@ export function ExplorerMapLayers() {
           String(f.properties?.shape_id ?? f.id)
         );
         const keys = directionsOnShapes(shapes, d.directions, d.patternShapes);
+        // The direction already picked, clicked again — on its own track or
+        // one the other direction shares: the path between the two stops
+        // around the click (placed by the selection resolver; nothing
+        // happens for a user who cannot edit).
+        const picked = patternNow.current?.direction;
+        if (picked !== undefined && keys.includes(picked)) {
+          dispatch(clickExplorerPath({ lon: e.lngLat.lng, lat: e.lngLat.lat }));
+          return;
+        }
         if (keys.length === 1) {
           dispatch(pickExplorerPattern({ direction: keys[0], pattern_idx: null }));
           return;
@@ -494,7 +541,9 @@ export function ExplorerMapLayers() {
       const cursor = map.getCanvas().style.cursor;
       if (cursor !== "" && cursor !== "pointer") return;
       if (open.current.choice) return; // the popup closes itself
-      if (open.current.panel) dispatch(closeExplorerPanel());
+      // One level up at a time: a path back to its direction first.
+      if (open.current.path) dispatch(setExplorerPath(null));
+      else if (open.current.panel) dispatch(closeExplorerPanel());
       else if (open.current.route) dispatch(selectExplorerRoute(null));
     };
     // Registered after the map viewer's own handler, which sets the cursor
@@ -829,7 +878,7 @@ export function ExplorerMapLayers() {
             // transparency: a route's many shapes lie over each other, and
             // see-through lines would add up to solid again.
             paint={{
-              "line-color": highlighting ? tint(color, 0.3, palette.ground) : color,
+              "line-color": highlighting ? tint(color, palette.fadedShare, palette.ground) : color,
               "line-width": highlighting ? 3.5 : 4.5,
             }}
           />
@@ -884,6 +933,35 @@ export function ExplorerMapLayers() {
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             "icon-rotation-alignment": "map",
+          }}
+        />
+      </Source>
+      {/* What is selected below a direction: a path between two stops, or
+          the open trip's pattern, in the theme's colour over the route, its
+          two ends marked (board 22). */}
+      <Source key="explorer-selection" id="explorer-selection" type="geojson" data={selectionLines}>
+        <Layer
+          id="explorer-selection-casing"
+          type="line"
+          layout={{ "line-cap": "round", "line-join": "round" }}
+          paint={{ "line-color": palette.ground, "line-width": 11 }}
+        />
+        <Layer
+          id="explorer-selection-line"
+          type="line"
+          layout={{ "line-cap": "round", "line-join": "round" }}
+          paint={{ "line-color": theme.palette.primary.main, "line-width": 6 }}
+        />
+      </Source>
+      <Source key="explorer-selection-ends" id="explorer-selection-ends" type="geojson" data={selectionEnds}>
+        <Layer
+          id="explorer-selection-ends"
+          type="circle"
+          paint={{
+            "circle-radius": 6,
+            "circle-color": "#FFFFFF",
+            "circle-stroke-color": theme.palette.primary.main,
+            "circle-stroke-width": 3,
           }}
         />
       </Source>

@@ -36,6 +36,18 @@ export interface ExplorerPatternChoice {
   pattern_idx: number | null;
 }
 
+/** A path: the stretch of a pattern between two of its stops in a row
+ * (board 21), selected below a direction; its line is the selection
+ * store's (lib/explorer/selectionStore.ts). */
+export interface ExplorerPath {
+  pattern_idx: number;
+  /** The two stops, by their place in the pattern and name. */
+  from_i: number;
+  to_i: number;
+  from_name: string;
+  to_name: string;
+}
+
 /** The trip strip, under a selected route (02-panel-behaviour-spec ›
  * Playback, Viewers): what the user set by hand, which no automatic change
  * undoes for the session. It shows the route's whole day; the chart zooms. */
@@ -176,6 +188,11 @@ export interface ExplorerState {
    * drawing is in, the direction they are of is picked (setExplorerDrawing),
    * so the route opens the way it was clicked, not in its first direction. */
   clickedShapes: { routeId: string; shapeIds: string[] } | null;
+  /** The path selected on the picked direction, and a click on its line
+   * waiting to be placed along it (the selection resolver does, with the
+   * database the map does not have); `n` counts the clicks. */
+  path: ExplorerPath | null;
+  pathClick: { lon: number; lat: number; n: number } | null;
   edit: ExplorerEdit;
 }
 
@@ -186,6 +203,7 @@ function selectRoute(state: ExplorerState, routeId: string | null): void {
   if (routeId !== state.selectedRouteId) {
     state.routeTab = "service";
     state.pattern = null;
+    state.path = null;
     if (state.panel.fromRoute !== null && state.panel.fromRoute === state.selectedRouteId)
       state.panel = { ...state.panel, stack: [], fromRoute: null };
   }
@@ -248,6 +266,8 @@ const initialState: ExplorerState = {
   scrub: null,
   focus: null,
   clickedShapes: null,
+  path: null,
+  pathClick: null,
   edit: NO_EDITS,
 };
 
@@ -313,6 +333,25 @@ const explorerSlice = createSlice({
     },
     pickExplorerPattern: (state, action: PayloadAction<ExplorerPatternChoice | null>) => {
       state.pattern = action.payload;
+      state.path = null;
+    },
+    /** A click on the picked direction's line, to place along it. */
+    clickExplorerPath: (state, action: PayloadAction<{ lon: number; lat: number }>) => {
+      state.pathClick = { ...action.payload, n: (state.pathClick?.n ?? 0) + 1 };
+    },
+    /** The path the click falls on (none: the click was not on a line). A
+     * path, a trip and a stop are one level, one at a time. */
+    setExplorerPath: (state, action: PayloadAction<ExplorerPath | null>) => {
+      state.path = action.payload;
+      state.pathClick = null;
+      if (action.payload) state.panel = { stack: [], fromRoute: null };
+    },
+    /** Esc with Select (board 17): nothing selected. */
+    clearExplorerSelection: (state) => {
+      selectRoute(state, null);
+      state.panel = { stack: [], fromRoute: null };
+      state.path = null;
+      state.pathClick = null;
     },
     openExplorerSettings: (state, action: PayloadAction<ExplorerSettingsTab | null>) => {
       state.settingsTab = action.payload;
@@ -376,6 +415,7 @@ const explorerSlice = createSlice({
       }>
     ) => {
       const { item, push, step, fromRoute } = action.payload;
+      state.path = null;
       // A trip opened afresh starts on its stops; stepping to the trip before
       // or after keeps the tab.
       if (item.kind === "trip" && !step) state.tripTab = "stops";
@@ -494,6 +534,9 @@ export const {
   askToLeave,
   setExitState,
   saveFailed,
+  clickExplorerPath,
+  setExplorerPath,
+  clearExplorerSelection,
 } = explorerSlice.actions;
 
 export const explorerReducer = explorerSlice.reducer;

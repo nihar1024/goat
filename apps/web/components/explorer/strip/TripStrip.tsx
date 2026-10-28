@@ -86,7 +86,12 @@ export function TripStrip({ route, height: panelHeight }: { route: RouteRow; hei
   useEffect(() => setZoom(null), [route.route_id, picked]);
   useEffect(() => {
     if (!zoom) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setZoom(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Used here: the edit bar's Esc (clear the selection) waits for the next.
+      e.preventDefault();
+      setZoom(null);
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [zoom]);

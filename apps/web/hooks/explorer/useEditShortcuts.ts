@@ -1,7 +1,7 @@
 /**
  * The edit bar's keys (board 17), while the Explorer is open for an editor:
  * V for Select, Ctrl/⌘+Z to undo, Ctrl/⌘+Shift+Z or Ctrl+Y to redo; Esc back
- * to Select from another tool. Never
+ * to Select from another tool, and with Select clears the selection. Never
  * while typing, nor while a dialog, the change list or a handler that used
  * the key (the strip's zoom) has it; the creating tools' letters (S, R, A)
  * come with the tools.
@@ -10,7 +10,7 @@ import { useEffect } from "react";
 import { useStore } from "react-redux";
 
 import type { RootState } from "@/lib/store";
-import { setEditTool } from "@/lib/store/explorer/slice";
+import { clearExplorerSelection, setEditTool } from "@/lib/store/explorer/slice";
 
 import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
@@ -47,8 +47,8 @@ export function useEditShortcuts(
       } else if (!mod && !e.altKey && key === "v") {
         dispatch(setEditTool("select"));
       } else if (key === "escape") {
-        // Another tool: back to Select.
-        if (edit.tool !== "select") dispatch(setEditTool("select"));
+        // Another tool: back to Select. Select: nothing selected (board 17).
+        dispatch(edit.tool === "select" ? clearExplorerSelection() : setEditTool("select"));
       }
     };
     window.addEventListener("keydown", onKey);

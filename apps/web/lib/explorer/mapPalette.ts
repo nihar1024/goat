@@ -22,6 +22,9 @@ export interface MapPalette {
   stopRing: string;
   /** The selected route's end names: GOAT's text colour for that ground. */
   label: string;
+  /** How much of a route's colour the rest of it keeps while one direction
+   * or a path is highlighted: faded into the ground, still clearly the line. */
+  fadedShare: number;
 }
 
 export const LIGHT_MAP: MapPalette = {
@@ -32,6 +35,7 @@ export const LIGHT_MAP: MapPalette = {
   stop: "#717171",
   stopRing: "#FFFFFF",
   label: "rgba(58, 53, 65, 0.87)",
+  fadedShare: 0.45,
 };
 
 export const DARK_MAP: MapPalette = {
@@ -43,6 +47,8 @@ export const DARK_MAP: MapPalette = {
   stop: "#8A8A8A",
   stopRing: "#0C0C0C",
   label: "rgba(231, 227, 252, 0.87)",
+  // Faded into near-black, a colour needs more of itself to stay legible.
+  fadedShare: 0.55,
 };
 
 /** The palette for the basemap shown, by its value in GOAT's basemaps. */

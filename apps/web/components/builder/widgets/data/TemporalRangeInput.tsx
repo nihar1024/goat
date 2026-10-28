@@ -10,6 +10,7 @@ import { TEMPORAL_VALUE_FORMAT } from "@p4b/ui/components/temporalFormats";
 
 import { useDayjsLocale } from "@/i18n/utils";
 
+import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
 import { useDatasetCollectionItems } from "@/lib/api/layers";
 import { useProjectLayerHistogramStats } from "@/lib/api/projects";
 import type { HistogramStatsQueryParams } from "@/lib/validations/project";
@@ -46,7 +47,7 @@ export default function TemporalRangeInput({
   layerId,
   fieldName,
   showHistogram = true,
-  color = "#0e58ff",
+  color = DEFAULT_WIDGET_COLOR,
   selectedRange,
   onSelectedRangeChange,
 }: TemporalRangeInputProps) {

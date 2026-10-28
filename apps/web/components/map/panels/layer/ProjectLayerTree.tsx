@@ -433,6 +433,8 @@ interface ProjectLayerTreeProps {
   headerContent?: React.ReactNode;
   /** Per-group info text (keyed by group ID string) shown as an ⓘ button on the group row */
   groupInfo?: Record<string, string>;
+  /** Content shown under a group row instead of its layers, keyed by group ID */
+  groupContent?: Record<number, React.ReactNode>;
   /** Project owner's user id, used to decide whether feature editing is offered.
    * Passed in rather than fetched so the public dashboard, which renders this
    * tree read-only, makes no authenticated request. */
@@ -463,6 +465,7 @@ export const ProjectLayerTree = ({
   dimOutOfZoom = true,
   headerContent,
   groupInfo,
+  groupContent,
   projectOwnerId,
 }: ProjectLayerTreeProps) => {
   const { t } = useTranslation("common");
@@ -1178,6 +1181,7 @@ export const ProjectLayerTree = ({
           // whole — but only in edit mode, where that panel exists at all.
           isSelectable: !!item.isBundleGroup && isEditMode,
           labelInfo: legendCaption,
+          legendContent: groupContent?.[node.id],
         };
       }
 
@@ -1359,7 +1363,7 @@ export const ProjectLayerTree = ({
         labelInfo: legendCaption ?? item.labelInfo,
       };
     });
-  }, [items, theme, currentZoom, viewMode, isEditMode, hideLegendHeading, groupIcons, simpleLegendLayerIds]);
+  }, [items, theme, currentZoom, viewMode, isEditMode, hideLegendHeading, groupIcons, simpleLegendLayerIds, groupContent]);
 
   const renderPrefix = useCallback(
     togglePosition === "left"

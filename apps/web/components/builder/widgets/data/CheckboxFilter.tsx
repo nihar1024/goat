@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { MAX_FILTER_VALUES, useFilterValues } from "./useFilterValues";
+import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
 
 interface CheckboxFilterProps {
   layerId: string;
@@ -28,7 +29,7 @@ const CheckboxFilter = ({
   multiple = false,
   customOrder,
   cqlFilter,
-  color = "#0e58ff",
+  color = DEFAULT_WIDGET_COLOR,
   labelMap,
 }: CheckboxFilterProps) => {
   const theme = useTheme();

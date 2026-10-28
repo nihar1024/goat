@@ -33,6 +33,7 @@ from geoapi.routers import (
     features_router,
     features_write_router,
     metadata_router,
+    pt_edits_router,
     tiles_router,
 )
 from geoapi.routers.explorer import cleanup_explorer_dir
@@ -201,6 +202,7 @@ app.include_router(tiles_router)
 app.include_router(expressions_router)
 app.include_router(download_router)
 app.include_router(explorer_router)
+app.include_router(pt_edits_router)
 
 
 @app.get(

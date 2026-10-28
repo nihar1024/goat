@@ -34,6 +34,8 @@ import { tripDetail } from "@/lib/explorer/derive/trip";
 import { type ExplorerSettings, type Period, type Rate, rateFor, settingsKey } from "@/lib/explorer/settings";
 import type { ExplorerRouteDrawing } from "@/lib/store/explorer/slice";
 
+import { useEdition } from "@/hooks/explorer/useEdition";
+
 export interface RouteRow {
   route_idx: number;
   route_id: string;
@@ -53,6 +55,8 @@ export interface RouteRow {
 /** Run `query` against `db` for `key`; the answer for the latest key wins. */
 function useQuery<T>(db: SqlRunner | undefined, key: string, query: (db: SqlRunner) => Promise<T>) {
   const [state, setState] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true });
+  // An edit, its undo or redo changed the tables: ask again.
+  const edition = useEdition(db);
   useEffect(() => {
     if (!db) return;
     let current = true;
@@ -63,9 +67,9 @@ function useQuery<T>(db: SqlRunner | undefined, key: string, query: (db: SqlRunn
     return () => {
       current = false;
     };
-    // The key names everything the query depends on.
+    // The key and the edition name everything the query depends on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db, key]);
+  }, [db, key, edition]);
   return state;
 }
 

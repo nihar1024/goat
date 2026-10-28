@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 
 import { useBundleLayers } from "@/lib/api/bundles";
 import type { SqlRunner } from "@/lib/explorer/db/types";
+import { type EditSession, sessionOf } from "@/lib/explorer/edit/session";
 import { networkShapes, networkStations, networkStops, networkStore } from "@/lib/explorer/network";
 import { DEFAULT_SETTINGS, type ExplorerSettings, loadSettings, saveSettings } from "@/lib/explorer/settings";
 import { setExplorerBounds, setExplorerDate } from "@/lib/store/explorer/slice";
@@ -34,6 +35,12 @@ interface ExplorerData {
    * false when this browser could not keep them. */
   settings: ExplorerSettings;
   setSettings: (next: ExplorerSettings) => boolean;
+  /** Whether this user may save edits to the bundle: the edit bar shows then. */
+  canEdit: boolean;
+  /** The bundle revision the snapshot is of: a save starts from it. */
+  revision: number | null;
+  /** The editing session, once the whole snapshot is in, for an editor. */
+  session: EditSession | null;
 }
 
 const Context = createContext<ExplorerData | null>(null);
@@ -153,6 +160,9 @@ export function ExplorerProvider({ bundleId, children }: { bundleId: string; chi
       shapeDistUnit: manifest?.shape_dist_unit ?? null,
       settings,
       setSettings,
+      canEdit: !!manifest?.can_edit,
+      revision: manifest?.layers_revision ?? null,
+      session: state.status === "ready" && manifest?.can_edit ? sessionOf(state.db) : null,
     };
   }, [state, window, retry, manifest, settings, setSettings, shapeLinesLayerId]);
 

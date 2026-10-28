@@ -37,6 +37,9 @@ export interface SnapshotManifest {
    * older import's `shapes`, or none. */
   shape_lines_role?: string | null;
   service_window: [string | null, string | null];
+  /** Whether the caller may save edits to the bundle: the edit bar shows
+   * only then. */
+  can_edit?: boolean;
 }
 
 /** The answer while the snapshot is being built, or after it failed. */

@@ -13,6 +13,7 @@ import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import { type ExplorerLeftTab, closeExplorer, setExplorerLeftTab } from "@/lib/store/explorer/slice";
 
+import { useExplorerLeave } from "@/hooks/explorer/useExplorerLeave";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { FloatingPanel } from "@/components/common/FloatingPanel";
@@ -33,6 +34,7 @@ export function ExplorerLeftPanel({ layersTab }: { layersTab: ReactNode }) {
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
   const tab = useAppSelector((s) => s.explorer.leftTab);
+  const leave = useExplorerLeave();
   const { db } = useExplorer();
 
   // One panel: the tab bar is its header, the active tab fills the rest. Both
@@ -80,13 +82,13 @@ export function ExplorerLeftPanel({ layersTab }: { layersTab: ReactNode }) {
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
-                      dispatch(closeExplorer());
+                      leave(() => dispatch(closeExplorer()));
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         e.stopPropagation();
-                        dispatch(closeExplorer());
+                        leave(() => dispatch(closeExplorer()));
                       }
                     }}
                     sx={{

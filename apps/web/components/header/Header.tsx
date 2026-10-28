@@ -21,6 +21,7 @@ import { setActiveRightPanel } from "@/lib/store/map/slice";
 import type { Project } from "@/lib/validations/project";
 
 import { useAuthZ } from "@/hooks/auth/AuthZ";
+import { useExplorerLeave } from "@/hooks/explorer/useExplorerLeave";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import UserInfoMenu from "@/components/UserInfoMenu";
@@ -64,6 +65,7 @@ export default function Header(props: HeaderProps) {
   const dateLocale = useDateFnsLocale();
   const lng = i18n.language === "de" ? "/de" : "";
   const dispatch = useAppDispatch();
+  const leaveExplorer = useExplorerLeave();
   // Below `md` the header has no room for another icon: the support entry moves into the user menu.
   // The header icon is hidden there by CSS, so the server-rendered first paint (before this media
   // query is known) never shows it on a phone; the user menu entries only render once opened.
@@ -314,11 +316,15 @@ export default function Header(props: HeaderProps) {
                   { label: t("common:builder"), value: "builder" },
                 ]}
                 activeOption={mapMode}
-                onToggle={(value: "data" | "builder" | "reports" | "workflows") => {
-                  dispatch(setSelectedLayers([]));
-                  dispatch(setActiveRightPanel(undefined));
-                  dispatch(setMapMode(value));
-                }}
+                onToggle={(value: "data" | "builder" | "reports" | "workflows") =>
+                  // Leaving the map view leaves the Explorer, which asks
+                  // first when it has unsaved changes.
+                  leaveExplorer(() => {
+                    dispatch(setSelectedLayers([]));
+                    dispatch(setActiveRightPanel(undefined));
+                    dispatch(setMapMode(value));
+                  })
+                }
               />
             )}
           </>

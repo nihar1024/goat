@@ -9,6 +9,7 @@ import { type PayloadAction, createSlice } from "@reduxjs/toolkit";
 
 import type { DirectionName } from "@/lib/explorer/derive/directions";
 import { directionsOnShapes } from "@/lib/explorer/directionChoice";
+import type { ChangeSummary } from "@/lib/explorer/edit/types";
 import type { ModeKey } from "@/lib/explorer/modes";
 import { setMapMode } from "@/lib/store/map/slice";
 
@@ -48,6 +49,29 @@ export interface ExplorerStrip {
 
 /** The settings dialog's tabs (settings.ts). */
 export type ExplorerSettingsTab = "rates" | "periods" | "vehicles";
+
+/** The edit bar's tools (board 17): Select, and the three that create. */
+export type ExplorerEditTool = "select" | "stop" | "route" | "area";
+
+/** Editing, for a user who may write the bundle. The changes themselves are
+ * the session's (lib/explorer/edit/session.ts); this mirrors their summaries
+ * for the bar, the change list and the exit dialog. */
+export interface ExplorerEdit {
+  tool: ExplorerEditTool;
+  /** Route paths follow streets (stops are placed where clicked); kept for
+   * the session. */
+  snap: boolean;
+  /** The applied changes, oldest first, and those undone that redo brings
+   * back, the latest undone last. */
+  changes: ChangeSummary[];
+  redo: ChangeSummary[];
+  /** The change list, under the bar's count. */
+  listOpen: boolean;
+  /** The "Save changes to …?" dialog: asking, or saving. */
+  exit: "asking" | "saving" | null;
+  /** Why the last save did not go through, shown in the dialog. */
+  saveProblem: string | null;
+}
 
 /** Playback speeds: how many seconds of the day pass in one second. */
 export const PLAYBACK_SPEEDS = [1, 10, 60] as const;
@@ -152,6 +176,7 @@ export interface ExplorerState {
    * drawing is in, the direction they are of is picked (setExplorerDrawing),
    * so the route opens the way it was clicked, not in its first direction. */
   clickedShapes: { routeId: string; shapeIds: string[] } | null;
+  edit: ExplorerEdit;
 }
 
 /** Select a route (or none): another route starts on its Overview tab, in
@@ -169,6 +194,22 @@ function selectRoute(state: ExplorerState, routeId: string | null): void {
 }
 
 /** What the strip keeps for the session, the Explorer closed or not. */
+const NO_EDITS: ExplorerEdit = {
+  tool: "select",
+  snap: true,
+  changes: [],
+  redo: [],
+  listOpen: false,
+  exit: null,
+  saveProblem: null,
+};
+
+/** Editing as a new session starts: nothing changed, Select, the snap as
+ * the user left it. */
+function freshEdit(edit: ExplorerEdit): ExplorerEdit {
+  return { ...NO_EDITS, snap: edit.snap };
+}
+
 function stickyStrip(strip: ExplorerStrip): ExplorerStrip {
   return {
     ...initialState.strip,
@@ -207,6 +248,7 @@ const initialState: ExplorerState = {
   scrub: null,
   focus: null,
   clickedShapes: null,
+  edit: NO_EDITS,
 };
 
 const explorerSlice = createSlice({
@@ -229,6 +271,7 @@ const explorerSlice = createSlice({
         ...initialState,
         leftTab: state.active && !same ? "explorer" : state.leftTab,
         strip: stickyStrip(state.strip),
+        edit: freshEdit(state.edit),
         active: true,
         bundleId: action.payload.bundleId,
         bundleName: action.payload.bundleName,
@@ -242,6 +285,7 @@ const explorerSlice = createSlice({
       ...initialState,
       leftTab: state.leftTab,
       strip: stickyStrip(state.strip),
+      edit: freshEdit(state.edit),
       restoreGroupId: state.hiddenGroupId,
     }),
     /** The layer tree has shown the group again. */
@@ -362,6 +406,43 @@ const explorerSlice = createSlice({
     setStripHeight: (state, action: PayloadAction<number>) => {
       state.strip.height = Math.round(action.payload);
     },
+    setEditTool: (state, action: PayloadAction<ExplorerEditTool>) => {
+      state.edit.tool = action.payload;
+      state.edit.listOpen = false;
+    },
+    setEditSnap: (state, action: PayloadAction<boolean>) => {
+      state.edit.snap = action.payload;
+    },
+    /** A change applied: it joins the list, and what was undone is gone. */
+    editApplied: (state, action: PayloadAction<ChangeSummary>) => {
+      state.edit.changes.push(action.payload);
+      state.edit.redo = [];
+    },
+    editUndone: (state) => {
+      const last = state.edit.changes.pop();
+      if (last) state.edit.redo.push(last);
+    },
+    editRedone: (state) => {
+      const next = state.edit.redo.pop();
+      if (next) state.edit.changes.push(next);
+    },
+    setChangeListOpen: (state, action: PayloadAction<boolean>) => {
+      state.edit.listOpen = action.payload;
+    },
+    /** Leaving with changes: the dialog asks what to do with them. */
+    askToLeave: (state) => {
+      state.edit.exit = "asking";
+      state.edit.listOpen = false;
+    },
+    setExitState: (state, action: PayloadAction<ExplorerEdit["exit"]>) => {
+      state.edit.exit = action.payload;
+      if (action.payload === null) state.edit.saveProblem = null;
+    },
+    /** A save that did not go through: the dialog asks again, saying why. */
+    saveFailed: (state, action: PayloadAction<string>) => {
+      state.edit.exit = "asking";
+      state.edit.saveProblem = action.payload;
+    },
   },
   extraReducers: (builder) => {
     // The Explorer lives in the data view; leaving it ends the session.
@@ -371,6 +452,7 @@ const explorerSlice = createSlice({
         : {
             ...initialState,
             leftTab: state.leftTab,
+            edit: freshEdit(state.edit),
             restoreGroupId: state.hiddenGroupId,
           }
     );
@@ -403,6 +485,15 @@ export const {
   setScrub,
   focusExplorerRun,
   selectExplorerRouteAt,
+  setEditTool,
+  setEditSnap,
+  editApplied,
+  editUndone,
+  editRedone,
+  setChangeListOpen,
+  askToLeave,
+  setExitState,
+  saveFailed,
 } = explorerSlice.actions;
 
 export const explorerReducer = explorerSlice.reducer;
@@ -416,4 +507,9 @@ export function panelItem(state: ExplorerState): ExplorerPanelItem | null {
 export function pickedStop(state: ExplorerState): ExplorerPickedStop | null {
   const item = panelItem(state);
   return item?.kind === "stop" ? item.stop : null;
+}
+
+/** Changes made and not saved: leaving asks first. */
+export function hasUnsavedEdits(state: ExplorerState): boolean {
+  return state.active && state.edit.changes.length > 0;
 }

@@ -2,20 +2,33 @@
  * The Explorer's bottom bar (boards 3, 6, 8; 02-panel-behaviour-spec ›
  * Playback): one row that plays the network through its day — play/pause,
  * the speed, the date, the time, a scrubber over the day's service, how many
- * vehicles are out. With the trip strip open, its top edge drags it taller or
- * shorter. Exit Explorer left the bar until editing brings it back as a
- * save-and-exit showing the changes (20 Oct 2026); the tab's × and the
- * bundle's menu leave the Explorer meanwhile.
+ * vehicles are out — and, for a user who may edit the bundle, Save and exit
+ * with the count of unsaved changes. With the trip strip open, its top edge
+ * drags it taller or shorter.
  */
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { Box, ButtonBase, Divider, IconButton, Slider, Stack, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  ButtonBase,
+  Divider,
+  IconButton,
+  Slider,
+  Stack,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
+
+import { holdLeave } from "@/lib/explorer/edit/leave";
 import { clock, count } from "@/lib/explorer/format";
 import {
   PLAYBACK_SPEEDS,
+  closeExplorer,
   setPlaybackSpeed,
   setPlaybackTime,
   setPlaying,
@@ -24,6 +37,7 @@ import {
 } from "@/lib/store/explorer/slice";
 
 import { type RouteRow, useRoutes } from "@/hooks/explorer/useExplorerData";
+import { useExplorerSave } from "@/hooks/explorer/useExplorerSave";
 import { usePickedTrips } from "@/hooks/explorer/usePickedTrips";
 import { usePlayback } from "@/hooks/explorer/usePlayback";
 import { usePlaybackValue } from "@/hooks/explorer/usePlaybackValue";
@@ -280,9 +294,67 @@ function BottomBar({ compact = false }: { compact?: boolean }) {
         {!stripOpen && route && <RouteChip route={route} />}
         {!tight && <Divider orientation="vertical" flexItem sx={{ my: 1.5 }} />}
         {!tight && <VehicleCount ready={ready} route={route} />}
+        <SaveExitButton compact={tight} />
       </Stack>
       {stripOpen && route && <TripStrip route={route} height={stripHeight} />}
     </FloatingPanel>
+  );
+}
+
+/** Save and exit, for an editor: the primary button at the bar's end,
+ * with the count of unsaved changes, enabled once there are any. It saves
+ * them into the bundle and closes the Explorer; a save that does not go
+ * through opens the exit dialog, saying why. Squeezed, the icon alone. */
+function SaveExitButton({ compact }: { compact: boolean }) {
+  const { t } = useTranslation("common");
+  const dispatch = useAppDispatch();
+  const { session } = useExplorer();
+  const { save } = useExplorerSave();
+  const changes = useAppSelector((s) => s.explorer.edit.changes.length);
+  const saving = useAppSelector((s) => s.explorer.edit.exit === "saving");
+  if (!session) return null;
+  const label = t("explorer_save_exit");
+  return (
+    <Tooltip title={compact ? label : ""}>
+      <Box component="span" sx={{ display: "inline-flex", ml: 1, mr: 0.5, flexShrink: 0 }}>
+        <Button
+          variant="contained"
+          size="small"
+          aria-label={label}
+          disabled={!changes || saving}
+          onClick={() => {
+            holdLeave(() => dispatch(closeExplorer()));
+            void save();
+          }}
+          startIcon={
+            !compact && <Icon iconName={ICON_NAME.SAVE} style={{ fontSize: 12 }} htmlColor="inherit" />
+          }
+          sx={{
+            borderRadius: "16px",
+            minWidth: 0,
+            px: compact ? 1 : 1.5,
+            fontWeight: 700,
+            textTransform: "none",
+            whiteSpace: "nowrap",
+          }}>
+          {compact ? <Icon iconName={ICON_NAME.SAVE} style={{ fontSize: 13 }} htmlColor="inherit" /> : label}
+          {changes > 0 && (
+            <Box
+              component="span"
+              sx={{
+                ml: 0.75,
+                px: 0.75,
+                borderRadius: "8px",
+                bgcolor: "rgba(255, 255, 255, 0.25)",
+                fontSize: 11,
+                lineHeight: "16px",
+              }}>
+              {changes}
+            </Box>
+          )}
+        </Button>
+      </Box>
+    </Tooltip>
   );
 }
 

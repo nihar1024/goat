@@ -26,12 +26,39 @@ export type GtfsValue = string | number | null;
 
 /** One row of a bundle table written: inserted whole, updated in the columns
  * given, or deleted; `key` is its GTFS primary key. */
-export interface GtfsRowOp {
+export interface GtfsRowEdit {
   role: GtfsRole;
   op: "insert" | "update" | "delete";
   key: Record<string, GtfsValue>;
   values?: Record<string, GtfsValue>;
 }
+
+/** A stretch of a shape drawn anew: from and to as shares of its length
+ * (null: its start or end), straight through `points`. */
+export interface ShapeStretch {
+  from: number | null;
+  to: number | null;
+  /** Where the stop it is drawn through was on it, as a share. */
+  at: number | null;
+  points: [number, number][];
+}
+
+/** A shape redrawn through a moved stop (2.2): `source`'s points, at their
+ * full resolution on the server, with each stretch replaced; written as
+ * `key.shape_id` (the same shape, or a copy for some of its trips). The
+ * feed's distances along it follow, `through` at its new place. */
+export interface GtfsShapeReshape {
+  role: "shapes";
+  op: "reshape";
+  key: { shape_id: string };
+  source: string;
+  through: string;
+  /** Metres per `shape_dist_traveled` unit, where the Explorer knows it. */
+  metres_per_unit?: number;
+  stretches: ShapeStretch[];
+}
+
+export type GtfsRowOp = GtfsRowEdit | GtfsShapeReshape;
 
 /** Rows of one snapshot table a change may alter, by a condition that
  * selects them before and after it: undo puts back exactly these rows. */
@@ -59,4 +86,7 @@ export interface EditChange extends ChangeSummary {
   sql: string[];
   /** The same change as bundle rows, for the save. */
   gtfs: GtfsRowOp[];
+  /** Paths it redraws (shape_idx): the map draws them from the snapshot
+   * until a save brings the bundle's lines in step. */
+  shapes?: number[];
 }

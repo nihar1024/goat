@@ -19,12 +19,15 @@ import {
   panelItem,
 } from "@/lib/store/explorer/slice";
 
+import { DraftEditContext, useDraftEdit } from "@/hooks/explorer/useDraftEdit";
 import { useRoutes, useTripDetail } from "@/hooks/explorer/useExplorerData";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { FloatingPanel } from "@/components/common/FloatingPanel";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { RouteBadge, routeName } from "@/components/explorer/RouteBadge";
+import { ApplyBar } from "@/components/explorer/edit/ApplyBar";
+import { NewStopPanel } from "@/components/explorer/edit/NewStopPanel";
 import { StopPanel } from "@/components/explorer/right/StopPanel";
 import { TripPanel } from "@/components/explorer/right/TripPanel";
 import { EXPLORER_RIGHT_PANEL_WIDTH } from "@/components/explorer/right/panelSize";
@@ -57,54 +60,67 @@ function RightPanel() {
   const previous = panel.stack.length > 1 ? panel.stack[panel.stack.length - 2] : null;
   const fromRoute = useRoutes(useExplorer().db).data?.find((r) => r.route_id === panel.fromRoute);
   const previousName = useItemName(previous);
-  if (!item) return null;
+  // The edit being made on the item shown: drafts go with the panel's item.
+  const edit = useDraftEdit();
+  // A stop being placed fills the panel until it is created (board 18).
+  const placing = edit?.draft.kind === "stop-new" ? edit.draft : null;
+  if (!item && !placing) return null;
 
   return (
-    <FloatingPanel width={EXPLORER_RIGHT_PANEL_WIDTH} maxHeight="100%" fillHeight>
-      {/* The back link starts on the panel's content line: its own padding
+    <DraftEditContext.Provider value={edit}>
+      <FloatingPanel width={EXPLORER_RIGHT_PANEL_WIDTH} maxHeight="100%" fillHeight>
+        {/* The back link starts on the panel's content line: its own padding
           (0.5) and the row's (2) make the content's (PX). */}
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ pl: 2, pr: 1.5, pt: 1, minHeight: 36 }}>
-        <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
-          {previous ? (
-            // Back to the item this one was opened from.
-            <ButtonBase
-              onClick={() => dispatch(explorerPanelBack())}
-              sx={{ gap: 0.75, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
-              <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
-              <Typography variant="caption" noWrap>
-                {previousName}
-              </Typography>
-            </ButtonBase>
-          ) : fromRoute ? (
-            // The route it belongs to, open in the left panel.
-            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ px: 0.5, minWidth: 0 }}>
-              <RouteBadge route={fromRoute} small />
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {routeName(fromRoute, t)}
-              </Typography>
-            </Stack>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={0.5}
+          sx={{ pl: 2, pr: 1.5, pt: 1, minHeight: 36 }}>
+          <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
+            {previous ? (
+              // Back to the item this one was opened from.
+              <ButtonBase
+                onClick={() => dispatch(explorerPanelBack())}
+                sx={{ gap: 0.75, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
+                <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
+                <Typography variant="caption" noWrap>
+                  {previousName}
+                </Typography>
+              </ButtonBase>
+            ) : fromRoute ? (
+              // The route it belongs to, open in the left panel.
+              <Stack direction="row" spacing={0.75} alignItems="center" sx={{ px: 0.5, minWidth: 0 }}>
+                <RouteBadge route={fromRoute} small />
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {routeName(fromRoute, t)}
+                </Typography>
+              </Stack>
+            ) : null}
+          </Box>
+          <Tooltip title={t("explorer_panel_close")}>
+            <IconButton
+              size="small"
+              aria-label={t("explorer_panel_close")}
+              onClick={() => dispatch(closeExplorerPanel())}>
+              <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 14 }} htmlColor="inherit" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {placing ? (
+            <NewStopPanel draft={placing} />
+          ) : item?.kind === "stop" ? (
+            <StopPanel key={item.stop.stop_idx} stop={item.stop} />
+          ) : item ? (
+            <TripPanel
+              key={`${item.trip_idx}:${item.run_dep_s}`}
+              trip_idx={item.trip_idx}
+              run_dep_s={item.run_dep_s}
+            />
           ) : null}
         </Box>
-        <Tooltip title={t("explorer_panel_close")}>
-          <IconButton
-            size="small"
-            aria-label={t("explorer_panel_close")}
-            onClick={() => dispatch(closeExplorerPanel())}>
-            <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 14 }} htmlColor="inherit" />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-      <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {item.kind === "stop" ? (
-          <StopPanel key={item.stop.stop_idx} stop={item.stop} />
-        ) : (
-          <TripPanel
-            key={`${item.trip_idx}:${item.run_dep_s}`}
-            trip_idx={item.trip_idx}
-            run_dep_s={item.run_dep_s}
-          />
-        )}
-      </Box>
-    </FloatingPanel>
+        {edit && <ApplyBar edit={edit} />}
+      </FloatingPanel>
+    </DraftEditContext.Provider>
   );
 }

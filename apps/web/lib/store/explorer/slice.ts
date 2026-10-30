@@ -9,6 +9,7 @@ import { type PayloadAction, createSlice } from "@reduxjs/toolkit";
 
 import type { DirectionName } from "@/lib/explorer/derive/directions";
 import { directionsOnShapes } from "@/lib/explorer/directionChoice";
+import { type EditDraft, NO_STOP_VALUES } from "@/lib/explorer/edit/drafts";
 import type { ChangeSummary } from "@/lib/explorer/edit/types";
 import type { ModeKey } from "@/lib/explorer/modes";
 import { setMapMode } from "@/lib/store/map/slice";
@@ -26,6 +27,9 @@ export interface ExplorerFilters {
 export type ExplorerRouteTab = "stops" | "service" | "calendar";
 /** The trip panel's tabs: its stops, or the days it runs. */
 export type ExplorerTripTab = "stops" | "calendar";
+/** The stop panel's tabs: its schedule for the date, the next departures,
+ * and for an editor its properties. */
+export type ExplorerStopTab = "schedule" | "departures" | "properties";
 
 /** The destination picker's choice: all directions, or a direction (by its
  * key, its main pattern's index) whole, or one of its patterns
@@ -83,6 +87,11 @@ export interface ExplorerEdit {
   exit: "asking" | "saving" | null;
   /** Why the last save did not go through, shown in the dialog. */
   saveProblem: string | null;
+  /** The edit being made, not yet applied (lib/explorer/edit/drafts.ts). */
+  draft: EditDraft | null;
+  /** This user edits the open bundle (its session is ready): what the map,
+   * outside the Explorer's data, needs to know to let a stop be dragged. */
+  enabled: boolean;
 }
 
 /** Playback speeds: how many seconds of the day pass in one second. */
@@ -159,6 +168,7 @@ export interface ExplorerState {
   routeTab: ExplorerRouteTab;
   /** Kept as trips are stepped through, each its own panel. */
   tripTab: ExplorerTripTab;
+  stopTab: ExplorerStopTab;
   /** One picker for the trip strip, the Stops tab and the stop timetable
    * (02-panel-behaviour-spec › Direction); null is the first direction. */
   pattern: ExplorerPatternChoice | null;
@@ -220,12 +230,14 @@ const NO_EDITS: ExplorerEdit = {
   listOpen: false,
   exit: null,
   saveProblem: null,
+  draft: null,
+  enabled: false,
 };
 
 /** Editing as a new session starts: nothing changed, Select, the snap as
  * the user left it. */
 function freshEdit(edit: ExplorerEdit): ExplorerEdit {
-  return { ...NO_EDITS, snap: edit.snap };
+  return { ...NO_EDITS, snap: edit.snap, enabled: edit.enabled };
 }
 
 function stickyStrip(strip: ExplorerStrip): ExplorerStrip {
@@ -251,6 +263,7 @@ const initialState: ExplorerState = {
   panel: { stack: [], fromRoute: null },
   routeTab: "service",
   tripTab: "stops",
+  stopTab: "schedule",
   pattern: null,
   strip: {
     collapsed: false,
@@ -328,6 +341,9 @@ const explorerSlice = createSlice({
     setExplorerTripTab: (state, action: PayloadAction<ExplorerTripTab>) => {
       state.tripTab = action.payload;
     },
+    setExplorerStopTab: (state, action: PayloadAction<ExplorerStopTab>) => {
+      state.stopTab = action.payload;
+    },
     setExplorerRouteTab: (state, action: PayloadAction<ExplorerRouteTab>) => {
       state.routeTab = action.payload;
     },
@@ -344,7 +360,10 @@ const explorerSlice = createSlice({
     setExplorerPath: (state, action: PayloadAction<ExplorerPath | null>) => {
       state.path = action.payload;
       state.pathClick = null;
-      if (action.payload) state.panel = { stack: [], fromRoute: null };
+      if (action.payload) {
+        state.panel = { stack: [], fromRoute: null };
+        state.edit.draft = null;
+      }
     },
     /** Esc with Select (board 17): nothing selected. */
     clearExplorerSelection: (state) => {
@@ -352,6 +371,7 @@ const explorerSlice = createSlice({
       state.panel = { stack: [], fromRoute: null };
       state.path = null;
       state.pathClick = null;
+      state.edit.draft = null;
     },
     openExplorerSettings: (state, action: PayloadAction<ExplorerSettingsTab | null>) => {
       state.settingsTab = action.payload;
@@ -416,6 +436,7 @@ const explorerSlice = createSlice({
     ) => {
       const { item, push, step, fromRoute } = action.payload;
       state.path = null;
+      state.edit.draft = null;
       // A trip opened afresh starts on its stops; stepping to the trip before
       // or after keeps the tab.
       if (item.kind === "trip" && !step) state.tripTab = "stops";
@@ -429,10 +450,12 @@ const explorerSlice = createSlice({
     },
     explorerPanelBack: (state) => {
       state.panel.stack = state.panel.stack.slice(0, -1);
+      state.edit.draft = null;
       if (!state.panel.stack.length) state.panel.fromRoute = null;
     },
     closeExplorerPanel: (state) => {
       state.panel.stack = [];
+      state.edit.draft = null;
       state.panel.fromRoute = null;
     },
     setStripCollapsed: (state, action: PayloadAction<boolean>) => {
@@ -449,13 +472,48 @@ const explorerSlice = createSlice({
     setEditTool: (state, action: PayloadAction<ExplorerEditTool>) => {
       state.edit.tool = action.payload;
       state.edit.listOpen = false;
+      state.edit.draft = null;
+    },
+    setEditEnabled: (state, action: PayloadAction<boolean>) => {
+      state.edit.enabled = action.payload;
+    },
+    /** The edit being made, or none: Cancel, or applied. */
+    setEditDraft: (state, action: PayloadAction<EditDraft | null>) => {
+      state.edit.draft = action.payload;
+    },
+    /** A click with the Stop tool (board 18): a new stop there, never
+     * snapped, in the right panel to name; a second click moves it, keeping
+     * what was typed. */
+    placeStop: (state, action: PayloadAction<{ lon: number; lat: number }>) => {
+      const draft = state.edit.draft;
+      state.edit.draft = {
+        kind: "stop-new",
+        ...action.payload,
+        // Its id is drawn by the panel, from the snapshot; kept on a move.
+        stop_id: draft?.kind === "stop-new" ? draft.stop_id : null,
+        values: draft?.kind === "stop-new" ? draft.values : NO_STOP_VALUES,
+      };
+      state.panel = { stack: [], fromRoute: null };
+      state.path = null;
+    },
+    /** A new stop's id, drawn once it was placed; not over one typed. */
+    presetNewStopId: (state, action: PayloadAction<string>) => {
+      const draft = state.edit.draft;
+      if (draft?.kind === "stop-new" && draft.stop_id === null) draft.stop_id = action.payload;
     },
     setEditSnap: (state, action: PayloadAction<boolean>) => {
       state.edit.snap = action.payload;
     },
-    /** A change applied: it joins the list, and what was undone is gone. */
+    /** A change applied: it joins the list, and what was undone and its draft
+     * are gone. */
     editApplied: (state, action: PayloadAction<ChangeSummary>) => {
       state.edit.changes.push(action.payload);
+      state.edit.redo = [];
+      state.edit.draft = null;
+    },
+    /** Saved into the bundle: the changes are its own now, with no undo. */
+    editsSaved: (state) => {
+      state.edit.changes = [];
       state.edit.redo = [];
     },
     editUndone: (state) => {
@@ -516,6 +574,7 @@ export const {
   setStripHeight,
   setExplorerRouteTab,
   setExplorerTripTab,
+  setExplorerStopTab,
   pickExplorerPattern,
   openExplorerSettings,
   setExplorerBounds,
@@ -527,7 +586,12 @@ export const {
   selectExplorerRouteAt,
   setEditTool,
   setEditSnap,
+  setEditDraft,
+  setEditEnabled,
+  placeStop,
+  presetNewStopId,
   editApplied,
+  editsSaved,
   editUndone,
   editRedone,
   setChangeListOpen,
@@ -544,6 +608,12 @@ export const explorerReducer = explorerSlice.reducer;
 /** The item the right panel shows, if any. */
 export function panelItem(state: ExplorerState): ExplorerPanelItem | null {
   return state.panel.stack[state.panel.stack.length - 1] ?? null;
+}
+
+/** Whether the right panel is open: an item in it, or a stop being placed
+ * (its draft fills the panel, board 18). */
+export function rightPanelOpen(state: ExplorerState): boolean {
+  return state.active && (state.panel.stack.length > 0 || state.edit.draft?.kind === "stop-new");
 }
 
 /** The stop the right panel shows, highlighted on the map. */

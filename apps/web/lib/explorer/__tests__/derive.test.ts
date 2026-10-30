@@ -980,9 +980,18 @@ describe("network shapes", () => {
 });
 
 describe("network stops", () => {
-  it("draws every stop vehicles call at, by its station's name, and no others", async () => {
-    const names = (await networkStops(db)).features.map((f) => f.properties.name);
-    expect(names.sort()).toEqual(["Fifth", "Fourth", "Main Station", "Second", "Sixth", "Third"]);
+  it("draws every stop by its station's name, those no route calls at marked", async () => {
+    const stops = (await networkStops(db)).features.map((f) => f.properties);
+    expect(stops.map((p) => p.name).sort()).toEqual([
+      "Fifth",
+      "Fourth",
+      "Main Station",
+      "Second",
+      "Sixth",
+      "Third",
+      "Unused",
+    ]);
+    expect(stops.filter((p) => !p.served).map((p) => p.name)).toEqual(["Unused"]);
   });
 });
 

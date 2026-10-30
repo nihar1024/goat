@@ -48,7 +48,7 @@ const TOOLS: { tool: ExplorerEditTool; mark: ReactNode; key: string; ready: bool
     key: "V",
     ready: true,
   },
-  { tool: "stop", mark: <StopMarker size={11} />, key: "S", ready: false },
+  { tool: "stop", mark: <StopMarker size={11} />, key: "S", ready: true },
   {
     tool: "route",
     mark: <Icon iconName={ICON_NAME.ROUTE} style={{ fontSize: 12 }} htmlColor="inherit" />,

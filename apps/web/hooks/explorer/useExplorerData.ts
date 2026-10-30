@@ -31,6 +31,7 @@ import {
 import { places } from "@/lib/explorer/derive/stops";
 import { stopsLine } from "@/lib/explorer/derive/stopsLine";
 import { tripDetail } from "@/lib/explorer/derive/trip";
+import { stopRecord } from "@/lib/explorer/edit/ops/stops";
 import { type ExplorerSettings, type Period, type Rate, rateFor, settingsKey } from "@/lib/explorer/settings";
 import type { ExplorerRouteDrawing } from "@/lib/store/explorer/slice";
 
@@ -367,5 +368,43 @@ export function useRouteDayRuns(db: SqlRunner | undefined, date: string | null) 
 export function useRouteTrips(db: SqlRunner | undefined, route: RouteRow | undefined, date: string | null) {
   return useQuery(route && date ? db : undefined, `route-trips:${route?.route_idx}:${date}`, (d) =>
     routeTrips(d, route as RouteRow, date as string)
+  );
+}
+
+/** A stop's own details as the snapshot holds them, for the Details tab. */
+export function useStopRecord(db: SqlRunner | undefined, stop_idx: number) {
+  return useQuery(db, `stop-record:${stop_idx}`, (d) => stopRecord(d, stop_idx));
+}
+
+/** A location as a parent to pick, or as one of a station's own. */
+export interface LocationRow {
+  stop_idx: number;
+  stop_id: string;
+  name: string;
+  location_type: number;
+  platform_code: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+const LOCATION_COLUMNS = `stop_idx, stop_id, COALESCE(name, stop_id) AS name,
+  CAST(COALESCE(location_type, 0) AS INTEGER) AS location_type, platform_code, lat, lon`;
+
+/** Every location of one type: the stations a stop may belong to. */
+export function useLocationsOfType(db: SqlRunner | undefined, location_type: number) {
+  return useQuery(db, `locations-of-type:${location_type}`, (d) =>
+    d.all<LocationRow>(
+      `SELECT ${LOCATION_COLUMNS} FROM stops WHERE COALESCE(location_type, 0) = ${Number(location_type)} ORDER BY name`
+    )
+  );
+}
+
+/** What belongs to a station: its stops and platforms, then its entrances. */
+export function useChildLocations(db: SqlRunner | undefined, stop_idx: number) {
+  return useQuery(db, `child-locations:${stop_idx}`, (d) =>
+    d.all<LocationRow>(
+      `SELECT ${LOCATION_COLUMNS} FROM stops WHERE parent_idx = ${Number(stop_idx)}
+       ORDER BY location_type, platform_code NULLS LAST, name, stop_idx`
+    )
   );
 }

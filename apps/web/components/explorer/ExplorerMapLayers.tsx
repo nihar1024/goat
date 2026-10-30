@@ -37,6 +37,7 @@ import {
   panelItem,
   pickExplorerPattern,
   pickedStop,
+  rightPanelOpen,
   selectExplorerRoute,
   selectExplorerRouteAt,
   setExplorerPath,
@@ -49,6 +50,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { EXPLORER_PANEL_WIDTH } from "@/components/explorer/ExplorerLeftPanel";
 import { RouteBadge } from "@/components/explorer/RouteBadge";
 import { directionLabel } from "@/components/explorer/directionWords";
+import { EDIT_DRAW_ORDER, ExplorerEditLayers } from "@/components/explorer/edit/ExplorerEditLayers";
 import { EXPLORER_RIGHT_PANEL_WIDTH } from "@/components/explorer/right/panelSize";
 import { bottomBarHeight } from "@/components/explorer/strip/stripLayout";
 import { VEHICLE_LAYER_ID, VehicleLayer } from "@/components/explorer/vehicleLayer";
@@ -168,12 +170,19 @@ const DRAW_ORDER = [
   "explorer-station-edge",
   "explorer-picked-station-area",
   "explorer-network-line",
+  "explorer-network-line-redrawn",
   "explorer-network-faded",
+  "explorer-network-faded-redrawn",
   "explorer-stop-dot",
+  "explorer-place-dot",
   "explorer-route-casing",
+  "explorer-route-casing-redrawn",
   "explorer-route-line",
+  "explorer-route-line-redrawn",
   "explorer-pattern-casing",
+  "explorer-pattern-casing-redrawn",
   "explorer-pattern-line",
+  "explorer-pattern-line-redrawn",
   "explorer-pattern-section-casing",
   "explorer-pattern-section-line",
   "explorer-pattern-section-arrows",
@@ -186,7 +195,11 @@ const DRAW_ORDER = [
   "explorer-picked-stop-halo",
   "explorer-picked-stop-dot",
   "explorer-route-ends",
+  ...EDIT_DRAW_ORDER,
 ];
+
+/** The ids of a line layer's copy over the paths an edit redrew. */
+const REDRAWN = "-redrawn";
 
 /** The line chooser's class, and its look: the panels' card. */
 const LINE_CHOICE = "explorer-line-choice";
@@ -202,10 +215,15 @@ const LINE_CHOICE_SX = {
 
 /** What a click opens, first found first: a vehicle, a stop, a line under
  * the pointer, the station it is in, a line near it. */
-const STOP_LAYERS = ["explorer-route-stop", "explorer-stop-dot"];
-const LINE_LAYERS = ["explorer-network-line", "explorer-network-faded"];
+const STOP_LAYERS = ["explorer-route-stop", "explorer-stop-dot", "explorer-place-dot"];
+const LINE_LAYERS = [
+  "explorer-network-line",
+  "explorer-network-faded",
+  "explorer-network-line-redrawn",
+  "explorer-network-faded-redrawn",
+];
 /** The selected line's own shapes: a click there picks one of its directions. */
-const ROUTE_LINE_LAYERS = ["explorer-route-line"];
+const ROUTE_LINE_LAYERS = ["explorer-route-line", "explorer-route-line-redrawn"];
 const STATION_LAYERS = ["explorer-station-area"];
 
 /** How far (px) from the pointer a feature is looked for, nearest first. */
@@ -224,7 +242,7 @@ export function ExplorerMapLayers() {
     const item = s.explorer.active ? panelItem(s.explorer) : null;
     return item?.kind === "trip" ? item : null;
   });
-  const panelOpen = useAppSelector((s) => s.explorer.active && s.explorer.panel.stack.length > 0);
+  const panelOpen = useAppSelector((s) => rightPanelOpen(s.explorer));
   const selectedRouteId = useAppSelector((s) => (s.explorer.active ? s.explorer.selectedRouteId : null));
   const filters = useAppSelector((s) => s.explorer.filters);
   const playing = useAppSelector((s) => s.explorer.playing);
@@ -278,6 +296,10 @@ export function ExplorerMapLayers() {
   drawingNow.current = drawing;
   const patternNow = useRef(pattern);
   patternNow.current = pattern;
+  // A tool other than Select owns the map's clicks (ExplorerEditLayers).
+  const tool = useAppSelector((s) => s.explorer.edit.tool);
+  const toolNow = useRef(tool);
+  toolNow.current = tool;
   // What is selected below a direction (a path, the open trip's pattern),
   // drawn over the route for an editor (the selection resolver).
   const selection = useSyncExternalStore(selectionStore.subscribe, selectionStore.getSnapshot, () => null);
@@ -303,7 +325,7 @@ export function ExplorerMapLayers() {
     ];
   }, [selection]);
   // What a click on nothing lets go of, as it is when the click lands.
-  const panelShown = useAppSelector((s) => s.explorer.active && s.explorer.panel.stack.length > 0);
+  const panelShown = useAppSelector((s) => rightPanelOpen(s.explorer));
   const pathSelected = useAppSelector((s) => s.explorer.active && s.explorer.path !== null);
   const open = useRef({ choice: false, path: false, panel: false, route: false });
   open.current = {
@@ -445,6 +467,7 @@ export function ExplorerMapLayers() {
       return null;
     };
     const onClick = (e: MapLayerMouseEvent) => {
+      if (toolNow.current !== "select") return;
       onMap.current = {};
       const vehicle = vehicleAt(e.point);
       if (vehicle) {
@@ -552,6 +575,7 @@ export function ExplorerMapLayers() {
     const all = [...STOP_LAYERS, ...STATION_LAYERS, ...LINE_LAYERS, ...ROUTE_LINE_LAYERS];
     const onMove = (e: MapLayerMouseEvent) => {
       const canvas = map.getCanvas();
+      if (toolNow.current !== "select") return;
       if (canvas.style.cursor === "" && (vehicleAt(e.point) || near(e.point, all).length))
         canvas.style.cursor = "pointer";
     };
@@ -611,22 +635,29 @@ export function ExplorerMapLayers() {
     () => (pickedArea ? { type: "FeatureCollection", features: [pickedArea] } : EMPTY),
     [pickedArea]
   );
-  const pickedPoint = useMemo<FeatureCollection>(
-    () =>
-      !pickedArea && picked && picked.lon !== null && picked.lat !== null
-        ? {
-            type: "FeatureCollection",
-            features: [
-              {
-                type: "Feature",
-                geometry: { type: "Point", coordinates: [picked.lon, picked.lat] },
-                properties: { name: picked.name },
-              },
-            ],
-          }
-        : EMPTY,
-    [picked, pickedArea]
-  );
+  // Where the network has it now (an edit may have moved it), else where
+  // it was picked.
+  const pickedPoint = useMemo<FeatureCollection>(() => {
+    if (pickedArea || !picked) return EMPTY;
+    const now = network.stops.features.find((f) => f.properties.stop_idx === picked.stop_idx);
+    const at = now
+      ? now.geometry.coordinates
+      : picked.lon !== null && picked.lat !== null
+        ? [picked.lon, picked.lat]
+        : null;
+    return at
+      ? {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: at },
+              properties: { name: picked.name },
+            },
+          ],
+        }
+      : EMPTY;
+  }, [picked, pickedArea, network.stops]);
 
   // Fly to a picked stop, clear of the panels, close enough to see it
   // (STOP_ZOOM), never out from a closer look; a station is fitted whole.
@@ -810,96 +841,121 @@ export function ExplorerMapLayers() {
   // Every line faded: a route selected, or only stops listed.
   const allFaded = !!selectedRouteId || (filters.types.length === 1 && filters.types[0] === "stops");
 
+  // The network's lines, the selected route over them and its highlighted
+  // patterns: drawn from the tiles, and again from the snapshot for paths
+  // an edit redrew (each kept out of the tiles' layers).
+  const redrawnIds = network.redrawn.features.map((f) => f.properties.shape_id);
+  const notRedrawn: FilterSpecification = ["!", ["in", ["get", "shape_id"], ["literal", redrawnIds]]];
+  const lineLayers = (
+    from: { source: string; "source-layer"?: string },
+    suffix: string,
+    only: (f: FilterSpecification) => FilterSpecification
+  ) => (
+    <>
+      {/* Every line in its route's colour; faded ones grey and thin.
+              With patterns highlighted, the selected route's own lines are
+              left to the route's layers above, faded there for them. */}
+      <Layer
+        id={`explorer-network-line${suffix}`}
+        type="line"
+        {...from}
+        filter={only(highlighting ? ["!", selectedShapes] : all)}
+        // Light to draw: a network's many shapes overlap on every street,
+        // and the map keeps vertices for each in every tile. Plain joins
+        // and caps (round ones add a fan of triangles at every vertex),
+        // and only the colour per shape (each per-shape paint property
+        // keeps an array per vertex): a shape faded by the filter is a
+        // pale colour, at the same width. Round, data-driven lines had
+        // Berlin's heap past 900 MB zoomed in and out (23 Oct 2026).
+        layout={{ visibility: allFaded ? "none" : "visible" }}
+        paint={{
+          "line-color": ["case", faded, palette.filtered, shapeColor] as ExpressionSpecification,
+          "line-opacity": 0.9,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 14, 3.5],
+        }}
+      />
+      {/* The whole network faded, in place of the layer above while a
+              route is selected or only stops are listed: one switch of
+              which layer shows, not a state for every shape. */}
+      <Layer
+        id={`explorer-network-faded${suffix}`}
+        type="line"
+        {...from}
+        filter={only(highlighting ? ["!", selectedShapes] : all)}
+        layout={{ visibility: allFaded ? "visible" : "none" }}
+        paint={{
+          "line-color": palette.faded,
+          "line-opacity": 0.35,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 1.5],
+        }}
+      />
+      {/* The selected route over the rest, on a casing of the map's
+              ground: white on a light basemap, near-black on the dark. */}
+      <Layer
+        id={`explorer-route-casing${suffix}`}
+        type="line"
+        {...from}
+        filter={only(selectedShapes)}
+        layout={{ "line-cap": "round", "line-join": "round" }}
+        paint={{ "line-color": palette.ground, "line-width": 8 }}
+      />
+      <Layer
+        id={`explorer-route-line${suffix}`}
+        type="line"
+        {...from}
+        filter={only(selectedShapes)}
+        layout={{ "line-cap": "round", "line-join": "round" }}
+        // Faded for highlighted patterns by a paler colour, not by
+        // transparency: a route's many shapes lie over each other, and
+        // see-through lines would add up to solid again.
+        paint={{
+          "line-color": highlighting ? tint(color, palette.fadedShare, palette.ground) : color,
+          "line-width": highlighting ? 3.5 : 4.5,
+        }}
+      />
+      <Layer
+        id={`explorer-pattern-casing${suffix}`}
+        type="line"
+        {...from}
+        filter={only(highlighting && !sections ? patternShapes : none)}
+        layout={{ "line-cap": "round", "line-join": "round" }}
+        paint={{ "line-color": palette.ground, "line-width": 10 }}
+      />
+      <Layer
+        id={`explorer-pattern-line${suffix}`}
+        type="line"
+        {...from}
+        filter={only(highlighting && !sections ? patternShapes : none)}
+        layout={{ "line-cap": "round", "line-join": "round" }}
+        paint={{ "line-color": color, "line-width": 6 }}
+      />
+    </>
+  );
+
   return (
     <>
       <GlobalStyles styles={LINE_CHOICE_SX} />
+      {/* The layers beside their sources, not inside: a Source hands its id
+          to what is inside it, fragments too, which take no props. */}
       {network.shapeLinesLayerId && (
-        <Source
-          key={NETWORK}
-          id={NETWORK}
-          type="vector"
-          tiles={networkTiles}
-          promoteId="shape_id"
-          maxzoom={14}>
-          {/* Every line in its route's colour; faded ones grey and thin.
-              With patterns highlighted, the selected route's own lines are
-              left to the route's layers above, faded there for them. */}
-          <Layer
-            id="explorer-network-line"
-            type="line"
-            source-layer={TILE_LAYER}
-            filter={highlighting ? ["!", selectedShapes] : all}
-            // Light to draw: a network's many shapes overlap on every street,
-            // and the map keeps vertices for each in every tile. Plain joins
-            // and caps (round ones add a fan of triangles at every vertex),
-            // and only the colour per shape (each per-shape paint property
-            // keeps an array per vertex): a shape faded by the filter is a
-            // pale colour, at the same width. Round, data-driven lines had
-            // Berlin's heap past 900 MB zoomed in and out (23 Oct 2026).
-            layout={{ visibility: allFaded ? "none" : "visible" }}
-            paint={{
-              "line-color": ["case", faded, palette.filtered, shapeColor] as ExpressionSpecification,
-              "line-opacity": 0.9,
-              "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 14, 3.5],
-            }}
+        <>
+          <Source
+            key={NETWORK}
+            id={NETWORK}
+            type="vector"
+            tiles={networkTiles}
+            promoteId="shape_id"
+            maxzoom={14}
           />
-          {/* The whole network faded, in place of the layer above while a
-              route is selected or only stops are listed: one switch of
-              which layer shows, not a state for every shape. */}
-          <Layer
-            id="explorer-network-faded"
-            type="line"
-            source-layer={TILE_LAYER}
-            filter={highlighting ? ["!", selectedShapes] : all}
-            layout={{ visibility: allFaded ? "visible" : "none" }}
-            paint={{
-              "line-color": palette.faded,
-              "line-opacity": 0.35,
-              "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 1.5],
-            }}
-          />
-          {/* The selected route over the rest, on a casing of the map's
-              ground: white on a light basemap, near-black on the dark. */}
-          <Layer
-            id="explorer-route-casing"
-            type="line"
-            source-layer={TILE_LAYER}
-            filter={selectedShapes}
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{ "line-color": palette.ground, "line-width": 8 }}
-          />
-          <Layer
-            id="explorer-route-line"
-            type="line"
-            source-layer={TILE_LAYER}
-            filter={selectedShapes}
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            // Faded for highlighted patterns by a paler colour, not by
-            // transparency: a route's many shapes lie over each other, and
-            // see-through lines would add up to solid again.
-            paint={{
-              "line-color": highlighting ? tint(color, palette.fadedShare, palette.ground) : color,
-              "line-width": highlighting ? 3.5 : 4.5,
-            }}
-          />
-          <Layer
-            id="explorer-pattern-casing"
-            type="line"
-            source-layer={TILE_LAYER}
-            filter={highlighting && !sections ? patternShapes : none}
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{ "line-color": palette.ground, "line-width": 10 }}
-          />
-          <Layer
-            id="explorer-pattern-line"
-            type="line"
-            source-layer={TILE_LAYER}
-            filter={highlighting && !sections ? patternShapes : none}
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{ "line-color": color, "line-width": 6 }}
-          />
-        </Source>
+          {lineLayers({ source: NETWORK, "source-layer": TILE_LAYER }, "", (f) =>
+            redrawnIds.length ? (["all", f, notRedrawn] as FilterSpecification) : f
+          )}
+        </>
       )}
+      {/* Paths an edit redrew, from the snapshot, in place of their tiles
+          (which show the bundle as saved) until a save redraws those. */}
+      <Source key="explorer-redrawn" id="explorer-redrawn" type="geojson" data={network.redrawn} />
+      {lineLayers({ source: "explorer-redrawn" }, REDRAWN, (f) => f)}
       {/* The highlighted patterns' own stretch of line, over the faded route. */}
       <Source
         key="explorer-pattern-sections"
@@ -989,17 +1045,49 @@ export function ExplorerMapLayers() {
         />
       </Source>
       {/* The network's stops from street level, to click for a timetable:
-          a grey dot in a ring of the map's ground (StopMarker's, on white). */}
+          a grey dot in a ring of the map's ground (StopMarker's, on white);
+          a stop no line calls at hollow, the colours the other way round. */}
       <Source key="explorer-stops" id="explorer-stops" type="geojson" data={network.stops}>
         <Layer
           id="explorer-stop-dot"
           type="circle"
           minzoom={13}
+          filter={["==", ["get", "kind"], "stop"]}
           paint={{
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2, 16, 4],
-            "circle-color": palette.stop,
-            "circle-stroke-color": palette.stopRing,
+            "circle-color": ["case", ["get", "served"], palette.stop, palette.stopRing],
+            "circle-stroke-color": ["case", ["get", "served"], palette.stopRing, palette.stop],
             "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 13, 1, 16, 2],
+            "circle-opacity": selectedRouteId ? 0.6 : 1,
+            "circle-stroke-opacity": selectedRouteId ? 0.6 : 1,
+          }}
+        />
+        {/* A station with no area yet, as a ring wider than a stop's; an
+            entrance, a small dot of the stops' grey, from closer in. */}
+        <Layer
+          id="explorer-place-dot"
+          type="circle"
+          minzoom={14}
+          filter={["!=", ["get", "kind"], "stop"]}
+          paint={{
+            // Zoom outermost, as MapLibre wants it; the kind at each stop.
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              14,
+              ["case", ["==", ["get", "kind"], "station"], 4, 1.5],
+              16,
+              ["case", ["==", ["get", "kind"], "station"], 7, 3],
+            ],
+            "circle-color": ["case", ["==", ["get", "kind"], "station"], palette.stopRing, palette.stop],
+            "circle-stroke-color": [
+              "case",
+              ["==", ["get", "kind"], "station"],
+              palette.stop,
+              palette.stopRing,
+            ],
+            "circle-stroke-width": ["case", ["==", ["get", "kind"], "station"], 2.5, 1],
             "circle-opacity": selectedRouteId ? 0.6 : 1,
             "circle-stroke-opacity": selectedRouteId ? 0.6 : 1,
           }}
@@ -1159,6 +1247,7 @@ export function ExplorerMapLayers() {
           </Box>
         </Popup>
       )}
+      <ExplorerEditLayers />
     </>
   );
 }

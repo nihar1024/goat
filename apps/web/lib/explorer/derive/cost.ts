@@ -120,8 +120,19 @@ export function annualFigures(
 
 /** The whole network's figures for a year, each operator's route types at
  * their rate. */
-export async function networkAnnualFigures(
+export function networkAnnualFigures(
   db: SqlRunner,
+  window: [string, string],
+  rateFor: (agencyId: string | null, routeType: number | null) => Rate = (_a, type) => defaultRate(type)
+): Promise<AnnualFigures> {
+  return tripsAnnualFigures(db, "true", window, rateFor);
+}
+
+/** The figures for a year of the trips `where` selects (SQL over `trips`),
+ * each operator's route types at their rate: what an edit to them changes. */
+export async function tripsAnnualFigures(
+  db: SqlRunner,
+  where: string,
   window: [string, string],
   rateFor: (agencyId: string | null, routeType: number | null) => Rate = (_a, type) => defaultRate(type)
 ): Promise<AnnualFigures> {
@@ -133,13 +144,14 @@ export async function networkAnnualFigures(
     route_type: number | null;
   }>(`
     SELECT DISTINCT r.agency_idx, a.agency_id, r.route_type
-    FROM routes r LEFT JOIN agencies a USING (agency_idx)`);
+    FROM routes r LEFT JOIN agencies a USING (agency_idx)
+    WHERE r.route_idx IN (SELECT route_idx FROM trips WHERE ${where})`);
   const total: AnnualFigures = { vehicle_km: 0, vehicle_hours: 0, cost: 0, window_days: 0 };
   const is = (col: string, v: number | null) => (v === null ? `${col} IS NULL` : `${col} = ${v}`);
   for (const g of groups) {
-    const where = `route_idx IN (SELECT route_idx FROM routes WHERE ${is("agency_idx", g.agency_idx)}
+    const group = `route_idx IN (SELECT route_idx FROM routes WHERE ${is("agency_idx", g.agency_idx)}
                    AND ${is("route_type", g.route_type)})`;
-    const f = await annualFor(db, where, year, rateFor(g.agency_id, g.route_type), days);
+    const f = await annualFor(db, `(${where}) AND ${group}`, year, rateFor(g.agency_id, g.route_type), days);
     total.vehicle_km += f.vehicle_km;
     total.vehicle_hours += f.vehicle_hours;
     total.cost += f.cost;

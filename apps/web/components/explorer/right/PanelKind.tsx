@@ -5,7 +5,7 @@
 import { Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
-export type PanelKindName = "station" | "platform" | "stop" | "trip";
+export type PanelKindName = "station" | "platform" | "stop" | "entrance" | "trip";
 
 export function PanelKind({ kind }: { kind: PanelKindName }) {
   const { t } = useTranslation("common");

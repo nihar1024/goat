@@ -21,6 +21,9 @@ export function StopMarker({ station = false, size = 12 }: { station?: boolean; 
         justifyContent: "center",
         width: d,
         height: d,
+        // Its ring inside its size, wherever it is put (a select's value
+        // passes content-box down).
+        boxSizing: "border-box",
         flexShrink: 0,
         borderRadius: "50%",
         bgcolor: STOP_FILL,

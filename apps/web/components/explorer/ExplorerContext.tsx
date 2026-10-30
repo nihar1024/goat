@@ -8,10 +8,17 @@ import type { ReactNode } from "react";
 import { useBundleLayers } from "@/lib/api/bundles";
 import type { SqlRunner } from "@/lib/explorer/db/types";
 import { type EditSession, sessionOf } from "@/lib/explorer/edit/session";
-import { networkShapes, networkStations, networkStops, networkStore } from "@/lib/explorer/network";
+import {
+  networkShapes,
+  networkStations,
+  networkStops,
+  networkStore,
+  redrawnLines,
+} from "@/lib/explorer/network";
 import { DEFAULT_SETTINGS, type ExplorerSettings, loadSettings, saveSettings } from "@/lib/explorer/settings";
 import { setExplorerBounds, setExplorerDate } from "@/lib/store/explorer/slice";
 
+import { useEdition } from "@/hooks/explorer/useEdition";
 import { type ExplorerDbState, FIRST_TABLES, hasTables, useExplorerDb } from "@/hooks/explorer/useExplorerDb";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -37,8 +44,11 @@ interface ExplorerData {
   setSettings: (next: ExplorerSettings) => boolean;
   /** Whether this user may save edits to the bundle: the edit bar shows then. */
   canEdit: boolean;
-  /** The bundle revision the snapshot is of: a save starts from it. */
+  /** The bundle revision the snapshot is of, or the last save's: the next
+   * save starts from it. */
   revision: number | null;
+  /** A save went through: the bundle is at `revision` now. */
+  setRevision: (revision: number) => void;
   /** The editing session, once the whole snapshot is in, for an editor. */
   session: EditSession | null;
 }
@@ -69,6 +79,10 @@ export function ExplorerProvider({ bundleId, children }: { bundleId: string; chi
   const { members } = useBundleLayers(bundleId);
 
   const manifest = state.status === "loading" || state.status === "ready" ? state.manifest : undefined;
+  // A save moves the bundle on without a new snapshot: the edits are in this
+  // one already. Forgotten with the snapshot it was saved from.
+  const [saved, setSaved] = useState<{ manifest: unknown; revision: number } | null>(null);
+  const setRevision = useCallback((revision: number) => setSaved({ manifest, revision }), [manifest]);
   const window = useMemo<[string, string] | null>(() => {
     const [first, last] = manifest?.service_window ?? [null, null];
     return first && last ? [first, last] : null;
@@ -121,16 +135,20 @@ export function ExplorerProvider({ bundleId, children }: { bundleId: string; chi
     state.status === "ready" || (state.status === "loading" && hasTables(state, tables));
   const shapesIn = has(["shapes_meta", "shape_route", "routes"]);
   const stopsIn = has(["stops", "patterns"]);
+  // An edit, undo or redo may move, add, rename or remove stops, and redraw
+  // or copy paths: drawn anew.
+  const edition = useEdition(firstDb);
   useEffect(() => {
     if (!firstDb || !shapesIn) return;
     let current = true;
-    networkShapes(firstDb)
-      .then((part) => current && networkStore.update(part))
+    const redrawn = sessionOf(firstDb).redrawnShapes;
+    Promise.all([networkShapes(firstDb), redrawnLines(firstDb, redrawn)])
+      .then(([part, lines]) => current && networkStore.update({ ...part, redrawn: lines }))
       .catch(() => undefined);
     return () => {
       current = false;
     };
-  }, [firstDb, shapesIn]);
+  }, [firstDb, shapesIn, edition]);
   useEffect(() => {
     if (!firstDb || !stopsIn) return;
     let current = true;
@@ -140,7 +158,7 @@ export function ExplorerProvider({ bundleId, children }: { bundleId: string; chi
     return () => {
       current = false;
     };
-  }, [firstDb, stopsIn]);
+  }, [firstDb, stopsIn, edition]);
 
   const value = useMemo<ExplorerData>(() => {
     const ready = state.status === "loading" || state.status === "ready";
@@ -161,10 +179,11 @@ export function ExplorerProvider({ bundleId, children }: { bundleId: string; chi
       settings,
       setSettings,
       canEdit: !!manifest?.can_edit,
-      revision: manifest?.layers_revision ?? null,
+      revision: saved && saved.manifest === manifest ? saved.revision : (manifest?.layers_revision ?? null),
+      setRevision,
       session: state.status === "ready" && manifest?.can_edit ? sessionOf(state.db) : null,
     };
-  }, [state, window, retry, manifest, settings, setSettings, shapeLinesLayerId]);
+  }, [state, window, retry, manifest, settings, setSettings, shapeLinesLayerId, saved, setRevision]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

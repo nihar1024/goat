@@ -113,7 +113,7 @@ export function DateChip({ date }: { date: string }) {
   return (
     // A label, not a control: grey text with no ground or edge, so it is not
     // taken for a button (the date is set in the bottom bar).
-    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: "text.secondary", flexShrink: 0 }}>
+    <Stack direction="row" alignItems="center" spacing="6px" sx={{ color: "text.secondary", flexShrink: 0 }}>
       <Icon iconName={ICON_NAME.CALENDAR} style={{ fontSize: 11 }} htmlColor="inherit" />
       <Typography variant="caption" noWrap>
         {shortDate(date, i18n.language)}

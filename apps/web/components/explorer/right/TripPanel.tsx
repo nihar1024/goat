@@ -162,7 +162,8 @@ export function TripPanel({ trip_idx, run_dep_s }: { trip_idx: number; run_dep_s
       <Tabs
         value={tab}
         onChange={(_e, v: ExplorerTripTab) => setTab(v)}
-        sx={{ minHeight: 36, px: PX, flexShrink: 0, borderBottom: 1, borderColor: "divider" }}>
+        // Edge to edge, as the line panel's.
+        sx={{ minHeight: 36, flexShrink: 0, borderBottom: 1, borderColor: "divider" }}>
         <Tab value="stops" label={t("explorer_tab_stops")} sx={TAB_SX} />
         <Tab value="calendar" label={t("explorer_schedule_tab")} sx={TAB_SX} />
       </Tabs>

@@ -1,16 +1,16 @@
 /**
  * The edit bar's keys (board 17), while the Explorer is open for an editor:
- * V for Select, Ctrl/⌘+Z to undo, Ctrl/⌘+Shift+Z or Ctrl+Y to redo; Esc back
- * to Select from another tool, and with Select clears the selection. Never
- * while typing, nor while a dialog, the change list or a handler that used
- * the key (the strip's zoom) has it; the creating tools' letters (S, R, A)
- * come with the tools.
+ * V for Select, S for Stop, Ctrl/⌘+Z to undo, Ctrl/⌘+Shift+Z or Ctrl+Y to
+ * redo; Esc drops the edit being made, else goes back to Select from another
+ * tool, and with Select clears the selection. Never while typing, nor while
+ * a dialog, the change list or a handler that used the key (the strip's
+ * zoom) has it; the other creating tools' letters (R, A) come with them.
  */
 import { useEffect } from "react";
 import { useStore } from "react-redux";
 
 import type { RootState } from "@/lib/store";
-import { clearExplorerSelection, setEditTool } from "@/lib/store/explorer/slice";
+import { clearExplorerSelection, setEditDraft, setEditTool } from "@/lib/store/explorer/slice";
 
 import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
@@ -46,9 +46,13 @@ export function useEditShortcuts(
         void redo();
       } else if (!mod && !e.altKey && key === "v") {
         dispatch(setEditTool("select"));
+      } else if (!mod && !e.altKey && key === "s") {
+        dispatch(setEditTool("stop"));
       } else if (key === "escape") {
-        // Another tool: back to Select. Select: nothing selected (board 17).
-        dispatch(edit.tool === "select" ? clearExplorerSelection() : setEditTool("select"));
+        // The edit being made first; then another tool: back to Select;
+        // Select: nothing selected (board 17).
+        if (edit.draft) dispatch(setEditDraft(null));
+        else dispatch(edit.tool === "select" ? clearExplorerSelection() : setEditTool("select"));
       }
     };
     window.addEventListener("keydown", onKey);

@@ -8,20 +8,20 @@
  * Laid out as the Explorer's panels are: a section header with its count,
  * rows on the same left edge, the panels' surface.
  */
+import LoadingButton from "@mui/lab/LoadingButton";
 import { Box, Button, Popover, Stack, Typography, alpha } from "@mui/material";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import { holdLeave } from "@/lib/explorer/edit/leave";
-import { money } from "@/lib/explorer/format";
-import { closeExplorer, setChangeListOpen } from "@/lib/store/explorer/slice";
+import { setChangeListOpen } from "@/lib/store/explorer/slice";
 
 import { useExplorerSave } from "@/hooks/explorer/useExplorerSave";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { PX } from "@/components/explorer/SectionHeader";
+import { costChange } from "@/components/explorer/edit/costWords";
 
 export function ChangeList({ anchor, undo }: { anchor: HTMLElement | null; undo: () => Promise<void> }) {
   const { t, i18n } = useTranslation("common");
@@ -34,16 +34,17 @@ export function ChangeList({ anchor, undo }: { anchor: HTMLElement | null; undo:
   const newest = [...changes].reverse();
   const costs = changes.filter((c) => c.cost !== undefined);
   const total = costs.reduce((sum, c) => sum + (c.cost ?? 0), 0);
-  const cost = (value: number) =>
-    `≈ ${value > 0 ? "+" : value < 0 ? "−" : "±"}${money(Math.abs(value), i18n.language, settings.currency)} ${t("explorer_a_year_short")}`;
+  const cost = (value: number) => costChange(value, i18n.language, settings.currency, t);
 
   return (
     <Popover
       open={open && !!anchor}
       anchorEl={anchor}
       onClose={() => dispatch(setChangeListOpen(false))}
-      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      transformOrigin={{ vertical: "top", horizontal: "right" }}
+      // By the count's left edge, which stays put: its right edge moves with
+      // its words ("1 edit", "No edits"), and the list would move with it.
+      anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      transformOrigin={{ vertical: "top", horizontal: "left" }}
       slotProps={{
         paper: {
           // The Explorer's floating surface (FloatingPanel).
@@ -106,11 +107,25 @@ export function ChangeList({ anchor, undo }: { anchor: HTMLElement | null; undo:
                 </Typography>
               </Box>
               {i === 0 && (
+                // Quiet, as the row's own words: an aside to the edit, not an
+                // action to compete with Save.
                 <Button
                   size="small"
+                  variant="text"
+                  color="inherit"
                   onClick={() => void undo()}
-                  startIcon={<Icon iconName={ICON_NAME.UNDO} style={{ fontSize: 11 }} htmlColor="inherit" />}
-                  sx={{ flexShrink: 0, fontWeight: 700, textTransform: "none" }}>
+                  startIcon={<Icon iconName={ICON_NAME.UNDO} style={{ fontSize: 10 }} htmlColor="inherit" />}
+                  sx={{
+                    flexShrink: 0,
+                    borderRadius: "16px",
+                    px: 1,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textTransform: "none",
+                    color: "text.secondary",
+                    "& .MuiButton-startIcon": { mr: 0.75 },
+                    "&:hover": { color: "text.primary" },
+                  }}>
                   {t("undo")}
                 </Button>
               )}
@@ -127,20 +142,19 @@ export function ChangeList({ anchor, undo }: { anchor: HTMLElement | null; undo:
         <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 0 }} noWrap>
           {costs.length > 0 && cost(total)}
         </Typography>
-        {/* As the bottom bar's Save and exit. */}
-        <Button
+        {/* Saves and stays: the saving shown on the button, the list open
+            until it is done (and then empty). */}
+        <LoadingButton
           variant="contained"
           size="small"
-          disabled={!changes.length || saving}
-          onClick={() => {
-            dispatch(setChangeListOpen(false));
-            holdLeave(() => dispatch(closeExplorer()));
-            void save();
-          }}
+          loading={saving}
+          loadingPosition="start"
+          disabled={!changes.length}
+          onClick={() => void save()}
           startIcon={<Icon iconName={ICON_NAME.SAVE} style={{ fontSize: 12 }} htmlColor="inherit" />}
           sx={{ borderRadius: "16px", px: 1.5, fontWeight: 700, textTransform: "none", flexShrink: 0 }}>
           {t("explorer_save_edits")}
-        </Button>
+        </LoadingButton>
       </Stack>
     </Popover>
   );

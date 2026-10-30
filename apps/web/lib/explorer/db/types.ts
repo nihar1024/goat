@@ -15,6 +15,9 @@ export interface SqlRunner {
   columns<K extends string>(sql: string): Promise<Record<K, ArrayLike<number>>>;
   /** A statement whose result is not needed. */
   exec(sql: string): Promise<void>;
+  /** A second connection to the same tables: what it does inside a
+   * transaction no other query sees (an edit's preview, rolled back). */
+  fork?(): Promise<SqlRunner & { close(): Promise<void> }>;
 }
 
 /** One snapshot file, as the manifest lists it. */

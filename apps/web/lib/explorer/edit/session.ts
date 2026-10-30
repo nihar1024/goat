@@ -23,6 +23,7 @@ interface Applied {
   summary: ChangeSummary;
   touches: Touch[];
   gtfs: GtfsRowOp[];
+  shapes: number[];
   /** Temp tables holding each touch's rows before and after. */
   before: string[];
   after: string[];
@@ -85,6 +86,28 @@ export class EditSession {
     return this.serial(() => this.redoNow());
   }
 
+  /** What `measure` finds before and after `sql`, without applying it: run
+   * on a second connection in a transaction that is rolled back, so no
+   * other query sees the change. Null where the database cannot fork. */
+  preview<T>(sql: string[], measure: (db: SqlRunner) => Promise<T>): Promise<{ before: T; after: T } | null> {
+    return this.serial(async () => {
+      const fork = this.db.fork ? await this.db.fork() : null;
+      if (!fork) return null;
+      try {
+        const before = await measure(fork);
+        await fork.exec("BEGIN TRANSACTION");
+        try {
+          for (const statement of sql) await fork.exec(statement);
+          return { before, after: await measure(fork) };
+        } finally {
+          await fork.exec("ROLLBACK");
+        }
+      } finally {
+        await fork.close();
+      }
+    });
+  }
+
   /** Forget every change and its copies, after a save or a discard. */
   clear(): Promise<void> {
     return this.serial(() => this.clearNow());
@@ -115,7 +138,14 @@ export class EditSession {
       cost: change.cost,
     };
     await this.drop(this.undone.splice(0));
-    this.applied.push({ summary, touches: change.touches, gtfs: change.gtfs, before, after });
+    this.applied.push({
+      summary,
+      touches: change.touches,
+      gtfs: change.gtfs,
+      shapes: change.shapes ?? [],
+      before,
+      after,
+    });
     this.changed();
     return summary;
   }
@@ -136,6 +166,12 @@ export class EditSession {
     this.applied.push(this.undone.pop() as Applied);
     this.changed();
     return next.summary;
+  }
+
+  /** The paths the applied changes redrew (shape_idx): drawn from the
+   * snapshot, as the bundle's lines are as they were until a save. */
+  get redrawnShapes(): number[] {
+    return [...new Set(this.applied.flatMap((a) => a.shapes))];
   }
 
   /** Every applied change as bundle rows, in the order they were made. */

@@ -1,6 +1,6 @@
 /**
  * Leaving the Explorer with changes (02-panel-behaviour-spec › Exit
- * Explorer): "Save edits to <bundle>?", with what changed per table and the
+ * Explorer): "Save edits to <bundle>?", with how many edits there are and the
  * reminder that saving updates the bundle for everyone in the project. It
  * asks when the Explorer is left another way with changes, and comes back,
  * saying why, when a Save and exit does not go through.
@@ -8,7 +8,8 @@
  * outside) stays; Save and exit writes them into the bundle and goes on with
  * whatever was leaving — closing the Explorer, another bundle's, another view.
  */
-import { Alert, Box, Button, Stack, Typography } from "@mui/material";
+import { Alert, Button, Stack, Typography } from "@mui/material";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
@@ -20,22 +21,23 @@ import { useExplorerSave } from "@/hooks/explorer/useExplorerSave";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import AppDialog, { AppDialogFooter } from "@/components/common/AppDialog";
-import { useExplorer } from "@/components/explorer/ExplorerContext";
 
 export function ExitDialog() {
   const { t } = useTranslation("common");
   const dispatch = useAppDispatch();
-  const { session } = useExplorer();
   const { save, discard } = useExplorerSave();
   const exit = useAppSelector((s) => s.explorer.edit.exit);
   const problem = useAppSelector((s) => s.explorer.edit.saveProblem);
   const changes = useAppSelector((s) => s.explorer.edit.changes);
   const name = useAppSelector((s) => s.explorer.bundleName) ?? "";
   const saving = exit === "saving";
-
-  // Rows per table, as the save will write them.
-  const perTable = new Map<string, number>();
-  for (const op of session?.changeset() ?? []) perTable.set(op.role, (perTable.get(op.role) ?? 0) + 1);
+  // Open only when it asks: leaving with edits, or a save that failed. A
+  // save started elsewhere (Save and exit in the bar, Save in the edits
+  // list) shows its progress on its own button; one started here, here.
+  const [asked, setAsked] = useState(false);
+  if (exit === "asking" && !asked) setAsked(true);
+  if (exit === null && asked) setAsked(false);
+  const open = exit === "asking" || (saving && asked);
 
   const keepEditing = () => {
     if (saving) return;
@@ -45,7 +47,7 @@ export function ExitDialog() {
 
   return (
     <AppDialog
-      open={exit !== null}
+      open={open}
       onClose={keepEditing}
       icon={ICON_NAME.SAVE}
       title={t("explorer_exit_title", { name })}
@@ -69,23 +71,9 @@ export function ExitDialog() {
         />
       }>
       <Stack spacing={2}>
-        <Typography variant="body2">
-          {t("explorer_exit_body", { count: changes.length })}
-          {perTable.size > 0 &&
-            ` · ${[...perTable].map(([role, n]) => `${t(`explorer_table_${role}`)} ${n}`).join(" · ")}`}
-        </Typography>
-        <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-          {changes.map((c) => (
-            <Typography key={c.id} component="li" variant="body2">
-              {c.label}
-              {c.impact && (
-                <Typography component="span" variant="body2" color="text.secondary">
-                  {` · ${c.impact}`}
-                </Typography>
-              )}
-            </Typography>
-          ))}
-        </Box>
+        {/* A count, not the edits themselves: a session's list can run
+            long, and the edits list under the bar holds it. */}
+        <Typography variant="body2">{t("explorer_exit_body", { count: changes.length })}</Typography>
         <Typography variant="body2" color="text.secondary">
           {t("explorer_exit_everyone")}
         </Typography>

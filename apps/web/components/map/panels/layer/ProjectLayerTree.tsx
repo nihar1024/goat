@@ -492,9 +492,10 @@ const filterMenuForViewMode = (
   return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
 };
 
-// Catalogue layers cannot be renamed, duplicated, or have features edited
+// Catalogue layers cannot be duplicated or have features edited. Renaming is allowed: it only
+// changes the project layer's name, never the shared catalog dataset.
 const filterMenuForCatalogLayer = (menuOptions: PopperMenuItem[]): PopperMenuItem[] => {
-  const excludedActions = [MapLayerActions.RENAME, MapLayerActions.DUPLICATE, MapLayerActions.EDIT_FEATURES];
+  const excludedActions = [MapLayerActions.DUPLICATE, MapLayerActions.EDIT_FEATURES];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return menuOptions.filter((option) => !excludedActions.includes(option.id as any));
 };
@@ -1054,7 +1055,7 @@ export const ProjectLayerTree = ({
         menuOptions = filterMenuForViewMode(menuOptions, allowedActions);
       }
 
-      // Catalogue layers cannot be renamed, duplicated, or have features edited
+      // Catalogue layers cannot be duplicated or have features edited
       if (node.is_catalog) {
         menuOptions = filterMenuForCatalogLayer(menuOptions);
       }

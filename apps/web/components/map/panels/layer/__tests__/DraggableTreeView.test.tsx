@@ -13,7 +13,14 @@ globalThis.ResizeObserver ??= class {
 } as unknown as typeof ResizeObserver;
 
 const items = (groupContent?: React.ReactNode) => [
-  { id: "group-7", parentId: null, label: "Versiegelung", isGroup: true, collapsed: false, legendContent: groupContent },
+  {
+    id: "group-7",
+    parentId: null,
+    label: "Versiegelung",
+    isGroup: true,
+    collapsed: false,
+    legendContent: groupContent,
+  },
   { id: "layer-1", parentId: "group-7", label: "2015" },
   { id: "layer-2", parentId: "group-7", label: "2018" },
 ];

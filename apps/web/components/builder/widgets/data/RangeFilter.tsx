@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
-import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
 import { useProjectLayerHistogramStats } from "@/lib/api/projects";
+import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
 import { formatNumber } from "@/lib/utils/format-number";
 import type { HistogramStatsQueryParams } from "@/lib/validations/project";
 

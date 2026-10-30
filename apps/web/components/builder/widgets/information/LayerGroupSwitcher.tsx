@@ -1,22 +1,33 @@
 import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import { Box, Chip, IconButton, MenuItem, Select, Slider, Stack, Tooltip, Typography, useTheme } from "@mui/material";
+import {
+  Box,
+  Chip,
+  IconButton,
+  MenuItem,
+  Select,
+  Slider,
+  Stack,
+  Tooltip,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SYSTEM_LAYERS_IDS } from "@/lib/constants";
+import { emitInteractionEvent } from "@/lib/store/interaction/slice";
 import { rgbToHex } from "@/lib/utils/helpers";
 import { getLegendColorMap, getLegendMarkerMap, resolveFeatureMarker } from "@/lib/utils/map/legend";
-import { emitInteractionEvent } from "@/lib/store/interaction/slice";
 import type { ProjectLayer, ProjectLayerTreeUpdate } from "@/lib/validations/project";
 import type { GroupSwitcherType } from "@/lib/validations/widget";
 
 import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
 import { selectableChipSx } from "@/components/builder/widgets/common/selectableChipSx";
+import { useWidgetLayerTree } from "@/components/builder/widgets/information/useWidgetLayerTree";
 import { LayerIcon } from "@/components/map/panels/layer/legend/LayerIcon";
 import { LayerLegendPanel } from "@/components/map/panels/layer/legend/LayerLegend";
-import { useWidgetLayerTree } from "@/components/builder/widgets/information/useWidgetLayerTree";
 
 /** How long each layer stays on the map while playing. */
 export const PLAY_INTERVAL_MS = 1500;
@@ -24,7 +35,11 @@ export const PLAY_INTERVAL_MS = 1500;
 const isVisible = (layer: ProjectLayer) => layer.properties?.visibility ?? true;
 
 const toCssColor = (value: unknown) =>
-  Array.isArray(value) ? (value.length >= 3 ? rgbToHex(value as [number, number, number]) : undefined) : (value as string | undefined);
+  Array.isArray(value)
+    ? value.length >= 3
+      ? rgbToHex(value as [number, number, number])
+      : undefined
+    : (value as string | undefined);
 
 /** The legend of the layer on the map, so the layer tree can leave the switched layers out. */
 const ActiveLayerLegend = ({
@@ -43,8 +58,8 @@ const ActiveLayerLegend = ({
   const hasBreakdown =
     !simple &&
     (getLegendColorMap(props, "color").length > 1 ||
-    getLegendColorMap(props, "stroke_color").length > 1 ||
-    getLegendMarkerMap(props).length > 1);
+      getLegendColorMap(props, "stroke_color").length > 1 ||
+      getLegendMarkerMap(props).length > 1);
   const marker = resolveFeatureMarker(props);
   return (
     <Box sx={{ pt: 1, pl: 0.5 }}>
@@ -122,10 +137,15 @@ export const LayerGroupSwitcher = ({
   // The first visible layer counts as the current one; none visible means none picked yet
   const active = groupLayers.find(isVisible);
 
+  // In the editor, play steps and slider drags are only shown, not saved; this marks that the
+  // layer on the map has not been saved yet, so the step that ends them saves it once.
+  const unsaved = useRef(false);
+
   const select = useCallback(
-    async (layerId: number) => {
+    async (layerId: number, persist = true) => {
       const changed = groupLayers.filter((l) => isVisible(l) !== (l.id === layerId));
-      if (changed.length === 0) return;
+      if (changed.length === 0 && !(persist && unsaved.current)) return;
+      unsaved.current = !persist && !viewOnly;
       const payload: ProjectLayerTreeUpdate = {
         items: groupLayers.map((layer, index) => ({
           id: layer.id,
@@ -140,9 +160,9 @@ export const LayerGroupSwitcher = ({
           emitInteractionEvent({ type: "visibility_changed", sourceId: l.id, value: l.id === layerId })
         )
       );
-      await updateTree(payload);
+      await updateTree(payload, { persist });
     },
-    [groupLayers, dispatch, updateTree]
+    [groupLayers, viewOnly, dispatch, updateTree]
   );
 
   // Viewers see exactly one layer at a time, even if the project was saved with none or several
@@ -161,17 +181,23 @@ export const LayerGroupSwitcher = ({
   useEffect(() => {
     if (!playing || !showPlay || groupLayers.length < 2) return;
     const timer = setTimeout(() => {
-      select(groupLayers[(activeIndex + 1) % groupLayers.length].id);
+      select(groupLayers[(activeIndex + 1) % groupLayers.length].id, false);
     }, PLAY_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [playing, showPlay, activeIndex, groupLayers, select]);
-  useEffect(() => {
-    if (!showPlay) setPlaying(false);
-  }, [showPlay]);
 
-  const pick = (layerId: number) => {
+  // Stopping saves the layer playing has left on the map
+  const stopPlaying = useCallback(() => {
     setPlaying(false);
-    select(layerId);
+    if (unsaved.current && active) select(active.id);
+  }, [active, select]);
+  useEffect(() => {
+    if (!showPlay && playing) stopPlaying();
+  }, [showPlay, playing, stopPlaying]);
+
+  const pick = (layerId: number, persist = true) => {
+    setPlaying(false);
+    select(layerId, persist);
   };
 
   if (groupLayers.length === 0) return null;
@@ -186,7 +212,7 @@ export const LayerGroupSwitcher = ({
         color="primary"
         aria-label={t(playing ? "pause" : "play")}
         aria-pressed={playing}
-        onClick={() => setPlaying((p) => !p)}>
+        onClick={() => (playing ? stopPlaying() : setPlaying(true))}>
         {playing ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
       </IconButton>
     </Tooltip>
@@ -195,11 +221,13 @@ export const LayerGroupSwitcher = ({
   const withLegend = (control: ReactNode) => (
     <Box>
       {control}
-      {active && !legendHiddenLayers.includes(active.id) && <ActiveLayerLegend
+      {active && !legendHiddenLayers.includes(active.id) && (
+        <ActiveLayerLegend
           layer={active}
           simple={simpleLegendLayers.includes(active.id)}
           hideHeading={hideLegendHeading ?? true}
-        />}
+        />
+      )}
     </Box>
   );
 
@@ -240,7 +268,9 @@ export const LayerGroupSwitcher = ({
             step={null}
             marks={marks}
             value={Math.max(activeIndex, 0)}
-            onChange={(_, value) => pick(groupLayers[value as number].id)}
+            // Dragging only shows each layer; letting go saves the one picked
+            onChange={(_, value) => pick(groupLayers[value as number].id, false)}
+            onChangeCommitted={(_, value) => pick(groupLayers[value as number].id)}
             getAriaValueText={(value) => groupLayers[value]?.name ?? ""}
             aria-label={groupLabel}
             sx={{
@@ -275,13 +305,7 @@ export const LayerGroupSwitcher = ({
   return withLegend(
     <Stack direction="row" alignItems="center" spacing={1}>
       {playButton}
-      <Stack
-        direction="row"
-        spacing={1}
-        useFlexGap
-        flexWrap="wrap"
-        role="radiogroup"
-        aria-label={groupLabel}>
+      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" role="radiogroup" aria-label={groupLabel}>
         {groupLayers.map((layer) => {
           const selected = layer.id === active?.id;
           return (

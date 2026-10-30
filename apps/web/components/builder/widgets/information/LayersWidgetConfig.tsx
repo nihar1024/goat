@@ -257,9 +257,11 @@ const LayersWidgetConfig = ({ config, onChange }: LayersWidgetConfigProps) => {
                     />
                   </Stack>
                   {/* How the group is shown: a list, or one layer at a time. Offered where there is
-                      something to switch between, and always once set, so it can be undone. */}
+                      something to switch between (the switcher leaves out tables and locked layers),
+                      and always once set, so it can be undone. */}
                   {(groupSwitchers[String(group.id)] ||
-                    (!allExcluded && groupLayers.filter((l) => !excludedLayers.includes(l.id)).length >= 2)) && (
+                    groupLayers.filter((l) => !excludedLayers.includes(l.id) && l.type !== "table" && !l.locked)
+                      .length >= 2) && (
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ pl: 3.5, pb: 0.5 }}>
                       <Select
                         size="small"

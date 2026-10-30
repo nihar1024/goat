@@ -20,7 +20,9 @@ const NO_LAYERS: never[] = [];
  * Public view (`viewOnly`): the published layers in Redux, changed locally only.
  * Editor: the saved layers, updated optimistically and persisted; `order` and
  * `parent_id` stay pinned to what is saved, so a widget can never reorder or
- * reparent layers on the map.
+ * reparent layers on the map. With `persist: false` the editor only shows the
+ * change and saves nothing, for steps that follow each other quickly (play,
+ * slider drags); the last one is saved with `persist: true`.
  */
 export const useWidgetLayerTree = (viewOnly?: boolean) => {
   const { t } = useTranslation("common");
@@ -37,7 +39,7 @@ export const useWidgetLayerTree = (viewOnly?: boolean) => {
   );
 
   const updateTree = useCallback(
-    async (updatePayload: ProjectLayerTreeUpdate) => {
+    async (updatePayload: ProjectLayerTreeUpdate, { persist = true }: { persist?: boolean } = {}) => {
       try {
         if (viewOnly) {
           updatePayload.items.forEach((item) => {
@@ -127,6 +129,7 @@ export const useWidgetLayerTree = (viewOnly?: boolean) => {
             mutateProjectLayerGroups(updatedGroups, false);
           }
 
+          if (!persist) return;
           await updateProjectLayerTree(projectId, sanitizedPayload);
         }
       } catch (error) {

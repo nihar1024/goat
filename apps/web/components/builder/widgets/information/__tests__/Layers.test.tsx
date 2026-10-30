@@ -54,9 +54,17 @@ vi.mock("@/components/map/panels/layer/ProjectLayerTree", () => ({
   }) => (
     <div>
       <div data-testid="tree">
-        {projectLayerGroups.map((g) => `group:${g.name}`).join(",")}|{projectLayers.map((l) => l.name).join(",")}
+        {projectLayerGroups.map((g) => `group:${g.name}`).join(",")}|
+        {projectLayers.map((l) => l.name).join(",")}
       </div>
-      {projectLayerGroups.map((g) => groupContent?.[g.id] && <div key={g.id} data-testid={`content-${g.id}`}>{groupContent[g.id]}</div>)}
+      {projectLayerGroups.map(
+        (g) =>
+          groupContent?.[g.id] && (
+            <div key={g.id} data-testid={`content-${g.id}`}>
+              {groupContent[g.id]}
+            </div>
+          )
+      )}
     </div>
   ),
 }));
@@ -77,14 +85,18 @@ describe("LayerInformationWidget", () => {
   it("lists every layer and group in the tree when no group is a switcher", () => {
     widget();
 
-    expect(screen.getByTestId("tree")).toHaveTextContent("group:Versiegelung,group:Verkehr|Bäume,2015,2018,Radwege");
+    expect(screen.getByTestId("tree")).toHaveTextContent(
+      "group:Versiegelung,group:Verkehr|Bäume,2015,2018,Radwege"
+    );
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
 
   it("keeps a switcher group in its place in the tree, with the switcher as its content", () => {
     widget({ group_switchers: { 7: { layout: "chips", show_play: false } } });
 
-    expect(screen.getByTestId("tree")).toHaveTextContent("group:Versiegelung,group:Verkehr|Bäume,2015,2018,Radwege");
+    expect(screen.getByTestId("tree")).toHaveTextContent(
+      "group:Versiegelung,group:Verkehr|Bäume,2015,2018,Radwege"
+    );
     expect(screen.queryByTestId("content-8")).not.toBeInTheDocument();
     const radios = within(screen.getByTestId("content-7")).getAllByRole("radio");
     expect(radios.map((c) => c.textContent)).toEqual(["2015", "2018"]);

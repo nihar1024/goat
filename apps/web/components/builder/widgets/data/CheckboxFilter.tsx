@@ -4,8 +4,9 @@ import { Box, Checkbox, FormControlLabel, Link, Skeleton, Stack, Typography, use
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { MAX_FILTER_VALUES, useFilterValues } from "./useFilterValues";
 import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
+
+import { MAX_FILTER_VALUES, useFilterValues } from "./useFilterValues";
 
 interface CheckboxFilterProps {
   layerId: string;

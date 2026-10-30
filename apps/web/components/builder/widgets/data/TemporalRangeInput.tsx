@@ -10,9 +10,9 @@ import { TEMPORAL_VALUE_FORMAT } from "@p4b/ui/components/temporalFormats";
 
 import { useDayjsLocale } from "@/i18n/utils";
 
-import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
 import { useDatasetCollectionItems } from "@/lib/api/layers";
 import { useProjectLayerHistogramStats } from "@/lib/api/projects";
+import { DEFAULT_WIDGET_COLOR } from "@/lib/constants/ui";
 import type { HistogramStatsQueryParams } from "@/lib/validations/project";
 
 dayjs.extend(utc);

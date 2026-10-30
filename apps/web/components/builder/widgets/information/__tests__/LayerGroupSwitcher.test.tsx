@@ -37,8 +37,7 @@ const GROUP = 7;
 const renderSwitcher = (
   options: Partial<GroupSwitcherType> = {},
   extra: { excludedLayers?: number[]; legendHiddenLayers?: number[]; viewOnly?: boolean } = {}
-) =>
-  render(<Switcher options={options} extra={extra} />);
+) => render(<Switcher options={options} extra={extra} />);
 
 const Switcher = ({
   options,
@@ -172,6 +171,37 @@ describe("LayerGroupSwitcher", () => {
     expect(visibilityIn(0)).toEqual({ 1: true, 2: false, 3: false });
   });
 
+  it("only shows each play step in the editor, and saves the layer it stops on once", async () => {
+    vi.useFakeTimers();
+    layers = [layer(1, "a", 0, false), layer(2, "b", 1, false), layer(3, "c", 2, true)];
+    renderSwitcher({ show_play: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "play" }));
+    await act(async () => {
+      vi.advanceTimersByTime(PLAY_INTERVAL_MS);
+    });
+    expect(updateTree).toHaveBeenCalledTimes(1);
+    expect(updateTree.mock.calls[0][1]).toEqual({ persist: false });
+
+    fireEvent.click(screen.getByRole("button", { name: "pause" }));
+    expect(updateTree).toHaveBeenCalledTimes(2);
+    expect(updateTree.mock.calls[1][1]).toEqual({ persist: true });
+  });
+
+  it("saves nothing more when playing stops in the public view", async () => {
+    vi.useFakeTimers();
+    layers = [layer(1, "a", 0, false), layer(2, "b", 1, false), layer(3, "c", 2, true)];
+    renderSwitcher({ show_play: true }, { viewOnly: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "play" }));
+    await act(async () => {
+      vi.advanceTimersByTime(PLAY_INTERVAL_MS);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "pause" }));
+
+    expect(updateTree).toHaveBeenCalledTimes(1);
+  });
+
   it("stops playing when the play button is switched off", async () => {
     vi.useFakeTimers();
     layers = [layer(1, "a", 0, false), layer(2, "b", 1, false), layer(3, "c", 2, true)];
@@ -191,6 +221,16 @@ describe("LayerGroupSwitcher", () => {
 
     expect(screen.getByRole("slider")).toBeInTheDocument();
     ["2015", "2018", "2021"].forEach((label) => expect(screen.getAllByText(label).length).toBeGreaterThan(0));
+  });
+
+  it("shows the slider's layer on change and saves it when the change is committed", () => {
+    renderSwitcher({ layout: "slider" });
+
+    // A keyboard step is a change and its commit at once; a drag commits only when let go
+    fireEvent.change(screen.getByRole("slider"), { target: { value: 2 } });
+
+    expect(updateTree.mock.calls.map((call) => call[1])).toEqual([{ persist: false }, { persist: true }]);
+    expect(visibilityIn(1)).toEqual({ 1: false, 2: false, 3: true });
   });
 
   it("renders a dropdown that shows the visible layer and picks another", () => {

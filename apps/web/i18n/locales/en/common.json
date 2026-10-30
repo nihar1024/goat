@@ -3631,7 +3631,8 @@
   "explorer_lines_count_other": "{{count}} lines",
   "explorer_rate_km_head": "{{currency}}/km",
   "explorer_rate_hour_head": "{{currency}}/h",
-  "explorer_rates_note": "Cost a year ≈ vehicle-km × km rate + vehicle-hours × hour rate. A blank km rate uses the default shown; with no hour rate, the km rate covers everything.",
+  "explorer_rate_train_km_head": "{{currency}}/train-km",
+  "explorer_rates_note": "Cost a year ≈ vehicle-km × km rate + vehicle-hours × hour rate. A blank km rate uses the default shown; with no hour rate, the km rate covers everything. Metro and rail count each train once: a rate per car-km is that times the cars per train.",
   "explorer_rates_days_counted": "Counted over {{days}} service days.",
   "explorer_periods_note": "Times past 24:00 are the next morning, as in the feed.",
   "explorer_layover_note": "The time a vehicle waits between trips. Used to estimate peak vehicles when the feed has no vehicle schedules."

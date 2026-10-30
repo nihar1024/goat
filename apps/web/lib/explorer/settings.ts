@@ -59,11 +59,20 @@ export const DEFAULT_SETTINGS: ExplorerSettings = {
   layover_s: 6 * 60,
 };
 
-/** Default rate by kind of vehicle, where none is set. */
+/** Rail-type kinds of vehicle: a trip is a train, so their km are
+ * train-km (an operator's report usually gives car-km). */
+export function perTrain(mode: ModeKey): boolean {
+  return mode === "metro" || mode === "rail" || mode === "monorail";
+}
+
+/** Default rate by kind of vehicle, where none is set: the European average
+ * operating cost per vehicle-km (a train's, for rail), rounded, from the
+ * EMTA Barometer 2025 (2024 data: bus 5.7, tram and light rail 8.4, metro
+ * 24.3, rail 24.9). An estimate until the user sets the operator's own. */
 export function modeRate(mode: ModeKey): Rate {
-  if (mode === "tram" || mode === "cable_tram" || mode === "trolleybus") return { per_km: 7, per_hour: null };
-  if (mode === "metro" || mode === "rail" || mode === "monorail") return { per_km: 12, per_hour: null };
-  return { per_km: 4.5, per_hour: null };
+  if (mode === "tram" || mode === "cable_tram" || mode === "trolleybus") return { per_km: 8, per_hour: null };
+  if (perTrain(mode)) return { per_km: 24, per_hour: null };
+  return { per_km: 5.5, per_hour: null };
 }
 
 /** Default rate by GTFS route type (basic or extended), where none is set. */

@@ -20,6 +20,7 @@ import {
   allCurrencies,
   defaultRate,
   modeRate,
+  perTrain,
   periodsFrom,
   rateKey,
   rateKeyMode,
@@ -330,8 +331,14 @@ function RatesTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => v
                   value={value.km}
                   // The default shows where none is set: what applies now.
                   placeholder={String(defaultRate(type).per_km)}
-                  unit={t("explorer_rate_km_head", { currency: symbol })}
-                  label={t("explorer_rate_km_head", { currency: symbol })}
+                  // A metro's or train's km are the train's: said, as a
+                  // report's rate is usually per car.
+                  unit={t(perTrain(mode) ? "explorer_rate_train_km_head" : "explorer_rate_km_head", {
+                    currency: symbol,
+                  })}
+                  label={t(perTrain(mode) ? "explorer_rate_train_km_head" : "explorer_rate_km_head", {
+                    currency: symbol,
+                  })}
                   onChange={(v) => setRate(key, "km", v)}
                 />
                 <UnitField

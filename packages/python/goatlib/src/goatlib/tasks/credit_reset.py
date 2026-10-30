@@ -11,6 +11,7 @@ Trials are left alone: a trial's credits last the whole trial, and its end
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import logging
 from datetime import datetime
@@ -65,8 +66,13 @@ DUE_SQL = (
 )
 
 
-async def main(params: CreditResetParams = CreditResetParams()) -> dict:
+def main(params: CreditResetParams = CreditResetParams()) -> dict:
     """Windmill entry point: start a new credit month where one is due."""
+    # Synchronous: Windmill calls main() without awaiting it.
+    return asyncio.run(_run(params))
+
+
+async def _run(params: CreditResetParams) -> dict:
     from goatlib.tasks._db import SKIPPED, billing_enabled
 
     if not billing_enabled():

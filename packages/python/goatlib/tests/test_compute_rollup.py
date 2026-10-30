@@ -174,8 +174,6 @@ class _FakeWm:
 
 
 def _run_main(monkeypatch, core, params=None, wm=None):
-    import asyncio
-
     import asyncpg
     from goatlib.tasks import compute_rollup as cr
 
@@ -188,7 +186,7 @@ def _run_main(monkeypatch, core, params=None, wm=None):
     monkeypatch.setattr(asyncpg, "connect", connect)
     monkeypatch.setattr(cr, "_windmill_dsn", lambda: "wm")
     monkeypatch.setattr(cr, "core_dsn", lambda: "core")
-    return asyncio.run(cr.main(params or cr.ComputeRollupParams())), wm
+    return cr.main(params or cr.ComputeRollupParams()), wm
 
 
 def test_selects_by_completion_time_with_a_day_of_lookback(monkeypatch):

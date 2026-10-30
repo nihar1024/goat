@@ -10,6 +10,7 @@ next run (charged already? delete, else merge back)."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -265,8 +266,13 @@ async def refresh_over_budget_flags(
     return {"flags_set": len(over_orgs), "flags_cleared": len(cleared)}
 
 
-async def main(params: TrafficRollupParams = TrafficRollupParams()) -> dict:
+def main(params: TrafficRollupParams = TrafficRollupParams()) -> dict:
     """Windmill entry point: charge egress per dimension; refresh over-budget flags."""
+    # Synchronous: Windmill calls main() without awaiting it.
+    return asyncio.run(_run(params))
+
+
+async def _run(params: TrafficRollupParams) -> dict:
     from goatlib.tasks._db import SKIPPED, billing_enabled
 
     if not billing_enabled():

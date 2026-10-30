@@ -4,6 +4,7 @@ Post-hoc, idempotent, leaf-jobs-only. See spec §4."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
@@ -205,8 +206,13 @@ async def _resolve_orgs(
     return {r["uid"]: r["oid"] for r in rows if r["oid"]}
 
 
-async def main(params: ComputeRollupParams = ComputeRollupParams()) -> dict:
+def main(params: ComputeRollupParams = ComputeRollupParams()) -> dict:
     """Windmill entry point: charge completed leaf tool jobs."""
+    # Synchronous: Windmill calls main() without awaiting it.
+    return asyncio.run(_run(params))
+
+
+async def _run(params: ComputeRollupParams) -> dict:
     from goatlib.tasks._db import SKIPPED, billing_enabled
 
     if not billing_enabled():

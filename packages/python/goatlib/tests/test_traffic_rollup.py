@@ -175,7 +175,7 @@ def _run_main(monkeypatch, redis, core, dry_run=False):
     monkeypatch.setattr(asyncpg, "connect", connect)
     monkeypatch.setattr(tr, "core_dsn", lambda: "core")
     monkeypatch.setattr(tr, "_redis", lambda: redis)
-    return asyncio.run(tr.main(tr.TrafficRollupParams(dry_run=dry_run)))
+    return tr.main(tr.TrafficRollupParams(dry_run=dry_run))
 
 
 def test_charge_carries_the_claim_marker_and_deletes_the_inflight_key(monkeypatch):

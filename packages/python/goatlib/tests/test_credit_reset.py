@@ -21,7 +21,6 @@ def test_advance_renewal_jumps_past_now_in_month_steps():
 
 def test_billing_tasks_do_nothing_with_billing_off(monkeypatch):
     # Self-hosted workers: no metering, no trials.
-    import asyncio
 
     from goatlib.tasks import (
         compute_rollup,
@@ -33,13 +32,11 @@ def test_billing_tasks_do_nothing_with_billing_off(monkeypatch):
 
     monkeypatch.delenv("BILLING_ENABLED", raising=False)
     for task in (compute_rollup, traffic_rollup, credit_reset):
-        assert asyncio.run(task.main()) == SKIPPED
+        assert task.main() == SKIPPED
     assert trial_expiry.main() == SKIPPED
 
 
 def test_one_failing_organization_does_not_stop_the_others(monkeypatch):
-    import asyncio
-
     import asyncpg
     from goatlib.tasks import credit_reset
 
@@ -69,7 +66,7 @@ def test_one_failing_organization_does_not_stop_the_others(monkeypatch):
     monkeypatch.setattr(asyncpg, "connect", connect)
     monkeypatch.setattr(credit_reset, "core_dsn", lambda: "core")
     monkeypatch.setattr(credit_reset, "_redis", lambda: None)
-    result = asyncio.run(credit_reset.main())
+    result = credit_reset.main()
     assert core.updated == ["a", "c"]
     assert result["reset"] == 2
     assert [e["organization_id"] for e in result["errors"]] == ["b"]

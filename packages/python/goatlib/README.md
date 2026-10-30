@@ -118,6 +118,14 @@ the touched rows and the rows referring to them, with the MobilityData
 validator's notice codes, and only problems the change brings count: a feed's
 own old faults do not block an unrelated edit.
 
+An optional field a feed left out (a stop's code, its station, its platform)
+gets its column the first time an edit sets one
+(`ADDABLE_COLUMNS`); any other column a table lacks is refused. A stop's
+location type is checked as the validator does: a parent station where one is
+required and none on a station, a parent of the right type (also for the
+stops of a station whose type changed), stop times only at stops or
+platforms.
+
 ## Copies behind a project entry
 
 Two tools replace the layer a `layer_project` entry shows instead of adding a

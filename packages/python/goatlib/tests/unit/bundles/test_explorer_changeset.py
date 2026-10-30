@@ -163,6 +163,173 @@ def test_a_new_stop_written_twice_is_one_insert(con: duckdb.DuckDBPyConnection) 
     )
 
 
+def test_an_optional_field_the_feed_left_out_gets_its_column(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # The mini feed has no wheelchair_boarding: a value adds the column, typed
+    # as an import types it; an empty value for it is no value, not an error.
+    cols = lambda: {r[0]: r[1] for r in con.execute("DESCRIBE stops").fetchall()}  # noqa: E731
+    assert "wheelchair_boarding" not in cols()
+    apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "S3"},
+                "values": {"stop_name": "Third", "wheelchair_boarding": None},
+            }
+        ],
+    )
+    assert "wheelchair_boarding" not in cols()
+    apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "insert",
+                "key": {"stop_id": "goat_0000002a"},
+                "values": {
+                    "stop_name": "New",
+                    "stop_lat": 52.51,
+                    "stop_lon": 13.41,
+                    "location_type": 0,
+                    "wheelchair_boarding": 1,
+                },
+            }
+        ],
+    )
+    assert cols()["wheelchair_boarding"] == "INTEGER"
+    assert one(
+        con,
+        "SELECT wheelchair_boarding, ST_AsText(geometry) FROM stops "
+        "WHERE stop_id = 'goat_0000002a'",
+    ) == (1, "POINT (13.41 52.51)")
+
+
+def test_a_stop_s_gtfs_fields_get_their_columns(con: duckdb.DuckDBPyConnection) -> None:
+    # An entrance to the station, with what the Explorer lets a stop say.
+    apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "insert",
+                "key": {"stop_id": "E1"},
+                "values": {
+                    "stop_name": "Main Station, north exit",
+                    "stop_lat": 52.501,
+                    "stop_lon": 13.4,
+                    "location_type": 2,
+                    "parent_station": "P",
+                },
+            },
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "S1"},
+                "values": {"platform_code": "1"},
+            },
+        ],
+    )
+    assert one(
+        con,
+        "SELECT location_type, parent_station FROM stops WHERE stop_id = 'E1'",
+    ) == (2, "P")
+    assert one(con, "SELECT platform_code FROM stops WHERE stop_id = 'S1'") == ("1",)
+
+
+def refused(con: duckdb.DuckDBPyConnection, ops: List[Dict[str, Any]]) -> Any:
+    """The problems a refused change set names, rolled back as geoapi does."""
+    con.begin()
+    with pytest.raises(ChangeSetIntegrityError) as caught:
+        apply(con, ops)
+    con.rollback()
+    return {(n.code, dict(n.key)["stop_id"]) for n in caught.value.notices}
+
+
+def test_an_entrance_needs_its_station(con: duckdb.DuckDBPyConnection) -> None:
+    entrance = {
+        "role": "stops",
+        "op": "insert",
+        "key": {"stop_id": "E1"},
+        "values": {
+            "stop_name": "Exit",
+            "stop_lat": 52.5,
+            "stop_lon": 13.4,
+            "location_type": 2,
+        },
+    }
+    assert refused(con, [entrance]) == {("location_without_parent_station", "E1")}
+    # A stop is no station to hang it from.
+    entrance["values"] = {**entrance["values"], "parent_station": "S2"}
+    assert refused(con, [entrance]) == {("wrong_parent_location_type", "E1")}
+
+
+def test_a_station_has_no_parent(con: duckdb.DuckDBPyConnection) -> None:
+    assert refused(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "insert",
+                "key": {"stop_id": "P2"},
+                "values": {
+                    "stop_name": "Another station",
+                    "stop_lat": 52.5,
+                    "stop_lon": 13.4,
+                    "location_type": 1,
+                    "parent_station": "P",
+                },
+            }
+        ],
+    ) == {("station_with_parent_station", "P2")}
+
+
+def test_a_station_made_a_stop_strands_its_platforms(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # S1 is P's platform: P no longer a station, S1's parent is the wrong kind.
+    assert refused(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "P"},
+                "values": {"location_type": 0},
+            }
+        ],
+    ) == {("wrong_parent_location_type", "S1")}
+
+
+def test_a_served_stop_stays_a_stop(con: duckdb.DuckDBPyConnection) -> None:
+    assert refused(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "S4"},
+                "values": {"location_type": 1},
+            }
+        ],
+    ) == {("location_with_unexpected_stop_time", "S4")}
+    # An unserved one may become a station.
+    apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "X"},
+                "values": {"location_type": 1},
+            }
+        ],
+    )
+    assert one(con, "SELECT location_type FROM stops WHERE stop_id = 'X'") == (1,)
+
+
 def test_a_row_inserted_then_deleted_leaves_no_trace(
     con: duckdb.DuckDBPyConnection,
 ) -> None:

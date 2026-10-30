@@ -48,7 +48,7 @@ from typing import (
 
 from pydantic import BaseModel, Field, model_validator
 
-from goatlib.bundles.importers.pt_network.gtfs_schema import SCHEMA
+from goatlib.bundles.importers.pt_network.gtfs_schema import SCHEMA, SQL_TYPE
 from goatlib.bundles.importers.pt_network.stop_chains import STOP_CHAIN_PREFIX
 
 #: The roles a change set may write, each with its GTFS primary key.
@@ -62,6 +62,19 @@ ROLE_KEYS: Dict[str, Tuple[str, ...]] = {
     "calendar_dates": ("service_id", "date"),
     "frequencies": ("trip_id", "start_time"),
     "shapes": ("shape_id", "shape_pt_sequence"),
+}
+
+#: Optional fields a feed may leave out that the Explorer sets: the column is
+#: added the first time a value is written to it. Any other column a table
+#: lacks is refused; an empty value for a column it lacks is no value.
+ADDABLE_COLUMNS: Dict[str, Tuple[str, ...]] = {
+    "stops": (
+        "stop_code",
+        "wheelchair_boarding",
+        "location_type",
+        "parent_station",
+        "platform_code",
+    ),
 }
 
 #: Columns a client never writes: the bundle derives them.
@@ -287,6 +300,9 @@ class _Tables:
             ]
         return self._columns[role]
 
+    def forget_columns(self, role: str) -> None:
+        self._columns.pop(role, None)
+
     def types(self, role: str) -> Dict[str, str]:
         return {
             str(r[0]): str(r[1]).upper()
@@ -299,16 +315,34 @@ def _parse_ops(
 ) -> List[Tuple[str, str, Tuple[Any, ...], Dict[str, Any]]]:
     parsed: List[Tuple[str, str, Tuple[Any, ...], Dict[str, Any]]] = []
     for op in changeset.ops:
-        columns = set(t.columns(op.role))
-        unknown = sorted(set(op.values) - columns)
+        missing = set(op.values) - set(t.columns(op.role))
+        unknown = sorted(missing - set(ADDABLE_COLUMNS.get(op.role, ())))
         if unknown:
             raise ChangeSetError(f"{op.role} has no column {', '.join(unknown)}")
         key = tuple(_typed(op.role, k, op.key[k]) for k in ROLE_KEYS[op.role])
         if any(k is None for k in key):
             raise ChangeSetError(f"a {op.role} key is empty")
         values = {c: _typed(op.role, c, v) for c, v in op.values.items()}
+        for column in sorted(missing):
+            if values[column] is None:
+                del values[column]
+            else:
+                _add_column(t, op.role, column)
+        if op.op == "update" and not values:
+            continue
         parsed.append((op.role, op.op, key, values))
     return parsed
+
+
+def _add_column(t: _Tables, role: str, column: str) -> None:
+    """Give ``role``'s table an optional GTFS column it did not have, typed as
+    an import types it."""
+    if column in t.columns(role):
+        return
+    spec = SCHEMA.get(role, {}).get(column)
+    sql_type = SQL_TYPE[spec.kind] if spec else "VARCHAR"
+    t.con.execute(f"ALTER TABLE {t.name(role)} ADD COLUMN {_ident(column)} {sql_type}")
+    t.forget_columns(role)
 
 
 def _where(role: str, key: Tuple[Any, ...], params: Dict[str, Any]) -> str:
@@ -484,6 +518,71 @@ def _blank(column: str) -> str:
     return f"({col} IS NULL OR CAST({col} AS VARCHAR) = '')"
 
 
+def _check_stop_locations(
+    t: _Tables,
+    cond: str,
+    stops: str,
+    keys: str,
+    add: Callable[..., None],
+) -> None:
+    """The rules of ``stops.location_type`` on the stops written (``cond``, on
+    alias ``x``) and on those naming one of them (``stops``, an id table) as
+    their parent: a parent where one is required, none on a station, a parent
+    of the right type, stop times only at stops or platforms."""
+    con = t.con
+    cols = set(t.columns("stops"))
+    name = t.name("stops")
+    kind = "coalesce(x.location_type, 0)" if "location_type" in cols else "0"
+    if "parent_station" in cols:
+        add(
+            "location_without_parent_station",
+            "ERROR",
+            "stops",
+            con.execute(
+                f"SELECT {keys} FROM {name} x WHERE {cond} "
+                f"AND {kind} IN (2, 3, 4) AND {_blank('parent_station')}"
+            ).fetchall(),
+            "parent_station",
+        )
+        add(
+            "station_with_parent_station",
+            "ERROR",
+            "stops",
+            con.execute(
+                f"SELECT {keys} FROM {name} x WHERE {cond} "
+                f"AND {kind} = 1 AND NOT {_blank('parent_station')}"
+            ).fetchall(),
+            "parent_station",
+        )
+        parent_kind = "coalesce(p.location_type, 0)" if "location_type" in cols else "0"
+        add(
+            "wrong_parent_location_type",
+            "ERROR",
+            "stops",
+            con.execute(
+                f"""
+                SELECT {keys} FROM {name} x JOIN {name} p ON p.stop_id = x.parent_station
+                WHERE ({cond} OR CAST(x.parent_station AS VARCHAR) IN (SELECT id FROM {stops}))
+                  AND CASE WHEN {kind} = 4 THEN {parent_kind} <> 0
+                           WHEN {kind} IN (0, 2, 3) THEN {parent_kind} <> 1
+                           ELSE false END
+                """
+            ).fetchall(),
+            "parent_station",
+        )
+    if "location_type" in cols and t.has("stop_times"):
+        add(
+            "location_with_unexpected_stop_time",
+            "ERROR",
+            "stops",
+            con.execute(
+                f"SELECT {keys} FROM {name} x WHERE {cond} AND {kind} <> 0 "
+                f"AND EXISTS (SELECT 1 FROM {t.name('stop_times')} st WHERE st.stop_id = x.stop_id)"
+            ).fetchall(),
+            "location_type",
+        )
+
+
 def _check(t: _Tables, touched: _Touched) -> Set[Notice]:
     """The ERRORs and WARNINGs on what ``touched`` reaches: its rows, and the
     rows referring to them."""
@@ -581,6 +680,8 @@ def _check(t: _Tables, touched: _Touched) -> Set[Notice]:
                 ).fetchall(),
                 f,
             )
+    if t.has("stops") and (cond := touched_rows("stops")) is not None:
+        _check_stop_locations(t, cond, stops, keys_sql("stops"), add)
     if t.has("routes") and (cond := touched_rows("routes")) is not None:
         cols = set(t.columns("routes"))
         short = _blank("route_short_name") if "route_short_name" in cols else "true"

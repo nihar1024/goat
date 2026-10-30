@@ -35,7 +35,7 @@ from goatlib.bundles.importers.pt_network.stop_chains import STOP_CHAIN_PREFIX
 
 #: Bumped when a file's columns or meaning change; part of the files' URLs,
 #: so a browser never mixes files of two versions.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: GTFS ``shape_dist_traveled`` has no fixed unit. The feed's unit is the one
 #: of these (metres per unit) nearest to what its stops' straight-line
@@ -275,7 +275,8 @@ def _stops(con: Any, rel: Rel, present: Present) -> None:
                        AS location_type,
                    NULLIF({_col(s, "parent_station", "VARCHAR")}, '') AS parent_station,
                    {_col(s, "platform_code", "VARCHAR")} AS platform_code,
-                   {_col(s, "wheelchair_boarding", "UTINYINT")} AS wheelchair
+                   {_col(s, "wheelchair_boarding", "UTINYINT")} AS wheelchair,
+                   NULLIF({_col(s, "stop_code", "VARCHAR")}, '') AS code
             FROM {rel["stops"]}
             WHERE "stop_id" IS NOT NULL
             QUALIFY row_number() OVER (PARTITION BY "stop_id") = 1
@@ -286,7 +287,7 @@ def _stops(con: Any, rel: Rel, present: Present) -> None:
             FROM src
         )
         SELECT i.stop_idx, i.stop_id, i.name, i.lat, i.lon, i.location_type,
-               p.stop_idx AS parent_idx, i.platform_code, i.wheelchair
+               p.stop_idx AS parent_idx, i.platform_code, i.wheelchair, i.code
         FROM indexed i LEFT JOIN indexed p ON p.stop_id = i.parent_station
         """
     )

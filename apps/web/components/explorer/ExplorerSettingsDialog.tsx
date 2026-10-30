@@ -5,15 +5,22 @@
  * has no blocks. Edited as a draft; Save keeps them for this bundle in this
  * browser and every figure follows.
  */
+import BedtimeOutlinedIcon from "@mui/icons-material/BedtimeOutlined";
+import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
+import NightsStayOutlinedIcon from "@mui/icons-material/NightsStayOutlined";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import UTurnLeftIcon from "@mui/icons-material/UTurnLeft";
+import WbTwilightIcon from "@mui/icons-material/WbTwilight";
 import { Box, InputAdornment, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
-import { clock, count, currencySymbol } from "@/lib/explorer/format";
+import { clock, currencySymbol } from "@/lib/explorer/format";
 import { type ModeKey, modeOf } from "@/lib/explorer/modes";
 import {
+  DEFAULT_SETTINGS,
   type ExplorerSettings,
   PERIOD_KEYS,
   SERVICE_DAY_END_S,
@@ -29,7 +36,7 @@ import {
 } from "@/lib/explorer/settings";
 import { type ExplorerSettingsTab, openExplorerSettings } from "@/lib/store/explorer/slice";
 
-import { useRoutes, useServiceDays } from "@/hooks/explorer/useExplorerData";
+import { useRoutes } from "@/hooks/explorer/useExplorerData";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import AppDialog, { AppDialogFooter } from "@/components/common/AppDialog";
@@ -50,6 +57,12 @@ interface Draft {
 
 /** Every field's width: one right edge down a card. */
 const FIELD_WIDTH = 112;
+
+/** The two kinds of rate, each in its own shade of GOAT's green: in its
+ * column's title, its field's unit and the formula, so the formula reads
+ * against the fields. */
+const KM_COLOUR = "primary.main";
+const HOUR_COLOUR = "primary.dark";
 
 /** A card on the dialog's tinted ground, rows split by hairlines: as the
  * route summary's headways table. */
@@ -98,10 +111,16 @@ function UnitField({
   error,
   disabled,
   numeric = "decimal",
+  colour,
+  width = FIELD_WIDTH,
 }: {
   value: string;
   onChange?: (value: string) => void;
   unit?: string;
+  /** Its unit's colour, where the field is one of the rates. */
+  colour?: string;
+  /** Narrower for a short value (minutes) than for a rate. */
+  width?: number;
   label: string;
   placeholder?: string;
   error?: boolean;
@@ -116,7 +135,7 @@ function UnitField({
         color="text.secondary"
         aria-label={label}
         sx={{
-          width: FIELD_WIDTH,
+          width,
           flexShrink: 0,
           textAlign: "right",
           pr: "11px",
@@ -140,7 +159,10 @@ function UnitField({
           ? {
               endAdornment: (
                 <InputAdornment position="end">
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    color={colour ?? "text.secondary"}
+                    fontWeight={colour ? 600 : 400}>
                     {unit}
                   </Typography>
                 </InputAdornment>
@@ -149,7 +171,7 @@ function UnitField({
           : undefined
       }
       sx={{
-        width: FIELD_WIDTH,
+        width,
         flexShrink: 0,
         "& .MuiOutlinedInput-root": {
           height: 32,
@@ -187,7 +209,10 @@ function toDraft(settings: ExplorerSettings): Draft {
     currency: settings.currency,
     rates,
     starts: settings.periods.slice(1).map((p) => clock(p.start_s)),
-    layover_min: String(Math.round(settings.layover_s / 60)),
+    // Blank where it is the default, which then shows in the field, as an
+    // unset rate's does.
+    layover_min:
+      settings.layover_s === DEFAULT_SETTINGS.layover_s ? "" : String(Math.round(settings.layover_s / 60)),
   };
 }
 
@@ -204,7 +229,10 @@ function fromDraft(draft: Draft, base: ExplorerSettings): ExplorerSettings | nul
     rates[key] = { per_km, per_hour };
   }
   const starts = draft.starts.map(parseClock);
-  const layover = Number(draft.layover_min);
+  // Blank is the default.
+  const layover = draft.layover_min.trim()
+    ? Number(draft.layover_min.replace(",", "."))
+    : DEFAULT_SETTINGS.layover_s / 60;
   if (starts.some((s) => s === null) || Number.isNaN(layover)) return null;
   return {
     ...base,
@@ -217,9 +245,8 @@ function fromDraft(draft: Draft, base: ExplorerSettings): ExplorerSettings | nul
 
 function RatesTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void }) {
   const { t, i18n } = useTranslation("common");
-  const { db, window } = useExplorer();
+  const { db } = useExplorer();
   const routes = useRoutes(db);
-  const days = useServiceDays(db, window);
   const lang = i18n.language;
   const symbol = currencySymbol(draft.currency, lang);
   // Every currency, by its code and its name in the reader's language.
@@ -274,12 +301,24 @@ function RatesTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => v
 
   return (
     <Stack spacing={2}>
-      {/* A feed may have one operator or fifty: a searchable list, as the
-          toolbox picks from many. Operators with rates set say so. Beside
-          it, the currency every rate is in. */}
+      {/* The currency first, as every operator's rates are in it; then
+          a feed's operators, one or fifty, as a searchable list (as the
+          toolbox picks from many), listed even when there is one: whose
+          rates these are. Operators with rates set say so. */}
       <Stack direction="row" spacing={1.5} alignItems="flex-end">
-        {agencies.length > 1 && (
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Selector
+            label={t("explorer_currency")}
+            items={currencyItems}
+            enableSearch
+            selectedItems={{ value: draft.currency, label: draft.currency }}
+            setSelectedItems={(item) => {
+              if (item && !Array.isArray(item)) setDraft({ ...draft, currency: String(item.value) });
+            }}
+          />
+        </Box>
+        {agencies.length > 0 && (
+          <Box sx={{ flex: 2, minWidth: 0 }}>
             <Selector
               label={t("explorer_filter_agency")}
               enableSearch={agencies.length > 8}
@@ -303,66 +342,126 @@ function RatesTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => v
             />
           </Box>
         )}
-        <Box sx={{ width: agencies.length > 1 ? 112 : 160, flexShrink: 0 }}>
-          <Selector
-            label={t("explorer_currency")}
-            items={currencyItems}
-            enableSearch
-            selectedItems={{ value: draft.currency, label: draft.currency }}
-            setSelectedItems={(item) => {
-              if (item && !Array.isArray(item)) setDraft({ ...draft, currency: String(item.value) });
-            }}
-          />
-        </Box>
       </Stack>
       {agency && (
-        <Card>
-          {kinds.map(([mode, { type, n }], i) => {
-            const key = rateKey(agency.id, type);
-            const value = draft.rates[key] ?? { km: "", hour: "" };
-            return (
-              <Row key={key} first={i === 0}>
-                <RowLabel
-                  icon={<Icon iconName={modeIcon(mode)} style={{ fontSize: 14 }} htmlColor="inherit" />}
-                  label={t(`explorer_mode_${mode}`)}
-                  note={t("explorer_n_routes", { count: n })}
-                />
-                <UnitField
-                  value={value.km}
-                  // The default shows where none is set: what applies now.
-                  placeholder={String(defaultRate(type).per_km)}
-                  // A metro's or train's km are the train's: said, as a
-                  // report's rate is usually per car.
-                  unit={t(perTrain(mode) ? "explorer_rate_train_km_head" : "explorer_rate_km_head", {
-                    currency: symbol,
-                  })}
-                  label={t(perTrain(mode) ? "explorer_rate_train_km_head" : "explorer_rate_km_head", {
-                    currency: symbol,
-                  })}
-                  onChange={(v) => setRate(key, "km", v)}
-                />
-                <UnitField
-                  value={value.hour}
-                  placeholder="—"
-                  unit={t("explorer_rate_hour_head", { currency: symbol })}
-                  label={t("explorer_rate_hour_head", { currency: symbol })}
-                  onChange={(v) => setRate(key, "hour", v)}
-                />
-              </Row>
-            );
-          })}
-        </Card>
+        <Box>
+          {/* The fields' titles, over their columns. */}
+          <Stack direction="row" spacing={1.5} sx={{ px: 1.5, pb: 0.5 }}>
+            <Box sx={{ flex: 1 }} />
+            {(
+              [
+                ["explorer_rates_col_km", KM_COLOUR],
+                ["explorer_rates_col_hour", HOUR_COLOUR],
+              ] as const
+            ).map(([key, colour]) => (
+              <Typography
+                key={key}
+                variant="caption"
+                color={colour}
+                fontWeight={600}
+                sx={{ width: FIELD_WIDTH, flexShrink: 0 }}>
+                {t(key)}
+              </Typography>
+            ))}
+          </Stack>
+          <Card>
+            {kinds.map(([mode, { type, n }], i) => {
+              const key = rateKey(agency.id, type);
+              const value = draft.rates[key] ?? { km: "", hour: "" };
+              return (
+                <Row key={key} first={i === 0}>
+                  <RowLabel
+                    icon={<Icon iconName={modeIcon(mode)} style={{ fontSize: 14 }} htmlColor="inherit" />}
+                    label={t(`explorer_mode_${mode}`)}
+                    // A metro's or train's km are its whole trainset's, as
+                    // the Explorer counts them (a report's are usually a car's).
+                    note={[
+                      t("explorer_n_routes", { count: n }),
+                      perTrain(mode) ? t("explorer_rate_per_trainset") : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
+                  <UnitField
+                    value={value.km}
+                    // The default shows where none is set: what applies now.
+                    placeholder={String(defaultRate(type).per_km)}
+                    unit={t("explorer_rate_km_head", { currency: symbol })}
+                    label={t("explorer_rate_km_head", { currency: symbol })}
+                    colour={KM_COLOUR}
+                    onChange={(v) => setRate(key, "km", v)}
+                  />
+                  <UnitField
+                    value={value.hour}
+                    placeholder="-"
+                    unit={t("explorer_rate_hour_head", { currency: symbol })}
+                    label={t("explorer_rate_hour_head", { currency: symbol })}
+                    colour={HOUR_COLOUR}
+                    onChange={(v) => setRate(key, "hour", v)}
+                  />
+                </Row>
+              );
+            })}
+          </Card>
+        </Box>
       )}
-      <Typography variant="caption" color="text.secondary">
-        {t("explorer_rates_note")}
-        {days.data &&
-          ` ${t("explorer_rates_days_counted", {
-            days: count(days.data.weekdays + days.data.saturdays + days.data.sundays, lang),
-          })}`}
-      </Typography>
+      <RatesFormula />
     </Stack>
   );
 }
+
+/** How the rates make a cost, set out as a formula: each rate in its
+ * fields' colour, so the formula reads against the fields above; what it
+ * multiplies (the feed's vehicle-km and -hours, not set here) in the text's. */
+function RatesFormula() {
+  const { t } = useTranslation("common");
+  const term = (key: string, colour = "text.primary") => (
+    // A term kept whole: "km-Satz" never broken at its hyphen.
+    <Typography
+      component="span"
+      variant="body2"
+      fontWeight={600}
+      color={colour}
+      sx={{ whiteSpace: "nowrap" }}>
+      {t(key)}
+    </Typography>
+  );
+  // Spaced with real spaces, not padding: the formula breaks between its
+  // parts, never inside one.
+  const op = (sign: string) => (
+    <>
+      {" "}
+      <Typography component="span" variant="body2" color="text.secondary">
+        {sign}
+      </Typography>{" "}
+    </>
+  );
+  return (
+    <Typography component="div" variant="body2" sx={{ lineHeight: 1.9 }}>
+      {term("explorer_rates_formula_cost")}
+      {op("≈")}
+      {term("explorer_rates_formula_vkm")}
+      {op("×")}
+      {term("explorer_rates_formula_km_rate", KM_COLOUR)}
+      {op("+")}
+      {term("explorer_rates_formula_vh")}
+      {op("×")}
+      {term("explorer_rates_formula_hour_rate", HOUR_COLOUR)}
+    </Typography>
+  );
+}
+
+/** Each time period's mark: the sun's course through the day, the peaks
+ * as service rising to meet them. */
+const PERIOD_ICON_SX = { fontSize: 16 };
+const PERIOD_ICONS: Record<(typeof PERIOD_KEYS)[number], ReactNode> = {
+  early: <WbTwilightIcon sx={PERIOD_ICON_SX} />,
+  am_peak: <TrendingUpIcon sx={PERIOD_ICON_SX} />,
+  midday: <LightModeOutlinedIcon sx={PERIOD_ICON_SX} />,
+  pm_peak: <TrendingUpIcon sx={PERIOD_ICON_SX} />,
+  evening: <NightsStayOutlinedIcon sx={PERIOD_ICON_SX} />,
+  night: <BedtimeOutlinedIcon sx={PERIOD_ICON_SX} />,
+};
 
 function PeriodsTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void }) {
   const { t } = useTranslation("common");
@@ -378,7 +477,7 @@ function PeriodsTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) =>
           const last = i === PERIOD_KEYS.length - 1;
           return (
             <Row key={key} first={i === 0}>
-              <RowLabel label={t(`explorer_period_${key}`)} />
+              <RowLabel icon={PERIOD_ICONS[key]} label={t(`explorer_period_${key}`)} />
               <Typography
                 variant="body2"
                 color="text.secondary"
@@ -401,9 +500,6 @@ function PeriodsTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) =>
           );
         })}
       </Card>
-      <Typography variant="caption" color="text.secondary">
-        {t("explorer_periods_note")}
-      </Typography>
     </Stack>
   );
 }
@@ -413,12 +509,18 @@ function VehiclesTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) =
   return (
     <Card>
       <Row first>
-        <RowLabel label={t("explorer_layover")} note={t("explorer_layover_note")} />
+        <RowLabel
+          icon={<UTurnLeftIcon sx={{ fontSize: 16 }} />}
+          label={t("explorer_layover")}
+          note={t("explorer_layover_note")}
+        />
         <UnitField
           value={draft.layover_min}
+          placeholder={String(DEFAULT_SETTINGS.layover_s / 60)}
           numeric="numeric"
           unit={t("explorer_minutes_short")}
           label={t("explorer_layover")}
+          width={88}
           onChange={(v) => setDraft({ ...draft, layover_min: v })}
         />
       </Row>

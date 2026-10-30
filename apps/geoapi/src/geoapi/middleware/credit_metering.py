@@ -1,8 +1,12 @@
 """Per-response egress metering: org × layer × service, with bytes /
 request count / anonymous count, attributed to the layer owner.
 
-Hot path: one cached org/owner lookup + a few Redis HINCRBYs. Fail-open
-everywhere — metering must never break a response. See spec §5/§7/§12.
+Hot path: one cached org/owner lookup and an in-memory count. A background
+task (run_flusher, started with the app) writes the counts to Redis every few
+seconds, so no response waits for Redis. Downloads are not counted here: the
+download route charges their export time and file size itself
+(charge_download). Fail-open everywhere — metering must never break a
+response. See spec §5/§7/§12.
 """
 
 import asyncio
@@ -27,6 +31,12 @@ _COLLECTION_RE = re.compile(r"/collections/([^/]+)")
 _COUNTER_TTL_SECONDS = 7 * 24 * 3600
 # Only a delivered body is metered: not HEAD, not redirects, not errors.
 _METERED_STATUS = (200, 206)
+# How often the in-memory counts are written to Redis.
+FLUSH_INTERVAL_SECONDS = 5.0
+
+# Counts not yet in Redis: (org, layer, service) -> [bytes, count, anon_count,
+# owner]. One entry per dimension, so it stays small however busy the server.
+_pending: dict[tuple[str, str, str], list] = {}
 
 
 def _collection_id_from_path(path: str) -> str | None:
@@ -56,7 +66,8 @@ def _service_from_path(path: str) -> str:
 def _redis() -> "redis.Redis | None":
     from geoapi.tile_cache import get_redis_client
 
-    return get_redis_client()
+    # The tile cache's Redis, also when the tile cache itself is switched off.
+    return get_redis_client(for_tile_cache=False)
 
 
 async def _resolve_layer_org(collection_id: str) -> tuple[str | None, str | None]:
@@ -73,8 +84,7 @@ async def _resolve_layer_org(collection_id: str) -> tuple[str | None, str | None
         return (None, None)
 
 
-def _record_sync(
-    client: "redis.Redis",
+def _record(
     org: str,
     owner: str | None,
     layer: str,
@@ -82,35 +92,101 @@ def _record_sync(
     size: int,
     anonymous: bool,
 ) -> None:
-    key = f"meter:egress:{org}:{layer}:{service}"
-    pipe = client.pipeline()
-    pipe.hincrby(key, "bytes", size)
-    pipe.hincrby(key, "count", 1)
+    """Count one response in memory; run_flusher writes it to Redis."""
+    entry = _pending.setdefault((org, layer, service), [0, 0, 0, None])
+    entry[0] += size
+    entry[1] += 1
     if anonymous:
-        pipe.hincrby(key, "anon_count", 1)
+        entry[2] += 1
     if owner:
-        pipe.hset(key, "owner", owner)
-    pipe.expire(key, _COUNTER_TTL_SECONDS)
+        entry[3] = owner
+
+
+def _write_sync(client: "redis.Redis", batch: dict) -> None:
+    """Write one batch of counts to Redis in one pipeline."""
+    pipe = client.pipeline()
+    for (org, layer, service), (size, count, anon, owner) in batch.items():
+        key = f"meter:egress:{org}:{layer}:{service}"
+        pipe.hincrby(key, "bytes", size)
+        pipe.hincrby(key, "count", count)
+        if anon:
+            pipe.hincrby(key, "anon_count", anon)
+        if owner:
+            pipe.hset(key, "owner", owner)
+        pipe.expire(key, _COUNTER_TTL_SECONDS)
     pipe.execute()  # type: ignore[no-untyped-call]
 
 
-async def _record(
-    org: str,
-    owner: str | None,
-    layer: str,
-    service: str,
-    size: int,
-    anonymous: bool,
-) -> None:
+def _merge_back(batch: dict) -> None:
+    """Return an unwritten batch to _pending, with what arrived meanwhile."""
+    for dims, (size, count, anon, owner) in batch.items():
+        entry = _pending.setdefault(dims, [0, 0, 0, None])
+        entry[0] += size
+        entry[1] += count
+        entry[2] += anon
+        entry[3] = entry[3] or owner
+
+
+async def flush() -> None:
+    """Write the pending counts to Redis; kept for the next run if it is down.
+
+    _pending is only touched on the event loop (here and in _record); the
+    worker thread gets a batch of its own."""
+    global _pending
+    if not _pending:
+        return
     client = _redis()
     if not client:
         return
+    batch, _pending = _pending, {}
     try:
-        await asyncio.to_thread(
-            _record_sync, client, org, owner, layer, service, size, anonymous
-        )
+        await asyncio.to_thread(_write_sync, client, batch)
     except Exception as exc:  # noqa: BLE001 — fail-open
-        logger.debug("metering: record failed (%s)", exc)
+        _merge_back(batch)
+        logger.debug("metering: flush failed (%s)", exc)
+
+
+async def run_flusher(interval: float = FLUSH_INTERVAL_SECONDS) -> None:
+    """Flush every `interval` seconds until cancelled, then once more."""
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            await flush()
+    finally:
+        await flush()
+
+
+async def charge_download(
+    org: str, owner: str | None, layer: str, seconds: float, size: int
+) -> None:
+    """Charge a download to the layer owner's organization: the export's run
+    time as compute and the file as egress, like a layer export job. Runs
+    after the response; a failure is logged, the download is not affected."""
+    import json
+
+    from geoapi.services.layer_service import layer_service
+
+    payload = json.dumps({"layer_id": layer, "export": "download"})
+    try:
+        async with layer_service._pool.acquire() as con, con.transaction():
+            await con.execute(
+                "SELECT customer.charge_credits("
+                "$1::uuid, $2::uuid, 'downloads', 'compute', $3, $4::jsonb)",
+                org,
+                owner,
+                seconds,
+                payload,
+            )
+            await con.execute(
+                "SELECT customer.charge_credits("
+                "$1::uuid, $2::uuid, 'downloads', 'egress', $3, $4::jsonb)",
+                org,
+                owner,
+                size,
+                payload,
+            )
+    except Exception:  # noqa: BLE001 — fail-open
+        logger.warning("metering: download of %s not charged", layer, exc_info=True)
 
 
 async def _is_over_budget(org_id: str) -> bool:
@@ -149,9 +225,11 @@ class CreditMeteringMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
+        service = _service_from_path(request.url.path)
         if (
             org_id
             and layer_id
+            and service != "downloads"  # the download route charges itself
             and request.method == "GET"
             and response.status_code in _METERED_STATUS
         ):
@@ -160,7 +238,6 @@ class CreditMeteringMiddleware(BaseHTTPMiddleware):
             except (TypeError, ValueError):
                 size = 0
             if size > 0:
-                service = _service_from_path(request.url.path)
                 anonymous = "authorization" not in request.headers
-                await _record(org_id, owner_id, layer_id, service, size, anonymous)
+                _record(org_id, owner_id, layer_id, service, size, anonymous)
         return response

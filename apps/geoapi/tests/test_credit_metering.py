@@ -41,7 +41,7 @@ def _app(monkeypatch, *, org, owner, over_budget, recorder):
     async def _over(o):
         return over_budget
 
-    async def _record(*args):
+    def _record(*args):
         recorder.append(args)
 
     monkeypatch.setattr(cm, "_resolve_layer_org", _resolve)
@@ -110,7 +110,7 @@ def _layer_app(monkeypatch, recorder, *, resolves=True):
         recorder.append(("resolve", cid))
         return ("org1", "own1") if resolves else (None, None)
 
-    async def _record(*args):
+    def _record(*args):
         recorder.append(args)
 
     async def _over(o):
@@ -177,20 +177,99 @@ def test_only_get_with_200_or_206_is_metered(monkeypatch):
     assert [r[3:5] for r in _recorded(rec)] == [("features", 50), ("features", 50)]
 
 
-def test_counter_hash_gets_a_ttl_on_every_write():
-    calls = []
+class _Pipe:
+    def __init__(self, calls, fail=False):
+        self.calls, self.fail = calls, fail
 
-    class Pipe:
-        def __getattr__(self, name):
-            return lambda *a: calls.append((name, a))
+    def __getattr__(self, name):
+        return lambda *a: self.calls.append((name, a))
 
-        def execute(self):
-            return []
+    def execute(self):
+        if self.fail:
+            raise ConnectionError("redis down")
+        return []
 
-    class Client:
-        def pipeline(self):
-            return Pipe()
 
-    cm._record_sync(Client(), "org1", "own1", LYR, "tiles", 10, True)
+class _Client:
+    def __init__(self, fail=False):
+        self.calls, self.fail = [], fail
+
+    def pipeline(self):
+        return _Pipe(self.calls, self.fail)
+
+
+def test_counts_are_summed_in_memory_and_written_in_one_pipeline(monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(cm, "_pending", {})
+    for _ in range(3):
+        cm._record("org1", "own1", LYR, "tiles", 10, True)
+    cm._record("org1", None, LYR, "tiles", 5, False)
+    client = _Client()
+    monkeypatch.setattr(cm, "_redis", lambda: client)
+    asyncio.run(cm.flush())
     key = f"meter:egress:org1:{LYR}:tiles"
-    assert ("expire", (key, 7 * 24 * 3600)) in calls
+    assert ("hincrby", (key, "bytes", 35)) in client.calls
+    assert ("hincrby", (key, "count", 4)) in client.calls
+    assert ("hincrby", (key, "anon_count", 3)) in client.calls
+    assert ("hset", (key, "owner", "own1")) in client.calls
+    assert ("expire", (key, 7 * 24 * 3600)) in client.calls
+    assert cm._pending == {}
+
+
+def test_counts_survive_a_failed_write(monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(cm, "_pending", {})
+    cm._record("org1", "own1", LYR, "tiles", 10, True)
+    monkeypatch.setattr(cm, "_redis", lambda: _Client(fail=True))
+    asyncio.run(cm.flush())
+    cm._record("org1", "own1", LYR, "tiles", 7, False)
+    client = _Client()
+    monkeypatch.setattr(cm, "_redis", lambda: client)
+    asyncio.run(cm.flush())
+    key = f"meter:egress:org1:{LYR}:tiles"
+    assert ("hincrby", (key, "bytes", 17)) in client.calls
+    assert ("hincrby", (key, "count", 2)) in client.calls
+
+
+def test_a_response_does_not_wait_for_redis(monkeypatch):
+    # The middleware only counts in memory; nothing touches Redis on the way.
+    monkeypatch.setattr(cm, "_pending", {})
+
+    async def _resolve(cid):
+        return ("org1", "own1")
+
+    def _no_redis():
+        raise AssertionError("Redis used on the request path")
+
+    monkeypatch.setattr(cm, "_resolve_layer_org", _resolve)
+    monkeypatch.setattr(cm, "_redis", _no_redis)
+    app = FastAPI()
+    app.add_middleware(cm.CreditMeteringMiddleware)
+
+    @app.get("/collections/{cid}/tiles/{z}/{x}/{y}")
+    def tile(cid: str, z: int, x: int, y: int):
+        return Response(content=b"x" * 40, headers={"content-length": "40"})
+
+    assert TestClient(app).get(f"/collections/{LYR}/tiles/1/2/3").status_code == 200
+    assert cm._pending[("org1", LYR, "tiles")][:2] == [40, 1]
+
+
+def test_downloads_are_left_to_the_download_route(monkeypatch):
+    rec = []
+    client = TestClient(
+        _app(monkeypatch, org="org1", owner="own1", over_budget=False, recorder=rec)
+    )
+    assert client.get(f"/collections/{LYR}/download").status_code == 200
+    assert rec == []
+
+
+def test_metering_counts_with_the_tile_cache_switched_off(monkeypatch):
+    from geoapi import tile_cache
+
+    sentinel = object()
+    monkeypatch.setattr(tile_cache.settings, "TILE_CACHE_ENABLED", False)
+    monkeypatch.setattr(tile_cache, "_redis_client", sentinel)
+    assert tile_cache.get_redis_client() is None
+    assert cm._redis() is sentinel

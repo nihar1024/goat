@@ -6,7 +6,7 @@
  * already.
  */
 import { Box, Stack, Typography } from "@mui/material";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
@@ -22,8 +22,9 @@ import { DateChip, SectionHeader } from "@/components/explorer/SectionHeader";
 import { VehiclesCurve } from "@/components/explorer/VehiclesCurve";
 import { directionLabel } from "@/components/explorer/directionWords";
 
-/** The time period's column: wide enough for "07:00–09:00"; the directions
- * share what is left, so their names have the room. */
+/** The time period's column: at least wide enough for "07:00–09:00", and as
+ * wide as its longest name ("Nachmittagsspitze"); the directions share what
+ * is left, so their names have the room. */
 const PERIOD_COL = 84;
 
 /** A period × direction table: titled columns, rows between hairlines. */
@@ -40,38 +41,46 @@ function PeriodTable({
   const { t } = useTranslation("common");
   const { periods } = useExplorer().settings;
   const cols = data.directions;
+  // One grid, not a row per period: the period column takes the width of
+  // its longest name in every row alike, never cut short.
+  // Every cell of a row stretched to the row's height, its hairline on top.
+  const rule = { py: 0.75, borderTop: 1, borderColor: "divider", alignSelf: "stretch", minWidth: 0 };
   return (
-    <Box>
-      <Stack direction="row" columnGap={1.5} alignItems="flex-end" sx={{ py: 1 }}>
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: `minmax(${PERIOD_COL}px, max-content) repeat(${cols.length}, minmax(0, 1fr))`,
+        // Space between columns as padding, not a gap: a row's hairline runs
+        // on across it.
+        [`& > :not(:nth-child(${cols.length + 1}n + 1))`]: { pl: 1.5 },
+        alignItems: "center",
+      }}>
+      <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ py: 1, alignSelf: "end" }}>
+        {t("explorer_col_time_period")}
+      </Typography>
+      {cols.map((c) => (
         <Typography
+          key={c.direction.key}
           variant="caption"
           color="text.secondary"
           fontWeight={600}
-          sx={{ width: PERIOD_COL, flexShrink: 0 }}>
-          {t("explorer_col_time_period")}
+          title={directionLabel(c.direction.name, t)}
+          // Wrapping, not cut short: the whole name, over two lines where
+          // two directions share a narrow panel.
+          sx={{
+            py: 1,
+            alignSelf: "end",
+            minWidth: 0,
+            textAlign: "right",
+            lineHeight: 1.35,
+            overflowWrap: "anywhere",
+          }}>
+          {directionLabel(c.direction.name, t)}
         </Typography>
-        {cols.map((c) => (
-          <Typography
-            key={c.direction.key}
-            variant="caption"
-            color="text.secondary"
-            fontWeight={600}
-            title={directionLabel(c.direction.name, t)}
-            // Wrapping, not cut short: the whole name, over two lines where
-            // two directions share a narrow panel.
-            sx={{ flex: 1, minWidth: 0, textAlign: "right", lineHeight: 1.35, overflowWrap: "anywhere" }}>
-            {directionLabel(c.direction.name, t)}
-          </Typography>
-        ))}
-      </Stack>
+      ))}
       {periods.map((p) => (
-        <Stack
-          key={p.key}
-          direction="row"
-          columnGap={1.5}
-          alignItems="center"
-          sx={{ py: 0.75, borderTop: 1, borderColor: "divider" }}>
-          <Box sx={{ width: PERIOD_COL, flexShrink: 0 }}>
+        <Fragment key={p.key}>
+          <Box sx={{ ...rule, display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <Typography variant="body2" fontWeight={600} noWrap sx={{ lineHeight: 1.3 }}>
               {t(`explorer_period_${p.key}`)}
             </Typography>
@@ -87,18 +96,21 @@ function PeriodTable({
           {cols.map((c) => {
             const { text, muted, title } = cell(c, p.key);
             return (
-              <Typography
+              <Box
                 key={c.direction.key}
-                variant="body2"
-                fontWeight={muted ? 400 : 600}
-                color={muted ? "text.secondary" : "text.primary"}
-                title={title}
-                sx={{ flex: 1, minWidth: 0, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                {text}
-              </Typography>
+                sx={{ ...rule, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                <Typography
+                  variant="body2"
+                  fontWeight={muted ? 400 : 600}
+                  color={muted ? "text.secondary" : "text.primary"}
+                  title={title}
+                  sx={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                  {text}
+                </Typography>
+              </Box>
             );
           })}
-        </Stack>
+        </Fragment>
       ))}
     </Box>
   );

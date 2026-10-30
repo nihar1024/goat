@@ -21,6 +21,29 @@ def test_apply_entitlement_resets_usage_on_renewal():
     assert org.plan_renewal_date == datetime.fromisoformat("2026-08-01T00:00:00")
 
 
+def test_a_repeated_renewal_keeps_the_usage_since_the_first():
+    org = make_organization(total_credits=1000, used_credits=940)
+    renewal = {"total_credits": 5000, "plan_renewal_date": "2026-08-01T00:00:00"}
+    crud_org.apply_entitlement(organization=org, entitlement=renewal, reset_usage=True)
+    org.used_credits = 120  # used after the renewal
+
+    # The same renewal again (a retry, possibly with a newer as_of).
+    crud_org.apply_entitlement(
+        organization=org,
+        entitlement={**renewal, "as_of": "2026-08-01T00:05:00"},
+        reset_usage=True,
+    )
+    assert float(org.used_credits) == 120
+
+    # The next renewal resets.
+    crud_org.apply_entitlement(
+        organization=org,
+        entitlement={**renewal, "plan_renewal_date": "2026-09-01T00:00:00"},
+        reset_usage=True,
+    )
+    assert float(org.used_credits) == 0
+
+
 def test_apply_entitlement_plan_change_keeps_usage():
     org = make_organization(total_credits=1000, used_credits=300)
     crud_org.apply_entitlement(

@@ -90,7 +90,7 @@ part of the organization as it is.
 | `suspended` | boolean | suspends or reactivates the organization. |
 | `on_trial` | boolean | `false` converts a trial into a subscription (it also reactivates a trial that expired). |
 | `as_of` | ISO 8601 datetime | the sender's time of the data. A push older than the one already applied is ignored. |
-| `reset_usage` | boolean, default `false` | zero the used credits (send `true` on a renewal). A conversion zeroes them as well. |
+| `reset_usage` | boolean, default `false` | zero the used credits (send `true` on a renewal, with the new `plan_renewal_date`). A push with the renewal date already applied is a repeat and does not reset again. A conversion zeroes them as well. |
 
 A subscription's credits are reset every month from its first push on; a
 trial's credits last the whole trial.

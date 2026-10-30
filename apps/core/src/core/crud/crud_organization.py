@@ -897,11 +897,16 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
                 value if isinstance(value, datetime) else datetime.fromisoformat(value)
             )
 
+        # A repeated renewal (same renewal date, whatever its as_of) must not
+        # zero the credits used since the first one.
+        repeat = False
         if entitlement.get("plan_renewal_date"):
-            organization.plan_renewal_date = moment(entitlement["plan_renewal_date"])
+            renewal = moment(entitlement["plan_renewal_date"])
+            repeat = renewal == organization.plan_renewal_date
+            organization.plan_renewal_date = renewal
         if entitlement.get("as_of"):
             organization.entitlement_as_of = moment(entitlement["as_of"])
-        if reset_usage or converted:
+        if (reset_usage and not repeat) or converted:
             organization.used_credits = 0
         # A subscription's credits reset monthly, from its first push on
         # (credit_reset moves the date on); a trial's credits last the trial.

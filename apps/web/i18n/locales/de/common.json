@@ -3631,6 +3631,8 @@
   "explorer_lines_count_other": "{{count}} Linien",
   "explorer_rate_km_head": "{{currency}}/km",
   "explorer_rate_hour_head": "{{currency}}/h",
+  "explorer_value_km": "{{value}} km",
+  "explorer_value_hours": "{{value}} h",
   "explorer_rate_train_km_head": "{{currency}}/Zug-km",
   "explorer_rates_note": "Kosten pro Jahr ≈ Fahrzeug-km × km-Satz + Fahrzeugstunden × Stundensatz. Ein leerer km-Satz nimmt den angezeigten Standard; ohne Stundensatz deckt der km-Satz alles ab. Metro und Bahn zählen jeden Zug einmal: ein Satz pro Wagen-km mal die Wagen pro Zug ergibt den Satz pro Zug-km.",
   "explorer_rates_days_counted": "Gezählt über {{days}} Betriebstage.",

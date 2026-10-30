@@ -3631,6 +3631,8 @@
   "explorer_lines_count_other": "{{count}} lines",
   "explorer_rate_km_head": "{{currency}}/km",
   "explorer_rate_hour_head": "{{currency}}/h",
+  "explorer_value_km": "{{value}} km",
+  "explorer_value_hours": "{{value}} h",
   "explorer_rate_train_km_head": "{{currency}}/train-km",
   "explorer_rates_note": "Cost a year ≈ vehicle-km × km rate + vehicle-hours × hour rate. A blank km rate uses the default shown; with no hour rate, the km rate covers everything. Metro and rail count each train once: a rate per car-km is that times the cars per train.",
   "explorer_rates_days_counted": "Counted over {{days}} service days.",

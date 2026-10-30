@@ -250,16 +250,19 @@ function Cost() {
       ))}
       {/* The deepest step's vehicle-km and -hours, as its branches. */}
       <Box sx={{ mt: "4px" }}>
-        {[
-          ["explorer_cost_km", deepest?.vehicle_km],
-          ["explorer_cost_hours", deepest?.vehicle_hours],
-        ].map(([key, value], i) => (
+        {(
+          [
+            ["explorer_cost_km", "explorer_value_km", deepest?.vehicle_km],
+            ["explorer_cost_hours", "explorer_value_hours", deepest?.vehicle_hours],
+          ] as const
+        ).map(([key, unit, value], i) => (
           <Figure
             key={key}
             depth={steps.length}
             first={i === 0}
-            label={t(key as string)}
-            value={value === undefined ? "–" : compact(value as number, lang)}
+            label={t(key)}
+            // With its unit: a count alone reads as anything.
+            value={value === undefined ? "–" : t(unit, { value: compact(value, lang) })}
           />
         ))}
       </Box>

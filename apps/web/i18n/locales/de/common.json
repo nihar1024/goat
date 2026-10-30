@@ -3485,7 +3485,6 @@
   "explorer_error_unreachable_title": "GOAT ist nicht erreichbar",
   "explorer_error_unreachable_hint": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
   "explorer_error_other_title": "Das Netz konnte nicht geöffnet werden",
-  "explorer_error_other_hint": "Versuchen Sie es erneut. Wenn es weiter fehlschlägt, senden Sie die Details an Ihre Administration.",
   "explorer_error_details": "Details",
   "explorer_vehicles_in_service_title": "Fahrzeuge im Einsatz",
   "explorer_n_of_m": "{{n}} von {{m}}",

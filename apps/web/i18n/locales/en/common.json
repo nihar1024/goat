@@ -1439,6 +1439,8 @@
   "layer_color_rgb_input": "Layer color RGB {{channel}} input",
   "layer_update": "Layer Update",
   "layers": "Layers",
+  "slider": "Slider",
+  "pause": "Pause",
   "layout": "Layout",
   "layout_name": "Layout name",
   "layout_style": "Layout style",

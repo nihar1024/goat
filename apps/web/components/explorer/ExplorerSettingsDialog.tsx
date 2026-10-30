@@ -40,7 +40,9 @@ import { useRoutes } from "@/hooks/explorer/useExplorerData";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import AppDialog, { AppDialogFooter } from "@/components/common/AppDialog";
+import { DataPeriodPicker } from "@/components/explorer/DataPeriodPicker";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
+import { SegmentedSwitch } from "@/components/explorer/SegmentedSwitch";
 import { modeIcon } from "@/components/explorer/modeIcon";
 import Selector from "@/components/map/panels/common/Selector";
 
@@ -53,6 +55,8 @@ interface Draft {
   /** The periods' starts after the first, as `HH:MM`. */
   starts: string[];
   layover_min: string;
+  /** The user's period for costs; null, the Explorer's choice. */
+  data_period: [string, string] | null;
 }
 
 /** Every field's width: one right edge down a card. */
@@ -213,6 +217,7 @@ function toDraft(settings: ExplorerSettings): Draft {
     // unset rate's does.
     layover_min:
       settings.layover_s === DEFAULT_SETTINGS.layover_s ? "" : String(Math.round(settings.layover_s / 60)),
+    data_period: settings.data_period,
   };
 }
 
@@ -240,6 +245,7 @@ function fromDraft(draft: Draft, base: ExplorerSettings): ExplorerSettings | nul
     rates,
     periods: periodsFrom(starts as number[]),
     layover_s: Math.round(layover * 60),
+    data_period: draft.data_period,
   };
 }
 
@@ -406,6 +412,30 @@ function RatesTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => v
         </Box>
       )}
       <RatesFormula />
+    </Stack>
+  );
+}
+
+/** The data period: the days figures are counted over, scaled to a year,
+ * and the Explorer opens within. On the feed's timeline; the optimum
+ * period until moved. */
+function DataTab({ draft, setDraft }: { draft: Draft; setDraft: (d: Draft) => void }) {
+  const { t } = useTranslation("common");
+  const { daily, optimum } = useExplorer();
+  return (
+    <Stack spacing={2}>
+      {daily?.length && optimum ? (
+        <DataPeriodPicker
+          days={daily}
+          value={draft.data_period ?? optimum}
+          optimum={optimum}
+          onChange={(data_period) => setDraft({ ...draft, data_period })}
+        />
+      ) : (
+        <Typography variant="caption" color="text.secondary">
+          {t("explorer_data_period_waiting")}
+        </Typography>
+      )}
     </Stack>
   );
 }
@@ -581,10 +611,16 @@ export function ExplorerSettingsDialog() {
         />
       }>
       <Tabs
-        value={tab ?? "rates"}
+        // Operating cost holds two tabs of its own, Cost rates and Data
+        // period: the top tab stands for both.
+        value={tab === "data" ? "rates" : (tab ?? "rates")}
         onChange={(_e, value: ExplorerSettingsTab) => dispatch(openExplorerSettings(value))}
         sx={{ minHeight: 36, mb: 2, borderBottom: 1, borderColor: "divider" }}>
-        <Tab value="rates" label={t("explorer_cost_rates")} sx={{ minHeight: 36, textTransform: "none" }} />
+        <Tab
+          value="rates"
+          label={t("explorer_operating_cost")}
+          sx={{ minHeight: 36, textTransform: "none" }}
+        />
         <Tab
           value="periods"
           label={t("explorer_time_periods")}
@@ -596,7 +632,27 @@ export function ExplorerSettingsDialog() {
           grow or shrink under the pointer as the tabs change, where a click
           meant for it could land outside and close it. */}
       <Box sx={{ height: TAB_HEIGHT, overflowY: "auto" }}>
-        {tab === "rates" && <RatesTab draft={draft} setDraft={setDraft} />}
+        {(tab === "rates" || tab === "data") && (
+          <Stack spacing={2}>
+            {/* As wide as its two options, not the dialog. */}
+            <Box sx={{ alignSelf: "flex-start", pb: 1.5 }}>
+              <SegmentedSwitch
+                label={t("explorer_operating_cost")}
+                options={[
+                  { value: "rates", label: t("explorer_cost_rates"), icon: ICON_NAME.COINS },
+                  { value: "data", label: t("explorer_data_period"), icon: ICON_NAME.CALENDAR },
+                ]}
+                value={tab}
+                onChange={(value) => dispatch(openExplorerSettings(value))}
+              />
+            </Box>
+            {tab === "rates" ? (
+              <RatesTab draft={draft} setDraft={setDraft} />
+            ) : (
+              <DataTab draft={draft} setDraft={setDraft} />
+            )}
+          </Stack>
+        )}
         {tab === "periods" && <PeriodsTab draft={draft} setDraft={setDraft} />}
         {tab === "vehicles" && <VehiclesTab draft={draft} setDraft={setDraft} />}
       </Box>

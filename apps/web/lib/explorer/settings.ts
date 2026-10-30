@@ -35,6 +35,10 @@ export interface ExplorerSettings {
   /** Contiguous, from 0 to SERVICE_DAY_END_S, in PERIOD_KEYS order. */
   periods: Period[];
   layover_s: number;
+  /** The data period as the user set it: the days figures are counted
+   * over, scaled to a year, and the date the Explorer opens on; null, the
+   * optimum period (optimumPeriod). */
+  data_period: [string, string] | null;
 }
 
 export const CURRENCIES = ["EUR", "CHF", "GBP", "USD"];
@@ -57,6 +61,7 @@ export const DEFAULT_SETTINGS: ExplorerSettings = {
   rates: {},
   periods: periodsFrom([7, 9, 15, 18, 22].map((h) => h * 3600)),
   layover_s: 6 * 60,
+  data_period: null,
 };
 
 /** Rail-type kinds of vehicle: a trip is a train, so their km are
@@ -129,6 +134,13 @@ export function settingsKey(settings: ExplorerSettings): string {
   return JSON.stringify([settings.rates, settings.periods.map((p) => p.start_s), settings.layover_s]);
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Days from `a` to `b`, both counted. */
+export function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
 /** Problems with a draft, as locale keys: none means it can be saved. */
 export function settingsProblems(settings: ExplorerSettings): string[] {
   const problems: string[] = [];
@@ -146,6 +158,9 @@ export function settingsProblems(settings: ExplorerSettings): string[] {
     problems.push("explorer_settings_periods_order");
   if (!(settings.layover_s >= 0 && settings.layover_s <= 3600))
     problems.push("explorer_settings_layover_range");
+  const p = settings.data_period;
+  if (p && !(DATE_RE.test(p[0]) && DATE_RE.test(p[1]) && p[0] <= p[1]))
+    problems.push("explorer_settings_data_period");
   return problems;
 }
 

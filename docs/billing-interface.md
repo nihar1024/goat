@@ -129,7 +129,9 @@ converts the organization.
   organization stays `on_trial` while suspended. Both stages are idempotent:
   when nothing applies (already converted, suspended or deleted, or not yet
   due) core answers `200 {"status": "noop"}`.
-- **Access:** an ended trial is refused on access without waiting for the task.
+- **Access:** only a suspended organization is refused. An ended trial keeps
+  working until the task's next run suspends it; with billing off, the
+  `on_trial` flag has no effect.
 - **Conversion:** an entitlement push with `on_trial: false` (and
   `suspended: false`).
 

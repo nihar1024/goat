@@ -1,6 +1,6 @@
-"""A trial that has run out is refused on access, not only once the daily
-trial_expiry task has suspended it; check_organization treats it like a
-suspended organization."""
+"""check_organization refuses a suspended organization only. An ended trial
+works until trial_expiry suspends it, and with billing off nothing does, so
+the on_trial flag alone never locks an organization out."""
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
@@ -47,15 +47,15 @@ async def _denial(db: AsyncSession, user_id: UUID, org_id: UUID) -> str:
 @pytest.mark.parametrize(
     "values, refused",
     [
-        ({"on_trial": True, "plan_renewal_date": "past"}, True),
+        ({"on_trial": True, "plan_renewal_date": "past"}, False),
         ({"on_trial": True, "plan_renewal_date": "future"}, False),
         ({"on_trial": True, "plan_renewal_date": None}, False),
-        # a subscription's renewal date in the past is Odoo's to handle
         ({"on_trial": False, "plan_renewal_date": "past"}, False),
         ({"on_trial": False, "suspended": True}, True),
+        ({"on_trial": True, "plan_renewal_date": "past", "suspended": True}, True),
     ],
 )
-async def test_an_ended_trial_is_refused_like_a_suspended_organization(
+async def test_only_a_suspended_organization_is_refused(
     db_session: AsyncSession,
     roles: dict[str, UUID],
     make_org: Callable[[], Awaitable[Organization]],

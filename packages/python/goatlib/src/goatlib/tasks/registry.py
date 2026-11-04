@@ -197,6 +197,19 @@ TASK_REGISTRY: tuple[TaskDefinition, ...] = (
         worker_tag="tools",
     ),
     TaskDefinition(
+        name="trial_expiry",
+        display_name="Trial Expiry",
+        description=(
+            "Enforce GOAT-managed trials: warn expiring organizations and "
+            "suspend expired ones via core's trial webhook."
+        ),
+        module_path="goatlib.tasks.trial_expiry",
+        params_class_name="TrialExpiryParams",
+        windmill_path="f/goat/tasks/trial_expiry",
+        schedule="0 0 3 * * *",
+        worker_tag="tools",
+    ),
+    TaskDefinition(
         name="ducklake_compact",
         display_name="DuckLake Compaction",
         description=(
@@ -226,6 +239,36 @@ TASK_REGISTRY: tuple[TaskDefinition, ...] = (
         params_class_name="PurgeTrashParams",
         windmill_path="f/goat/tasks/purge_trash",
         schedule="0 0 3 * * *",  # Daily, 03:00
+        worker_tag="tools",
+    ),
+    TaskDefinition(
+        name="compute_rollup",
+        display_name="Compute Rollup",
+        description="Charge compute credits from completed Windmill tool jobs.",
+        module_path="goatlib.tasks.compute_rollup",
+        params_class_name="ComputeRollupParams",
+        windmill_path="f/goat/tasks/compute_rollup",
+        schedule="0 */5 * * * *",  # every 5 minutes
+        worker_tag="tools",
+    ),
+    TaskDefinition(
+        name="traffic_rollup",
+        display_name="Traffic Rollup",
+        description="Charge egress bytes per layer/service/project; refresh over-budget flags.",
+        module_path="goatlib.tasks.traffic_rollup",
+        params_class_name="TrafficRollupParams",
+        windmill_path="f/goat/tasks/traffic_rollup",
+        schedule="0 */5 * * * *",  # every 5 minutes
+        worker_tag="tools",
+    ),
+    TaskDefinition(
+        name="credit_reset",
+        display_name="Credit Reset",
+        description="Monthly credit period: zero used_credits and used_ai_credits where credits_reset_at has passed.",
+        module_path="goatlib.tasks.credit_reset",
+        params_class_name="CreditResetParams",
+        windmill_path="f/goat/tasks/credit_reset",
+        schedule="0 0 1 * * *",  # daily at 01:00 UTC
         worker_tag="tools",
     ),
     TaskDefinition(
@@ -259,5 +302,19 @@ TASK_REGISTRY: tuple[TaskDefinition, ...] = (
         windmill_path="f/goat/tasks/gtfs_typed_storage",
         schedule=None,  # Run manually
         worker_tag="tools",
+    ),
+    TaskDefinition(
+        name="build_pt_network",
+        display_name="Build PT Network",
+        description=(
+            "Build GOAT's default public transport network from its combined "
+            "GTFS feed (timetable, walking access/egress, GTFS tables) and "
+            "publish it as a public_transport base data version."
+        ),
+        module_path="goatlib.tasks.build_pt_network",
+        params_class_name="BuildPtNetworkParams",
+        windmill_path="f/goat/tasks/build_pt_network",
+        schedule=None,  # Run manually, when the feed is regenerated
+        worker_tag="tools",  # The routing extension and the street network
     ),
 )

@@ -64,7 +64,7 @@ export interface ExplorerStrip {
 }
 
 /** The settings dialog's tabs (settings.ts). */
-export type ExplorerSettingsTab = "rates" | "periods" | "vehicles";
+export type ExplorerSettingsTab = "data" | "rates" | "periods" | "vehicles";
 
 /** The edit bar's tools (board 17): Select, and the three that create. */
 export type ExplorerEditTool = "select" | "stop" | "route" | "area";

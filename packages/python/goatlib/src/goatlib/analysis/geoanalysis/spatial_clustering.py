@@ -68,9 +68,7 @@ class ClusteringZones(AnalysisTool):
         input_geom = input_meta.geometry_column
 
         if not input_geom:
-            raise ValueError(
-                f"Could not detect geometry column for input: {params.input_path}"
-            )
+            raise ValueError("The input layer has no geometry column.")
 
         # Validate that input contains point geometries
         self.validate_geometry_types(
@@ -116,8 +114,8 @@ class ClusteringZones(AnalysisTool):
                 ST_X({input_geom}) AS lon,
                 ST_Y({input_geom}) AS lat,
                 {weight_expr} AS weight,
-                ST_X(ST_Transform({input_geom}, '{crs_str}', 'EPSG:3857')) AS x,
-                ST_Y(ST_Transform({input_geom}, '{crs_str}', 'EPSG:3857')) AS y
+                ST_X(ST_Transform({input_geom}, '{crs_str}', 'EPSG:3857', always_xy := true)) AS x,
+                ST_Y(ST_Transform({input_geom}, '{crs_str}', 'EPSG:3857', always_xy := true)) AS y
             FROM {input_view}
         """)
         n_features = self.con.execute(
@@ -316,22 +314,29 @@ class ClusteringZones(AnalysisTool):
         # Output 2: Multifeature summary per cluster with characteristics
         self.con.execute(f"""
             CREATE OR REPLACE TEMP VIEW cluster_summary AS
-            WITH cluster_points AS (
-                SELECT a.cluster_id, p.feature_id, p.x, p.y
+            WITH cluster_hulls AS (
+                -- The farthest pair always lies on the convex hull, so only hull vertices are compared
+                SELECT
+                    a.cluster_id,
+                    ST_Points(ST_ConvexHull(ST_Collect(LIST(ST_Point(p.x, p.y))))) AS hull
                 FROM final_assignments a
                 JOIN features_metric p ON a.feature_id = p.feature_id
+                GROUP BY a.cluster_id
+            ),
+            hull_points AS (
+                SELECT h.cluster_id, ST_X(d.geom) AS x, ST_Y(d.geom) AS y
+                FROM cluster_hulls h, LATERAL (SELECT UNNEST(ST_Dump(h.hull)).geom AS geom) d
             ),
             pairwise_distances AS (
                 SELECT
-                    cp1.cluster_id,
+                    hp1.cluster_id,
                     MAX(SQRT(
-                        (cp1.x - cp2.x) * (cp1.x - cp2.x) +
-                        (cp1.y - cp2.y) * (cp1.y - cp2.y)
+                        (hp1.x - hp2.x) * (hp1.x - hp2.x) +
+                        (hp1.y - hp2.y) * (hp1.y - hp2.y)
                     )) AS max_distance
-                FROM cluster_points cp1
-                JOIN cluster_points cp2 ON cp1.cluster_id = cp2.cluster_id
-                                        AND cp1.feature_id < cp2.feature_id
-                GROUP BY cp1.cluster_id
+                FROM hull_points hp1
+                JOIN hull_points hp2 ON hp1.cluster_id = hp2.cluster_id
+                GROUP BY hp1.cluster_id
             )
             SELECT
                 a.cluster_id,

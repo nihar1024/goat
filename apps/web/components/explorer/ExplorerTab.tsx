@@ -33,7 +33,7 @@ import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { ExplorerFilterButton, ExplorerFilterChips } from "@/components/explorer/ExplorerFilter";
 import { RouteListItem } from "@/components/explorer/RouteListItem";
 import { RouteSummary } from "@/components/explorer/RouteSummary";
-import { PX, SectionHeader } from "@/components/explorer/SectionHeader";
+import { ICON_GAP, PX, SectionHeader } from "@/components/explorer/SectionHeader";
 import { StationsList } from "@/components/explorer/StationsList";
 import { StopMarker } from "@/components/explorer/StopMarker";
 
@@ -180,7 +180,7 @@ export function ExplorerTab() {
     <Stack sx={{ height: "100%", minHeight: 0 }}>
       {/* No title of its own: the tab bar above already says Explorer. */}
       <Box sx={{ px: PX, pt: 2, pb: 1.5 }}>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ color: "text.secondary" }}>
+        <Stack direction="row" spacing={ICON_GAP} alignItems="center" sx={{ color: "text.secondary" }}>
           <Icon iconName={ICON_NAME.CUBE} style={{ fontSize: 13 }} htmlColor="inherit" />
           <Typography variant="body2" fontWeight="bold" color="text.primary" noWrap>
             {bundleName}

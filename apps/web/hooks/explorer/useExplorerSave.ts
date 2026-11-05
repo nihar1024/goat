@@ -12,7 +12,13 @@ import { toast } from "react-toastify";
 
 import { SaveConflictError, SaveRefusedError, saveExplorerChanges } from "@/lib/explorer/edit/api";
 import { takeLeave } from "@/lib/explorer/edit/leave";
-import { editsSaved, saveFailed, setChangeListOpen, setExitState } from "@/lib/store/explorer/slice";
+import {
+  editsDiscarded,
+  editsSaved,
+  saveFailed,
+  setChangeListOpen,
+  setExitState,
+} from "@/lib/store/explorer/slice";
 
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
@@ -56,5 +62,13 @@ export function useExplorerSave() {
     }
   }, [session, bundleId, revision, setRevision, name, t, dispatch, finish]);
 
-  return { save, discard: finish };
+  /** Undo the session's changes, so the snapshot is the bundle's again,
+   * and go on with what was leaving. */
+  const discard = useCallback(async () => {
+    await session?.discard();
+    dispatch(editsDiscarded());
+    await finish();
+  }, [session, dispatch, finish]);
+
+  return { save, discard };
 }

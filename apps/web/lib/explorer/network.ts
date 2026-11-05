@@ -47,6 +47,8 @@ export interface NetworkDrawing {
   /** Paths an edit redrew, from the snapshot: drawn in place of their tiles,
    * which show the bundle as saved. */
   redrawn: FeatureCollection<LineString, { shape_id: string }>;
+  /** Paths an edit took out (shape_id): left out of the tiles. */
+  dropped: string[];
 }
 
 export interface NetworkStopProps {
@@ -74,6 +76,7 @@ const EMPTY: NetworkDrawing = {
   stops: NO_STOPS,
   stations: NO_STATIONS,
   redrawn: NO_REDRAWN,
+  dropped: [],
 };
 
 let drawing: NetworkDrawing = EMPTY;
@@ -274,10 +277,14 @@ export async function redrawnLines(
     WHERE m.shape_idx IN (${shapeIdxs.join(", ")}) GROUP BY m.shape_id`);
   return {
     type: "FeatureCollection",
-    features: rows.map((r) => ({
-      type: "Feature",
-      geometry: { type: "LineString", coordinates: Array.from(r.lon, (lon, k) => [lon, r.lat[k]]) },
-      properties: { shape_id: r.shape_id },
-    })),
+    features: rows.map((r) => {
+      // Lists come back as Arrow vectors, which read by iterating, not by index.
+      const lat = Array.from(r.lat);
+      return {
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: Array.from(r.lon, (lon, k) => [lon, lat[k]]) },
+        properties: { shape_id: r.shape_id },
+      };
+    }),
   };
 }

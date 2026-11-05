@@ -22,7 +22,12 @@ import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { ExplorerLoadingCard, ExplorerLoadingLine } from "@/components/explorer/ExplorerLoading";
 import { ExplorerSettingsDialog } from "@/components/explorer/ExplorerSettingsDialog";
 import { ExplorerTab } from "@/components/explorer/ExplorerTab";
+import { ICON_GAP } from "@/components/explorer/SectionHeader";
 import { EXPLORER_RIGHT_PANEL_WIDTH } from "@/components/explorer/right/panelSize";
+
+/** The Explorer's gap between a tab's icon and its name, in place of MUI's
+ * own margin on the icon. */
+const TAB_ICON = { gap: ICON_GAP, "& > .MuiTab-iconWrapper": { mr: 0 } };
 
 /** The left panel's width while the Explorer is open: the right panel's, so
  * the two sides match and the route summary has room. It holds for the
@@ -64,7 +69,7 @@ export function ExplorerLeftPanel({ layersTab }: { layersTab: ReactNode }) {
             label={t("layers")}
             // Half the row each, whatever their padding: a tab's padding counts
             // toward its share where they only grow.
-            sx={{ minHeight: 44, textTransform: "none", gap: 0.5, flex: "0 0 50%", maxWidth: "50%" }}
+            sx={{ ...TAB_ICON, minHeight: 44, textTransform: "none", flex: "0 0 50%", maxWidth: "50%" }}
           />
           <Tab
             value="explorer"
@@ -128,9 +133,9 @@ export function ExplorerLeftPanel({ layersTab }: { layersTab: ReactNode }) {
             // Icon and name centred between the tab's left padding and the
             // divider before the close (40px from its right edge).
             sx={{
+              ...TAB_ICON,
               minHeight: 44,
               textTransform: "none",
-              gap: 0.5,
               flex: "0 0 50%",
               maxWidth: "50%",
               pl: "16px",

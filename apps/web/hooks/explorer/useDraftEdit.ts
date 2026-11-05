@@ -1,14 +1,20 @@
 /**
  * The edit being made (the draft), as the Apply bar shows it: built into a
  * change against the snapshot as it is now, rebuilt as the draft changes or
- * an undo changes the snapshot under it, worded, and applied on Apply. A
- * stop made or described changes no trip: its ≈ cost is none.
+ * an undo changes the snapshot under it, its ≈ cost previewed (applied out
+ * of sight and rolled back, EditSession.preview), worded, and applied on
+ * Apply.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 
 import type { SqlRunner } from "@/lib/explorer/db/types";
+import { tripsAnnualFigures } from "@/lib/explorer/derive/cost";
+import { type DraftPathKind, draftPathsStore } from "@/lib/explorer/edit/draftStore";
 import type { EditDraft, StopValues } from "@/lib/explorer/edit/drafts";
+import { type DeleteStopFacts, deleteStop } from "@/lib/explorer/edit/ops/deleteStop";
+import { type MoveStopFacts, type Router, moveStop } from "@/lib/explorer/edit/ops/moveStop";
 import { locationKind } from "@/lib/explorer/edit/ops/stopRules";
 import {
   type NewStopFacts,
@@ -16,9 +22,17 @@ import {
   createStop,
   editStopDetails,
 } from "@/lib/explorer/edit/ops/stops";
-import type { Built } from "@/lib/explorer/edit/ops/types";
+import type { Built, Check } from "@/lib/explorer/edit/ops/types";
+import { carRoads } from "@/lib/explorer/edit/roads";
 import type { ChangeSummary } from "@/lib/explorer/edit/types";
-import { openExplorerPanel, setEditDraft, setEditTool, setExplorerStopTab } from "@/lib/store/explorer/slice";
+import { rateFor } from "@/lib/explorer/settings";
+import {
+  closeExplorerPanel,
+  openExplorerPanel,
+  setEditDraft,
+  setEditTool,
+  setExplorerStopTab,
+} from "@/lib/store/explorer/slice";
 
 import { useEditActions } from "@/hooks/explorer/useEditActions";
 import { useEdition } from "@/hooks/explorer/useEdition";
@@ -32,7 +46,9 @@ type T = (key: string, options?: Record<string, unknown>) => string;
 /** A draft built: by its kind, with the facts its operation found. */
 export type Building =
   | { kind: "stop-details"; built: Built<StopDetailsFacts> }
-  | { kind: "stop-new"; built: Built<NewStopFacts> };
+  | { kind: "stop-new"; built: Built<NewStopFacts> }
+  | { kind: "stop-delete"; built: Built<DeleteStopFacts> }
+  | { kind: "stop-move"; built: Built<MoveStopFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -68,37 +84,132 @@ let ids = 0;
 export function useDraftEdit(): DraftEdit | null {
   const { t, i18n } = useTranslation("common");
   const dispatch = useAppDispatch();
-  const { db, session, settings } = useExplorer();
+  const { db, session, shapeDistUnit, settings, window } = useExplorer();
   const edition = useEdition(db);
   const draft = useAppSelector((s) => s.explorer.edit.draft);
+  // With Snap on, a moved stop's lines follow the streets.
+  const snap = useAppSelector((s) => s.explorer.edit.snap);
   const { apply: applyChange } = useEditActions();
   const [building, setBuilding] = useState<{ draft: EditDraft; building: Building } | null>(null);
+  // The change in annual cost, for the draft built (undefined: not yet).
+  const [cost, setCost] = useState<{ draft: EditDraft; building: Building; value: number | null } | null>(
+    null
+  );
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     if (!db || !draft) return;
     let current = true;
-    build(db, draft)
-      .then((b) => current && setBuilding({ draft, building: b }))
-      .catch(() => current && setBuilding(null));
+    const run = (roads?: Router) =>
+      build(db, draft, shapeDistUnit, roads)
+        .then((b) => current && setBuilding({ draft, building: b }))
+        .catch(() => current && setBuilding(null));
+    // A moved stop's lines along the streets (Snap), built once, when the
+    // stop rests: the router answers one request a second, and asking at
+    // every step of a drag queued the drop's own request behind the whole
+    // drag's. Not drawn straight first and then again: one path, once.
+    if (snap && draft.kind === "stop-move") {
+      // Once this build is stale, its remaining stretches ask no more of
+      // the router: its one request a second goes to the drop that counts.
+      const roads: Router = (waypoints) => (current ? carRoads(waypoints) : Promise.resolve(null));
+      const routed = setTimeout(() => void run(roads), ROUTE_AFTER_MS);
+      return () => {
+        current = false;
+        clearTimeout(routed);
+      };
+    }
+    // Anything else at once: the draft changes at each step of a drag.
+    void run();
     return () => {
       current = false;
     };
-  }, [db, draft, edition]);
+  }, [db, draft, edition, shapeDistUnit, snap]);
 
   const now = building && building.draft === draft ? building.building : null;
+
+  // Why it is refused, and its notices, said once as it is built, as
+  // toasts: worth knowing, not worth keeping beside the edit. One toast a
+  // finding, not one a build. A refusal on a form field is said on it.
+  useEffect(() => {
+    if (!now) return;
+    const words = (c: Check) =>
+      t(`explorer_check_${c.code}`, { ...c.params, interpolation: { escapeValue: false } });
+    if (!now.built.ok && !now.built.refused.field)
+      toast.error(words(now.built.refused), { toastId: now.built.refused.code });
+    for (const c of now.built.checks)
+      if (c.severity === "notice") toast.warning(words(c), { toastId: c.code });
+  }, [now, t]);
   // While the draft is rebuilt (each key typed, each step of a drag), what
   // was built for the same edit stays shown: the Apply bar and the map keep
-  // their words instead of blinking empty between builds.
+  // their words and paths instead of blinking empty between builds.
   const shown = now ?? (building && draft && sameEdit(building.draft, draft) ? building.building : null);
 
+  // The paths a stop being moved would take, for the map: each new one, and
+  // the one it replaces in its two parts. Only once built for where the stop
+  // is now, not what was built for where it was.
+  useEffect(() => {
+    const paths = now?.kind === "stop-move" && now.built.ok ? now.built.facts.paths : null;
+    const line = (coordinates: [number, number][], kind: DraftPathKind, color: string) => ({
+      type: "Feature" as const,
+      geometry: { type: "LineString" as const, coordinates },
+      properties: { kind, color },
+    });
+    draftPathsStore.set(
+      paths && {
+        type: "FeatureCollection",
+        features: paths.flatMap((p) => [
+          ...(p.old?.kept ?? []).map((c) => line(c, "kept", p.color)),
+          ...(p.old?.replaced ?? []).map((c) => line(c, "replaced", p.color)),
+          // Dotted only where it is drawn anew: the rest runs as it did.
+          ...p.drawn.filter((c) => c.length > 1).map((c) => line(c, "new", p.color)),
+        ]),
+      },
+      paths?.flatMap((p) => (p.replaces ? [p.replaces] : [])) ?? []
+    );
+  }, [now]);
+  useEffect(() => () => draftPathsStore.set(null), []);
+
+  // What the trips it changes cost a year, before and after it.
+  useEffect(() => {
+    if (!now || !session || !window) return;
+    const trips = tripsOf(now);
+    if (!now.built.ok || !trips?.length) return;
+    let current = true;
+    const where = `trip_idx IN (${trips.join(", ")})`;
+    session
+      .preview(now.built.rows.sql, (d) =>
+        tripsAnnualFigures(d, where, window, (a, type) => rateFor(settings, a, type))
+      )
+      .then(
+        (seen) =>
+          current &&
+          draft &&
+          setCost({ draft, building: now, value: seen ? seen.after.cost - seen.before.cost : null })
+      )
+      .catch(() => current && draft && setCost({ draft, building: now, value: null }));
+    return () => {
+      current = false;
+    };
+  }, [now, draft, session, window, settings]);
+
+  // Likewise the last cost of the same edit, until the new one is known.
+  const priced = !tripsOf(shown)?.length
+    ? 0
+    : cost && (cost.building === shown || (draft && sameEdit(cost.draft, draft)))
+      ? cost.value
+      : undefined;
   const said = shown ? wordsFor(shown, t) : null;
   const bar =
     said &&
     ({
       ...said.bar,
-      cost: costChange(0, i18n.language, settings.currency, t),
-      costs: false,
+      cost:
+        priced === undefined
+          ? null
+          : priced === null
+            ? t("explorer_cost_unknown")
+            : costChange(priced, i18n.language, settings.currency, t),
+      costs: typeof priced === "number" && Math.abs(priced) >= 0.5,
     } satisfies BarWords);
 
   const apply = useCallback(async () => {
@@ -108,6 +219,7 @@ export function useDraftEdit(): DraftEdit | null {
       await applyChange({
         id: `e${Date.now()}-${ids++}`,
         ...said.words,
+        cost: typeof priced === "number" && tripsOf(now)?.length ? priced : undefined,
         ...now.built.rows,
       });
       // The Stop tool is one-shot: back to Select, the new stop picked.
@@ -128,10 +240,12 @@ export function useDraftEdit(): DraftEdit | null {
         );
         dispatch(setExplorerStopTab("properties"));
       }
+      // A stop deleted has nothing left to show.
+      if (now.kind === "stop-delete") dispatch(closeExplorerPanel());
     } finally {
       setApplying(false);
     }
-  }, [now, said, session, applyChange, dispatch, draft]);
+  }, [now, said, priced, session, applyChange, dispatch, draft]);
   const cancel = useCallback(() => dispatch(setEditDraft(null)), [dispatch]);
 
   if (!draft) return null;
@@ -147,7 +261,20 @@ export function useDraftEdit(): DraftEdit | null {
   };
 }
 
-async function build(db: SqlRunner, draft: EditDraft): Promise<Building> {
+/** How long a moved stop rests before its lines are routed along the streets. */
+const ROUTE_AFTER_MS = 500;
+
+/** The trips an edit changes, where it changes what they cost. */
+function tripsOf(b: Building | null): number[] | null {
+  return b?.kind === "stop-delete" || b?.kind === "stop-move" ? (b.built.facts?.trip_idxs ?? null) : null;
+}
+
+async function build(
+  db: SqlRunner,
+  draft: EditDraft,
+  shapeDistUnit: string | null,
+  roads?: Router
+): Promise<Building> {
   switch (draft.kind) {
     case "stop-details":
       return { kind: draft.kind, built: await editStopDetails(db, draft.stop_idx, draft.values) };
@@ -155,6 +282,13 @@ async function build(db: SqlRunner, draft: EditDraft): Promise<Building> {
       return {
         kind: draft.kind,
         built: await createStop(db, draft.lon, draft.lat, draft.values, draft.stop_id ?? ""),
+      };
+    case "stop-delete":
+      return { kind: draft.kind, built: await deleteStop(db, draft.stop_idx, shapeDistUnit) };
+    case "stop-move":
+      return {
+        kind: draft.kind,
+        built: await moveStop(db, draft.stop_idx, [draft.lon, draft.lat], shapeDistUnit, roads),
       };
   }
 }
@@ -199,5 +333,47 @@ function wordsFor(
         },
         bar: { action: t(`explorer_create_${locationKind(b.built.facts?.location_type)}`) },
       };
+    case "stop-delete": {
+      const f = b.built.facts;
+      const kind = locationKind(f?.location_type);
+      const impact =
+        kind === "station"
+          ? [
+              f?.platforms ? t("explorer_platforms_deleted", { count: f.platforms }) : null,
+              f && f.entrances + f.nodes
+                ? t("explorer_entrances_deleted", { count: f.entrances + f.nodes })
+                : null,
+              f?.trips ? t("explorer_trips", { count: f.trips }) : null,
+              f?.trips ? t("explorer_lines_count", { count: f.routes.length }) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          : kind === "entrance"
+            ? undefined
+            : f?.trips
+              ? [
+                  t("explorer_trips", { count: f.trips }),
+                  t("explorer_lines_count", { count: f.routes.length }),
+                ].join(" · ")
+              : t("explorer_not_served");
+      return {
+        words: { label: t(`explorer_edit_${kind}_deleted`, { name: f?.name ?? "", ...raw }), impact },
+        bar: { action: t(`explorer_delete_${kind}`), danger: true },
+      };
+    }
+    case "stop-move": {
+      const f = b.built.facts;
+      const moved = t("explorer_moved_m", { metres: Math.round(f?.metres ?? 0) });
+      const paths = f?.paths.length ? t("explorer_paths_redrawn", { count: f.paths.length }) : null;
+      const impact = [moved, paths, f?.trips ? t("explorer_times_kept", { count: f.trips }) : null]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        words: { label: t("explorer_edit_stop_moved", { name: f?.name ?? "", ...raw }), impact },
+        bar: {
+          action: t("apply"),
+        },
+      };
+    }
   }
 }

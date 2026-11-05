@@ -28,7 +28,7 @@ import { RouteBadge, namedByMode, routeName } from "@/components/explorer/RouteB
 import { RouteCalendar } from "@/components/explorer/RouteCalendar";
 import { RouteService } from "@/components/explorer/RouteService";
 import { RouteStops } from "@/components/explorer/RouteStops";
-import { TAB_SX } from "@/components/explorer/SectionHeader";
+import { ICON_GAP, TAB_SX } from "@/components/explorer/SectionHeader";
 import { modeIcon } from "@/components/explorer/modeIcon";
 
 /** A tab's shape while the route's figures are worked out, so it fills in
@@ -109,7 +109,7 @@ export function RouteSummary({ route }: { route: RouteRow }) {
       <Box sx={{ px: 2.5, pt: 1.5, pb: 0.5 }}>
         <ButtonBase
           onClick={() => dispatch(selectExplorerRoute(null))}
-          sx={{ gap: 0.75, color: "text.secondary", borderRadius: 1, px: 0.5 }}>
+          sx={{ gap: ICON_GAP, color: "text.secondary", borderRadius: 1, px: 0.5 }}>
           <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
           <Typography variant="caption">{t("explorer_routes")}</Typography>
         </ButtonBase>
@@ -121,7 +121,7 @@ export function RouteSummary({ route }: { route: RouteRow }) {
         </Stack>
         <Stack
           direction="row"
-          spacing={0.75}
+          spacing={ICON_GAP}
           alignItems="flex-start"
           sx={{ mt: 0.75, color: "text.secondary" }}>
           {/* One text line tall, so the icon centres on the first line however

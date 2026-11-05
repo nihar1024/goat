@@ -38,7 +38,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { RouteBadge, distinctLines, lineKey } from "@/components/explorer/RouteBadge";
-import { DateChip, PX, SectionHeader, TAB_SX } from "@/components/explorer/SectionHeader";
+import { DateChip, ICON_GAP, PX, SectionHeader, TAB_SX } from "@/components/explorer/SectionHeader";
 import { platformLabel } from "@/components/explorer/StationsList";
 import { StopMarker } from "@/components/explorer/StopMarker";
 import { directionLabel } from "@/components/explorer/directionWords";
@@ -214,8 +214,7 @@ export function StopPanel({ stop }: { stop: ExplorerPickedStop }) {
       <Stack direction="row" alignItems="center" spacing="20px" sx={{ mt: 1.5 }}>
         {date && <DateChip date={date} />}
         {tab === "departures" && (
-          // The date chip's gap between its mark and its text.
-          <Stack direction="row" alignItems="center" spacing="6px" sx={{ color: "text.secondary" }}>
+          <Stack direction="row" alignItems="center" spacing={ICON_GAP} sx={{ color: "text.secondary" }}>
             <Icon iconName={ICON_NAME.CLOCK} style={{ fontSize: 11 }} htmlColor="inherit" />
             <Typography variant="caption" noWrap>
               {clock(now ?? 0)}

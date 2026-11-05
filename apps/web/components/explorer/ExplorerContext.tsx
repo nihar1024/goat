@@ -185,8 +185,9 @@ export function ExplorerProvider({ bundleId, children }: { bundleId: string; chi
     if (!firstDb || !shapesIn) return;
     let current = true;
     const redrawn = sessionOf(firstDb).redrawnShapes;
+    const dropped = sessionOf(firstDb).droppedShapeIds;
     Promise.all([networkShapes(firstDb), redrawnLines(firstDb, redrawn)])
-      .then(([part, lines]) => current && networkStore.update({ ...part, redrawn: lines }))
+      .then(([part, lines]) => current && networkStore.update({ ...part, redrawn: lines, dropped }))
       .catch(() => undefined);
     return () => {
       current = false;

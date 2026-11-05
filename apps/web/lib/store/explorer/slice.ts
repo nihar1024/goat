@@ -516,6 +516,12 @@ const explorerSlice = createSlice({
       state.edit.changes = [];
       state.edit.redo = [];
     },
+    /** Every change undone and forgotten, with the draft. */
+    editsDiscarded: (state) => {
+      state.edit.changes = [];
+      state.edit.redo = [];
+      state.edit.draft = null;
+    },
     editUndone: (state) => {
       const last = state.edit.changes.pop();
       if (last) state.edit.redo.push(last);
@@ -592,6 +598,7 @@ export const {
   presetNewStopId,
   editApplied,
   editsSaved,
+  editsDiscarded,
   editUndone,
   editRedone,
   setChangeListOpen,

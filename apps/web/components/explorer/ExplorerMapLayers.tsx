@@ -23,6 +23,7 @@ import { Layer, Popup, Source, useMap } from "react-map-gl/maplibre";
 import { GEOAPI_BASE_URL } from "@/lib/constants";
 import { vehicleFrame } from "@/lib/explorer/derive/vehicles";
 import { directionsOnShapes } from "@/lib/explorer/directionChoice";
+import { previewedStore } from "@/lib/explorer/edit/draftStore";
 import { routeMatches } from "@/lib/explorer/filters";
 import { highlightStore } from "@/lib/explorer/highlightStore";
 import { mapColor, mapPalette } from "@/lib/explorer/mapPalette";
@@ -58,6 +59,7 @@ import { VEHICLE_LAYER_ID, VehicleLayer } from "@/components/explorer/vehicleLay
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
 const NO_VEHICLES = vehicleFrame();
 const NETWORK = "explorer-network";
+const NO_IDS: string[] = [];
 /** How close a picked stop is shown: near enough to tell its platforms and
  * the streets round it apart. A station is fitted whole, no closer. */
 const STOP_ZOOM = 17;
@@ -259,6 +261,12 @@ export function ExplorerMapLayers() {
   // The stretch those patterns run, cut from their shapes; until it is in,
   // the shapes themselves stand in.
   const highlight = useSyncExternalStore(highlightStore.subscribe, highlightStore.getSnapshot, () => null);
+  const preview = useSyncExternalStore(
+    previewedStore.subscribe,
+    previewedStore.getSnapshot,
+    previewedStore.getSnapshot
+  );
+  const previewed = preview?.replaces ?? NO_IDS;
   const sections = highlight && highlight.key === patternKey ? highlight.sections : null;
   const network = useSyncExternalStore(
     networkStore.subscribe,
@@ -838,14 +846,23 @@ export function ExplorerMapLayers() {
   const none: FilterSpecification = ["boolean", false];
   const all: FilterSpecification = ["boolean", true];
   const faded: ExpressionSpecification = ["boolean", ["feature-state", "faded"], false];
-  // Every line faded: a route selected, or only stops listed.
-  const allFaded = !!selectedRouteId || (filters.types.length === 1 && filters.types[0] === "stops");
+  // Every line faded: a route selected, only stops listed, or a moved
+  // stop's paths previewed (drawn by the editing layers, over the rest).
+  const allFaded =
+    !!selectedRouteId || (filters.types.length === 1 && filters.types[0] === "stops") || !!preview;
 
   // The network's lines, the selected route over them and its highlighted
   // patterns: drawn from the tiles, and again from the snapshot for paths
-  // an edit redrew (each kept out of the tiles' layers).
+  // an edit redrew (each kept out of the tiles' layers, as are those an edit
+  // took out). A path a moved
+  // stop's preview redraws in place is left out of both meanwhile: the
+  // preview draws it.
   const redrawnIds = network.redrawn.features.map((f) => f.properties.shape_id);
-  const notRedrawn: FilterSpecification = ["!", ["in", ["get", "shape_id"], ["literal", redrawnIds]]];
+  const notRedrawn: FilterSpecification = [
+    "!",
+    ["in", ["get", "shape_id"], ["literal", [...redrawnIds, ...network.dropped, ...previewed]]],
+  ];
+  const notPreviewed: FilterSpecification = ["!", ["in", ["get", "shape_id"], ["literal", previewed]]];
   const lineLayers = (
     from: { source: string; "source-layer"?: string },
     suffix: string,
@@ -948,14 +965,18 @@ export function ExplorerMapLayers() {
             maxzoom={14}
           />
           {lineLayers({ source: NETWORK, "source-layer": TILE_LAYER }, "", (f) =>
-            redrawnIds.length ? (["all", f, notRedrawn] as FilterSpecification) : f
+            redrawnIds.length || network.dropped.length || previewed.length
+              ? (["all", f, notRedrawn] as FilterSpecification)
+              : f
           )}
         </>
       )}
       {/* Paths an edit redrew, from the snapshot, in place of their tiles
           (which show the bundle as saved) until a save redraws those. */}
       <Source key="explorer-redrawn" id="explorer-redrawn" type="geojson" data={network.redrawn} />
-      {lineLayers({ source: "explorer-redrawn" }, REDRAWN, (f) => f)}
+      {lineLayers({ source: "explorer-redrawn" }, REDRAWN, (f) =>
+        previewed.length ? (["all", f, notPreviewed] as FilterSpecification) : f
+      )}
       {/* The highlighted patterns' own stretch of line, over the faded route. */}
       <Source
         key="explorer-pattern-sections"

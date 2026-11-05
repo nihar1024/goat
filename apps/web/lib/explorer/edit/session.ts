@@ -24,6 +24,7 @@ interface Applied {
   touches: Touch[];
   gtfs: GtfsRowOp[];
   shapes: number[];
+  dropped: string[];
   /** Temp tables holding each touch's rows before and after. */
   before: string[];
   after: string[];
@@ -86,6 +87,15 @@ export class EditSession {
     return this.serial(() => this.redoNow());
   }
 
+  /** Undo every change, newest first, and forget them: the snapshot as the
+   * bundle was when the session began or last saved. */
+  discard(): Promise<void> {
+    return this.serial(async () => {
+      for (const entry of [...this.applied].reverse()) await this.restore(entry, entry.before);
+      await this.clearNow();
+    });
+  }
+
   /** What `measure` finds before and after `sql`, without applying it: run
    * on a second connection in a transaction that is rolled back, so no
    * other query sees the change. Null where the database cannot fork. */
@@ -143,6 +153,7 @@ export class EditSession {
       touches: change.touches,
       gtfs: change.gtfs,
       shapes: change.shapes ?? [],
+      dropped: change.dropped ?? [],
       before,
       after,
     });
@@ -172,6 +183,12 @@ export class EditSession {
    * snapshot, as the bundle's lines are as they were until a save. */
   get redrawnShapes(): number[] {
     return [...new Set(this.applied.flatMap((a) => a.shapes))];
+  }
+
+  /** The paths the applied changes took out (shape_id), for the map to
+   * leave out of the bundle's lines until a save. */
+  get droppedShapeIds(): string[] {
+    return [...new Set(this.applied.flatMap((a) => a.dropped))];
   }
 
   /** Every applied change as bundle rows, in the order they were made. */

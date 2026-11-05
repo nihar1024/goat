@@ -6,7 +6,7 @@
  * (dropped 20 Oct 2026): closed, it is opened again from where it came.
  */
 import { Box, ButtonBase, IconButton, Stack, Tooltip, Typography } from "@mui/material";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
@@ -26,7 +26,9 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { FloatingPanel } from "@/components/common/FloatingPanel";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { RouteBadge, routeName } from "@/components/explorer/RouteBadge";
+import { ICON_GAP } from "@/components/explorer/SectionHeader";
 import { ApplyBar } from "@/components/explorer/edit/ApplyBar";
+import { DeleteStopCascade } from "@/components/explorer/edit/DeleteStopCascade";
 import { NewStopPanel } from "@/components/explorer/edit/NewStopPanel";
 import { StopPanel } from "@/components/explorer/right/StopPanel";
 import { TripPanel } from "@/components/explorer/right/TripPanel";
@@ -58,7 +60,9 @@ function RightPanel() {
   const panel = useAppSelector((s) => s.explorer.panel);
   const item = useAppSelector((s) => panelItem(s.explorer));
   const previous = panel.stack.length > 1 ? panel.stack[panel.stack.length - 2] : null;
-  const fromRoute = useRoutes(useExplorer().db).data?.find((r) => r.route_id === panel.fromRoute);
+  const routes = useRoutes(useExplorer().db).data;
+  const fromRoute = routes?.find((r) => r.route_id === panel.fromRoute);
+  const routeByIdx = useMemo(() => new Map((routes ?? []).map((r) => [r.route_idx, r])), [routes]);
   const previousName = useItemName(previous);
   // The edit being made on the item shown: drafts go with the panel's item.
   const edit = useDraftEdit();
@@ -81,7 +85,7 @@ function RightPanel() {
               // Back to the item this one was opened from.
               <ButtonBase
                 onClick={() => dispatch(explorerPanelBack())}
-                sx={{ gap: 0.75, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
+                sx={{ gap: ICON_GAP, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
                 <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
                 <Typography variant="caption" noWrap>
                   {previousName}
@@ -119,7 +123,17 @@ function RightPanel() {
             />
           ) : null}
         </Box>
-        {edit && <ApplyBar edit={edit} />}
+        {edit && (
+          <ApplyBar
+            edit={edit}
+            // What a delete takes, at the top of the bar: read before its cost.
+            impact={
+              edit.building?.kind === "stop-delete" ? (
+                <DeleteStopCascade edit={edit} routeByIdx={routeByIdx} />
+              ) : null
+            }
+          />
+        )}
       </FloatingPanel>
     </DraftEditContext.Provider>
   );

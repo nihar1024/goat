@@ -41,6 +41,9 @@ export interface ShapeStretch {
   /** Where the stop it is drawn through was on it, as a share. */
   at: number | null;
   points: [number, number][];
+  /** The point the stop lies at, where the stretch follows a road (Snap);
+   * absent: the first. */
+  stop_point?: number;
 }
 
 /** A shape redrawn through a moved stop (2.2): `source`'s points, at their
@@ -56,6 +59,9 @@ export interface GtfsShapeReshape {
   /** Metres per `shape_dist_traveled` unit, where the Explorer knows it. */
   metres_per_unit?: number;
   stretches: ShapeStretch[];
+  /** The trips whose distances follow, as they were on it when redrawn: a
+   * later edit may move some onto a copy before the save. */
+  trips?: string[];
 }
 
 export type GtfsRowOp = GtfsRowEdit | GtfsShapeReshape;
@@ -89,4 +95,7 @@ export interface EditChange extends ChangeSummary {
   /** Paths it redraws (shape_idx): the map draws them from the snapshot
    * until a save brings the bundle's lines in step. */
   shapes?: number[];
+  /** Paths it takes out of the snapshot (shape_id), no trip running them
+   * any more: the map leaves their tiles out until a save. */
+  dropped?: string[];
 }

@@ -4,11 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { openFixtureDb } from "@/lib/explorer/__tests__/fixtureDb";
 import type { SqlRunner } from "@/lib/explorer/db/types";
 import { NO_STOP_VALUES, type StopValues } from "@/lib/explorer/edit/drafts";
-import { parseLatLon } from "@/lib/explorer/edit/ops/stopRules";
+import { cleanStopValues, parseLatLon } from "@/lib/explorer/edit/ops/stopRules";
 import {
   createStop,
   editStopDetails,
-  nearestStop,
   newStopId,
   sameStopValues,
   stopRecord,
@@ -182,19 +181,16 @@ describe("2.1 create stop", () => {
     expect(await db.all("SELECT * FROM stops ORDER BY stop_idx")).toEqual(before);
   });
 
-  it("says when another stop is within 50 m, by its station's name", async () => {
-    // 0.0003° of longitude at 52.5° is about 20 m east of S1, a platform of
-    // Main Station.
-    const built = await createStop(db, 13.4003, 52.5, v({ name: "Near", wheelchair: 0 }), "goat_x");
-    if (!built.ok) throw new Error("refused");
-    expect(built.checks).toEqual([
-      {
-        code: "goat_stop_near_existing",
-        severity: "warning",
-        params: { name: "Main Station", metres: 20 },
-      },
-    ]);
-    expect(await nearestStop(db, 13.41, 52.6, 50)).toBeNull();
+  it("renames a platform whose parent the feed got wrong: the problem is the feed's", async () => {
+    // S1's parent made another platform, as a malformed feed may have it.
+    await db.exec(`UPDATE stops SET parent_idx = (SELECT stop_idx FROM stops WHERE stop_id = 'S2')
+                   WHERE stop_id = 'S1'`);
+    const s1 = (await db.all<{ stop_idx: number }>("SELECT stop_idx FROM stops WHERE stop_id = 'S1'"))[0]
+      .stop_idx;
+    const record = await stopRecord(db, s1);
+    if (!record) throw new Error("no S1");
+    const built = await editStopDetails(db, s1, { ...cleanStopValues(record), name: "Renamed" });
+    expect(built.ok).toBe(true);
   });
 
   it("waits for a name", async () => {

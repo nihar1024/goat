@@ -8,7 +8,6 @@
  */
 import type { SqlRunner } from "@/lib/explorer/db/types";
 import type { LocationType, StopValues, Wheelchair } from "@/lib/explorer/edit/drafts";
-import { metresSql } from "@/lib/explorer/edit/ops/geo";
 import {
   STOP_VALUE_KEYS,
   type StopField,
@@ -68,12 +67,20 @@ export function wheelchairOf(value: number | null): Wheelchair {
 export type FieldCheck = Check & { field: StopField };
 
 /** The values' first problem, as the refusal of the edit; and a parent that
- * is no station (or, for a boarding area, no platform). */
-async function refusalOf(db: SqlRunner, values: StopValues, stop_id?: string): Promise<FieldCheck | null> {
+ * is no station (or, for a boarding area, no platform). Editing, only of the
+ * fields it changes (`changed`): a problem the stop had in the feed is the
+ * feed's, and does not block renaming it (the save, too, counts only the
+ * problems a change makes). */
+async function refusalOf(
+  db: SqlRunner,
+  values: StopValues,
+  stop_id?: string,
+  changed?: Set<string>
+): Promise<FieldCheck | null> {
   const problems = stopFieldProblems(values, stop_id);
-  const field = Object.keys(problems)[0] as StopField | undefined;
+  const field = (Object.keys(problems) as StopField[]).find((f) => !changed || changed.has(f));
   if (field) return { code: problems[field] as string, severity: "error", field };
-  if (values.parent_idx !== null) {
+  if (values.parent_idx !== null && (!changed || changed.has("parent_idx"))) {
     const [parent] = await db.all<{ location_type: number }>(
       `SELECT COALESCE(location_type, 0) AS location_type FROM stops WHERE stop_idx = ${sqlNumber(values.parent_idx)}`
     );
@@ -139,10 +146,8 @@ export async function editStopDetails(
       facts,
       checks: [],
     };
-  const refused = await refusalOf(db, to);
+  const refused = await refusalOf(db, to, undefined, new Set(changed));
   if (refused) return { ok: false, refused, facts, checks: [] };
-  // Only a stop or platform is called at; what belongs to a location keeps
-  // it what it is (the save checks both again).
 
   const where = `stop_idx = ${sqlNumber(stop_idx)}`;
   const set: string[] = [];
@@ -165,34 +170,6 @@ export async function editStopDetails(
   };
 }
 
-/** How near another stop a new one may be placed before it is said
- * (`goat_stop_near_existing`, 03-validation-spec § 5). */
-export const NEAR_STOP_M = 50;
-
-/** The stop nearest a point within `within` metres, if any: a stop or
- * platform, named by its station where it has one. */
-export async function nearestStop(
-  db: SqlRunner,
-  lon: number,
-  lat: number,
-  within: number,
-  except: number | null = null
-): Promise<{ stop_idx: number; name: string; metres: number } | null> {
-  // A box round the point first, then the distance: a feed has many stops.
-  const dLat = within / 111_000;
-  const dLon = dLat / Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
-  const [row] = await db.all<{ stop_idx: number; name: string; metres: number }>(`
-    SELECT s.stop_idx, COALESCE(p.name, s.name, s.stop_id) AS name,
-           ${metresSql("s.lon", "s.lat", sqlNumber(lon), sqlNumber(lat))} AS metres
-    FROM stops s LEFT JOIN stops p ON p.stop_idx = s.parent_idx
-    WHERE COALESCE(s.location_type, 0) = 0
-      AND s.lat BETWEEN ${sqlNumber(lat - dLat)} AND ${sqlNumber(lat + dLat)}
-      AND s.lon BETWEEN ${sqlNumber(lon - dLon)} AND ${sqlNumber(lon + dLon)}
-      ${except === null ? "" : `AND s.stop_idx <> ${sqlNumber(except)}`}
-    ORDER BY metres LIMIT 1`);
-  return row && row.metres <= within ? row : null;
-}
-
 /** A GTFS id for a stop made here: `goat_` and 8 hex digits, none the feed
  * uses. */
 export async function newStopId(db: SqlRunner, random: () => number = Math.random): Promise<string> {
@@ -213,8 +190,8 @@ export interface NewStopFacts {
 }
 
 /** 2.1: a location where it was placed: a stop, unserved until a line
- * calls there (added from the line, 3.1), a station or an entrance. Warns
- * when another stop is within 50 m. Its id is the one given, checked unused. */
+ * calls there (added from the line, 3.1), a station or an entrance. Its id
+ * is the one given, checked unused. */
 export async function createStop(
   db: SqlRunner,
   lon: number,
@@ -228,16 +205,7 @@ export async function createStop(
   );
   const stop_id = (stopId ?? (await newStopId(db))).trim();
   const facts = { stop_idx: next, stop_id, name: to.name, location_type: to.location_type };
-  const near = to.location_type === 0 ? await nearestStop(db, lon, lat, NEAR_STOP_M) : null;
-  const checks = near
-    ? [
-        {
-          code: "goat_stop_near_existing",
-          severity: "warning" as const,
-          params: { name: near.name, metres: Math.round(near.metres) },
-        },
-      ]
-    : [];
+  const checks: Check[] = [];
   const refused = await refusalOf(db, to, stop_id);
   if (refused) return { ok: false, refused, facts, checks };
   const [taken] = await db.all(`SELECT 1 FROM stops WHERE stop_id = ${sqlText(stop_id)}`);

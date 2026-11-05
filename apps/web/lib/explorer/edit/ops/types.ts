@@ -7,13 +7,14 @@
 import type { EditChange } from "@/lib/explorer/edit/types";
 
 /** A change as an operation builds it; the words are added by the caller. */
-export type ChangeRows = Pick<EditChange, "kind" | "touches" | "sql" | "gtfs" | "shapes">;
+export type ChangeRows = Pick<EditChange, "kind" | "touches" | "sql" | "gtfs" | "shapes" | "dropped">;
 
 /** A finding about a draft, by its notice code (03-validation-spec): an
- * error refuses the edit, a warning is shown and never blocks. */
+ * error refuses the edit, a notice lets it be. Both are said once, as a
+ * toast, not kept beside the edit; an error on a form field is said on it. */
 export interface Check {
   code: string;
-  severity: "error" | "warning";
+  severity: "error" | "notice";
   params?: Record<string, string | number>;
   /** The form field it is about, where the form shows it there. */
   field?: string;

@@ -23,7 +23,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { useTimetablesPending } from "@/components/explorer/ExplorerLoading";
 import { RouteBadge, routeName } from "@/components/explorer/RouteBadge";
-import { PX } from "@/components/explorer/SectionHeader";
+import { ICON_GAP, PX } from "@/components/explorer/SectionHeader";
 
 /** The days counted, by month: `Oct 2026 - Dec 2026`, one month once. */
 function monthSpan(from: string, to: string, lang: string): string {
@@ -220,7 +220,7 @@ function Cost() {
         pt: 1.5,
       }}>
       {/* Laid out like the tab's section headers: icon, name, action. */}
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 32 }}>
+      <Stack direction="row" alignItems="center" spacing={ICON_GAP} sx={{ minHeight: 32 }}>
         <Icon iconName={ICON_NAME.COINS} style={{ fontSize: 14 }} htmlColor="inherit" />
         <Typography variant="body2" fontWeight="bold" noWrap sx={{ flex: 1 }}>
           {t("explorer_operating_cost")}

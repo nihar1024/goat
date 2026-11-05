@@ -14,6 +14,7 @@ import WorkspacesOutlinedIcon from "@mui/icons-material/WorkspacesOutlined";
 import {
   Autocomplete,
   Box,
+  Button,
   List,
   ListItemButton,
   MenuItem,
@@ -24,8 +25,9 @@ import {
 } from "@mui/material";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 
-import { ICON_NAME } from "@p4b/ui/components/Icon";
+import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import {
   EDITABLE_LOCATION_TYPES,
@@ -36,6 +38,7 @@ import {
 import { metres } from "@/lib/explorer/edit/ops/geo";
 import {
   type StopField,
+  locationKind,
   nameRequired,
   parentRequired,
   parentTypeFor,
@@ -158,7 +161,7 @@ function LocationField({
 }: {
   lat: number | null;
   lon: number | null;
-  onChange?: (lon: number, lat: number) => void;
+  onChange: (lon: number, lat: number) => void;
 }) {
   const { t } = useTranslation("common");
   const shown = lat === null || lon === null ? "" : `${Number(lat.toFixed(6))}, ${Number(lon.toFixed(6))}`;
@@ -176,14 +179,13 @@ function LocationField({
       size="small"
       fullWidth
       value={text}
-      disabled={!onChange}
       placeholder={t("explorer_lat_lon_hint")}
       error={bad}
       helperText={bad ? t("explorer_field_invalid_lat_lon") : undefined}
       onChange={(e) => {
         setText(e.target.value);
         const p = parseLatLon(e.target.value);
-        if (p && (p.lat !== lat || p.lon !== lon)) onChange?.(p.lon, p.lat);
+        if (p && (p.lat !== lat || p.lon !== lon)) onChange(p.lon, p.lat);
       }}
       // Back to the position it has, if left as none.
       onBlur={() => bad && setText(shown)}
@@ -298,6 +300,7 @@ export function StopFields({
   lat,
   lon,
   onLocation,
+  moved = null,
   autoFocus = false,
 }: {
   values: StopValues;
@@ -311,8 +314,10 @@ export function StopFields({
   refused?: Check | null;
   lat: number | null;
   lon: number | null;
-  /** A position typed, where a new location goes; none, shown only. */
-  onLocation?: (lon: number, lat: number) => void;
+  /** A position typed: a move, or where a new location goes. */
+  onLocation: (lon: number, lat: number) => void;
+  /** Metres it was dragged, while the move waits for Apply (board 23). */
+  moved?: number | null;
   autoFocus?: boolean;
 }) {
   const { t } = useTranslation("common");
@@ -335,11 +340,27 @@ export function StopFields({
     onChange(next);
   };
   const problems = stopFieldProblems(values);
+  // Said on a field only while it is the one being edited; a refusal about
+  // one left alone (a parent of the wrong kind once the type changed) is said
+  // in a toast. One still to be filled in is not said until it is touched.
   const error = (f: StopField) => {
-    const code = touched.has(f) ? problems[f] : undefined;
-    const said = code ?? (refused?.field === f && !problems[f] ? refused.code : undefined);
-    return said ? t(`explorer_field_${said}`) : undefined;
+    const code = touched.has(f)
+      ? (problems[f] ?? (refused?.field === f ? refused.code : undefined))
+      : undefined;
+    return code ? t(`explorer_field_${code}`) : undefined;
   };
+  // A field still to be filled in (missing_*), a new stop's ID among them
+  // while it is drawn, is no news: not said.
+  const untouchedRefusal =
+    refused?.field &&
+    !touched.has(refused.field as StopField) &&
+    !problems[refused.field as StopField] &&
+    !refused.code.startsWith("missing_")
+      ? refused.code
+      : null;
+  useEffect(() => {
+    if (untouchedRefusal) toast.error(t(`explorer_field_${untouchedRefusal}`), { toastId: untouchedRefusal });
+  }, [untouchedRefusal, t]);
   const shown = stopFieldsShown(values);
   const type = values.location_type;
   const editableType = (EDITABLE_LOCATION_TYPES as readonly number[]).includes(type);
@@ -437,8 +458,13 @@ export function StopFields({
         </TextField>
       </Row>
       <Row label={t("explorer_stop_field_location")}>
-        {/* Typed, or the placed stop dragged on the map: the same place. */}
+        {/* Typed, or dragged on the map: both make the same move. */}
         <LocationField lat={lat} lon={lon} onChange={onLocation} />
+        {moved !== null && (
+          <Typography variant="caption" fontWeight={700} color="primary" display="block">
+            {t("explorer_moved_on_map", { metres: Math.round(moved) })}
+          </Typography>
+        )}
       </Row>
     </Stack>
   );
@@ -567,6 +593,8 @@ export function StopDetails({ stop_idx, lines }: { stop_idx: number; lines: Rout
   const record = query.data;
   const draft = useAppSelector((s) => s.explorer.edit.draft);
   const edit = useDraftEditShown();
+  const deleting = draft?.kind === "stop-delete" && draft.stop_idx === stop_idx;
+  const moving = draft?.kind === "stop-move" && draft.stop_idx === stop_idx ? draft : null;
   if (query.error)
     return (
       <Typography variant="body2" color="error" sx={{ px: PX, mt: 2 }}>
@@ -602,11 +630,35 @@ export function StopDetails({ stop_idx, lines }: { stop_idx: number; lines: Rout
           self={stop_idx}
           typeFixed
           refused={refused}
-          lat={lat}
-          lon={lon}
+          lat={moving ? moving.lat : lat}
+          lon={moving ? moving.lon : lon}
+          onLocation={(lon2, lat2) =>
+            dispatch(
+              setEditDraft(
+                // Back where it was: nothing to apply.
+                lon2 === lon && lat2 === lat ? null : { kind: "stop-move", stop_idx, lon: lon2, lat: lat2 }
+              )
+            )
+          }
+          moved={moving && lat !== null && lon !== null ? metres([lon, lat], [moving.lon, moving.lat]) : null}
         />
       </DetailsSection>
       <TypeSections type={values.location_type} stop_idx={stop_idx} lines={lines} />
+      {!deleting && (
+        // At the foot of the tab, at the right, as the Apply bar's buttons;
+        // what it takes with it is said once it is pressed (the delete card).
+        <Stack direction="row" justifyContent="flex-end" sx={{ px: PX, mt: "auto", pt: 2 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            onClick={() => dispatch(setEditDraft({ kind: "stop-delete", stop_idx }))}
+            startIcon={<Icon iconName={ICON_NAME.TRASH} style={{ fontSize: 12 }} htmlColor="inherit" />}
+            sx={{ flexShrink: 0, borderRadius: "16px", px: 1.5, fontWeight: 700, textTransform: "none" }}>
+            {t(`explorer_delete_${locationKind(values.location_type)}`)}
+          </Button>
+        </Stack>
+      )}
     </Box>
   );
 }

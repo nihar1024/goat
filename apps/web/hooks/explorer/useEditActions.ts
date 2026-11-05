@@ -1,12 +1,12 @@
 /**
- * Apply, undo and redo on the open bundle's editing session, with the
+ * Apply, undo, redo and discard on the open bundle's editing session, with the
  * change list (Redux) kept in step: the session holds the rows, Redux the
  * summaries the bar and the list show.
  */
 import { useCallback } from "react";
 
 import type { EditChange } from "@/lib/explorer/edit/types";
-import { editApplied, editRedone, editUndone } from "@/lib/store/explorer/slice";
+import { editApplied, editRedone, editUndone, editsDiscarded } from "@/lib/store/explorer/slice";
 
 import { useAppDispatch } from "@/hooks/store/ContextHooks";
 
@@ -28,5 +28,10 @@ export function useEditActions() {
   const redo = useCallback(async () => {
     if (session && (await session.redo())) dispatch(editRedone());
   }, [session, dispatch]);
-  return { apply, undo, redo };
+  const discard = useCallback(async () => {
+    if (!session) return;
+    await session.discard();
+    dispatch(editsDiscarded());
+  }, [session, dispatch]);
+  return { apply, undo, redo, discard };
 }

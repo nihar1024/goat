@@ -10,8 +10,9 @@
 export type Wheelchair = 0 | 1 | 2;
 
 /** GTFS location_type: 0 stop or platform, 1 station, 2 entrance or exit,
- * 3 generic node, 4 boarding area. The Explorer makes and switches between
- * the first three; a feed's nodes and boarding areas are shown, not edited. */
+ * 3 generic node, 4 boarding area. The Explorer makes the first three, each
+ * keeping its type once made; a feed's nodes and boarding areas are shown,
+ * not edited. */
 export type LocationType = 0 | 1 | 2 | 3 | 4;
 export const EDITABLE_LOCATION_TYPES = [0, 1, 2] as const;
 
@@ -39,4 +40,8 @@ export type EditDraft =
   | { kind: "stop-details"; stop_idx: number; values: StopValues }
   /** 2.1: a stop placed with the Stop tool, where it was clicked. */
   /** Its id null until one is drawn for it. */
-  | { kind: "stop-new"; lon: number; lat: number; stop_id: string | null; values: StopValues };
+  | { kind: "stop-new"; lon: number; lat: number; stop_id: string | null; values: StopValues }
+  /** 2.3: a stop deleted, with all that calls there. */
+  | { kind: "stop-delete"; stop_idx: number }
+  /** 2.2: a stop dragged to a new place, its paths with it. */
+  | { kind: "stop-move"; stop_idx: number; lon: number; lat: number };

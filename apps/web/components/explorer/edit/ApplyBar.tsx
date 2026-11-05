@@ -1,37 +1,44 @@
 /**
  * The Apply bar (spec 01, Interaction model; boards 18, 23, 29): where every
- * edit ends, at the foot of the right panel. Its ≈ cost, its warnings, or
- * why it is not possible; Cancel, and the edit's own action.
+ * edit ends, at the foot of the right panel. What it takes with it (a
+ * delete's card), its ≈ cost; Cancel, and the
+ * edit's own action, greyed out while it is refused (why is said once, in a
+ * toast: useDraftEdit).
  * What else an edit changes is the panel's to show, in sections of its own
  * kind (a stop's delete card).
  */
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, Stack, Typography, alpha } from "@mui/material";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ICON_NAME } from "@p4b/ui/components/Icon";
-
-import type { Check } from "@/lib/explorer/edit/ops/types";
 
 import type { DraftEdit } from "@/hooks/explorer/useDraftEdit";
 
 import { PX, SectionHeader } from "@/components/explorer/SectionHeader";
 
-/** A check in words, by its notice code. */
-export function checkWords(check: Check, t: (key: string, options?: Record<string, unknown>) => string) {
-  return t(`explorer_check_${check.code}`, { ...check.params, interpolation: { escapeValue: false } });
-}
-
-export function ApplyBar({ edit }: { edit: DraftEdit }) {
+export function ApplyBar({ edit, impact }: { edit: DraftEdit; impact?: ReactNode }) {
   const { t } = useTranslation("common");
   const { built, bar, applying } = edit;
-  const refused = built && !built.ok ? built.refused : null;
-  const warnings = built ? built.checks.filter((c) => c.severity === "warning") : [];
   const nothing = built?.ok ? !built.rows.sql.length : true;
 
   return (
     // Less above than below: the first section header's own row (32 px)
     // already sets its name off the divider.
-    <Box sx={{ px: PX, pt: "4px", pb: "12px", borderTop: 1, borderColor: "divider", flexShrink: 0 }}>
+    // Set off from the panel as the edits list's foot is: a stronger line
+    // over it and the grey of a confirmation.
+    <Box
+      sx={{
+        px: PX,
+        pt: "4px",
+        pb: "12px",
+        borderTop: 1,
+        borderColor: (theme) => alpha(theme.palette.text.primary, 0.24),
+        bgcolor: "action.hover",
+        flexShrink: 0,
+      }}>
+      {/* What the edit takes with it, where it has a card for it. */}
+      {impact}
       {/* As the operating cost card: its coins, and the change a year in
           the card's step figures. */}
       <Box>
@@ -56,20 +63,9 @@ export function ApplyBar({ edit }: { edit: DraftEdit }) {
           </Typography>
         )}
       </Box>
-      {/* The cost set off from what follows, warnings or the buttons, by a
-          line across the panel, as the bar is from the panel above it. */}
+      {/* The cost set off from the buttons by a line across the panel, as
+          the bar is from the panel above it. */}
       <Box sx={{ mx: -PX, mt: "12px", borderTop: 1, borderColor: "divider" }} />
-      {warnings.map((w) => (
-        <Typography key={w.code} variant="caption" display="block" sx={{ mt: "8px", color: "warning.dark" }}>
-          {checkWords(w, t)}
-        </Typography>
-      ))}
-      {/* A refusal about a form field is said on the field, not again here. */}
-      {refused && !refused.field && (
-        <Typography variant="caption" display="block" color="error" sx={{ mt: "8px" }}>
-          {checkWords(refused, t)}
-        </Typography>
-      )}
       <Stack direction="row" justifyContent="flex-end" alignItems="center" spacing={1} sx={{ mt: "12px" }}>
         {/* As the dialogs' footer: Cancel in words, the action filled; both
             in the buttons' one size and weight, as the panel's others. */}

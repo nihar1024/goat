@@ -28,6 +28,7 @@ table name (a DuckLake table in geoapi, a plain DuckDB table in tests).
 """
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -75,6 +76,15 @@ ADDABLE_COLUMNS: Dict[str, Tuple[str, ...]] = {
         "parent_station",
         "platform_code",
     ),
+    "trips": ("trip_headsign",),
+}
+
+#: Tables the Explorer does not edit whose rows name a stop: a stop deleted
+#: takes them with it (01-editing-operations 2.3; the browser holds none).
+STOP_REFERENCES: Dict[str, Tuple[str, ...]] = {
+    "transfers": ("from_stop_id", "to_stop_id"),
+    "pathways": ("from_stop_id", "to_stop_id"),
+    "stop_areas": ("stop_id",),
 }
 
 #: Columns a client never writes: the bundle derives them.
@@ -126,10 +136,60 @@ class RowOp(BaseModel):
         return self
 
 
+class Stretch(BaseModel):
+    """A stretch of a shape drawn anew: from and to as shares of its length
+    (none: its start or end), straight through ``points`` (lon, lat). The
+    moved stop is ``points[stop_point]``: the first, or, where the stretch
+    follows the streets to it, wherever the route reaches it."""
+
+    model_config = {"populate_by_name": True}
+
+    start: Optional[float] = Field(None, alias="from", ge=0, le=1)
+    end: Optional[float] = Field(None, alias="to", ge=0, le=1)
+    #: Where the stop drawn through was on the shape, as a share: its stop
+    #: times move on by as far as its new point lies past it.
+    at: Optional[float] = Field(None, ge=0, le=1)
+    points: List[Tuple[float, float]] = Field(..., min_length=1, max_length=10_000)
+    stop_point: int = Field(0, ge=0)
+
+    @model_validator(mode="after")
+    def _stop_on_it(self) -> "Stretch":
+        if self.stop_point >= len(self.points):
+            raise ValueError("stop_point is past the stretch's points")
+        return self
+
+
+class ShapeReshape(BaseModel):
+    """A shape redrawn through a moved stop (01-editing-operations 2.2): the
+    points of ``source`` with each stretch replaced, written as
+    ``key.shape_id`` (the same shape, or a copy some trips were given). The
+    trips on it keep their distances in step, ``through`` at its new place."""
+
+    role: Literal["shapes"]
+    op: Literal["reshape"]
+    key: Dict[str, Value]
+    source: str
+    through: str
+    #: Metres per ``shape_dist_traveled`` unit, as the Explorer found the
+    #: feed's: for stop times measured along a shape that gives no distances.
+    metres_per_unit: Optional[float] = Field(None, gt=0)
+    stretches: List[Stretch] = Field(..., min_length=1, max_length=1_000)
+    #: The trips whose distances follow, as the Explorer had them on the
+    #: shape when it was redrawn: a later edit in the same set may move some
+    #: onto a copy, and their rows no longer say this shape by then.
+    trips: Optional[List[str]] = Field(None, max_length=500_000)
+
+    @model_validator(mode="after")
+    def _shape(self) -> "ShapeReshape":
+        if set(self.key) != {"shape_id"} or not self.key["shape_id"]:
+            raise ValueError("a reshape is keyed by shape_id")
+        return self
+
+
 class ChangeSet(BaseModel):
     """The rows a session changed, in the order it changed them."""
 
-    ops: List[RowOp] = Field(..., min_length=1, max_length=500_000)
+    ops: List[Union[RowOp, ShapeReshape]] = Field(..., min_length=1, max_length=500_000)
 
 
 @dataclass(frozen=True)
@@ -315,6 +375,8 @@ def _parse_ops(
 ) -> List[Tuple[str, str, Tuple[Any, ...], Dict[str, Any]]]:
     parsed: List[Tuple[str, str, Tuple[Any, ...], Dict[str, Any]]] = []
     for op in changeset.ops:
+        if isinstance(op, ShapeReshape):
+            continue
         missing = set(op.values) - set(t.columns(op.role))
         unknown = sorted(missing - set(ADDABLE_COLUMNS.get(op.role, ())))
         if unknown:
@@ -1096,7 +1158,18 @@ def apply_changeset(
                     counts["inserted"] += 1
         applied.rows[role] = counts
 
-    _real_lines(t, touched.ids("shapes", "shape_id"), derived)
+    _cascade_stops(t, net, applied)
+    reshaped: Set[str] = set()
+    for op in changeset.ops:
+        if isinstance(op, ShapeReshape):
+            _reshape(t, op)
+            reshaped.add(str(op.key["shape_id"]))
+    if reshaped:
+        counts = applied.rows.setdefault(
+            "shapes", {"inserted": 0, "updated": 0, "deleted": 0}
+        )
+        counts["updated"] += len(reshaped)
+    _real_lines(t, touched.ids("shapes", "shape_id") | reshaped, derived)
     _chain_lines(t, chains_before, reach, derived)
 
     after = _check(t, touched)
@@ -1107,6 +1180,248 @@ def apply_changeset(
     applied.warnings = [n for n in new if n.severity == "WARNING"]
     _drop_scratch(con)
     return applied
+
+
+_EARTH_M = 6371008.8
+
+
+def _metres(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    """Metres between two (lon, lat) points, as the snapshot measures."""
+    lon1, lat1, lon2, lat2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = (
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+    )
+    return 2 * _EARTH_M * math.asin(math.sqrt(min(1.0, h)))
+
+
+def _along(
+    pts: List[Tuple[float, float]], m: List[float], at: float
+) -> Tuple[float, float]:
+    """The point ``at`` metres along ``pts`` (``m``: metres at each)."""
+    if at <= m[0]:
+        return pts[0]
+    for k in range(1, len(pts)):
+        if at <= m[k]:
+            f = (at - m[k - 1]) / (m[k] - m[k - 1]) if m[k] > m[k - 1] else 0.0
+            p, q = pts[k - 1], pts[k]
+            return (p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1]))
+    return pts[-1]
+
+
+def _value_at(m: List[float], v: List[float], at: float) -> float:
+    """``v`` (one per point) interpolated ``at`` metres along."""
+    if at <= m[0]:
+        return v[0]
+    for k in range(1, len(m)):
+        if at <= m[k]:
+            f = (at - m[k - 1]) / (m[k] - m[k - 1]) if m[k] > m[k - 1] else 0.0
+            return v[k - 1] + f * (v[k] - v[k - 1])
+    return v[-1]
+
+
+def _reshape(t: _Tables, op: ShapeReshape) -> None:
+    """Write ``op``'s shape: its source's points, every stretch drawn straight
+    through its points; the shape's own distances and those of the stop
+    times on it kept in the feed's unit (01-editing-operations 2.2)."""
+    con = t.con
+    shapes = t.name("shapes")
+    cols = set(t.columns("shapes"))
+    with_dist = "shape_dist_traveled" in cols
+    rows = con.execute(
+        f"SELECT shape_pt_lon, shape_pt_lat"
+        f"{', shape_dist_traveled' if with_dist else ''} FROM {shapes} "
+        "WHERE shape_id = $s AND shape_pt_lon IS NOT NULL AND shape_pt_lat IS NOT NULL "
+        "ORDER BY shape_pt_sequence",
+        {"s": op.source},
+    ).fetchall()
+    if len(rows) < 2:
+        raise ChangeSetError(f"shape {op.source} has no line to redraw")
+    pts = [(float(r[0]), float(r[1])) for r in rows]
+    m = [0.0]
+    for k in range(1, len(pts)):
+        m.append(m[-1] + _metres(pts[k - 1], pts[k]))
+    length = m[-1]
+    dists = [r[2] for r in rows] if with_dist else []
+    # The feed's unit per metre, where the shape gives its distances.
+    unit: Optional[float] = None
+    if with_dist and all(d is not None for d in dists) and length > 0:
+        fd = [float(d) for d in dists]
+        # Only distances that grow along the shape measure it: all zero, one
+        # value, or going back are no unit, and the fallback below applies.
+        if fd[-1] > fd[0] and all(x <= y for x, y in zip(fd, fd[1:])):
+            unit = (fd[-1] - fd[0]) / length
+            dists = fd
+    shape_dists = unit is not None
+    if unit is None and op.metres_per_unit:
+        # The shape gives none: its stop times' unit, measured from its start.
+        unit = 1 / op.metres_per_unit
+        dists = [x * unit for x in m]
+    out: List[Tuple[float, float, Optional[float]]] = []
+    # Per stretch: the new segments' lengths, and how far the shape moved on.
+    legs: List[Tuple[bool, float, float, float, float, Optional[float]]] = []
+    # Per stretch: where it lies in the feed's unit, halfway (a trip that does
+    # not call at the stop lies wholly before or after it), and how far the
+    # shape moved on past it.
+    middles: List[Tuple[float, float]] = []
+    offset = 0.0
+    cursor = -math.inf
+    for st in sorted(op.stretches, key=lambda x: -1 if x.start is None else x.start):
+        a = None if st.start is None else st.start * length
+        b = None if st.end is None else st.end * length
+        before = offset
+        start: Optional[Tuple[float, float]] = None
+        start_d = dists[0] if unit else None
+        if a is not None:
+            for k, p in enumerate(pts):
+                if cursor < m[k] < a:
+                    out.append((p[0], p[1], dists[k] + offset if unit else None))
+            start = _along(pts, m, a)
+            start_d = _value_at(m, dists, a) + offset if unit else None
+            out.append((start[0], start[1], start_d))
+        into = 0.0
+        prev = start
+        # How far the stop's stop times move on: from where it was on the
+        # shape to its new point (``stop_point``), in the feed's unit.
+        shift: Optional[float] = None
+        to_stop = 0.0
+        for n, q in enumerate(st.points):
+            if prev is not None:
+                into += _metres(prev, q)
+            d = (start_d or 0.0) + into * unit if unit else None
+            if n == st.stop_point:
+                to_stop = into
+                if d is not None and st.at is not None:
+                    shift = d - _value_at(m, dists, st.at * length)
+            out.append((q[0], q[1], d))
+            prev = q
+        through_m = into
+        # Beyond the stop, to the stretch's last point.
+        past_stop = through_m - to_stop
+        if b is not None:
+            end = _along(pts, m, b)
+            out_m = _metres(prev, end) if prev else 0.0
+            if unit:
+                end_d = (start_d or 0.0) + (through_m + out_m) * unit
+                offset = end_d - _value_at(m, dists, b)
+            out.append((end[0], end[1], end_d if unit else None))
+            cursor = b
+            legs.append((a is None, to_stop, past_stop + out_m, before, offset, shift))
+            if unit:
+                lo = _value_at(m, dists, a) if a is not None else dists[0]
+                middles.append(((lo + _value_at(m, dists, b)) / 2, offset))
+        else:
+            cursor = math.inf
+            legs.append((a is None, to_stop, past_stop, before, before, shift))
+    for k, p in enumerate(pts):
+        if m[k] > cursor:
+            out.append((p[0], p[1], dists[k] + offset if unit else None))
+
+    con.execute(f"DELETE FROM {shapes} WHERE shape_id = $s", {"s": op.key["shape_id"]})
+    with_dist = with_dist and shape_dists
+    dist_col = ", shape_dist_traveled" if with_dist else ""
+    con.executemany(
+        f"INSERT INTO {shapes} (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence{dist_col}) "
+        f"VALUES ($1, $2, $3, $4{', $5' if with_dist else ''})",
+        [
+            [op.key["shape_id"], lat, lon, k + 1, *([d] if with_dist else [])]
+            for k, (lon, lat, d) in enumerate(out)
+        ],
+    )
+    if (
+        unit is None
+        or not t.has("stop_times")
+        or "shape_dist_traveled" not in t.columns("stop_times")
+    ):
+        return
+    # The trips on it: the stop moved on as far as its new point lies past
+    # where it was (from its neighbour where that is not known), the stops
+    # past it as far as the shape moved on there.
+    passed = " ".join(f"WHEN {k + 1} THEN {leg[4] * 1.0}" for k, leg in enumerate(legs))
+    # A trip on the shape that does not call at the stop: moved on as far as
+    # the shape did where it runs.
+    beyond = " ".join(
+        f"WHEN shape_dist_traveled >= {mid} THEN {after * 1.0}"
+        for mid, after in sorted(middles, reverse=True)
+    )
+    here = " ".join(
+        f"WHEN {k + 1} THEN "
+        + (
+            f"shape_dist_traveled + {shift}"
+            if shift is not None
+            else f"nxt + {after - out_m * unit}"
+            if first
+            else f"prev + {before + into * unit}"
+        )
+        for k, (first, into, out_m, before, after, shift) in enumerate(legs)
+    )
+    times = t.name("stop_times")
+    trips = t.name("trips")
+    # The trips the Explorer had on it, where it said; else those on it now.
+    on_it = (
+        "list_contains($trips, trip_id)"
+        if op.trips is not None
+        else f"trip_id IN (SELECT trip_id FROM {trips} WHERE shape_id = $s)"
+    )
+    con.execute(
+        f"""
+        UPDATE {times} SET shape_dist_traveled = x.nd FROM (
+            SELECT trip_id, stop_sequence,
+                   -- A neighbour without a distance leaves the stop's own as it was.
+                   CASE WHEN here THEN COALESCE(CASE upto {here} END, shape_dist_traveled)
+                        WHEN calls = 0 THEN shape_dist_traveled + {f"CASE {beyond} ELSE 0 END" if beyond else "0"}
+                        ELSE shape_dist_traveled + CASE upto {passed} ELSE 0 END END AS nd
+            FROM (
+                SELECT trip_id, stop_sequence, shape_dist_traveled, stop_id = $through AS here,
+                       -- The k-th call here: one right after another here is
+                       -- the same stretch, counted with it.
+                       sum(CASE WHEN stop_id = $through AND prev_stop IS DISTINCT FROM $through
+                                THEN 1 ELSE 0 END) OVER (
+                           PARTITION BY trip_id ORDER BY stop_sequence
+                           ROWS UNBOUNDED PRECEDING) AS upto,
+                       sum(CASE WHEN stop_id = $through THEN 1 ELSE 0 END) OVER (
+                           PARTITION BY trip_id) AS calls,
+                       lag(shape_dist_traveled) OVER w AS prev,
+                       lead(shape_dist_traveled) OVER w AS nxt
+                FROM (SELECT *, lag(stop_id) OVER (PARTITION BY trip_id ORDER BY stop_sequence) AS prev_stop
+                      FROM {times}) st
+                WHERE {on_it}
+                WINDOW w AS (PARTITION BY trip_id ORDER BY stop_sequence)
+            )
+        ) x
+        WHERE {times}.trip_id = x.trip_id AND {times}.stop_sequence = x.stop_sequence
+          AND {times}.shape_dist_traveled IS NOT NULL
+        """,
+        {
+            "through": op.through,
+            **(
+                {"trips": op.trips}
+                if op.trips is not None
+                else {"s": op.key["shape_id"]}
+            ),
+        },
+    )
+
+
+def _cascade_stops(
+    t: _Tables, net: Mapping[str, Mapping[Tuple[Any, ...], _Net]], applied: Applied
+) -> None:
+    """Delete the rows of ``STOP_REFERENCES`` that name a stop the change set
+    deleted, counted with what it wrote."""
+    gone = [key[0] for key, n in net.get("stops", {}).items() if n.kind == "delete"]
+    if not gone:
+        return
+    for role, columns in STOP_REFERENCES.items():
+        present = [c for c in columns if t.has(role) and c in t.columns(role)]
+        if not present:
+            continue
+        where = " OR ".join(f"{_ident(c)} IN (SELECT UNNEST($gone))" for c in present)
+        (n,) = t.con.execute(
+            f"SELECT count(*) FROM {t.name(role)} WHERE {where}", {"gone": gone}
+        ).fetchone()
+        if n:
+            t.con.execute(f"DELETE FROM {t.name(role)} WHERE {where}", {"gone": gone})
+            applied.rows[role] = {"inserted": 0, "updated": 0, "deleted": int(n)}
 
 
 def _drop_scratch(con: Any) -> None:

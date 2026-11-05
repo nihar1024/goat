@@ -144,8 +144,14 @@ the touched rows and the rows referring to them, with the MobilityData
 validator's notice codes, and only problems the change brings count: a feed's
 own old faults do not block an unrelated edit.
 
-An optional field a feed left out (a stop's code, its station, its platform)
-gets its column the first time an edit sets one
+What the browser cannot hold the change set does on the server. A stop deleted
+takes the transfers, pathways and stop areas naming it (the snapshot has none
+of those tables). A stop moved sends each path through it as a `reshape`: the
+stretches the browser redrew, as shares of the path's length, which the server
+cuts into the feed's full-resolution shape (the snapshot's is simplified),
+keeping `shape_dist_traveled` in the feed's unit on the shape and on the stop
+times of the trips that run it. An optional field a feed left out (a stop's
+code, its station, its platform) gets its column the first time an edit sets one
 (`ADDABLE_COLUMNS`); any other column a table lacks is refused. A stop's
 location type is checked as the validator does: a parent station where one is
 required and none on a station, a parent of the right type (also for the

@@ -37,6 +37,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from goatlib.bundles.explorer.changeset import (
     ROLE_KEYS,
+    STOP_REFERENCES,
     Applied,
     ChangeSet,
     ChangeSetError,
@@ -64,9 +65,10 @@ router = APIRouter(prefix="/bundles", tags=["Explorer"])
 
 T = TypeVar("T")
 
-#: The members a save reads or writes: the editable tables, and the lines the
-#: map draws, which the save keeps in step.
-_ROLES = (*ROLE_KEYS, "shape_lines")
+#: The members a save reads or writes: the editable tables, the lines the
+#: map draws, which the save keeps in step, and the tables naming stops,
+#: which a stop deleted takes rows from.
+_ROLES = (*ROLE_KEYS, "shape_lines", *STOP_REFERENCES)
 #: Members whose rows carry a geometry, so a write fills its derived columns.
 _GEOMETRY_ROLES = ("stops", "shape_lines")
 

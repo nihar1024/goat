@@ -330,6 +330,196 @@ def test_a_served_stop_stays_a_stop(con: duckdb.DuckDBPyConnection) -> None:
     assert one(con, "SELECT location_type FROM stops WHERE stop_id = 'X'") == (1,)
 
 
+def test_a_station_deleted_leaves_its_platforms_on_their_own(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # The platform's station cleared, then the station gone (the Explorer
+    # deletes a station's platforms with it, but keeps a stop found under a
+    # deleted location this way). S1 keeps its stop times.
+    apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "S1"},
+                "values": {"parent_station": None},
+            },
+            {"role": "stops", "op": "delete", "key": {"stop_id": "P"}},
+        ],
+    )
+    assert one(con, "SELECT count(*) FROM stops WHERE stop_id = 'P'") == (0,)
+    assert one(con, "SELECT parent_station FROM stops WHERE stop_id = 'S1'") == (None,)
+    assert one(con, "SELECT count(*) > 0 FROM stop_times WHERE stop_id = 'S1'") == (
+        True,
+    )
+
+
+def test_a_station_deleted_under_its_platform_is_refused(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    assert refused(
+        con, [{"role": "stops", "op": "delete", "key": {"stop_id": "P"}}]
+    ) == {("foreign_key_violation", "S1")}
+
+
+def test_a_stop_deleted_takes_its_transfers_with_it(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    con.execute(
+        "CREATE TABLE transfers AS SELECT * FROM (VALUES "
+        "('X', 'S1', 2), ('S1', 'X', 2), ('S1', 'S2', 2)) v(from_stop_id, to_stop_id, transfer_type)"
+    )
+    applied = apply_changeset(
+        con,
+        {**TABLES, "transfers": "transfers"},
+        ChangeSet(ops=[{"role": "stops", "op": "delete", "key": {"stop_id": "X"}}]),
+    )
+    assert con.execute("SELECT from_stop_id, to_stop_id FROM transfers").fetchall() == [
+        ("S1", "S2")
+    ]
+    assert applied.rows["transfers"] == {"inserted": 0, "updated": 0, "deleted": 2}
+
+
+def test_a_moved_stop_takes_the_paths_through_it_along(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    def shape(shape_id: str) -> List[Any]:
+        return con.execute(
+            "SELECT shape_pt_lon, shape_pt_lat FROM shapes WHERE shape_id = $s "
+            "ORDER BY shape_pt_sequence",
+            {"s": shape_id},
+        ).fetchall()
+
+    def dist(trip_id: str, seq: int) -> float:
+        return one(
+            con,
+            f"SELECT shape_dist_traveled FROM stop_times "
+            f"WHERE trip_id = '{trip_id}' AND stop_sequence = {seq}",
+        )[0]
+
+    sh1 = shape("SH1")
+    s4 = dist("T1", 4)
+    stretch = {"from": 0.3, "to": 0.6, "points": [[13.42, 52.502]]}
+    applied = apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "S3"},
+                "values": {"stop_lat": 52.502, "stop_lon": 13.42},
+            },
+            {
+                "role": "trips",
+                "op": "update",
+                "key": {"trip_id": "T4"},
+                "values": {"shape_id": "SH1_goat1"},
+            },
+            {
+                "role": "shapes",
+                "op": "reshape",
+                "key": {"shape_id": "SH1_goat1"},
+                "source": "SH1",
+                "through": "S3",
+                "metres_per_unit": 1000,
+                "stretches": [{"from": 0.3, "to": None, "points": [[13.42, 52.502]]}],
+            },
+            {
+                "role": "shapes",
+                "op": "reshape",
+                "key": {"shape_id": "SH1"},
+                "source": "SH1",
+                "through": "S3",
+                "metres_per_unit": 1000,
+                "stretches": [stretch],
+            },
+        ],
+    )
+    # SH1 runs through S3's new place, its start and end where they were.
+    new = shape("SH1")
+    assert (13.42, 52.502) in new
+    assert new[0] == sh1[0] and new[-1] == sh1[-1]
+    # T4's copy ends there; both are drawn.
+    assert shape("SH1_goat1")[-1] == (13.42, 52.502)
+    assert line(con, "SH1_goat1") is not None
+    assert "13.42 52.502" in line(con, "SH1")
+    # T1's later stops moved on, in km, by as much as SH1 grew; S1 did not.
+    assert dist("T1", 1) == 0
+    assert dist("T1", 4) > s4
+    assert applied.rows["shapes"]["updated"] == 2
+
+
+def test_a_moved_stop_on_a_routed_stretch_lies_where_the_route_reaches_it(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    """A stretch following the streets: the route runs on before and after
+    the stop (``stop_point``), and the stop's distance is the route's there."""
+    stop = (13.42, 52.502)
+    old_s3 = one(
+        con,
+        "SELECT shape_dist_traveled FROM stop_times WHERE trip_id = 'T1' AND stop_id = 'S3'",
+    )[0]
+    applied = apply(
+        con,
+        [
+            {
+                "role": "stops",
+                "op": "update",
+                "key": {"stop_id": "S3"},
+                "values": {"stop_lat": stop[1], "stop_lon": stop[0]},
+            },
+            {
+                "role": "shapes",
+                "op": "reshape",
+                "key": {"shape_id": "SH1"},
+                "source": "SH1",
+                "through": "S3",
+                "metres_per_unit": 1000,
+                "stretches": [
+                    {
+                        "from": 0.3,
+                        "to": 0.6,
+                        # The stop was where the stretch starts.
+                        "at": 0.3,
+                        "points": [[13.415, 52.501], list(stop), [13.425, 52.503]],
+                        "stop_point": 1,
+                    }
+                ],
+            },
+        ],
+    )
+    from goatlib.bundles.explorer.changeset import _metres
+
+    order = con.execute(
+        "SELECT shape_pt_lon, shape_pt_lat FROM shapes "
+        "WHERE shape_id = 'SH1' ORDER BY shape_pt_sequence"
+    ).fetchall()
+    # The route, in its order: the point before the stop, the stop, the one after.
+    k = order.index(stop)
+    assert order[k - 1] == (13.415, 52.501) and order[k + 1] == (13.425, 52.503)
+    # The stop moved on by the route's length from the stretch's start (the
+    # point before the route's first) to it, through the point before it (km).
+    to_stop_km = (
+        sum(_metres(order[n - 1], order[n]) for n in range(k - 1, k + 1)) / 1000
+    )
+    s3 = one(
+        con,
+        "SELECT shape_dist_traveled FROM stop_times WHERE trip_id = 'T1' AND stop_id = 'S3'",
+    )[0]
+    assert s3 == pytest.approx(old_s3 + to_stop_km, rel=1e-4)
+    assert applied.rows["shapes"]["updated"] == 1
+
+
+def test_a_stretch_names_a_stop_point_on_it() -> None:
+    from goatlib.bundles.explorer.changeset import Stretch
+
+    with pytest.raises(ValueError, match="stop_point"):
+        Stretch.model_validate(
+            {"from": 0.1, "to": 0.2, "points": [[1, 2]], "stop_point": 1}
+        )
+
+
 def test_a_row_inserted_then_deleted_leaves_no_trace(
     con: duckdb.DuckDBPyConnection,
 ) -> None:
@@ -590,3 +780,65 @@ def test_a_malformed_change_set_is_refused_whole(
 def test_what_a_change_set_may_not_say(op: Dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         ChangeSet(ops=[op])
+
+
+def _reshape_sh1(trips: Any = None) -> Dict[str, Any]:
+    return {
+        "role": "shapes",
+        "op": "reshape",
+        "key": {"shape_id": "SH1"},
+        "source": "SH1",
+        "through": "S3",
+        "metres_per_unit": 1000,
+        "stretches": [
+            {"from": 0.3, "to": 0.6, "at": 0.45, "points": [[13.42, 52.502]]}
+        ],
+        **({"trips": trips} if trips is not None else {}),
+    }
+
+
+def _dist(con: duckdb.DuckDBPyConnection, trip_id: str, seq: int) -> float:
+    return one(
+        con,
+        f"SELECT shape_dist_traveled FROM stop_times WHERE trip_id = '{trip_id}' AND stop_sequence = {seq}",
+    )[0]
+
+
+def test_a_trip_on_a_redrawn_shape_not_calling_at_the_stop_moves_on_with_it(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # T9: on SH1 from S4 to S5, past where the stretch is redrawn.
+    con.execute(
+        "INSERT INTO trips SELECT * REPLACE ('T9' AS trip_id) FROM trips WHERE trip_id = 'T1'"
+    )
+    con.execute(
+        "INSERT INTO stop_times SELECT * REPLACE ('T9' AS trip_id) FROM stop_times "
+        "WHERE trip_id = 'T1' AND stop_sequence >= 3"
+    )
+    t1, t9 = _dist(con, "T1", 3), _dist(con, "T9", 3)
+    apply(con, [_reshape_sh1()])
+    assert _dist(con, "T9", 3) - t9 == pytest.approx(_dist(con, "T1", 3) - t1)
+    assert _dist(con, "T9", 3) > t9
+
+
+def test_a_reshape_follows_the_trips_it_names(con: duckdb.DuckDBPyConnection) -> None:
+    # Named, only T1's distances follow, whatever shape the others' rows say.
+    t1, t2 = _dist(con, "T1", 3), _dist(con, "T2", 1)
+    apply(con, [_reshape_sh1(["T1"])])
+    assert _dist(con, "T1", 3) > t1
+    assert _dist(con, "T2", 1) == t2
+
+
+def test_a_shape_whose_distances_measure_nothing_falls_back_to_the_stop_times_unit(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # Every point at 0: no unit; the stop times' (km) measures the shape.
+    con.execute("ALTER TABLE shapes ADD COLUMN shape_dist_traveled DOUBLE DEFAULT 0")
+    apply(con, [_reshape_sh1()])
+    d = [
+        r[0]
+        for r in con.execute(
+            "SELECT shape_dist_traveled FROM stop_times WHERE trip_id = 'T1' ORDER BY stop_sequence"
+        ).fetchall()
+    ]
+    assert all(x < y for x, y in zip(d, d[1:])), d

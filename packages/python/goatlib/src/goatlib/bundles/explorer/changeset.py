@@ -186,10 +186,30 @@ class ShapeReshape(BaseModel):
         return self
 
 
+class StopTimesShift(BaseModel):
+    """Room made in a trip for a stop added to it (01-editing-operations
+    3.1): every stop time of ``key.trip_id`` past ``after`` numbered one on.
+    Rows named before it in the change set are named as they were then, those
+    after it as they are after it; the save numbers both alike."""
+
+    role: Literal["stop_times"]
+    op: Literal["shift"]
+    key: Dict[str, Value]
+    after: int
+
+    @model_validator(mode="after")
+    def _shape(self) -> "StopTimesShift":
+        if set(self.key) != {"trip_id"} or not self.key["trip_id"]:
+            raise ValueError("a shift is keyed by trip_id")
+        return self
+
+
 class ChangeSet(BaseModel):
     """The rows a session changed, in the order it changed them."""
 
-    ops: List[Union[RowOp, ShapeReshape]] = Field(..., min_length=1, max_length=500_000)
+    ops: List[Union[RowOp, ShapeReshape, StopTimesShift]] = Field(
+        ..., min_length=1, max_length=500_000
+    )
 
 
 @dataclass(frozen=True)
@@ -370,12 +390,47 @@ class _Tables:
         }
 
 
+def _shift_stop_times(t: _Tables, changeset: ChangeSet) -> ChangeSet:
+    """Make the room each shift asks for in the feed's trips, in order, and
+    name every stop time the change set writes as it is numbered once all of
+    them are made: the change set, its shifts gone."""
+    shifts = [
+        (k, str(op.key["trip_id"]), op.after)
+        for k, op in enumerate(changeset.ops)
+        if isinstance(op, StopTimesShift)
+    ]
+    if not shifts:
+        return changeset
+    if t.has("stop_times"):
+        times = t.name("stop_times")
+        for _, trip_id, after in shifts:
+            t.con.execute(
+                f"UPDATE {times} SET stop_sequence = stop_sequence + 1 "
+                "WHERE trip_id = $t AND stop_sequence > $a",
+                {"t": trip_id, "a": after},
+            )
+    ops: List[Union[RowOp, ShapeReshape, StopTimesShift]] = []
+    for k, op in enumerate(changeset.ops):
+        if isinstance(op, StopTimesShift):
+            continue
+        if isinstance(op, RowOp) and op.role == "stop_times":
+            trip_id = str(op.key["trip_id"])
+            seq = int(_typed("stop_times", "stop_sequence", op.key["stop_sequence"]))
+            # Moved on by every shift after it in the same trip.
+            for at, shifted, after in shifts:
+                if at > k and shifted == trip_id and seq > after:
+                    seq += 1
+            op = op.model_copy(update={"key": {**op.key, "stop_sequence": seq}})
+        ops.append(op)
+    return ChangeSet.model_construct(ops=ops)
+
+
 def _parse_ops(
     t: _Tables, changeset: ChangeSet
 ) -> List[Tuple[str, str, Tuple[Any, ...], Dict[str, Any]]]:
     parsed: List[Tuple[str, str, Tuple[Any, ...], Dict[str, Any]]] = []
     for op in changeset.ops:
-        if isinstance(op, ShapeReshape):
+        if isinstance(op, (ShapeReshape, StopTimesShift)):
             continue
         missing = set(op.values) - set(t.columns(op.role))
         unknown = sorted(missing - set(ADDABLE_COLUMNS.get(op.role, ())))
@@ -1113,6 +1168,7 @@ def apply_changeset(
     ``ChangeSetIntegrityError`` when it would bring an ERROR; the caller rolls back
     on either."""
     t = _Tables(con, tables)
+    changeset = _shift_stop_times(t, changeset)
     net = _squash(_parse_ops(t, changeset))
     touched = _Touched({role: set(rows) for role, rows in net.items() if rows})
 

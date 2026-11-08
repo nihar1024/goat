@@ -150,7 +150,12 @@ of those tables). A stop moved sends each path through it as a `reshape`: the
 stretches the browser redrew, as shares of the path's length, which the server
 cuts into the feed's full-resolution shape (the snapshot's is simplified),
 keeping `shape_dist_traveled` in the feed's unit on the shape and on the stop
-times of the trips that run it. An optional field a feed left out (a stop's
+times of the trips that run it (the trips it names, as they were on the shape
+when redrawn: a later edit may move some onto a copy). A stop added to a line
+between two stop times numbered one apart sends a `shift` first, which numbers
+the trip's later stop times one on; rows named before it keep the numbers they
+had then and are renumbered with the feed's, so a change set stays in the
+order it was made. An optional field a feed left out (a stop's
 code, its station, its platform) gets its column the first time an edit sets one
 (`ADDABLE_COLUMNS`); any other column a table lacks is refused. A stop's
 location type is checked as the validator does: a parent station where one is

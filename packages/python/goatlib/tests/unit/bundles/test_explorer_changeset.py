@@ -842,3 +842,53 @@ def test_a_shape_whose_distances_measure_nothing_falls_back_to_the_stop_times_un
         ).fetchall()
     ]
     assert all(x < y for x, y in zip(d, d[1:])), d
+
+
+def _hms(t: Any) -> str:
+    secs = int(t.total_seconds())
+    return f"{secs // 3600:02d}:{secs % 3600 // 60:02d}:{secs % 60:02d}"
+
+
+def test_a_stop_added_between_two_numbered_one_apart_makes_room_for_itself(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    def calls() -> List[Any]:
+        return con.execute(
+            "SELECT stop_sequence, stop_id, departure_time FROM stop_times "
+            "WHERE trip_id = 'T1' ORDER BY stop_sequence"
+        ).fetchall()
+
+    before = calls()
+    seq = [r[0] for r in before]
+    a, b = seq[1], seq[2]
+    assert b - a == 1
+    apply(
+        con,
+        [
+            # Named before the shift, as it was numbered then: S5's time.
+            {
+                "role": "stop_times",
+                "op": "update",
+                "key": {"trip_id": "T1", "stop_sequence": seq[-1]},
+                "values": {"departure_time": _hms(before[-1][2])},
+            },
+            {"role": "stop_times", "op": "shift", "key": {"trip_id": "T1"}, "after": a},
+            {
+                "role": "stop_times",
+                "op": "insert",
+                "key": {"trip_id": "T1", "stop_sequence": a + 1},
+                "values": {"stop_id": "X"},
+            },
+        ],
+    )
+    after = calls()
+    # X between the second and third stop, untimed; the rest kept, in order.
+    assert [r[1] for r in after] == [
+        before[0][1],
+        before[1][1],
+        "X",
+        *[r[1] for r in before[2:]],
+    ]
+    assert after[2][2] is None
+    assert [r[2] for r in after if r[1] != "X"] == [r[2] for r in before]
+    assert all(x[0] < y[0] for x, y in zip(after, after[1:]))

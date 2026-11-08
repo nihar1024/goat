@@ -1,13 +1,14 @@
 /**
  * The Apply bar (spec 01, Interaction model; boards 18, 23, 29): where every
- * edit ends, at the foot of the right panel. What it takes with it (a
- * delete's card), its ≈ cost; Cancel, and the
+ * edit ends, a panel of its own under the right panel. For an edit on a line, how far
+ * it reaches (Apply to); what it takes with it (a delete's card), its ≈
+ * cost; Cancel, and the
  * edit's own action, greyed out while it is refused (why is said once, in a
  * toast: useDraftEdit).
  * What else an edit changes is the panel's to show, in sections of its own
  * kind (a stop's delete card).
  */
-import { Box, Button, Stack, Typography, alpha } from "@mui/material";
+import { Box, Button, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,28 +17,43 @@ import { ICON_NAME } from "@p4b/ui/components/Icon";
 import type { DraftEdit } from "@/hooks/explorer/useDraftEdit";
 
 import { PX, SectionHeader } from "@/components/explorer/SectionHeader";
+import { FixedScope, ScopePicker } from "@/components/explorer/edit/ScopePicker";
 
-export function ApplyBar({ edit, impact }: { edit: DraftEdit; impact?: ReactNode }) {
+export function ApplyBar({
+  edit,
+  impact,
+  titled = true,
+  scoped = true,
+}: {
+  edit: DraftEdit;
+  impact?: ReactNode;
+  /** Its own title; none at the foot of a draft's panel, which has one. */
+  titled?: boolean;
+  /** Its Apply to; none where the draft's panel asks it first. */
+  scoped?: boolean;
+}) {
   const { t } = useTranslation("common");
   const { built, bar, applying } = edit;
   const nothing = built?.ok ? !built.rows.sql.length : true;
 
   return (
-    // Less above than below: the first section header's own row (32 px)
-    // already sets its name off the divider.
-    // Set off from the panel as the edits list's foot is: a stronger line
-    // over it and the grey of a confirmation.
-    <Box
-      sx={{
-        px: PX,
-        pt: "4px",
-        pb: "12px",
-        borderTop: 1,
-        borderColor: (theme) => alpha(theme.palette.text.primary, 0.24),
-        bgcolor: "action.hover",
-        flexShrink: 0,
-      }}>
-      {/* What the edit takes with it, where it has a card for it. */}
+    // A panel of its own under the right panel, as the operating cost is
+    // under the left. Less above than below: the first section header's own
+    // row (32 px) already sets its name off the panel's edge.
+    <Box sx={{ px: PX, pt: titled ? "4px" : "8px", pb: "12px" }}>
+      {/* Its title, as the panels' section headers and the edits list's. */}
+      {titled && <SectionHeader icon={ICON_NAME.EDIT} label={t("explorer_edit_panel")} px={0} />}
+      {/* How far an edit on a line reaches, then what it takes with it,
+          where it has a card for it. */}
+      {scoped && edit.scope && <ScopePicker scope={edit.scope} />}
+      {(edit.building?.kind === "stop-move" || edit.building?.kind === "stop-delete") &&
+        edit.building.built.facts &&
+        edit.building.built.facts.trips > 0 && (
+          <FixedScope
+            lines={edit.building.built.facts.routes.length}
+            trips={edit.building.built.facts.trips}
+          />
+        )}
       {impact}
       {/* As the operating cost card: its coins, and the change a year in
           the card's step figures. */}

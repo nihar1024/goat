@@ -34,8 +34,9 @@ export function useEditShortcuts(
       if (e.defaultPrevented || typing(e.target)) return;
       const explorer = store.getState().explorer;
       const edit = explorer.edit;
-      // A dialog, the change list or the settings own the keys meanwhile.
-      if (edit.exit || edit.listOpen || explorer.settingsTab) return;
+      // A dialog, the change list, the settings or a menu on the line own
+      // the keys meanwhile (Esc closes the menu, not the selection).
+      if (edit.exit || edit.listOpen || explorer.settingsTab || explorer.lineMenu) return;
       const key = e.key.toLowerCase();
       const mod = e.metaKey || e.ctrlKey;
       if (mod && key === "z") {

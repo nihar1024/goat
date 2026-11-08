@@ -7,7 +7,7 @@
  */
 import { type PayloadAction, createSlice } from "@reduxjs/toolkit";
 
-import type { DirectionName } from "@/lib/explorer/derive/directions";
+import type { DirectionName, VariantKind } from "@/lib/explorer/derive/directions";
 import { directionsOnShapes } from "@/lib/explorer/directionChoice";
 import { type EditDraft, NO_STOP_VALUES } from "@/lib/explorer/edit/drafts";
 import type { ChangeSummary } from "@/lib/explorer/edit/types";
@@ -115,7 +115,14 @@ export interface ExplorerRouteDrawing {
   /** The route's directions, each with its patterns (its main one first)
    * and its name: which pattern the map highlights for the picker's choice,
    * and how the map offers a direction to pick. */
-  directions: { key: number; patterns: number[]; name: DirectionName }[];
+  directions: {
+    key: number;
+    patterns: number[];
+    name: DirectionName;
+    /** Its patterns other than the main one, as the direction picker names
+     * them (a short turn, an express, a branch, to where). */
+    variants: { pattern_idx: number; kind: VariantKind; destination: string }[];
+  }[];
   /** Each pattern's extent from its stops, `[west, south, east, north]`: the
    * map fits it when the Stops tab switches to it. */
   patternBounds: Record<number, [number, number, number, number]>;
@@ -175,6 +182,9 @@ export interface ExplorerState {
   strip: ExplorerStrip;
   /** The settings dialog, open on a tab, or closed. */
   settingsTab: ExplorerSettingsTab | null;
+  /** A right click on the selected line, while editing: where (on the
+   * page, and on the map), and on which stop, if one. */
+  lineMenu: { x: number; y: number; lon: number; lat: number; stop_idx: number | null } | null;
   /** The network's extent, `[west, south, east, north]`: the map fits it
    * once on opening. */
   bounds: [number, number, number, number] | null;
@@ -265,6 +275,7 @@ const initialState: ExplorerState = {
   tripTab: "stops",
   stopTab: "schedule",
   pattern: null,
+  lineMenu: null,
   strip: {
     collapsed: false,
     view: "chart",
@@ -478,6 +489,12 @@ const explorerSlice = createSlice({
       state.edit.enabled = action.payload;
     },
     /** The edit being made, or none: Cancel, or applied. */
+    openExplorerLineMenu: (state, action: PayloadAction<NonNullable<ExplorerState["lineMenu"]>>) => {
+      state.lineMenu = action.payload;
+    },
+    closeExplorerLineMenu: (state) => {
+      state.lineMenu = null;
+    },
     setEditDraft: (state, action: PayloadAction<EditDraft | null>) => {
       state.edit.draft = action.payload;
     },
@@ -593,6 +610,8 @@ export const {
   setEditTool,
   setEditSnap,
   setEditDraft,
+  openExplorerLineMenu,
+  closeExplorerLineMenu,
   setEditEnabled,
   placeStop,
   presetNewStopId,
@@ -618,9 +637,10 @@ export function panelItem(state: ExplorerState): ExplorerPanelItem | null {
 }
 
 /** Whether the right panel is open: an item in it, or a stop being placed
- * (its draft fills the panel, board 18). */
+ * or added to a line (its draft fills the panel, board 18). */
 export function rightPanelOpen(state: ExplorerState): boolean {
-  return state.active && (state.panel.stack.length > 0 || state.edit.draft?.kind === "stop-new");
+  const kind = state.edit.draft?.kind;
+  return state.active && (state.panel.stack.length > 0 || kind === "stop-new" || kind === "line-stop-add");
 }
 
 /** The stop the right panel shows, highlighted on the map. */

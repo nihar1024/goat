@@ -4,6 +4,7 @@
  * that fills it in and the Apply bar that applies it read the same thing;
  * Cancel, Esc or picking something else lets it go with no trace.
  */
+import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
 
 /** GTFS wheelchair_boarding: 0 unknown (or as its station), 1 accessible,
  * 2 not. */
@@ -44,4 +45,9 @@ export type EditDraft =
   /** 2.3: a stop deleted, with all that calls there. */
   | { kind: "stop-delete"; stop_idx: number }
   /** 2.2: a stop dragged to a new place, its paths with it. */
-  | { kind: "stop-move"; stop_idx: number; lon: number; lat: number };
+  | { kind: "stop-move"; stop_idx: number; lon: number; lat: number }
+  /** 3.2: a stop taken off a line, for the trips its scope takes. */
+  | { kind: "line-stop-remove"; stop_idx: number; scope: LineScope }
+  /** 3.1: a stop added to a line between `a` and `b`, for the trips its
+   * scope takes; picked on the map (null until then). */
+  | { kind: "line-stop-add"; a: number; b: number; stop_idx: number | null; scope: LineScope };

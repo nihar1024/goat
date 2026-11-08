@@ -5,6 +5,7 @@
  * of sight and rolled back, EditSession.preview), worded, and applied on
  * Apply.
  */
+import type { TFunction } from "i18next";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -14,6 +15,17 @@ import { tripsAnnualFigures } from "@/lib/explorer/derive/cost";
 import { type DraftPathKind, draftPathsStore } from "@/lib/explorer/edit/draftStore";
 import type { EditDraft, StopValues } from "@/lib/explorer/edit/drafts";
 import { type DeleteStopFacts, deleteStop } from "@/lib/explorer/edit/ops/deleteStop";
+import {
+  type AddToLineFacts,
+  type LineScope,
+  type RemoveFromLineFacts,
+  type ScopeLevel,
+  type ScopeOption,
+  addScopeOptions,
+  addToLine,
+  removeFromLine,
+  removeScopeOptions,
+} from "@/lib/explorer/edit/ops/lineStops";
 import { type MoveStopFacts, type Router, moveStop } from "@/lib/explorer/edit/ops/moveStop";
 import { locationKind } from "@/lib/explorer/edit/ops/stopRules";
 import {
@@ -39,6 +51,7 @@ import { useEdition } from "@/hooks/explorer/useEdition";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 import { useExplorer } from "@/components/explorer/ExplorerContext";
+import { scopeName } from "@/components/explorer/edit/ScopePicker";
 import { costChange } from "@/components/explorer/edit/costWords";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
@@ -48,7 +61,9 @@ export type Building =
   | { kind: "stop-details"; built: Built<StopDetailsFacts> }
   | { kind: "stop-new"; built: Built<NewStopFacts> }
   | { kind: "stop-delete"; built: Built<DeleteStopFacts> }
-  | { kind: "stop-move"; built: Built<MoveStopFacts> };
+  | { kind: "stop-move"; built: Built<MoveStopFacts> }
+  | { kind: "line-stop-remove"; built: Built<RemoveFromLineFacts> }
+  | { kind: "line-stop-add"; built: Built<AddToLineFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -73,6 +88,15 @@ export interface DraftEdit {
   applying: boolean;
   apply: () => Promise<void>;
   cancel: () => void;
+  /** For an edit on a line: how far it reaches, each level with the trips
+   * it would take (null while they are counted), and a way to change it. */
+  scope: {
+    level: ScopeLevel;
+    /** Where it started: the line, the variant shown, its direction. */
+    line: LineScope;
+    options: ScopeOption[] | null;
+    set: (level: ScopeLevel) => void;
+  } | null;
 }
 
 /** The draft edit, for the panel parts that show what it changes. */
@@ -98,7 +122,8 @@ export function useDraftEdit(): DraftEdit | null {
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
-    if (!db || !draft) return;
+    // A stop to add not picked yet: nothing to build.
+    if (!db || !draft || (draft.kind === "line-stop-add" && draft.stop_idx === null)) return;
     let current = true;
     const run = (roads?: Router) =>
       build(db, draft, shapeDistUnit, roads)
@@ -108,7 +133,7 @@ export function useDraftEdit(): DraftEdit | null {
     // stop rests: the router answers one request a second, and asking at
     // every step of a drag queued the drop's own request behind the whole
     // drag's. Not drawn straight first and then again: one path, once.
-    if (snap && draft.kind === "stop-move") {
+    if (snap && (draft.kind === "stop-move" || draft.kind === "line-stop-add")) {
       // Once this build is stale, its remaining stretches ask no more of
       // the router: its one request a second goes to the drop that counts.
       const roads: Router = (waypoints) => (current ? carRoads(waypoints) : Promise.resolve(null));
@@ -148,7 +173,10 @@ export function useDraftEdit(): DraftEdit | null {
   // the one it replaces in its two parts. Only once built for where the stop
   // is now, not what was built for where it was.
   useEffect(() => {
-    const paths = now?.kind === "stop-move" && now.built.ok ? now.built.facts.paths : null;
+    const paths =
+      (now?.kind === "stop-move" || now?.kind === "line-stop-add") && now.built.ok
+        ? now.built.facts.paths
+        : null;
     const line = (coordinates: [number, number][], kind: DraftPathKind, color: string) => ({
       type: "Feature" as const,
       geometry: { type: "LineString" as const, coordinates },
@@ -198,7 +226,13 @@ export function useDraftEdit(): DraftEdit | null {
     : cost && (cost.building === shown || (draft && sameEdit(cost.draft, draft)))
       ? cost.value
       : undefined;
-  const said = shown ? wordsFor(shown, t) : null;
+  // The scope of an edit on a line, named as "Apply to" names it.
+  const drawing = useAppSelector((s) => s.explorer.drawing);
+  const reach =
+    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add"
+      ? scopeName(draft.scope.level, draft.scope, drawing, t as TFunction)
+      : "";
+  const said = shown ? wordsFor(shown, t, reach) : null;
   const bar =
     said &&
     ({
@@ -248,6 +282,38 @@ export function useDraftEdit(): DraftEdit | null {
   }, [now, said, priced, session, applyChange, dispatch, draft]);
   const cancel = useCallback(() => dispatch(setEditDraft(null)), [dispatch]);
 
+  // An edit on a line: what each level of its scope would take.
+  const [options, setOptions] = useState<{ draft: EditDraft; options: ScopeOption[] } | null>(null);
+  useEffect(() => {
+    if (!db || (draft?.kind !== "line-stop-remove" && draft?.kind !== "line-stop-add")) return;
+    let current = true;
+    (draft.kind === "line-stop-add"
+      ? addScopeOptions(db, draft.scope, draft.a, draft.b)
+      : removeScopeOptions(db, draft.scope, draft.stop_idx)
+    )
+      .then((o) => current && setOptions({ draft, options: o }))
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [db, draft, edition]);
+  const setLevel = useCallback(
+    (level: ScopeLevel) => {
+      if (draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add")
+        dispatch(setEditDraft({ ...draft, scope: { ...draft.scope, level } }));
+    },
+    [draft, dispatch]
+  );
+  const scope =
+    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add"
+      ? {
+          level: draft.scope.level,
+          line: draft.scope,
+          options: options && sameEdit(options.draft, draft) ? options.options : null,
+          set: setLevel,
+        }
+      : null;
+
   if (!draft) return null;
   return {
     draft,
@@ -258,6 +324,7 @@ export function useDraftEdit(): DraftEdit | null {
     applying,
     apply,
     cancel,
+    scope,
   };
 }
 
@@ -266,7 +333,12 @@ const ROUTE_AFTER_MS = 500;
 
 /** The trips an edit changes, where it changes what they cost. */
 function tripsOf(b: Building | null): number[] | null {
-  return b?.kind === "stop-delete" || b?.kind === "stop-move" ? (b.built.facts?.trip_idxs ?? null) : null;
+  return b?.kind === "stop-delete" ||
+    b?.kind === "stop-move" ||
+    b?.kind === "line-stop-remove" ||
+    b?.kind === "line-stop-add"
+    ? (b.built.facts?.trip_idxs ?? null)
+    : null;
 }
 
 async function build(
@@ -290,6 +362,24 @@ async function build(
         kind: draft.kind,
         built: await moveStop(db, draft.stop_idx, [draft.lon, draft.lat], shapeDistUnit, roads),
       };
+    case "line-stop-remove":
+      return {
+        kind: draft.kind,
+        built: await removeFromLine(db, draft.stop_idx, draft.scope, shapeDistUnit),
+      };
+    case "line-stop-add":
+      return {
+        kind: draft.kind,
+        built: await addToLine(
+          db,
+          draft.stop_idx as number,
+          draft.a,
+          draft.b,
+          draft.scope,
+          shapeDistUnit,
+          roads
+        ),
+      };
   }
 }
 
@@ -301,7 +391,9 @@ function sameEdit(a: EditDraft, b: EditDraft): boolean {
 
 function wordsFor(
   b: Building,
-  t: T
+  t: T,
+  /** How far an edit on a line reaches, in words. */
+  reach: string
 ): { words: Pick<ChangeSummary, "label" | "impact">; bar: Omit<BarWords, "cost"> } {
   const raw = { interpolation: { escapeValue: false } };
   switch (b.kind) {
@@ -373,6 +465,47 @@ function wordsFor(
         bar: {
           action: t("apply"),
         },
+      };
+    }
+    case "line-stop-remove": {
+      const f = b.built.facts;
+      const scope = reach;
+      // The rest of their stops keep their times.
+      const impact = f?.trips ? t("explorer_times_kept", { count: f.trips }) : undefined;
+      return {
+        words: {
+          label: t("explorer_edit_stop_removed_from_line", {
+            name: f?.name ?? "",
+            line: f?.line ?? "",
+            scope,
+            ...raw,
+          }),
+          impact,
+        },
+        bar: { action: t("explorer_remove_stop_from_line"), danger: true },
+      };
+    }
+    case "line-stop-add": {
+      const f = b.built.facts;
+      const scope = reach;
+      const impact = [
+        f?.trips ? t("explorer_trips", { count: f.trips }) : null,
+        t("explorer_added_untimed"),
+        f?.paths.length ? t("explorer_paths_redrawn", { count: f.paths.length }) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        words: {
+          label: t("explorer_edit_stop_added_to_line", {
+            name: f?.name ?? "",
+            line: f?.line ?? "",
+            scope,
+            ...raw,
+          }),
+          impact,
+        },
+        bar: { action: t("explorer_add_stop_to_line") },
       };
     }
   }

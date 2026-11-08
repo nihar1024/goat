@@ -23,7 +23,7 @@ import {
   Typography,
   createFilterOptions,
 } from "@mui/material";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 
@@ -204,6 +204,91 @@ const PARENT_FILTER = createFilterOptions<LocationRow>({
   stringify: (o) => `${o.name} ${o.stop_id}`,
 });
 
+/** Locations nearest first, each with how far it is, found by name or id:
+ * the one way the Explorer offers places to pick (a station for a stop, a
+ * stop to add to a line). `away` measures each, from wherever matters. */
+export function NearestPicker({
+  options: all,
+  loading,
+  away: measure,
+  value,
+  onChange,
+  mark,
+  label,
+  placeholder,
+  noOptions,
+  error,
+  onBlur,
+}: {
+  options: LocationRow[];
+  loading: boolean;
+  away: (o: LocationRow) => number | null;
+  value: number | null;
+  onChange: (stop_idx: number | null) => void;
+  mark: ReactNode;
+  /** Its name, for the screen reader: the field's label says it. */
+  label: string;
+  placeholder?: string;
+  noOptions: string;
+  error?: string;
+  onBlur?: () => void;
+}) {
+  const { i18n } = useTranslation("common");
+  const { options, away } = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const o of all) {
+      const d = measure(o);
+      if (d !== null) m.set(o.stop_idx, d);
+    }
+    const far = (o: LocationRow) => m.get(o.stop_idx) ?? Infinity;
+    return { options: [...all].sort((a, b) => far(a) - far(b)), away: m };
+  }, [all, measure]);
+  const picked = options.find((o) => o.stop_idx === value) ?? null;
+  return (
+    <Autocomplete
+      size="small"
+      options={options}
+      value={picked}
+      onChange={(_, o) => onChange(o?.stop_idx ?? null)}
+      onBlur={onBlur}
+      loading={loading}
+      filterOptions={PARENT_FILTER}
+      getOptionLabel={(o) => o.name}
+      isOptionEqualToValue={(a, b) => a.stop_idx === b.stop_idx}
+      noOptionsText={noOptions}
+      renderOption={({ key: _key, ...props }, o) => (
+        <Box component="li" {...props} key={o.stop_idx} sx={OPTION_SX}>
+          <Choice icon={mark} label={o.name} note={distance(away.get(o.stop_idx) ?? null, i18n.language)} />
+        </Box>
+      )}
+      slotProps={{ paper: { sx: POPUP_SX } }}
+      // The search list's own option padding outranks the row's: set here.
+      ListboxProps={{ sx: { "&& .MuiAutocomplete-option": OPTION_SX } }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          placeholder={placeholder}
+          error={!!error}
+          helperText={error}
+          inputProps={{ ...params.inputProps, "aria-label": label }}
+          InputProps={{
+            ...params.InputProps,
+            // The picked place's mark, where the dropdowns show theirs.
+            startAdornment: picked ? (
+              <Box
+                aria-hidden
+                sx={{ display: "flex", justifyContent: "center", width: 16, ml: 1.25, mr: "3px" }}>
+                {mark}
+              </Box>
+            ) : undefined,
+          }}
+        />
+      )}
+      sx={FIELD_SX}
+    />
+  );
+}
+
 /** The station a location belongs to, nearest first, found by name or id. */
 function ParentPicker({
   value,
@@ -229,62 +314,30 @@ function ParentPicker({
   const { t } = useTranslation("common");
   const { db } = useExplorer();
   const query = useLocationsOfType(db, parentTypeFor(type));
-  const { i18n } = useTranslation("common");
-  // Nearest first, each with how far it is.
-  const { options, away } = useMemo(() => {
-    const all = (query.data ?? []).filter((o) => o.stop_idx !== self);
-    const m = new Map<number, number>();
-    if (lat !== null && lon !== null)
-      for (const o of all)
-        if (o.lat !== null && o.lon !== null) m.set(o.stop_idx, metres([lon, lat], [o.lon, o.lat]));
-    const far = (o: LocationRow) => m.get(o.stop_idx) ?? Infinity;
-    return { options: [...all].sort((a, b) => far(a) - far(b)), away: m };
-  }, [query.data, self, lat, lon]);
-  const picked = options.find((o) => o.stop_idx === value) ?? null;
-  const mark = <StopMarker station size={10} />;
+  const options = useMemo(() => (query.data ?? []).filter((o) => o.stop_idx !== self), [query.data, self]);
+  // From the location itself.
+  const away = useCallback(
+    (o: LocationRow) =>
+      lat !== null && lon !== null && o.lat !== null && o.lon !== null
+        ? metres([lon, lat], [o.lon, o.lat])
+        : null,
+    [lat, lon]
+  );
   return (
-    <Autocomplete
-      size="small"
+    <NearestPicker
       options={options}
-      value={picked}
-      onChange={(_, o) => onChange(o?.stop_idx ?? null)}
-      onBlur={onBlur}
       loading={query.loading}
-      filterOptions={PARENT_FILTER}
-      getOptionLabel={(o) => o.name}
-      isOptionEqualToValue={(a, b) => a.stop_idx === b.stop_idx}
-      noOptionsText={t("explorer_no_stations")}
-      renderOption={({ key: _key, ...props }, o) => (
-        <Box component="li" {...props} key={o.stop_idx} sx={OPTION_SX}>
-          <Choice icon={mark} label={o.name} note={distance(away.get(o.stop_idx) ?? null, i18n.language)} />
-        </Box>
-      )}
-      slotProps={{ paper: { sx: POPUP_SX } }}
-      // The search list's own option padding outranks the row's: set here.
-      ListboxProps={{ sx: { "&& .MuiAutocomplete-option": OPTION_SX } }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          // An optional station says what none means; a required one is
-          // simply empty until picked.
-          placeholder={required ? undefined : t("explorer_parent_none")}
-          error={!!error}
-          helperText={error}
-          inputProps={{ ...params.inputProps, "aria-label": t("explorer_stop_field_parent_idx") }}
-          InputProps={{
-            ...params.InputProps,
-            // The picked station's mark, where the dropdowns show theirs.
-            startAdornment: picked ? (
-              <Box
-                aria-hidden
-                sx={{ display: "flex", justifyContent: "center", width: 16, ml: 1.25, mr: "3px" }}>
-                {mark}
-              </Box>
-            ) : undefined,
-          }}
-        />
-      )}
-      sx={FIELD_SX}
+      away={away}
+      value={value}
+      onChange={onChange}
+      mark={<StopMarker station size={10} />}
+      label={t("explorer_stop_field_parent_idx")}
+      // An optional station says what none means; a required one is simply
+      // empty until picked.
+      placeholder={required ? undefined : t("explorer_parent_none")}
+      noOptions={t("explorer_no_stations")}
+      error={error}
+      onBlur={onBlur}
     />
   );
 }

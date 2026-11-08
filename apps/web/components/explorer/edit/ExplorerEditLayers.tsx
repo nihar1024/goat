@@ -209,7 +209,8 @@ export function ExplorerEditLayers() {
   // The paths as they would run, once the drop is built (not while
   // dragging): dotted in their line's colour, over the path each replaces,
   // drawn here in the network's stead and faint where it is drawn anew.
-  const shown = !!moving && !dragAt;
+  // A stop being added to a line shows its paths as a moved one does.
+  const shown = (!!moving || draft?.kind === "line-stop-add") && !dragAt;
   // In the colours the network is drawn in for the basemap under it: a dark
   // line lifted on a dark one, as ExplorerMapLayers draws it.
   const basemap = useAppSelector((s) => s.map.activeBasemap?.value);

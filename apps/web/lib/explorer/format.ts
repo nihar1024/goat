@@ -133,3 +133,8 @@ export function distance(m: number | null, locale: string): string | null {
     ? `${count(Math.round(m / 10) * 10, locale)} m`
     : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(m / 1000)} km`;
 }
+
+/** Today, as the Explorer's dates are kept (as `defaultDate` reads it). */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}

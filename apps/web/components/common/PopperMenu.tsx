@@ -51,9 +51,52 @@ export default function PopperMenu(props: PopperMenuProps) {
     placement = "bottom",
     enableFlip = false,
   } = props;
-  const theme = useTheme();
   const [popperMenuOpen, setPopperMenuOpen] = useState<boolean>(false);
 
+  return (
+    <ArrowPopper
+      open={popperMenuOpen}
+      placement={placement}
+      onClose={() => setPopperMenuOpen(false)}
+      disablePortal={disablePortal}
+      enableFlip={enableFlip}
+      arrow={false}
+      popperStyle={{ zIndex: 10000, pointerEvents: "all" }} // Ensure the popper menu is above any other element and clickable
+      content={
+        <PopperMenuContent
+          menuItems={menuItems}
+          selectedItem={selectedItem}
+          onPick={(item) => {
+            props?.onSelect?.(item);
+            item.onClick?.();
+            setPopperMenuOpen(false);
+          }}
+        />
+      }>
+      <div
+        style={{ pointerEvents: "all" }}
+        onClick={(event) => {
+          event.stopPropagation();
+          setPopperMenuOpen(!popperMenuOpen);
+        }}>
+        {menuButton}
+      </div>
+    </ArrowPopper>
+  );
+}
+
+/** The menu's list, as PopperMenu shows it under its button: also for a menu
+ * opened elsewhere (a right click on the map), so every menu looks alike. */
+export function PopperMenuContent({
+  menuItems,
+  selectedItem,
+  onPick,
+}: {
+  menuItems: PopperMenuItem[];
+  selectedItem?: PopperMenuItem;
+  onPick: (item: PopperMenuItem) => void;
+}) {
+  const theme = useTheme();
   // Group menu items by their group property
   const groupedMenuItems = menuItems.reduce(
     (acc, item) => {
@@ -68,122 +111,97 @@ export default function PopperMenu(props: PopperMenuProps) {
   );
 
   return (
-    <ArrowPopper
-      open={popperMenuOpen}
-      placement={placement}
-      onClose={() => setPopperMenuOpen(false)}
-      disablePortal={disablePortal}
-      enableFlip={enableFlip}
-      arrow={false}
-      popperStyle={{ zIndex: 10000, pointerEvents: "all" }} // Ensure the popper menu is above any other element and clickable
-      content={
-        <Paper
-          elevation={8}
-          sx={{
-            minWidth: 220,
-            maxWidth: 340,
-            overflow: "auto",
-            py: theme.spacing(2),
-            pointerEvents: "all",
-          }}>
-          <List dense={true} disablePadding>
-            {Object.keys(groupedMenuItems).map((group, groupIndex) => (
-              <div key={groupIndex}>
-                {groupedMenuItems[group].map((item) => (
-                  <ListItemButton
-                    disabled={item.disabled}
-                    selected={selectedItem?.label === item.label}
-                    key={item.id}
-                    onClick={(event) => {
-                      props?.onSelect?.(item);
-                      item.onClick?.();
-                      setPopperMenuOpen(false);
-                      event.stopPropagation();
-                    }}
+    <Paper
+      elevation={8}
+      sx={{
+        minWidth: 220,
+        maxWidth: 340,
+        overflow: "auto",
+        py: theme.spacing(2),
+        pointerEvents: "all",
+      }}>
+      <List dense={true} disablePadding>
+        {Object.keys(groupedMenuItems).map((group, groupIndex) => (
+          <div key={groupIndex}>
+            {groupedMenuItems[group].map((item) => (
+              <ListItemButton
+                disabled={item.disabled}
+                selected={selectedItem?.label === item.label}
+                key={item.id}
+                onClick={(event) => {
+                  onPick(item);
+                  event.stopPropagation();
+                }}
+                sx={{
+                  ...(item.color && {
+                    color: item.color,
+                  }),
+                  // Tinted, edge to edge as the menu's other rows.
+                  ...(item.featured && {
+                    mb: 0.5,
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.14) },
+                  }),
+                }}>
+                {/* The tile is centred on the plain icons' column and its label
+                    starts where theirs do. */}
+                {item.featured && item.icon && (
+                  <ListItemIcon sx={{ minWidth: 0, ml: "-3.5px", pr: "12.5px" }}>
+                    <Box
+                      sx={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: "primary.main",
+                        color: "primary.contrastText",
+                      }}>
+                      <Icon style={{ fontSize: 11 }} iconName={item.icon} htmlColor="inherit" />
+                    </Box>
+                  </ListItemIcon>
+                )}
+                {!item.featured && item.icon && (
+                  <ListItemIcon
                     sx={{
+                      color: item.color || "inherit",
+                      pr: 4,
+                      minWidth: 0,
+                    }}>
+                    <Icon style={{ fontSize: 15 }} iconName={item.icon} htmlColor={item.color || "inherit"} />
+                  </ListItemIcon>
+                )}
+                <ListItemText
+                  primary={item.label}
+                  sx={{
+                    "& .MuiTypography-root": {
                       ...(item.color && {
                         color: item.color,
                       }),
-                      // Tinted, edge to edge as the menu's other rows.
-                      ...(item.featured && {
-                        mb: 0.5,
-                        bgcolor: alpha(theme.palette.primary.main, 0.08),
-                        "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.14) },
-                      }),
-                    }}>
-                    {/* The tile is centred on the plain icons' column and its label
-                        starts where theirs do. */}
-                    {item.featured && item.icon && (
-                      <ListItemIcon sx={{ minWidth: 0, ml: "-3.5px", pr: "12.5px" }}>
-                        <Box
-                          sx={{
-                            width: 22,
-                            height: 22,
-                            borderRadius: 1,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            bgcolor: "primary.main",
-                            color: "primary.contrastText",
-                          }}>
-                          <Icon style={{ fontSize: 11 }} iconName={item.icon} htmlColor="inherit" />
-                        </Box>
-                      </ListItemIcon>
-                    )}
-                    {!item.featured && item.icon && (
-                      <ListItemIcon
-                        sx={{
-                          color: item.color || "inherit",
-                          pr: 4,
-                          minWidth: 0,
-                        }}>
-                        <Icon
-                          style={{ fontSize: 15 }}
-                          iconName={item.icon}
-                          htmlColor={item.color || "inherit"}
-                        />
-                      </ListItemIcon>
-                    )}
-                    <ListItemText
-                      primary={item.label}
+                    },
+                  }}
+                />
+                {item.tag && (
+                  <Tooltip title={item.tagTooltip || ""} placement="right" arrow>
+                    <Chip
+                      label={item.tag}
+                      size="small"
                       sx={{
-                        "& .MuiTypography-root": {
-                          ...(item.color && {
-                            color: item.color,
-                          }),
-                        },
+                        ml: 1,
+                        height: 18,
+                        fontSize: "0.65rem",
+                        fontWeight: 600,
                       }}
                     />
-                    {item.tag && (
-                      <Tooltip title={item.tagTooltip || ""} placement="right" arrow>
-                        <Chip
-                          label={item.tag}
-                          size="small"
-                          sx={{
-                            ml: 1,
-                            height: 18,
-                            fontSize: "0.65rem",
-                            fontWeight: 600,
-                          }}
-                        />
-                      </Tooltip>
-                    )}
-                  </ListItemButton>
-                ))}
-                {groupIndex < Object.keys(groupedMenuItems).length - 1 && <Divider sx={{ mx: 2 }} />}
-              </div>
+                  </Tooltip>
+                )}
+              </ListItemButton>
             ))}
-          </List>
-        </Paper>
-      }>
-      <div
-        style={{ pointerEvents: "all" }}
-        onClick={(event) => {
-          event.stopPropagation();
-          setPopperMenuOpen(!popperMenuOpen);
-        }}>
-        {menuButton}
-      </div>
-    </ArrowPopper>
+            {groupIndex < Object.keys(groupedMenuItems).length - 1 && <Divider sx={{ mx: 2 }} />}
+          </div>
+        ))}
+      </List>
+    </Paper>
   );
 }

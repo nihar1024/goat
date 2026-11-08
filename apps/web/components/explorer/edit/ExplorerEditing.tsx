@@ -16,6 +16,7 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { EditBar } from "@/components/explorer/edit/EditBar";
 import { ExitDialog } from "@/components/explorer/edit/ExitDialog";
+import { LineContextMenu } from "@/components/explorer/edit/LineContextMenu";
 import { SelectionResolver } from "@/components/explorer/edit/SelectionResolver";
 import { ToolHint } from "@/components/explorer/edit/ToolHint";
 
@@ -40,6 +41,7 @@ export function ExplorerEditing({ compact, barHidden }: { compact: boolean; barH
         </>
       )}
       <SelectionResolver />
+      <LineContextMenu />
       <ExitDialog />
     </>
   );

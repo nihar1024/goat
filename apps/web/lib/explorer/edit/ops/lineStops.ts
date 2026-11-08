@@ -1,0 +1,508 @@
+/**
+ * A stop on a line (01-editing-operations § 3): 3.2 taken off it, for the
+ * trips in scope. The scope is one of four levels, the same for every edit
+ * on a line (decided 6 Nov 2026): a trip, a variant (one pattern), a
+ * direction (its patterns), the whole line. The selection sets where it
+ * starts; the Apply bar's "Apply to" widens or narrows it, each level with
+ * the trips it takes, one that takes none named with why.
+ *
+ * Taken off: the trips in scope no longer call there; the stop stays, as do
+ * the line's paths (the vehicles drive the same streets, 6 Nov 2026), and
+ * every other time. The cascade is a stop delete's for those trips
+ * (removeStops): patterns without the stop, merged where one runs the same
+ * stops, a pattern only some of whose trips are in scope split; refused
+ * where a trip would keep fewer than two stops, end untimed, or lose the
+ * first stop its frequencies run from.
+ */
+import type { SqlRunner } from "@/lib/explorer/db/types";
+import { STOP_CHAIN_PREFIX } from "@/lib/explorer/edit/ops/chains";
+import { type DeleteStopFacts, removeStops } from "@/lib/explorer/edit/ops/deleteStop";
+import { metres } from "@/lib/explorer/edit/ops/geo";
+import { type MoveStopFacts, type Router, moveStop } from "@/lib/explorer/edit/ops/moveStop";
+import type { Built, ChangeRows } from "@/lib/explorer/edit/ops/types";
+import { sqlNumber } from "@/lib/explorer/edit/sql";
+import type { GtfsRowOp, Touch } from "@/lib/explorer/edit/types";
+
+/** How much of a line an edit on it changes, narrowest first. */
+export const SCOPE_LEVELS = ["trip", "variant", "direction", "line"] as const;
+export type ScopeLevel = (typeof SCOPE_LEVELS)[number];
+
+/** Where an edit on a line was started, and how far it reaches. */
+export interface LineScope {
+  route_idx: number;
+  level: ScopeLevel;
+  /** The variant shown (the Stops tab's line). */
+  pattern_idx: number;
+  /** Its direction's patterns. */
+  direction: number[];
+  /** The trip picked, where one of this line is. */
+  trip_idx: number | null;
+}
+
+/** A level as the Apply bar offers it: the trips it takes; none, and why. */
+export interface ScopeOption {
+  level: ScopeLevel;
+  trips: number;
+  /** Why it takes none: no trip picked, or none of its trips call there. */
+  none?: "no_trip" | "not_here";
+}
+
+const list = (xs: number[]) => (xs.length ? xs.map(sqlNumber).join(", ") : "NULL");
+
+/** The trips of `scope` at `level` whose pattern calls at `stop_idx`. */
+async function tripsAt(
+  db: SqlRunner,
+  scope: LineScope,
+  level: ScopeLevel,
+  stop_idx: number
+): Promise<number[]> {
+  const patterns =
+    level === "trip"
+      ? null
+      : level === "variant"
+        ? `pattern_idx = ${sqlNumber(scope.pattern_idx)}`
+        : level === "direction"
+          ? `pattern_idx IN (${list(scope.direction)})`
+          : `route_idx = ${sqlNumber(scope.route_idx)}`;
+  const where =
+    level === "trip"
+      ? scope.trip_idx === null
+        ? "false"
+        : `t.trip_idx = ${sqlNumber(scope.trip_idx)}`
+      : `t.pattern_idx IN (SELECT pattern_idx FROM patterns WHERE ${patterns})`;
+  return (
+    await db.all<{ trip_idx: number }>(`
+      SELECT t.trip_idx FROM trips t JOIN patterns p USING (pattern_idx)
+      WHERE ${where} AND list_contains(p.stops, ${sqlNumber(stop_idx)}) ORDER BY t.trip_idx`)
+  ).map((r) => r.trip_idx);
+}
+
+/** Every level, with the trips it would take a stop off. */
+export async function removeScopeOptions(
+  db: SqlRunner,
+  scope: LineScope,
+  stop_idx: number
+): Promise<ScopeOption[]> {
+  return Promise.all(
+    SCOPE_LEVELS.map(async (level): Promise<ScopeOption> => {
+      if (level === "trip" && scope.trip_idx === null) return { level, trips: 0, none: "no_trip" };
+      const trips = (await tripsAt(db, scope, level, stop_idx)).length;
+      return trips ? { level, trips } : { level, trips, none: "not_here" };
+    })
+  );
+}
+
+export interface RemoveFromLineFacts extends DeleteStopFacts {
+  route_idx: number;
+  /** The line as riders know it: its number, else its name. */
+  line: string;
+  level: ScopeLevel;
+}
+
+/** 3.2: `stop_idx` off the trips `scope` takes. */
+export async function removeFromLine(
+  db: SqlRunner,
+  stop_idx: number,
+  scope: LineScope,
+  shapeDistUnit: string | null
+): Promise<Built<RemoveFromLineFacts>> {
+  const [stop] = await db.all<{ stop_id: string; place: string; location_type: number }>(`
+    SELECT s.stop_id, COALESCE(p.name, s.name, s.stop_id) AS place, COALESCE(s.location_type, 0) AS location_type
+    FROM stops s LEFT JOIN stops p ON p.stop_idx = s.parent_idx WHERE s.stop_idx = ${sqlNumber(stop_idx)}`);
+  if (!stop) throw new Error(`No stop ${stop_idx}`);
+  const [route] = await db.all<{ line: string }>(`
+    SELECT COALESCE(NULLIF(short_name, ''), long_name, route_id) AS line FROM routes
+    WHERE route_idx = ${sqlNumber(scope.route_idx)}`);
+  const facts: RemoveFromLineFacts = {
+    stop_id: stop.stop_id,
+    name: stop.place,
+    location_type: stop.location_type,
+    entrances: 0,
+    nodes: 0,
+    platforms: 0,
+    trips: 0,
+    routes: [],
+    patterns: 0,
+    merged: 0,
+    headsigns: 0,
+    trip_idxs: [],
+    route_idx: scope.route_idx,
+    line: route?.line ?? "",
+    level: scope.level,
+  };
+  const trips = await tripsAt(db, scope, scope.level, stop_idx);
+  if (!trips.length)
+    return { ok: false, refused: { code: "goat_scope_empty", severity: "error" }, facts, checks: [] };
+  const built = await removeStops(db, [stop_idx], shapeDistUnit, facts, trips);
+  return built.ok
+    ? { ...built, facts, rows: { ...built.rows, kind: "line_stop_remove" } }
+    : { ...built, facts };
+}
+
+// 3.1: a stop added to a line --------------------------------------------
+
+/** How near a line's path a stop added to it lies on it: the path stays,
+ * the stop placed where the path passes it (6 Nov 2026). */
+export const ON_PATH_M = 15;
+
+type LonLat = [number, number];
+
+/** The patterns' condition for calling at `a` then `b` back to back (or, the
+ * whole line, either way round: its other direction). */
+function adjacent(a: number, b: number, eitherWay: boolean): string {
+  const pair = (x: number, y: number) =>
+    `list_contains(list_transform(range(1, len(p.stops)), k -> [p.stops[k], p.stops[k + 1]]), [${sqlNumber(x)}, ${sqlNumber(y)}])`;
+  return eitherWay ? `(${pair(a, b)} OR ${pair(b, a)})` : pair(a, b);
+}
+
+/** The trips of `scope` at `level` that call at `a` then `b` back to back. */
+async function tripsBetween(
+  db: SqlRunner,
+  scope: LineScope,
+  level: ScopeLevel,
+  a: number,
+  b: number
+): Promise<number[]> {
+  const where =
+    level === "trip"
+      ? scope.trip_idx === null
+        ? "false"
+        : `t.trip_idx = ${sqlNumber(scope.trip_idx)}`
+      : level === "variant"
+        ? `t.pattern_idx = ${sqlNumber(scope.pattern_idx)}`
+        : level === "direction"
+          ? `t.pattern_idx IN (${list(scope.direction)})`
+          : `t.route_idx = ${sqlNumber(scope.route_idx)}`;
+  return (
+    await db.all<{ trip_idx: number }>(`
+      SELECT t.trip_idx FROM trips t JOIN patterns p USING (pattern_idx)
+      WHERE ${where} AND ${adjacent(a, b, level === "line")} ORDER BY t.trip_idx`)
+  ).map((r) => r.trip_idx);
+}
+
+/** Every level, with the trips that would call at a stop added between `a`
+ * and `b`. */
+export async function addScopeOptions(
+  db: SqlRunner,
+  scope: LineScope,
+  a: number,
+  b: number
+): Promise<ScopeOption[]> {
+  return Promise.all(
+    SCOPE_LEVELS.map(async (level): Promise<ScopeOption> => {
+      if (level === "trip" && scope.trip_idx === null) return { level, trips: 0, none: "no_trip" };
+      const trips = (await tripsBetween(db, scope, level, a, b)).length;
+      return trips ? { level, trips } : { level, trips, none: "not_here" };
+    })
+  );
+}
+
+export interface AddToLineFacts {
+  stop_id: string;
+  name: string;
+  route_idx: number;
+  line: string;
+  level: ScopeLevel;
+  trips: number;
+  trip_idxs: number[];
+  /** Where it lies off the path, in metres (the farthest, over the paths). */
+  off_path_m: number;
+  /** The paths drawn anew through it, for the map to preview (a move's). */
+  paths: MoveStopFacts["paths"];
+}
+
+/** Where `x` is nearest the path `pts` between `lo` and `hi` metres along it:
+ * the point, how far along, how far off. */
+function nearestOn(
+  pts: { lon: number; lat: number; d: number }[],
+  x: LonLat,
+  lo: number,
+  hi: number
+): { at: LonLat; d: number; off: number } | null {
+  const k = Math.cos((x[1] * Math.PI) / 180) * 111_320;
+  const xy = (lon: number, lat: number) => [(lon - x[0]) * k, (lat - x[1]) * 110_540];
+  let best: { at: LonLat; d: number; off: number } | null = null;
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i - 1];
+    const q = pts[i];
+    if (q.d < lo || p.d > hi) continue;
+    const [px, py] = xy(p.lon, p.lat);
+    const [qx, qy] = xy(q.lon, q.lat);
+    const len = (qx - px) ** 2 + (qy - py) ** 2;
+    // Within the segment, and within the stretch between the neighbours.
+    const span = q.d - p.d;
+    const fLo = span > 0 ? Math.max(0, (lo - p.d) / span) : 0;
+    const fHi = span > 0 ? Math.min(1, (hi - p.d) / span) : 1;
+    const f = Math.max(fLo, Math.min(fHi, len > 0 ? -(px * (qx - px) + py * (qy - py)) / len : 0));
+    const d = p.d + f * span;
+    const at: LonLat = [p.lon + f * (q.lon - p.lon), p.lat + f * (q.lat - p.lat)];
+    const off = metres(at, x);
+    if (!best || off < best.off) best = { at, d, off };
+  }
+  return best;
+}
+
+/** 3.1: `stop_idx` added between `a` and `b` for the trips `scope` takes:
+ * untimed (6 Nov 2026: no time is made up), the trips' other times kept.
+ * Within ON_PATH_M of the path it is placed where the path passes it; else
+ * the path between `a` and `b` is drawn anew through it, straight or with
+ * Snap along the streets, as a stop moved there from that point is (a
+ * copy where another pattern runs the stretch without it). */
+export async function addToLine(
+  db: SqlRunner,
+  stop_idx: number,
+  a: number,
+  b: number,
+  scope: LineScope,
+  shapeDistUnit: string | null,
+  route?: Router
+): Promise<Built<AddToLineFacts>> {
+  const x = sqlNumber(stop_idx);
+  const [stop] = await db.all<{
+    stop_id: string;
+    place: string;
+    lon: number | null;
+    lat: number | null;
+    location_type: number;
+  }>(`
+    SELECT s.stop_id, COALESCE(p.name, s.name, s.stop_id) AS place, s.lon, s.lat,
+           COALESCE(s.location_type, 0) AS location_type
+    FROM stops s LEFT JOIN stops p ON p.stop_idx = s.parent_idx WHERE s.stop_idx = ${x}`);
+  if (!stop) throw new Error(`No stop ${stop_idx}`);
+  const [line] = await db.all<{ line: string }>(`
+    SELECT COALESCE(NULLIF(short_name, ''), long_name, route_id) AS line FROM routes
+    WHERE route_idx = ${sqlNumber(scope.route_idx)}`);
+  const facts: AddToLineFacts = {
+    stop_id: stop.stop_id,
+    name: stop.place,
+    route_idx: scope.route_idx,
+    line: line?.line ?? "",
+    level: scope.level,
+    trips: 0,
+    trip_idxs: [],
+    off_path_m: 0,
+    paths: [],
+  };
+  const refuse = (code: string): Built<AddToLineFacts> => ({
+    ok: false,
+    refused: { code, severity: "error" },
+    facts,
+    checks: [],
+  });
+  // Only a stop or platform is called at; and not as its own neighbour.
+  if (stop.location_type !== 0 || stop.lon === null || stop.lat === null)
+    return refuse("goat_add_not_a_stop");
+  if (stop_idx === a || stop_idx === b) return refuse("goat_add_neighbour");
+  const to: LonLat = [stop.lon, stop.lat];
+  const trips = await tripsBetween(db, scope, scope.level, a, b);
+  if (!trips.length) return refuse("goat_scope_empty");
+  facts.trips = trips.length;
+  facts.trip_idxs = trips;
+  const tripList = list(trips);
+  const eitherWay = scope.level === "line";
+
+  // Each pattern of those trips, the stop added after every call at `a`
+  // followed by `b` (or the other way round); one only some of whose trips
+  // are in scope split off, one that then runs as another of the line's
+  // merged into it.
+  const patterns = await db.all<{ pattern_idx: number; stops: ArrayLike<number>; n: number; going: number }>(`
+    SELECT p.pattern_idx, p.stops,
+           (SELECT CAST(count(*) AS INTEGER) FROM trips t WHERE t.pattern_idx = p.pattern_idx) AS n,
+           (SELECT CAST(count(*) AS INTEGER) FROM trips t WHERE t.pattern_idx = p.pattern_idx AND t.trip_idx IN (${tripList})) AS going
+    FROM patterns p WHERE p.pattern_idx IN (SELECT pattern_idx FROM trips WHERE trip_idx IN (${tripList}))
+    ORDER BY p.pattern_idx`);
+  const others = await db.all<{ pattern_idx: number; stops: ArrayLike<number> }>(`
+    SELECT pattern_idx, stops FROM patterns WHERE route_idx = ${sqlNumber(scope.route_idx)}`);
+  const known = new Map(others.map((p) => [Array.from(p.stops).join(","), p.pattern_idx]));
+  let [{ nextPattern }] = await db.all<{ nextPattern: number }>(
+    `SELECT CAST(COALESCE(max(pattern_idx) + 1, 0) AS INTEGER) AS nextPattern FROM patterns`
+  );
+  const sql: string[] = [];
+  const touched = new Set<number>();
+  /** Per pattern: where the stop goes in it (after these positions), and the
+   * pattern its trips in scope run as now. */
+  const changed: { pattern_idx: number; after: number[]; to: number; split: boolean }[] = [];
+  for (const p of patterns) {
+    const stops = Array.from(p.stops);
+    const after = stops.flatMap((s, i) =>
+      i + 1 < stops.length &&
+      ((s === a && stops[i + 1] === b) || (eitherWay && s === b && stops[i + 1] === a))
+        ? [i]
+        : []
+    );
+    if (!after.length) continue;
+    const added = stops.flatMap((s, i) => (after.includes(i) ? [s, stop_idx] : [s]));
+    const key = added.join(",");
+    let to = known.get(key);
+    const split = p.going < p.n;
+    if (to === undefined) {
+      to = split ? nextPattern++ : p.pattern_idx;
+      known.set(key, to);
+      if (split)
+        sql.push(
+          `INSERT INTO patterns SELECT * REPLACE (${sqlNumber(to)} AS pattern_idx, [${list(added)}]::INTEGER[] AS stops,
+             ${added.length} AS n_stops) FROM patterns WHERE pattern_idx = ${sqlNumber(p.pattern_idx)}`
+        );
+      else
+        sql.push(
+          `UPDATE patterns SET stops = [${list(added)}]::INTEGER[], n_stops = ${added.length}
+           WHERE pattern_idx = ${sqlNumber(p.pattern_idx)}`
+        );
+    }
+    changed.push({ pattern_idx: p.pattern_idx, after, to, split });
+    touched.add(p.pattern_idx).add(to);
+  }
+
+  // Their places on the paths their trips run: the stop where the path
+  // passes nearest it between its neighbours; the stops past it one on.
+  const shapes = await db.all<{ pattern_idx: number; shape_idx: number }>(`
+    SELECT DISTINCT pattern_idx, shape_idx FROM trips
+    WHERE trip_idx IN (${tripList}) AND shape_idx IS NOT NULL ORDER BY 1, 2`);
+  const off: { pattern: number; from: LonLat }[] = [];
+  let chained = false;
+  for (const c of changed) {
+    for (const { shape_idx } of shapes.filter((s) => s.pattern_idx === c.pattern_idx)) {
+      const s = sqlNumber(shape_idx);
+      const [meta] = await db.all<{ shape_id: string }>(
+        `SELECT shape_id FROM shapes_meta WHERE shape_idx = ${s}`
+      );
+      if (meta?.shape_id.startsWith(STOP_CHAIN_PREFIX)) chained = true;
+      const placed = await db.all<{ i: number; d: number }>(`
+        SELECT i, d FROM pattern_shape_stops WHERE pattern_idx = ${sqlNumber(c.pattern_idx)} AND shape_idx = ${s} ORDER BY i`);
+      const pts = await db.all<{ lon: number; lat: number; d: number }>(
+        `SELECT lon, lat, d FROM shape_points WHERE shape_idx = ${s} ORDER BY i`
+      );
+      const at = (i: number) => placed.find((r) => r.i === i)?.d ?? null;
+      const rows = c.after.flatMap((i) => {
+        const lo = at(i);
+        const hi = at(i + 1);
+        if (lo === null || hi === null) return [];
+        const near = nearestOn(pts, to, Math.min(lo, hi), Math.max(lo, hi));
+        if (!near) return [];
+        facts.off_path_m = Math.max(facts.off_path_m, near.off);
+        if (near.off > ON_PATH_M) off.push({ pattern: c.to, from: near.at });
+        return [
+          `(${sqlNumber(c.to)}, ${s}, ${i + 1 + c.after.filter((k) => k < i).length}, ${sqlNumber(near.d)})`,
+        ];
+      });
+      // The stops past each place it goes in, one on.
+      const kept = placed.map(
+        (r) => `(${sqlNumber(c.to)}, ${s}, ${r.i + c.after.filter((k) => k < r.i).length}, ${sqlNumber(r.d)})`
+      );
+      sql.push(`DELETE FROM pattern_shape_stops WHERE pattern_idx = ${sqlNumber(c.to)} AND shape_idx = ${s}`);
+      if (placed.length) sql.push(`INSERT INTO pattern_shape_stops VALUES ${[...kept, ...rows].join(", ")}`);
+    }
+  }
+
+  // The stop times: one at the stop, untimed and with no distance along the
+  // path (neither is made up), after the call at its neighbour; room made
+  // where the two are numbered one apart.
+  const calls = await db.all<{
+    trip_idx: number;
+    trip_id: string;
+    seq: number;
+    next_seq: number;
+    dist: number | null;
+    next_dist: number | null;
+  }>(`
+    SELECT trip_idx, trip_id, seq, next_seq, dist, next_dist FROM (
+      SELECT st.trip_idx, t.trip_id, st.stop_sequence AS seq, st.shape_dist AS dist, st.stop_idx,
+             lead(st.stop_idx) OVER w AS next_stop, lead(st.stop_sequence) OVER w AS next_seq,
+             lead(st.shape_dist) OVER w AS next_dist
+      FROM stop_times st JOIN trips t USING (trip_idx)
+      WHERE st.trip_idx IN (${tripList})
+      WINDOW w AS (PARTITION BY st.trip_idx ORDER BY st.stop_sequence)
+    )
+    WHERE (stop_idx = ${sqlNumber(a)} AND next_stop = ${sqlNumber(b)})
+       ${eitherWay ? `OR (stop_idx = ${sqlNumber(b)} AND next_stop = ${sqlNumber(a)})` : ""}
+    QUALIFY row_number() OVER (PARTITION BY trip_idx ORDER BY seq) = 1
+    ORDER BY trip_idx`);
+  const tight = calls.filter((c) => c.next_seq - c.seq < 2);
+  if (tight.length) {
+    const room = `CASE trip_idx ${tight.map((c) => `WHEN ${c.trip_idx} THEN ${c.seq}`).join(" ")} END`;
+    const where = `trip_idx IN (${list(tight.map((c) => c.trip_idx))}) AND stop_sequence > ${room}`;
+    sql.push(
+      `UPDATE stop_time_extras SET stop_sequence = stop_sequence + 1 WHERE ${where}`,
+      `UPDATE stop_times SET stop_sequence = stop_sequence + 1 WHERE ${where}`
+    );
+  }
+  sql.push(
+    `INSERT INTO stop_times (trip_idx, stop_sequence, stop_idx, arrival_s, departure_s, shape_dist) VALUES ${calls
+      .map((c) => `(${c.trip_idx}, ${c.seq + 1}, ${x}, NULL, NULL, NULL)`)
+      .join(", ")}`
+  );
+  const gtfs: GtfsRowOp[] = calls.flatMap((c): GtfsRowOp[] => [
+    ...(c.next_seq - c.seq < 2
+      ? [{ role: "stop_times" as const, op: "shift" as const, key: { trip_id: c.trip_id }, after: c.seq }]
+      : []),
+    {
+      role: "stop_times",
+      op: "insert",
+      key: { trip_id: c.trip_id, stop_sequence: c.seq + 1 },
+      values: { stop_id: stop.stop_id },
+    },
+  ]);
+  // The trips onto the pattern they now run as; one left with none goes.
+  for (const c of changed)
+    if (c.to !== c.pattern_idx) {
+      sql.push(
+        `UPDATE trips SET pattern_idx = ${sqlNumber(c.to)}
+         WHERE pattern_idx = ${sqlNumber(c.pattern_idx)} AND trip_idx IN (${tripList})`
+      );
+      if (!c.split)
+        sql.push(
+          `DELETE FROM pattern_shape_stops WHERE pattern_idx = ${sqlNumber(c.pattern_idx)}`,
+          `DELETE FROM patterns WHERE pattern_idx = ${sqlNumber(c.pattern_idx)}`
+        );
+    }
+  const pats = list([...touched]);
+  sql.push(
+    `UPDATE patterns SET
+       n_trips = (SELECT CAST(count(*) AS INTEGER) FROM trips t WHERE t.pattern_idx = patterns.pattern_idx)
+     WHERE pattern_idx IN (${pats})`
+  );
+  const touches: Touch[] = [
+    { table: "stop_times", where: `trip_idx IN (${tripList})` },
+    { table: "stop_time_extras", where: `trip_idx IN (${tripList})` },
+    { table: "trips", where: `trip_idx IN (${tripList})` },
+    { table: "patterns", where: `pattern_idx IN (${pats})` },
+    { table: "pattern_shape_stops", where: `pattern_idx IN (${pats})` },
+  ];
+  let rows: ChangeRows = { kind: "line_stop_add", touches, sql, gtfs };
+
+  // Off the path, or a line drawn through its stops: drawn anew through it,
+  // as a stop moved there from where the path passes nearest.
+  if ((off.length || chained) && db.fork) {
+    const fork = await db.fork();
+    try {
+      await fork.exec("BEGIN TRANSACTION");
+      try {
+        for (const statement of sql) await fork.exec(statement);
+        const only = [
+          ...new Set([...off.map((o) => o.pattern), ...(chained ? changed.map((c) => c.to) : [])]),
+        ];
+        const moved = await moveStop(fork, stop_idx, to, shapeDistUnit, route, {
+          from: off[0]?.from ?? [to[0] + 0.0001, to[1]],
+          only,
+          stopToStop: true,
+        });
+        if (!moved.ok) return { ...moved, facts } as Built<AddToLineFacts>;
+        facts.paths = moved.facts.paths;
+        rows = {
+          ...rows,
+          sql: [...sql, ...moved.rows.sql],
+          touches: [...touches, ...moved.rows.touches],
+          // Not a move: the stop stays where it is.
+          gtfs: [...gtfs, ...moved.rows.gtfs.filter((o) => o.role !== "stops")],
+          shapes: moved.rows.shapes,
+        };
+        return { ok: true, facts, checks: moved.checks, rows };
+      } finally {
+        await fork.exec("ROLLBACK");
+      }
+    } finally {
+      await fork.close();
+    }
+  }
+  return { ok: true, facts, checks: [], rows };
+}

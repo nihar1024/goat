@@ -48,19 +48,15 @@ const TOOLS: { tool: ExplorerEditTool; mark: ReactNode; key: string; ready: bool
     key: "V",
     ready: true,
   },
-  { tool: "stop", mark: <StopMarker size={11} />, key: "S", ready: true },
+  // In the button's colour, as the other tools' icons: green when chosen.
+  { tool: "stop", mark: <StopMarker size={11} fill="currentColor" />, key: "S", ready: true },
   {
     tool: "route",
     mark: <Icon iconName={ICON_NAME.ROUTE} style={{ fontSize: 12 }} htmlColor="inherit" />,
     key: "R",
     ready: false,
   },
-  {
-    tool: "area",
-    mark: <Icon iconName={ICON_NAME.DRAW_POLYGON} style={{ fontSize: 12 }} htmlColor="inherit" />,
-    key: "A",
-    ready: false,
-  },
+  // Area (board 20) is left out until it is built (6 Nov 2026).
 ];
 
 function Divider() {
@@ -77,6 +73,7 @@ function BarButton({
   active = false,
   disabled = false,
   compact,
+  tight = false,
   onClick,
   children,
 }: {
@@ -86,6 +83,8 @@ function BarButton({
   active?: boolean;
   disabled?: boolean;
   compact: boolean;
+  /** Less room either side (Stop, Route, Snap; Select keeps its own). */
+  tight?: boolean;
   onClick: () => void;
   children?: ReactNode;
 }) {
@@ -102,7 +101,7 @@ function BarButton({
             height: ITEM_H,
             // Room either side, so a chosen tool's fill is not tight round
             // its name. In pixels: the theme's spacing unit is 4 px.
-            px: compact ? "10px" : "14px",
+            px: tight ? "10px" : compact ? "10px" : "14px",
             gap: "8px",
             borderRadius: `${ITEM_H / 2}px`,
             color: active ? "primary.main" : "text.secondary",
@@ -244,6 +243,7 @@ export function EditBar({
               active={edit.tool === tool}
               disabled={!ready}
               compact={compact}
+              tight={tool !== "select"}
               onClick={() => dispatch(setEditTool(tool))}
             />
             {/* Select apart from the tools that create. */}
@@ -257,6 +257,7 @@ export function EditBar({
         hint={t("explorer_snap_hint")}
         mark={<Icon iconName={ICON_NAME.MAGNET} style={{ fontSize: ICON_SIZE }} htmlColor="inherit" />}
         compact={compact}
+        tight
         onClick={() => dispatch(setEditSnap(!edit.snap))}>
         <Toggle on={edit.snap} />
       </BarButton>

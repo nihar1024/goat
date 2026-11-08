@@ -5,7 +5,7 @@
  * to the item it was opened from, × closes it. It does not fold away
  * (dropped 20 Oct 2026): closed, it is opened again from where it came.
  */
-import { Box, ButtonBase, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, ButtonBase, IconButton, Stack, type Theme, Tooltip, Typography, alpha } from "@mui/material";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -29,6 +29,7 @@ import { RouteBadge, routeName } from "@/components/explorer/RouteBadge";
 import { ICON_GAP } from "@/components/explorer/SectionHeader";
 import { ApplyBar } from "@/components/explorer/edit/ApplyBar";
 import { DeleteStopCascade } from "@/components/explorer/edit/DeleteStopCascade";
+import { InsertStopPanel } from "@/components/explorer/edit/InsertStopPanel";
 import { NewStopPanel } from "@/components/explorer/edit/NewStopPanel";
 import { StopPanel } from "@/components/explorer/right/StopPanel";
 import { TripPanel } from "@/components/explorer/right/TripPanel";
@@ -68,73 +69,109 @@ function RightPanel() {
   const edit = useDraftEdit();
   // A stop being placed fills the panel until it is created (board 18).
   const placing = edit?.draft.kind === "stop-new" ? edit.draft : null;
-  if (!item && !placing) return null;
+  // A stop being added to a line, likewise until it is (3.1).
+  const inserting = edit?.draft.kind === "line-stop-add" ? edit.draft : null;
+  if (!item && !placing && !inserting) return null;
+  // A draft that fills the panel (a new stop, a stop added to a line) is the
+  // edit itself: its fields and its confirmation one panel, outlined as the
+  // edit panel is. Any other edit is made on the item shown, its
+  // confirmation a panel of its own under it.
+  const whole = !!(placing || inserting);
+  const editSx = (theme: Theme) => ({
+    border: `1.5px solid ${alpha(theme.palette.primary.main, 0.7)}`,
+    boxShadow: `0 0 12px ${alpha(theme.palette.primary.main, 0.35)}`,
+  });
+  const applyBar = edit && (
+    <ApplyBar
+      edit={edit}
+      titled={!whole}
+      // Adding a stop to a line asks how far it reaches first, at the top.
+      scoped={!inserting}
+      // What a delete takes, at the top: read before its cost.
+      impact={
+        edit.building?.kind === "stop-delete" ? (
+          <DeleteStopCascade edit={edit} routeByIdx={routeByIdx} />
+        ) : null
+      }
+    />
+  );
 
   return (
     <DraftEditContext.Provider value={edit}>
-      <FloatingPanel width={EXPLORER_RIGHT_PANEL_WIDTH} maxHeight="100%" fillHeight>
-        {/* The back link starts on the panel's content line: its own padding
+      {/* The item, and under it, while an edit is made, its confirmation as
+          a panel of its own, as the left panel has the operating cost. */}
+      <Stack spacing={2} sx={{ height: "100%", width: EXPLORER_RIGHT_PANEL_WIDTH, pointerEvents: "none" }}>
+        <FloatingPanel
+          width={EXPLORER_RIGHT_PANEL_WIDTH}
+          maxHeight="100%"
+          minHeight={0}
+          sx={(theme) => ({ flex: 1, minHeight: 0, ...(whole ? editSx(theme) : {}) })}>
+          {/* The back link starts on the panel's content line: its own padding
           (0.5) and the row's (2) make the content's (PX). */}
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={0.5}
-          sx={{ pl: 2, pr: 1.5, pt: 1, minHeight: 36 }}>
-          <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
-            {previous ? (
-              // Back to the item this one was opened from.
-              <ButtonBase
-                onClick={() => dispatch(explorerPanelBack())}
-                sx={{ gap: ICON_GAP, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
-                <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
-                <Typography variant="caption" noWrap>
-                  {previousName}
-                </Typography>
-              </ButtonBase>
-            ) : fromRoute ? (
-              // The route it belongs to, open in the left panel.
-              <Stack direction="row" spacing={0.75} alignItems="center" sx={{ px: 0.5, minWidth: 0 }}>
-                <RouteBadge route={fromRoute} small />
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {routeName(fromRoute, t)}
-                </Typography>
-              </Stack>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={0.5}
+            sx={{ pl: 2, pr: 1.5, pt: 1, minHeight: 36 }}>
+            <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
+              {previous ? (
+                // Back to the item this one was opened from.
+                <ButtonBase
+                  onClick={() => dispatch(explorerPanelBack())}
+                  sx={{ gap: ICON_GAP, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
+                  <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
+                  <Typography variant="caption" noWrap>
+                    {previousName}
+                  </Typography>
+                </ButtonBase>
+              ) : fromRoute ? (
+                // The route it belongs to, open in the left panel.
+                <Stack direction="row" spacing={ICON_GAP} alignItems="center" sx={{ px: 0.5, minWidth: 0 }}>
+                  <RouteBadge route={fromRoute} small />
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {routeName(fromRoute, t)}
+                  </Typography>
+                </Stack>
+              ) : null}
+            </Box>
+            <Tooltip title={t("explorer_panel_close")}>
+              <IconButton
+                size="small"
+                aria-label={t("explorer_panel_close")}
+                onClick={() => dispatch(closeExplorerPanel())}>
+                <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 14 }} htmlColor="inherit" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+          <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            {placing ? (
+              <NewStopPanel draft={placing} />
+            ) : inserting ? (
+              <InsertStopPanel draft={inserting} />
+            ) : item?.kind === "stop" ? (
+              <StopPanel key={item.stop.stop_idx} stop={item.stop} />
+            ) : item ? (
+              <TripPanel
+                key={`${item.trip_idx}:${item.run_dep_s}`}
+                trip_idx={item.trip_idx}
+                run_dep_s={item.run_dep_s}
+              />
             ) : null}
           </Box>
-          <Tooltip title={t("explorer_panel_close")}>
-            <IconButton
-              size="small"
-              aria-label={t("explorer_panel_close")}
-              onClick={() => dispatch(closeExplorerPanel())}>
-              <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 14 }} htmlColor="inherit" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-        <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          {placing ? (
-            <NewStopPanel draft={placing} />
-          ) : item?.kind === "stop" ? (
-            <StopPanel key={item.stop.stop_idx} stop={item.stop} />
-          ) : item ? (
-            <TripPanel
-              key={`${item.trip_idx}:${item.run_dep_s}`}
-              trip_idx={item.trip_idx}
-              run_dep_s={item.run_dep_s}
-            />
-          ) : null}
-        </Box>
-        {edit && (
-          <ApplyBar
-            edit={edit}
-            // What a delete takes, at the top of the bar: read before its cost.
-            impact={
-              edit.building?.kind === "stop-delete" ? (
-                <DeleteStopCascade edit={edit} routeByIdx={routeByIdx} />
-              ) : null
-            }
-          />
+          {/* The draft's confirmation at its foot, set off by a line. */}
+          {whole && <Box sx={{ borderTop: 1, borderColor: "divider", flexShrink: 0 }}>{applyBar}</Box>}
+        </FloatingPanel>
+        {edit && !whole && (
+          <FloatingPanel
+            width={EXPLORER_RIGHT_PANEL_WIDTH}
+            minHeight={0}
+            // Outlined in the theme's green, its shadow tinted with it: where
+            // the edit waits to be applied, to draw the eye.
+            sx={(theme) => ({ flexShrink: 0, ...editSx(theme) })}>
+            {applyBar}
+          </FloatingPanel>
         )}
-      </FloatingPanel>
+      </Stack>
     </DraftEditContext.Provider>
   );
 }

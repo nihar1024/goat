@@ -99,14 +99,17 @@ export async function deleteStop(
 /** The stops `gone` (stops or platforms) out of the network and every trip
  * calling there, with their boarding areas: the cascade above, in one
  * change. The rows of a station's own delete are added by the caller. */
-async function removeStops(
+export async function removeStops(
   db: SqlRunner,
   gone: number[],
   shapeDistUnit: string | null,
-  facts: DeleteStopFacts
+  facts: DeleteStopFacts,
+  /** Only these trips (3.2, a stop off a line): the stops themselves stay. */
+  only?: number[]
 ): Promise<Built<DeleteStopFacts>> {
   const set = new Set(gone);
   const n = list(gone);
+  const inScope = only ? `AND trip_idx IN (${list(only)})` : "";
   const trips = await db.all<{
     trip_idx: number;
     trip_id: string;
@@ -118,7 +121,7 @@ async function removeStops(
     headsign: string | null;
     new_last: string | null;
   }>(`
-    WITH aff AS (SELECT DISTINCT trip_idx FROM stop_times WHERE stop_idx IN (${n})),
+    WITH aff AS (SELECT DISTINCT trip_idx FROM stop_times WHERE stop_idx IN (${n}) ${inScope}),
     rest AS (
       SELECT st.*, COALESCE(p.name, s.name, s.stop_id) AS place
       FROM stop_times st JOIN aff USING (trip_idx)
@@ -169,25 +172,62 @@ async function removeStops(
     WHERE route_idx IN (SELECT route_idx FROM patterns WHERE list_has_any(stops, [${n}]))
     ORDER BY pattern_idx`);
   const keyOf = (route: number, stops: number[]) => `${route}|${stops.join(",")}`;
+  // The trips calling here each pattern has, and those of them in scope: a
+  // pattern only some of whose trips go without the stop keeps it for the
+  // rest, the others running as another pattern.
+  const inPattern = new Map(
+    (
+      await db.all<{ pattern_idx: number; n: number }>(`
+        SELECT pattern_idx, CAST(count(*) AS INTEGER) AS n FROM trips
+        WHERE pattern_idx IN (SELECT pattern_idx FROM patterns WHERE list_has_any(stops, [${n}]))
+        GROUP BY 1`)
+    ).map((r) => [r.pattern_idx, r.n])
+  );
+  const going = new Map(
+    (
+      await db.all<{ pattern_idx: number; n: number }>(`
+        SELECT pattern_idx, CAST(count(*) AS INTEGER) AS n FROM trips
+        WHERE trip_idx IN (${list(facts.trip_idxs)}) GROUP BY 1`)
+    ).map((r) => [r.pattern_idx, r.n])
+  );
   const unaffected = new Map<string, number>();
-  const affected: { pattern_idx: number; stops: number[]; kept: number[]; removed: number[] }[] = [];
+  const affected: {
+    pattern_idx: number;
+    stops: number[];
+    kept: number[];
+    removed: number[];
+    /** Some of its trips stay as they are. */
+    split: boolean;
+  }[] = [];
   for (const p of patterns) {
     const stops = Array.from(p.stops);
-    if (!stops.some((s) => set.has(s))) unaffected.set(keyOf(p.route_idx, stops), p.pattern_idx);
-    else
-      affected.push({
-        pattern_idx: p.pattern_idx,
-        stops,
-        kept: stops.filter((s) => !set.has(s)),
-        removed: stops.flatMap((s, i) => (set.has(s) ? [i] : [])),
-      });
+    if (!stops.some((s) => set.has(s)) || !going.has(p.pattern_idx)) {
+      if (!stops.some((s) => set.has(s))) unaffected.set(keyOf(p.route_idx, stops), p.pattern_idx);
+      continue;
+    }
+    affected.push({
+      pattern_idx: p.pattern_idx,
+      stops,
+      kept: stops.filter((s) => !set.has(s)),
+      removed: stops.flatMap((s, i) => (set.has(s) ? [i] : [])),
+      split: (going.get(p.pattern_idx) ?? 0) < (inPattern.get(p.pattern_idx) ?? 0),
+    });
   }
   const routeOf = new Map(patterns.map((p) => [p.pattern_idx, p.route_idx]));
   const target = new Map<number, number>();
   const first = new Map<string, number>();
+  let [{ nextPattern }] = await db.all<{ nextPattern: number }>(
+    `SELECT CAST(COALESCE(max(pattern_idx) + 1, 0) AS INTEGER) AS nextPattern FROM patterns`
+  );
+  const created: number[] = [];
   for (const p of affected) {
     const key = keyOf(routeOf.get(p.pattern_idx) as number, p.kept);
-    const to = unaffected.get(key) ?? first.get(key) ?? p.pattern_idx;
+    let to = unaffected.get(key) ?? first.get(key);
+    if (to === undefined) {
+      // A pattern split: its trips in scope as a new one.
+      to = p.split ? nextPattern++ : p.pattern_idx;
+      if (p.split) created.push(to);
+    }
     if (!first.has(key)) first.set(key, to);
     target.set(p.pattern_idx, to);
   }
@@ -197,12 +237,12 @@ async function removeStops(
 
   const tripList = list(facts.trip_idxs);
   const sql: string[] = [];
-  // Stop times, and their extras, at the stops.
+  // Stop times, and their extras, at the stops: on the trips in scope.
   sql.push(
     `DELETE FROM stop_time_extras WHERE EXISTS (
-       SELECT 1 FROM stop_times st WHERE st.stop_idx IN (${n})
+       SELECT 1 FROM stop_times st WHERE st.stop_idx IN (${n}) AND st.trip_idx IN (${tripList})
        AND st.trip_idx = stop_time_extras.trip_idx AND st.stop_sequence = stop_time_extras.stop_sequence)`,
-    `DELETE FROM stop_times WHERE stop_idx IN (${n})`
+    `DELETE FROM stop_times WHERE stop_idx IN (${n}) AND trip_idx IN (${tripList})`
   );
   // Patterns: places on their shapes renumbered past the stop, merged into
   // the pattern they now run as, or kept with the stop left out.
@@ -214,6 +254,25 @@ async function removeStops(
       .filter((i) => !p.removed.includes(i))
       .map((i) => `WHEN ${i} THEN ${i - p.removed.filter((r) => r < i).length}`)
       .join(" ");
+    if (p.split) {
+      // Its trips in scope onto the pattern they now run as (new, or
+      // another), placed on their shapes as it was, the stop left out.
+      const t = sqlNumber(to);
+      if (created.includes(to))
+        sql.push(
+          `INSERT INTO patterns SELECT * REPLACE (${t} AS pattern_idx, [${list(p.kept)}]::INTEGER[] AS stops,
+             ${p.kept.length} AS n_stops) FROM patterns WHERE pattern_idx = ${idx}`
+        );
+      sql.push(
+        `INSERT INTO pattern_shape_stops
+         SELECT ${t}, shape_idx, CASE i ${renumber} END, d FROM pattern_shape_stops
+         WHERE pattern_idx = ${idx} AND i NOT IN (${list(p.removed)})
+           AND shape_idx IN (SELECT shape_idx FROM trips WHERE trip_idx IN (${tripList}) AND pattern_idx = ${idx})
+           AND shape_idx NOT IN (SELECT shape_idx FROM pattern_shape_stops WHERE pattern_idx = ${t})`,
+        `UPDATE trips SET pattern_idx = ${t} WHERE pattern_idx = ${idx} AND trip_idx IN (${tripList})`
+      );
+      continue;
+    }
     sql.push(
       `DELETE FROM pattern_shape_stops WHERE pattern_idx = ${idx} AND i IN (${list(p.removed)})`,
       `UPDATE pattern_shape_stops SET i = CASE i ${renumber} END WHERE pattern_idx = ${idx}`
@@ -368,39 +427,47 @@ async function removeStops(
          length_m = (SELECT CAST(median(t.length_m) AS REAL) FROM trips t WHERE t.pattern_idx = patterns.pattern_idx)
        WHERE pattern_idx IN (${list(touchedPatterns)})`
     );
-  // What lies under the stops: any location but a stop or platform goes
-  // with them, and what lies under that in turn, deepest first (a boarding
-  // area, or whatever a feed puts there); a stop or platform under any of
-  // them is kept, on its own.
-  const under = await db.all<{ stop_idx: number; stop_id: string }>(`
-    WITH RECURSIVE u(stop_idx, depth) AS (
-      SELECT stop_idx, 1 FROM stops
-      WHERE parent_idx IN (${n}) AND COALESCE(location_type, 0) <> 0 AND stop_idx NOT IN (${n})
-      UNION ALL
-      SELECT s.stop_idx, u.depth + 1 FROM stops s JOIN u ON s.parent_idx = u.stop_idx
-      WHERE COALESCE(s.location_type, 0) <> 0 AND s.stop_idx NOT IN (${n})
-    )
-    SELECT s.stop_idx, s.stop_id FROM (SELECT stop_idx, max(depth) AS depth FROM u GROUP BY 1) u
-    JOIN stops s USING (stop_idx) ORDER BY u.depth DESC, s.stop_idx`);
-  const removed = [...under.map((u) => u.stop_idx), ...gone];
-  const orphans = await db.all<{ stop_idx: number; stop_id: string }>(`
-    SELECT stop_idx, stop_id FROM stops
-    WHERE parent_idx IN (${list(removed)}) AND COALESCE(location_type, 0) = 0 AND stop_idx NOT IN (${list(removed)})
-    ORDER BY stop_idx`);
-  const ids = await db.all<{ stop_idx: number; stop_id: string }>(
-    `SELECT stop_idx, stop_id FROM stops WHERE stop_idx IN (${list(removed)})`
-  );
-  const idOf = new Map(ids.map((r) => [r.stop_idx, r.stop_id]));
-  if (orphans.length)
-    sql.push(
-      `UPDATE stops SET parent_idx = NULL WHERE stop_idx IN (${list(orphans.map((o) => o.stop_idx))})`
+  // The stops themselves, unless only taken off some trips (they stay).
+  const removed: number[] = [];
+  const orphans: { stop_idx: number; stop_id: string }[] = [];
+  const idOf = new Map<number, string>();
+  if (!only) {
+    // What lies under the stops: any location but a stop or platform goes
+    // with them, and what lies under that in turn, deepest first (a boarding
+    // area, or whatever a feed puts there); a stop or platform under any of
+    // them is kept, on its own.
+    const under = await db.all<{ stop_idx: number; stop_id: string }>(`
+      WITH RECURSIVE u(stop_idx, depth) AS (
+        SELECT stop_idx, 1 FROM stops
+        WHERE parent_idx IN (${n}) AND COALESCE(location_type, 0) <> 0 AND stop_idx NOT IN (${n})
+        UNION ALL
+        SELECT s.stop_idx, u.depth + 1 FROM stops s JOIN u ON s.parent_idx = u.stop_idx
+        WHERE COALESCE(s.location_type, 0) <> 0 AND s.stop_idx NOT IN (${n})
+      )
+      SELECT s.stop_idx, s.stop_id FROM (SELECT stop_idx, max(depth) AS depth FROM u GROUP BY 1) u
+      JOIN stops s USING (stop_idx) ORDER BY u.depth DESC, s.stop_idx`);
+    removed.push(...under.map((u) => u.stop_idx), ...gone);
+    orphans.push(
+      ...(await db.all<{ stop_idx: number; stop_id: string }>(`
+      SELECT stop_idx, stop_id FROM stops
+      WHERE parent_idx IN (${list(removed)}) AND COALESCE(location_type, 0) = 0 AND stop_idx NOT IN (${list(removed)})
+      ORDER BY stop_idx`))
     );
-  sql.push(`DELETE FROM stops WHERE stop_idx IN (${list(removed)})`);
+    const ids = await db.all<{ stop_idx: number; stop_id: string }>(
+      `SELECT stop_idx, stop_id FROM stops WHERE stop_idx IN (${list(removed)})`
+    );
+    for (const r of ids) idOf.set(r.stop_idx, r.stop_id);
+    if (orphans.length)
+      sql.push(
+        `UPDATE stops SET parent_idx = NULL WHERE stop_idx IN (${list(orphans.map((o) => o.stop_idx))})`
+      );
+    sql.push(`DELETE FROM stops WHERE stop_idx IN (${list(removed)})`);
+  }
 
   // One row each, in case a feed repeats a stop_sequence in a trip.
   const calls = await db.all<{ trip_id: string; stop_sequence: number }>(`
     SELECT DISTINCT t.trip_idx, t.trip_id, st.stop_sequence FROM stop_times st JOIN trips t USING (trip_idx)
-    WHERE st.stop_idx IN (${n}) ORDER BY t.trip_idx, st.stop_sequence`);
+    WHERE st.stop_idx IN (${n}) AND st.trip_idx IN (${tripList}) ORDER BY t.trip_idx, st.stop_sequence`);
   gtfs.unshift(
     ...calls.map((c) => ({
       role: "stop_times" as const,

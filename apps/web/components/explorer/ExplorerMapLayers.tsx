@@ -34,6 +34,7 @@ import { selectionStore } from "@/lib/explorer/selectionStore";
 import {
   clickExplorerPath,
   closeExplorerPanel,
+  openExplorerLineMenu,
   openExplorerPanel,
   panelItem,
   pickExplorerPattern,
@@ -41,6 +42,7 @@ import {
   rightPanelOpen,
   selectExplorerRoute,
   selectExplorerRouteAt,
+  setEditDraft,
   setExplorerPath,
 } from "@/lib/store/explorer/slice";
 
@@ -226,6 +228,13 @@ const LINE_LAYERS = [
 ];
 /** The selected line's own shapes: a click there picks one of its directions. */
 const ROUTE_LINE_LAYERS = ["explorer-route-line", "explorer-route-line-redrawn"];
+/** Where a right click finds the selected line, highlighted or not. */
+const LINE_MENU_LAYERS = [
+  ...ROUTE_LINE_LAYERS,
+  "explorer-pattern-line",
+  "explorer-pattern-line-redrawn",
+  "explorer-pattern-section-line",
+];
 const STATION_LAYERS = ["explorer-station-area"];
 
 /** How far (px) from the pointer a feature is looked for, nearest first. */
@@ -308,6 +317,13 @@ export function ExplorerMapLayers() {
   const tool = useAppSelector((s) => s.explorer.edit.tool);
   const toolNow = useRef(tool);
   toolNow.current = tool;
+  const editing = useAppSelector((s) => s.explorer.edit.enabled);
+  const editingNow = useRef(editing);
+  editingNow.current = editing;
+  // A stop being added to a line (3.1): the next stop clicked is the one.
+  const draft = useAppSelector((s) => s.explorer.edit.draft);
+  const adding = useRef(draft);
+  adding.current = draft?.kind === "line-stop-add" ? draft : null;
   // What is selected below a direction (a path, the open trip's pattern),
   // drawn over the route for an editor (the selection resolver).
   const selection = useSyncExternalStore(selectionStore.subscribe, selectionStore.getSnapshot, () => null);
@@ -476,6 +492,13 @@ export function ExplorerMapLayers() {
     };
     const onClick = (e: MapLayerMouseEvent) => {
       if (toolNow.current !== "select") return;
+      const insert = adding.current;
+      if (insert?.kind === "line-stop-add") {
+        // Picking the stop to add: a stop or platform, nothing else.
+        const [stop] = near(e.point, STOP_LAYERS);
+        if (stop) dispatch(setEditDraft({ ...insert, stop_idx: Number(stop.properties?.stop_idx) }));
+        return;
+      }
       onMap.current = {};
       const vehicle = vehicleAt(e.point);
       if (vehicle) {
@@ -587,16 +610,61 @@ export function ExplorerMapLayers() {
       if (canvas.style.cursor === "" && (vehicleAt(e.point) || near(e.point, all).length))
         canvas.style.cursor = "pointer";
     };
+    // A right click on the selected line, while editing: its stop's edits,
+    // or a stop added between two of its stops (LineContextMenu works out
+    // which, with the snapshot).
+    const onContext = (e: MapLayerMouseEvent) => {
+      if (!editingNow.current || !drawingNow.current || toolNow.current !== "select") return;
+      const [stop] = near(e.point, STOP_LAYERS);
+      // On the line: the route's, or the highlighted variant's drawn over it.
+      const onLine = near(e.point, LINE_MENU_LAYERS, HIT_RADII.slice(0, 2)).length > 0;
+      if (!stop && !onLine) return;
+      e.preventDefault();
+      dispatch(
+        openExplorerLineMenu({
+          x: e.originalEvent.clientX,
+          y: e.originalEvent.clientY,
+          lon: e.lngLat.lng,
+          lat: e.lngLat.lat,
+          stop_idx: stop ? Number(stop.properties?.stop_idx) : null,
+        })
+      );
+    };
     map.on("click", onClick);
     map.on("mousemove", onMove);
+    map.on("contextmenu", onContext);
     return () => {
       map.off("click", onClick);
       map.off("mousemove", onMove);
+      map.off("contextmenu", onContext);
     };
   }, [map, active, network, selectedRouteId, dispatch, vehicles]);
 
   // A picked station is its whole area, as drawn round its stops, not a
   // point in it; a stop or platform is its point.
+  // A stop being added to a line: the stretch it goes on, between the stops
+  // before and after it, fitted clear of the panels as the edit starts.
+  const addA = draft?.kind === "line-stop-add" ? draft.a : null;
+  const addB = draft?.kind === "line-stop-add" ? draft.b : null;
+  useEffect(() => {
+    if (!map || addA === null || addB === null) return;
+    const ends = network.stops.features
+      .filter((f) => f.properties.stop_idx === addA || f.properties.stop_idx === addB)
+      .map((f) => f.geometry.coordinates as [number, number]);
+    if (ends.length < 2) return;
+    const lons = ends.map((c) => c[0]);
+    const lats = ends.map((c) => c[1]);
+    map.fitBounds(
+      [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ],
+      { maxZoom: STOP_ZOOM, padding: fitPadding(map, clearOf(map, { rightPanel: true, bar }, FIT_ROOM)) }
+    );
+    // Only for another stretch, not as the stops redraw.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, addA, addB]);
+
   // A run picked in the trip strip: its vehicle, if out on the map, flown
   // to, clear of the panels — the trip opens in the right panel with it. In
   // plain view already, it is left where it is; a run not running now has

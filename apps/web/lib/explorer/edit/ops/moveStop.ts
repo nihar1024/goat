@@ -265,7 +265,11 @@ export async function moveStop(
   to: LonLat,
   shapeDistUnit: string | null,
   /** With Snap on: the router road lines' stretches are asked of. */
-  route?: Router
+  route?: Router,
+  /** A stop added to a line (3.1) is drawn into it as one moved there from
+   * its place on the path (`from`), only for the patterns it was added to
+   * (`only`), the whole way between its neighbours (`stopToStop`). */
+  opts: { from?: LonLat; only?: number[]; stopToStop?: boolean } = {}
 ): Promise<Built<MoveStopFacts>> {
   const n = sqlNumber(stop_idx);
   const [stop] = await db.all<{
@@ -279,7 +283,7 @@ export async function moveStop(
            COALESCE(s.location_type, 0) AS location_type
     FROM stops s LEFT JOIN stops p ON p.stop_idx = s.parent_idx WHERE s.stop_idx = ${n}`);
   if (!stop) throw new Error(`No stop ${stop_idx}`);
-  const from: LonLat = [stop.lon ?? to[0], stop.lat ?? to[1]];
+  const from: LonLat = opts.from ?? [stop.lon ?? to[0], stop.lat ?? to[1]];
   const moved = metres(from, to);
   const facts: MoveStopFacts = {
     stop_id: stop.stop_id,
@@ -315,7 +319,8 @@ export async function moveStop(
   // The patterns through the stop, the paths their trips run on, and every
   // pattern's place on those paths.
   const patterns = await db.all<{ pattern_idx: number; route_idx: number; stops: ArrayLike<number> }>(`
-    SELECT pattern_idx, route_idx, stops FROM patterns WHERE list_contains(stops, ${n})`);
+    SELECT pattern_idx, route_idx, stops FROM patterns WHERE list_contains(stops, ${n})
+    ${opts.only ? `AND pattern_idx IN (${list(opts.only)})` : ""}`);
   const through = new Map(
     patterns.map((p) => [p.pattern_idx, { route: p.route_idx, stops: Array.from(p.stops) }])
   );
@@ -405,7 +410,7 @@ export async function moveStop(
 
     // A path of the feed's: each pattern's stretches through the stop.
     const local = Math.max(REDRAW_MIN_M, 3 * moved);
-    const reach = routed ? Infinity : local;
+    const reach = routed || opts.stopToStop ? Infinity : local;
     const rawStretchesOf = (p: number): Stretch[] => {
       const stops = through.get(p)?.stops ?? [];
       // The nearest other stop placed on the path, back or on from call i:

@@ -64,7 +64,17 @@ export interface GtfsShapeReshape {
   trips?: string[];
 }
 
-export type GtfsRowOp = GtfsRowEdit | GtfsShapeReshape;
+/** Room made in a trip for a stop added to it (3.1): its stop times past
+ * `after` numbered one on. Rows named before it are named as they were then,
+ * those after it as they are after it. */
+export interface GtfsStopTimesShift {
+  role: "stop_times";
+  op: "shift";
+  key: { trip_id: string };
+  after: number;
+}
+
+export type GtfsRowOp = GtfsRowEdit | GtfsShapeReshape | GtfsStopTimesShift;
 
 /** Rows of one snapshot table a change may alter, by a condition that
  * selects them before and after it: undo puts back exactly these rows. */

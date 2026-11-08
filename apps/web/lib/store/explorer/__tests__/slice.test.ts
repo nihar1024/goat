@@ -207,8 +207,8 @@ describe("explorer slice", () => {
       // Direction 10 runs "out", direction 20 "back"; both run "both".
       patternShapes: { 10: ["out", "both"], 20: ["back", "both"] },
       directions: [
-        { key: 10, patterns: [10], name: { kind: "to" as const, place: "A", via: null } },
-        { key: 20, patterns: [20], name: { kind: "to" as const, place: "B", via: null } },
+        { key: 10, patterns: [10], name: { kind: "to" as const, place: "A", via: null }, variants: [] },
+        { key: 20, patterns: [20], name: { kind: "to" as const, place: "B", via: null }, variants: [] },
       ],
       patternBounds: {},
       patternEnds: {},

@@ -188,6 +188,10 @@ async function summarize(
         key: d.key,
         patterns: d.patterns.map((p) => p.pattern_idx),
         name: d.name,
+        // Its variants as the direction picker names them.
+        variants: d.patterns
+          .filter((p) => p.kind !== "main")
+          .map((p) => ({ pattern_idx: p.pattern_idx, kind: p.kind, destination: p.destination })),
       })),
       patternShapes: shapes.reduce<Record<number, string[]>>((acc, s) => {
         (acc[s.pattern_idx] ??= []).push(s.shape_id);

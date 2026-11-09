@@ -79,7 +79,8 @@ function RightPanel() {
   // A line being extended (1.3).
   const extending = edit?.draft.kind === "line-extend" ? edit.draft : null;
   // A line being deleted: its delete card alone, nothing open above it (1.5).
-  const deletingLine = edit?.draft.kind === "line-delete";
+  // Or a line's own fields being edited: the line's in the left panel.
+  const deletingLine = edit?.draft.kind === "line-delete" || edit?.draft.kind === "route-details";
   if (!item && !placing && !inserting && !rerouting && !extending && !deletingLine) return null;
   // A draft that fills the panel (a new stop, a stop added to a line) is the
   // edit itself: its fields and its confirmation one panel, outlined as the

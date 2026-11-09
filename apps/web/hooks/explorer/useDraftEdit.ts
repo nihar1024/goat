@@ -30,6 +30,7 @@ import {
 } from "@/lib/explorer/edit/ops/lineStops";
 import { type MoveStopFacts, type Router, moveStop } from "@/lib/explorer/edit/ops/moveStop";
 import { type RerouteFacts, reroutePath } from "@/lib/explorer/edit/ops/reroute";
+import { type RouteDetailsFacts, editRouteDetails } from "@/lib/explorer/edit/ops/routes";
 import { locationKind } from "@/lib/explorer/edit/ops/stopRules";
 import {
   type NewStopFacts,
@@ -71,7 +72,8 @@ export type Building =
   | { kind: "line-stop-add"; built: Built<AddToLineFacts> }
   | { kind: "line-reroute"; built: Built<RerouteFacts> }
   | { kind: "line-delete"; built: Built<DeleteLineFacts> }
-  | { kind: "line-extend"; built: Built<ExtendLineFacts> };
+  | { kind: "line-extend"; built: Built<ExtendLineFacts> }
+  | { kind: "route-details"; built: Built<RouteDetailsFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -405,6 +407,8 @@ async function build(
           roads
         ),
       };
+    case "route-details":
+      return { kind: draft.kind, built: await editRouteDetails(db, draft.route_idx, draft.values) };
     case "line-extend":
       return {
         kind: draft.kind,
@@ -431,6 +435,7 @@ function sameEdit(a: EditDraft, b: EditDraft): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "line-reroute" && b.kind === "line-reroute") return a.a === b.a && a.b === b.b;
   if (a.kind === "line-delete" && b.kind === "line-delete") return a.route_idx === b.route_idx;
+  if (a.kind === "route-details" && b.kind === "route-details") return a.route_idx === b.route_idx;
   if (a.kind === "line-extend" && b.kind === "line-extend")
     return a.stop_idx === b.stop_idx && a.end === b.end;
   return !("stop_idx" in a) || !("stop_idx" in b) || a.stop_idx === b.stop_idx;
@@ -553,6 +558,20 @@ function wordsFor(
           impact,
         },
         bar: { action: t("explorer_add_stop_to_line") },
+      };
+    }
+    case "route-details": {
+      const f = b.built.facts;
+      return {
+        words: {
+          label: t("explorer_edit_line_details", { line: f?.line ?? "", ...raw }),
+          impact: (f?.changed ?? [])
+            .map((k) =>
+              t(`explorer_line_field_${k === "route_type" ? "mode" : k === "agency_idx" ? "agency" : k}`)
+            )
+            .join(" · "),
+        },
+        bar: { action: t("apply") },
       };
     }
     case "line-extend": {

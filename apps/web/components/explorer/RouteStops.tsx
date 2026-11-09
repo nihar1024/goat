@@ -199,24 +199,11 @@ function StopActions({ onRemove }: { onRemove: () => void }) {
 }
 
 /** Beyond either end of the line, while editing: the line run on from it,
- * as a green pill on hover, as the one between stops adds a stop; the rail
- * a faint stub where it would go. */
-function ExtendRow({ color, end, onExtend }: { color: string; end: "end" | "start"; onExtend: () => void }) {
+ * as a green pill on hover, as the one between stops adds a stop. */
+function ExtendRow({ onExtend }: { onExtend: () => void }) {
   const { t } = useTranslation("common");
   return (
-    <Stack className="ext" direction="row" alignItems="center" sx={{ position: "relative", minHeight: 22 }}>
-      <Box sx={{ position: "relative", width: RAIL, alignSelf: "stretch", flexShrink: 0 }}>
-        <Box
-          sx={{
-            position: "absolute",
-            left: RAIL / 2 - 1,
-            top: end === "end" ? 0 : "40%",
-            bottom: end === "end" ? "40%" : 0,
-            borderLeft: `2px dashed ${color}`,
-            opacity: 0.35,
-          }}
-        />
-      </Box>
+    <Box className="ext" sx={{ position: "relative", minHeight: 22 }}>
       <ActionPill
         tone="primary"
         icon={ICON_NAME.PLUS}
@@ -225,7 +212,7 @@ function ExtendRow({ color, end, onExtend }: { color: string; end: "end" | "star
         shownOn=".ext:hover &"
         sx={PILL_SX}
       />
-    </Stack>
+    </Box>
   );
 }
 
@@ -374,7 +361,7 @@ export function RouteStops({ route, directions }: { route: RouteRow; directions:
       {data && (
         <Box>
           {editing && data.stops.length > 0 && (
-            <ExtendRow color={color} end="start" onExtend={() => extend(data.stops[0].stop_idx, "start")} />
+            <ExtendRow onExtend={() => extend(data.stops[0].stop_idx, "start")} />
           )}
           {data.stops.map((s, i) => {
             const last = i === data.stops.length - 1;
@@ -406,11 +393,7 @@ export function RouteStops({ route, directions }: { route: RouteRow; directions:
             );
           })}
           {editing && data.stops.length > 0 && (
-            <ExtendRow
-              color={color}
-              end="end"
-              onExtend={() => extend(data.stops[data.stops.length - 1].stop_idx, "end")}
-            />
+            <ExtendRow onExtend={() => extend(data.stops[data.stops.length - 1].stop_idx, "end")} />
           )}
         </Box>
       )}

@@ -70,7 +70,7 @@ import { StopMarker } from "@/components/explorer/StopMarker";
 const LABEL_W = 88;
 
 /** A field as the Explorer's settings have them: 32 px, 13 px text. */
-const FIELD_SX = {
+export const FIELD_SX = {
   "& .MuiOutlinedInput-root": {
     minHeight: 32,
     borderRadius: 1,
@@ -92,12 +92,12 @@ const FIELD_SX = {
 };
 /** Every dropdown's options, and the list they open in: one row height
  * and inset, and the Explorer's popup card (the line chooser's). */
-const OPTION_SX = { minHeight: 32, px: "10px", py: "6px" };
-const POPUP_SX = { mt: 0.5, borderRadius: "12px", boxShadow: "rgba(0, 0, 0, 0.2) 0px 0px 10px" };
+export const OPTION_SX = { minHeight: 32, px: "10px", py: "6px" };
+export const POPUP_SX = { mt: 0.5, borderRadius: "12px", boxShadow: "rgba(0, 0, 0, 0.2) 0px 0px 10px" };
 
 /** An option of a dropdown, and the value its field shows: an icon, the
  * label, a quiet note at the right. */
-function Choice({ icon, label, note }: { icon: ReactNode; label: string; note?: string | null }) {
+export function Choice({ icon, label, note }: { icon: ReactNode; label: string; note?: string | null }) {
   return (
     <Stack direction="row" alignItems="center" spacing="8px" sx={{ flex: 1, minWidth: 0 }}>
       <Box
@@ -133,7 +133,7 @@ function wheelchairIcon(w: Wheelchair, inherits: boolean): ReactNode {
   return inherits ? <StopMarker station size={10} /> : <HelpOutlineIcon sx={SMALL_ICON} />;
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+export function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     // Labels on the first line: a value with a note under it (a move, a
     // problem) keeps its label level with the value, not between the two.

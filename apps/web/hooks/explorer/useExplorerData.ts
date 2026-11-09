@@ -31,6 +31,7 @@ import {
 import { places } from "@/lib/explorer/derive/stops";
 import { stopsLine } from "@/lib/explorer/derive/stopsLine";
 import { tripDetail } from "@/lib/explorer/derive/trip";
+import { routeRecord } from "@/lib/explorer/edit/ops/routes";
 import { stopRecord } from "@/lib/explorer/edit/ops/stops";
 import { type ExplorerSettings, type Period, type Rate, rateFor, settingsKey } from "@/lib/explorer/settings";
 import type { ExplorerRouteDrawing } from "@/lib/store/explorer/slice";
@@ -98,6 +99,11 @@ export function useStops(db: SqlRunner | undefined) {
 export interface AgencyRow {
   agency_idx: number;
   name: string | null;
+}
+
+/** A line's own fields, for its Properties tab. */
+export function useRouteRecord(db: SqlRunner | undefined, route_idx: number) {
+  return useQuery(db, `route-record:${route_idx}`, (d) => routeRecord(d, route_idx));
 }
 
 export function useAgencies(db: SqlRunner | undefined) {

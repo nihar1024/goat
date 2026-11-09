@@ -6,6 +6,7 @@
  */
 import type { LineEnd } from "@/lib/explorer/edit/ops/extendLine";
 import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
+import type { RouteValues } from "@/lib/explorer/edit/ops/routes";
 
 /** GTFS wheelchair_boarding: 0 unknown (or as its station), 1 accessible,
  * 2 not. */
@@ -64,6 +65,8 @@ export type EditDraft =
     }
   /** 1.5: a line deleted, with the stops no other line serves if `stops`. */
   | { kind: "line-delete"; route_idx: number; stops: boolean }
+  /** A line's own fields, as its Properties tab has them. */
+  | { kind: "route-details"; route_idx: number; values: RouteValues }
   /** 1.3: the line run on past its terminus `stop_idx` (at its `end`)
    * through `adds`, outward, for the trips its scope takes. */
   | { kind: "line-extend"; stop_idx: number; end: LineEnd; adds: number[]; scope: LineScope };

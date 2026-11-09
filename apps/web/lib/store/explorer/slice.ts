@@ -24,7 +24,7 @@ export interface ExplorerFilters {
   agencies: number[];
 }
 
-export type ExplorerRouteTab = "stops" | "service" | "calendar";
+export type ExplorerRouteTab = "stops" | "service" | "calendar" | "properties";
 /** The trip panel's tabs: its stops, or the days it runs. */
 export type ExplorerTripTab = "stops" | "calendar";
 /** The stop panel's tabs: its schedule for the date, the next departures,
@@ -651,7 +651,8 @@ export function rightPanelOpen(state: ExplorerState): boolean {
       kind === "line-stop-add" ||
       kind === "line-reroute" ||
       kind === "line-delete" ||
-      kind === "line-extend")
+      kind === "line-extend" ||
+      kind === "route-details")
   );
 }
 

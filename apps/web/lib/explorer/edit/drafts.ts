@@ -4,6 +4,7 @@
  * that fills it in and the Apply bar that applies it read the same thing;
  * Cancel, Esc or picking something else lets it go with no trace.
  */
+import type { LineEnd } from "@/lib/explorer/edit/ops/extendLine";
 import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
 
 /** GTFS wheelchair_boarding: 0 unknown (or as its station), 1 accessible,
@@ -62,4 +63,7 @@ export type EditDraft =
       scope: LineScope;
     }
   /** 1.5: a line deleted, with the stops no other line serves if `stops`. */
-  | { kind: "line-delete"; route_idx: number; stops: boolean };
+  | { kind: "line-delete"; route_idx: number; stops: boolean }
+  /** 1.3: the line run on past its terminus `stop_idx` (at its `end`)
+   * through `adds`, outward, for the trips its scope takes. */
+  | { kind: "line-extend"; stop_idx: number; end: LineEnd; adds: number[]; scope: LineScope };

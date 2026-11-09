@@ -1,8 +1,9 @@
 /**
  * A right click on the selected line, while editing: on one of its stops,
  * the stop's edits on the line (as its row's menu in the Stops tab has
- * them); on the line between two stops, a stop added there (as the Stops
- * tab's hover action between them). Along the variant picked, else the
+ * them), and at either end of the line, the line run on from it; on the
+ * line between two stops, a stop added there (as the Stops tab's hover
+ * action between them). Along the variant picked, else the
  * direction's main pattern, as a click on the line selects.
  */
 import { Popover } from "@mui/material";
@@ -14,6 +15,7 @@ import { ICON_NAME } from "@p4b/ui/components/Icon";
 
 import { pathAt } from "@/lib/explorer/derive/path";
 import { shownPattern } from "@/lib/explorer/directionChoice";
+import type { LineEnd } from "@/lib/explorer/edit/ops/extendLine";
 import { sqlNumber } from "@/lib/explorer/edit/sql";
 import { closeExplorerLineMenu } from "@/lib/store/explorer/slice";
 
@@ -23,9 +25,11 @@ import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 import { PopperMenuContent, type PopperMenuItem } from "@/components/common/PopperMenu";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 
-/** A stop's edits on its line, in its row's menu and on the map alike. */
-export function lineStopMenu(t: TFunction): PopperMenuItem[] {
+/** A stop's edits on its line, in its row's menu and on the map alike: at
+ * either end (`end`), the line extended from it too. */
+export function lineStopMenu(t: TFunction, end?: LineEnd): PopperMenuItem[] {
   return [
+    ...(end ? [{ id: `extend-${end}`, label: t("explorer_extend_line"), icon: ICON_NAME.PLUS }] : []),
     {
       id: "remove",
       label: t("explorer_remove_stop_from_line"),
@@ -52,7 +56,7 @@ export function LineContextMenu() {
   const at = useAppSelector((s) => s.explorer.lineMenu);
   const drawing = useAppSelector((s) => s.explorer.drawing);
   const choice = useAppSelector((s) => s.explorer.pattern);
-  const { insertBetween, removeFromLine } = useLineStopEdits();
+  const { insertBetween, removeFromLine, extend } = useLineStopEdits();
   const [resolved, setResolved] = useState<Resolved | null>(null);
 
   useEffect(() => {
@@ -73,7 +77,10 @@ export function LineContextMenu() {
           SELECT s.stop_idx, COALESCE(p.name, s.name, s.stop_id) AS name, s.lat, s.lon
           FROM stops s LEFT JOIN stops p ON p.stop_idx = s.parent_idx WHERE s.stop_idx = ${sqlNumber(at.stop_idx)}`);
         if (!current) return;
-        if (row) setResolved({ kind: "stop", stop: row, items: lineStopMenu(t) });
+        // At either end of the line shown: extended from there too.
+        const end: LineEnd | undefined =
+          at.stop_idx === stops[stops.length - 1] ? "end" : at.stop_idx === stops[0] ? "start" : undefined;
+        if (row) setResolved({ kind: "stop", stop: row, items: lineStopMenu(t, end) });
         else close();
         return;
       }
@@ -103,10 +110,12 @@ export function LineContextMenu() {
       {resolved && (
         <PopperMenuContent
           menuItems={resolved.items}
-          onPick={() => {
+          onPick={(item) => {
             close();
-            if (resolved.kind === "stop") removeFromLine(resolved.stop);
-            else insertBetween(resolved.a, resolved.b);
+            if (resolved.kind === "segment") insertBetween(resolved.a, resolved.b);
+            else if (item.id === "extend-end" || item.id === "extend-start")
+              extend(resolved.stop.stop_idx, item.id === "extend-end" ? "end" : "start");
+            else removeFromLine(resolved.stop);
           }}
         />
       )}

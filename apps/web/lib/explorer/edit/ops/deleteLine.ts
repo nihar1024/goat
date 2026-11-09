@@ -38,7 +38,7 @@ export interface DeleteLineFacts {
 const list = (xs: number[]) => (xs.length ? xs.map(sqlNumber).join(", ") : "NULL");
 
 /** Seconds as a GTFS time, past midnight where it runs on ("25:10:00"). */
-function gtfsTime(s: number): string {
+export function gtfsTime(s: number): string {
   const pad = (x: number) => String(x).padStart(2, "0");
   return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
 }

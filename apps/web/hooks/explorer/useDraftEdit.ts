@@ -16,6 +16,7 @@ import { type DraftPathKind, draftPathsStore } from "@/lib/explorer/edit/draftSt
 import type { EditDraft, StopValues } from "@/lib/explorer/edit/drafts";
 import { type DeleteLineFacts, deleteLine } from "@/lib/explorer/edit/ops/deleteLine";
 import { type DeleteStopFacts, deleteStop } from "@/lib/explorer/edit/ops/deleteStop";
+import { type ExtendLineFacts, extendLine, extendScopeOptions } from "@/lib/explorer/edit/ops/extendLine";
 import {
   type AddToLineFacts,
   type LineScope,
@@ -69,7 +70,8 @@ export type Building =
   | { kind: "line-stop-remove"; built: Built<RemoveFromLineFacts> }
   | { kind: "line-stop-add"; built: Built<AddToLineFacts> }
   | { kind: "line-reroute"; built: Built<RerouteFacts> }
-  | { kind: "line-delete"; built: Built<DeleteLineFacts> };
+  | { kind: "line-delete"; built: Built<DeleteLineFacts> }
+  | { kind: "line-extend"; built: Built<ExtendLineFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -141,7 +143,10 @@ export function useDraftEdit(): DraftEdit | null {
     // drag's. Not drawn straight first and then again: one path, once.
     if (
       snap &&
-      (draft.kind === "stop-move" || draft.kind === "line-stop-add" || draft.kind === "line-reroute")
+      (draft.kind === "stop-move" ||
+        draft.kind === "line-stop-add" ||
+        draft.kind === "line-reroute" ||
+        draft.kind === "line-extend")
     ) {
       // Once this build is stale, its remaining stretches ask no more of
       // the router: its one request a second goes to the drop that counts.
@@ -183,7 +188,10 @@ export function useDraftEdit(): DraftEdit | null {
   // is now, not what was built for where it was.
   useEffect(() => {
     const paths =
-      (now?.kind === "stop-move" || now?.kind === "line-stop-add" || now?.kind === "line-reroute") &&
+      (now?.kind === "stop-move" ||
+        now?.kind === "line-stop-add" ||
+        now?.kind === "line-reroute" ||
+        now?.kind === "line-extend") &&
       now.built.ok
         ? now.built.facts.paths
         : null;
@@ -239,9 +247,7 @@ export function useDraftEdit(): DraftEdit | null {
   // The scope of an edit on a line, named as "Apply to" names it.
   const drawing = useAppSelector((s) => s.explorer.drawing);
   const reach =
-    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add" || draft?.kind === "line-reroute"
-      ? scopeName(draft.scope.level, draft.scope, drawing, t as TFunction)
-      : "";
+    draft && onLine(draft) ? scopeName(draft.scope.level, draft.scope, drawing, t as TFunction) : "";
   const said = shown ? wordsFor(shown, t, reach) : null;
   const bar =
     said &&
@@ -299,18 +305,14 @@ export function useDraftEdit(): DraftEdit | null {
   // An edit on a line: what each level of its scope would take.
   const [options, setOptions] = useState<{ draft: EditDraft; options: ScopeOption[] } | null>(null);
   useEffect(() => {
-    if (
-      !db ||
-      (draft?.kind !== "line-stop-remove" &&
-        draft?.kind !== "line-stop-add" &&
-        draft?.kind !== "line-reroute")
-    )
-      return;
+    if (!db || !draft || !onLine(draft)) return;
     let current = true;
     // A path rerouted takes the trips a stop added on it would.
     (draft.kind === "line-stop-add" || draft.kind === "line-reroute"
       ? addScopeOptions(db, draft.scope, draft.a, draft.b)
-      : removeScopeOptions(db, draft.scope, draft.stop_idx)
+      : draft.kind === "line-extend"
+        ? extendScopeOptions(db, draft.scope, draft.stop_idx, draft.end)
+        : removeScopeOptions(db, draft.scope, draft.stop_idx)
     )
       .then((o) => current && setOptions({ draft, options: o }))
       .catch(() => undefined);
@@ -320,17 +322,12 @@ export function useDraftEdit(): DraftEdit | null {
   }, [db, draft, edition]);
   const setLevel = useCallback(
     (level: ScopeLevel) => {
-      if (
-        draft?.kind === "line-stop-remove" ||
-        draft?.kind === "line-stop-add" ||
-        draft?.kind === "line-reroute"
-      )
-        dispatch(setEditDraft({ ...draft, scope: { ...draft.scope, level } }));
+      if (draft && onLine(draft)) dispatch(setEditDraft({ ...draft, scope: { ...draft.scope, level } }));
     },
     [draft, dispatch]
   );
   const scope =
-    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add" || draft?.kind === "line-reroute"
+    draft && onLine(draft)
       ? {
           level: draft.scope.level,
           line: draft.scope,
@@ -363,7 +360,8 @@ function tripsOf(b: Building | null): number[] | null {
     b?.kind === "line-stop-remove" ||
     b?.kind === "line-stop-add" ||
     b?.kind === "line-reroute" ||
-    b?.kind === "line-delete"
+    b?.kind === "line-delete" ||
+    b?.kind === "line-extend"
     ? (b.built.facts?.trip_idxs ?? null)
     : null;
 }
@@ -407,6 +405,11 @@ async function build(
           roads
         ),
       };
+    case "line-extend":
+      return {
+        kind: draft.kind,
+        built: await extendLine(db, draft.stop_idx, draft.end, draft.adds, draft.scope, shapeDistUnit, roads),
+      };
     case "line-delete":
       return { kind: draft.kind, built: await deleteLine(db, draft.route_idx, draft.stops) };
     case "line-reroute":
@@ -417,11 +420,19 @@ async function build(
   }
 }
 
+/** An edit on a line, with a scope ("Apply to"). */
+type OnLine = Extract<EditDraft, { scope: unknown }>;
+function onLine(d: EditDraft): d is OnLine {
+  return "scope" in d;
+}
+
 /** The same edit of the same thing, whatever its values now. */
 function sameEdit(a: EditDraft, b: EditDraft): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "line-reroute" && b.kind === "line-reroute") return a.a === b.a && a.b === b.b;
   if (a.kind === "line-delete" && b.kind === "line-delete") return a.route_idx === b.route_idx;
+  if (a.kind === "line-extend" && b.kind === "line-extend")
+    return a.stop_idx === b.stop_idx && a.end === b.end;
   return !("stop_idx" in a) || !("stop_idx" in b) || a.stop_idx === b.stop_idx;
 }
 
@@ -542,6 +553,28 @@ function wordsFor(
           impact,
         },
         bar: { action: t("explorer_add_stop_to_line") },
+      };
+    }
+    case "line-extend": {
+      const f = b.built.facts;
+      const impact = [
+        f?.trips ? t("explorer_trips", { count: f.trips }) : null,
+        f?.paths.length ? t("explorer_paths_redrawn", { count: f.paths.length }) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        words: {
+          label: t("explorer_edit_line_extended", {
+            line: f?.line ?? "",
+            from: f?.from_name ?? "",
+            to: f?.to_name ?? "",
+            scope: reach,
+            ...raw,
+          }),
+          impact,
+        },
+        bar: { action: t("explorer_extend_line") },
       };
     }
     case "line-delete": {

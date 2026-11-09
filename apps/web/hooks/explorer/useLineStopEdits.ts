@@ -8,6 +8,7 @@
 import { useCallback } from "react";
 
 import { shownPattern } from "@/lib/explorer/directionChoice";
+import type { LineEnd } from "@/lib/explorer/edit/ops/extendLine";
 import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
 import {
   type ExplorerPatternChoice,
@@ -92,5 +93,15 @@ export function useLineStopEdits() {
     [scope, route, dispatch]
   );
 
-  return { insertBetween, removeFromLine, ready: !!route && !!drawing };
+  /** 1.3: the line run on past `stop`, its terminus at `end`, through stops
+   * picked next, on the map or in the panel. */
+  const extend = useCallback(
+    (stop_idx: number, end: LineEnd) => {
+      const s = scope();
+      if (s) dispatch(setEditDraft({ kind: "line-extend", stop_idx, end, adds: [], scope: s }));
+    },
+    [scope, dispatch]
+  );
+
+  return { insertBetween, removeFromLine, extend, ready: !!route && !!drawing };
 }

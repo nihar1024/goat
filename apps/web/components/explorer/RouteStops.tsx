@@ -198,6 +198,37 @@ function StopActions({ onRemove }: { onRemove: () => void }) {
   );
 }
 
+/** Beyond either end of the line, while editing: the line run on from it,
+ * as a green pill on hover, as the one between stops adds a stop; the rail
+ * a faint stub where it would go. */
+function ExtendRow({ color, end, onExtend }: { color: string; end: "end" | "start"; onExtend: () => void }) {
+  const { t } = useTranslation("common");
+  return (
+    <Stack className="ext" direction="row" alignItems="center" sx={{ position: "relative", minHeight: 22 }}>
+      <Box sx={{ position: "relative", width: RAIL, alignSelf: "stretch", flexShrink: 0 }}>
+        <Box
+          sx={{
+            position: "absolute",
+            left: RAIL / 2 - 1,
+            top: end === "end" ? 0 : "40%",
+            bottom: end === "end" ? "40%" : 0,
+            borderLeft: `2px dashed ${color}`,
+            opacity: 0.35,
+          }}
+        />
+      </Box>
+      <ActionPill
+        tone="primary"
+        icon={ICON_NAME.PLUS}
+        label={t("explorer_extend_line")}
+        onClick={onExtend}
+        shownOn=".ext:hover &"
+        sx={PILL_SX}
+      />
+    </Stack>
+  );
+}
+
 /** An action on hover, as a small pill in its colour: green to add, red to
  * take away; named by its tooltip. */
 function ActionPill({
@@ -245,7 +276,7 @@ export function RouteStops({ route, directions }: { route: RouteRow; directions:
   const { t, i18n } = useTranslation("common");
   const dispatch = useAppDispatch();
   const editing = useAppSelector((s) => s.explorer.edit.enabled);
-  const { insertBetween, removeFromLine } = useLineStopEdits();
+  const { insertBetween, removeFromLine, extend } = useLineStopEdits();
 
   const { db, complete, shapeDistUnit, settings } = useExplorer();
   const date = useAppSelector((s) => s.explorer.date);
@@ -342,6 +373,9 @@ export function RouteStops({ route, directions }: { route: RouteRow; directions:
 
       {data && (
         <Box>
+          {editing && data.stops.length > 0 && (
+            <ExtendRow color={color} end="start" onExtend={() => extend(data.stops[0].stop_idx, "start")} />
+          )}
           {data.stops.map((s, i) => {
             const last = i === data.stops.length - 1;
             return (
@@ -371,6 +405,13 @@ export function RouteStops({ route, directions }: { route: RouteRow; directions:
               </Box>
             );
           })}
+          {editing && data.stops.length > 0 && (
+            <ExtendRow
+              color={color}
+              end="end"
+              onExtend={() => extend(data.stops[data.stops.length - 1].stop_idx, "end")}
+            />
+          )}
         </Box>
       )}
     </Box>

@@ -323,7 +323,7 @@ export function ExplorerMapLayers() {
   // A stop being added to a line (3.1): the next stop clicked is the one.
   const draft = useAppSelector((s) => s.explorer.edit.draft);
   const adding = useRef(draft);
-  adding.current = draft?.kind === "line-stop-add" ? draft : null;
+  adding.current = draft?.kind === "line-stop-add" || draft?.kind === "line-extend" ? draft : null;
   // What is selected below a direction (a path, the open trip's pattern),
   // drawn over the route for an editor (the selection resolver).
   const selection = useSyncExternalStore(selectionStore.subscribe, selectionStore.getSnapshot, () => null);
@@ -499,6 +499,14 @@ export function ExplorerMapLayers() {
         // Picking the stop to add: a stop or platform, nothing else.
         const [stop] = near(e.point, STOP_LAYERS);
         if (stop) dispatch(setEditDraft({ ...insert, stop_idx: Number(stop.properties?.stop_idx) }));
+        return;
+      }
+      if (insert?.kind === "line-extend") {
+        // A line being extended: the stop clicked is the next it runs to.
+        const [stop] = near(e.point, STOP_LAYERS);
+        const next = Number(stop?.properties?.stop_idx);
+        if (stop && next !== insert.stop_idx && !insert.adds.includes(next))
+          dispatch(setEditDraft({ ...insert, adds: [...insert.adds, next] }));
         return;
       }
       onMap.current = {};

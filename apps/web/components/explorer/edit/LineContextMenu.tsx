@@ -56,7 +56,7 @@ export function LineContextMenu() {
   const at = useAppSelector((s) => s.explorer.lineMenu);
   const drawing = useAppSelector((s) => s.explorer.drawing);
   const choice = useAppSelector((s) => s.explorer.pattern);
-  const { insertBetween, removeFromLine, extend } = useLineStopEdits();
+  const { insertBetween, removeFromLine, extend, cutLine } = useLineStopEdits();
   const [resolved, setResolved] = useState<Resolved | null>(null);
 
   useEffect(() => {
@@ -77,10 +77,40 @@ export function LineContextMenu() {
           SELECT s.stop_idx, COALESCE(p.name, s.name, s.stop_id) AS name, s.lat, s.lon
           FROM stops s LEFT JOIN stops p ON p.stop_idx = s.parent_idx WHERE s.stop_idx = ${sqlNumber(at.stop_idx)}`);
         if (!current) return;
-        // At either end of the line shown: extended from there too.
+        // At either end of the line shown: extended from there too. Its
+        // ends are also where the line is cut back to: offered where they cut
+        // something (not past the line's own first or last stop).
         const end: LineEnd | undefined =
           at.stop_idx === stops[stops.length - 1] ? "end" : at.stop_idx === stops[0] ? "start" : undefined;
-        if (row) setResolved({ kind: "stop", stop: row, items: lineStopMenu(t, end) });
+        const i = stops.indexOf(at.stop_idx);
+        if (row)
+          setResolved({
+            kind: "stop",
+            stop: row,
+            items: [
+              ...lineStopMenu(t, end),
+              ...(i < stops.length - 1
+                ? [
+                    {
+                      id: "end",
+                      label: t("explorer_line_cut_end"),
+                      icon: ICON_NAME.CHEVRON_RIGHT,
+                      group: "cut",
+                    },
+                  ]
+                : []),
+              ...(i > 0
+                ? [
+                    {
+                      id: "start",
+                      label: t("explorer_line_cut_start"),
+                      icon: ICON_NAME.CHEVRON_LEFT,
+                      group: "cut",
+                    },
+                  ]
+                : []),
+            ],
+          });
         else close();
         return;
       }
@@ -115,6 +145,7 @@ export function LineContextMenu() {
             if (resolved.kind === "segment") insertBetween(resolved.a, resolved.b);
             else if (item.id === "extend-end" || item.id === "extend-start")
               extend(resolved.stop.stop_idx, item.id === "extend-end" ? "end" : "start");
+            else if (item.id === "end" || item.id === "start") cutLine(resolved.stop, item.id);
             else removeFromLine(resolved.stop);
           }}
         />

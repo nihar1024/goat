@@ -19,12 +19,14 @@ import { type DeleteStopFacts, deleteStop } from "@/lib/explorer/edit/ops/delete
 import { type ExtendLineFacts, extendLine, extendScopeOptions } from "@/lib/explorer/edit/ops/extendLine";
 import {
   type AddToLineFacts,
+  type CutLineFacts,
   type LineScope,
   type RemoveFromLineFacts,
   type ScopeLevel,
   type ScopeOption,
   addScopeOptions,
   addToLine,
+  cutLine,
   removeFromLine,
   removeScopeOptions,
 } from "@/lib/explorer/edit/ops/lineStops";
@@ -75,7 +77,8 @@ export type Building =
   | { kind: "line-delete"; built: Built<DeleteLineFacts> }
   | { kind: "line-extend"; built: Built<ExtendLineFacts> }
   | { kind: "route-details"; built: Built<RouteDetailsFacts> }
-  | { kind: "line-new"; built: Built<NewLineFacts> };
+  | { kind: "line-new"; built: Built<NewLineFacts> }
+  | { kind: "line-cut"; built: Built<CutLineFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -203,7 +206,8 @@ export function useDraftEdit(): DraftEdit | null {
         now?.kind === "line-stop-add" ||
         now?.kind === "line-reroute" ||
         now?.kind === "line-extend" ||
-        now?.kind === "line-new") &&
+        now?.kind === "line-new" ||
+        now?.kind === "line-cut") &&
       now.built.ok
         ? now.built.facts.paths
         : null;
@@ -383,7 +387,8 @@ function tripsOf(b: Building | null): number[] | null {
     b?.kind === "line-reroute" ||
     b?.kind === "line-delete" ||
     b?.kind === "line-extend" ||
-    b?.kind === "line-new"
+    b?.kind === "line-new" ||
+    b?.kind === "line-cut"
     ? (b.built.facts?.trip_idxs ?? null)
     : null;
 }
@@ -408,6 +413,11 @@ async function build(
       return {
         kind: draft.kind,
         built: await moveStop(db, draft.stop_idx, [draft.lon, draft.lat], shapeDistUnit, roads),
+      };
+    case "line-cut":
+      return {
+        kind: draft.kind,
+        built: await cutLine(db, draft.stop_idx, draft.end, draft.scope, shapeDistUnit),
       };
     case "line-stop-remove":
       return {
@@ -539,6 +549,28 @@ function wordsFor(
         bar: {
           action: t("apply"),
         },
+      };
+    }
+    case "line-cut": {
+      const f = b.built.facts;
+      const end = f?.end ?? "end";
+      const impact = [
+        f?.trips ? t("explorer_trips", { count: f.trips }) : null,
+        f?.dropped ? t("explorer_stops_dropped", { count: f.dropped }) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        words: {
+          label: t(`explorer_edit_line_cut_${end}`, {
+            name: f?.name ?? "",
+            line: f?.line ?? "",
+            scope: reach,
+            ...raw,
+          }),
+          impact,
+        },
+        bar: { action: t(`explorer_line_cut_${end}`), danger: true },
       };
     }
     case "line-stop-remove": {

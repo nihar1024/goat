@@ -51,7 +51,6 @@ describe("1.3 extend a line", () => {
     level,
     pattern_idx,
     direction: [0, 2],
-    trip_idx: null,
   });
   beforeEach(async () => {
     db = await openFixtureDb();
@@ -159,7 +158,6 @@ describe("1.3 extend a line", () => {
       level: "direction",
       pattern_idx: 1,
       direction: [1],
-      trip_idx: null,
     };
     const built = await extendLine(db, await idx(db, "S1"), "end", [await idx(db, "X")], other, "km");
     if (!built.ok) throw new Error(built.refused.code);
@@ -190,7 +188,6 @@ describe("1.3 extend a line", () => {
         level: "variant",
         pattern_idx: f.pattern_idx,
         direction: [f.pattern_idx],
-        trip_idx: null,
       },
       "km"
     );

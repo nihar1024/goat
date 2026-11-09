@@ -2,8 +2,7 @@
  * The edits on a stop of the selected line (01-editing-operations § 3),
  * started from wherever they are offered — the Stops tab, a right click on
  * the map — alike: the same draft, the same scope to start from (the
- * variant picked, else the direction; a trip of the line open in the right
- * panel, the narrowest it may take). The Apply bar widens or narrows it.
+ * variant picked, else the direction). The Apply bar widens or narrows it.
  */
 import { useCallback } from "react";
 
@@ -14,7 +13,6 @@ import {
   type ExplorerPatternChoice,
   type ExplorerRouteDrawing,
   openExplorerPanel,
-  panelItem,
   setEditDraft,
 } from "@/lib/store/explorer/slice";
 
@@ -31,12 +29,11 @@ export interface LineStopRef {
 }
 
 /** Where an edit on line `route_idx`, drawn as `drawing`, starts: the
- * variant picked, else the direction shown; `trip_idx` the trip of it open. */
+ * variant picked, else the direction shown. */
 export function lineScope(
   route_idx: number,
   drawing: ExplorerRouteDrawing,
-  choice: ExplorerPatternChoice | null,
-  trip_idx: number | null
+  choice: ExplorerPatternChoice | null
 ): LineScope | null {
   const direction = drawing.directions.find((d) => d.key === choice?.direction) ?? drawing.directions[0];
   const pattern_idx = shownPattern(choice, drawing.directions);
@@ -47,7 +44,6 @@ export function lineScope(
     level: variant ? "variant" : "direction",
     pattern_idx,
     direction: direction.patterns,
-    trip_idx,
   };
 }
 
@@ -58,20 +54,12 @@ export function useLineStopEdits() {
   const route = useRoutes(db).data?.find((r) => r.route_id === routeId);
   const drawing = useAppSelector((s) => s.explorer.drawing);
   const choice = useAppSelector((s) => s.explorer.pattern);
-  const openTrip = useAppSelector((s) => {
-    const item = panelItem(s.explorer);
-    return item?.kind === "trip" ? item.trip_idx : null;
-  });
 
   /** Where an edit on the line starts; null with no line selected. */
   const scope = useCallback((): LineScope | null => {
     if (!route || !drawing || drawing.routeId !== route.route_id) return null;
-    const ofLine =
-      openTrip !== null && route.trip_lo !== null && route.trip_hi !== null
-        ? openTrip >= route.trip_lo && openTrip <= route.trip_hi
-        : false;
-    return lineScope(route.route_idx, drawing, choice, ofLine ? openTrip : null);
-  }, [route, drawing, choice, openTrip]);
+    return lineScope(route.route_idx, drawing, choice);
+  }, [route, drawing, choice]);
 
   /** 3.1: a stop to add between `a` and `b`, picked on the map next. */
   const insertBetween = useCallback(

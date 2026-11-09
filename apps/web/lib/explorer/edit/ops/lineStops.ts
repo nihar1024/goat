@@ -1,8 +1,9 @@
 /**
  * A stop on a line (01-editing-operations § 3): 3.2 taken off it, for the
- * trips in scope. The scope is one of four levels, the same for every edit
- * on a line (decided 6 Nov 2026): a trip, a variant (one pattern), a
- * direction (its patterns), the whole line. The selection sets where it
+ * trips in scope. The scope is one of three levels, the same for every edit
+ * on a line (decided 6 Nov 2026): a variant (one pattern), a direction (its
+ * patterns), the whole line; not a trip, which an edit on the map never has
+ * picked (9 Nov 2026). The selection sets where it
  * starts; the Apply bar's "Apply to" widens or narrows it, each level with
  * the trips it takes, one that takes none named with why.
  *
@@ -24,7 +25,7 @@ import { sqlNumber } from "@/lib/explorer/edit/sql";
 import type { GtfsRowOp, Touch } from "@/lib/explorer/edit/types";
 
 /** How much of a line an edit on it changes, narrowest first. */
-export const SCOPE_LEVELS = ["trip", "variant", "direction", "line"] as const;
+export const SCOPE_LEVELS = ["variant", "direction", "line"] as const;
 export type ScopeLevel = (typeof SCOPE_LEVELS)[number];
 
 /** Where an edit on a line was started, and how far it reaches. */
@@ -35,16 +36,14 @@ export interface LineScope {
   pattern_idx: number;
   /** Its direction's patterns. */
   direction: number[];
-  /** The trip picked, where one of this line is. */
-  trip_idx: number | null;
 }
 
 /** A level as the Apply bar offers it: the trips it takes; none, and why. */
 export interface ScopeOption {
   level: ScopeLevel;
   trips: number;
-  /** Why it takes none: no trip picked, or none of its trips call there. */
-  none?: "no_trip" | "not_here";
+  /** Why it takes none: none of its trips call there. */
+  none?: "not_here";
 }
 
 const list = (xs: number[]) => (xs.length ? xs.map(sqlNumber).join(", ") : "NULL");
@@ -57,19 +56,12 @@ async function tripsAt(
   stop_idx: number
 ): Promise<number[]> {
   const patterns =
-    level === "trip"
-      ? null
-      : level === "variant"
-        ? `pattern_idx = ${sqlNumber(scope.pattern_idx)}`
-        : level === "direction"
-          ? `pattern_idx IN (${list(scope.direction)})`
-          : `route_idx = ${sqlNumber(scope.route_idx)}`;
-  const where =
-    level === "trip"
-      ? scope.trip_idx === null
-        ? "false"
-        : `t.trip_idx = ${sqlNumber(scope.trip_idx)}`
-      : `t.pattern_idx IN (SELECT pattern_idx FROM patterns WHERE ${patterns})`;
+    level === "variant"
+      ? `pattern_idx = ${sqlNumber(scope.pattern_idx)}`
+      : level === "direction"
+        ? `pattern_idx IN (${list(scope.direction)})`
+        : `route_idx = ${sqlNumber(scope.route_idx)}`;
+  const where = `t.pattern_idx IN (SELECT pattern_idx FROM patterns WHERE ${patterns})`;
   return (
     await db.all<{ trip_idx: number }>(`
       SELECT t.trip_idx FROM trips t JOIN patterns p USING (pattern_idx)
@@ -85,7 +77,6 @@ export async function removeScopeOptions(
 ): Promise<ScopeOption[]> {
   return Promise.all(
     SCOPE_LEVELS.map(async (level): Promise<ScopeOption> => {
-      if (level === "trip" && scope.trip_idx === null) return { level, trips: 0, none: "no_trip" };
       const trips = (await tripsAt(db, scope, level, stop_idx)).length;
       return trips ? { level, trips } : { level, trips, none: "not_here" };
     })
@@ -164,15 +155,11 @@ export async function tripsBetween(
   b: number
 ): Promise<number[]> {
   const where =
-    level === "trip"
-      ? scope.trip_idx === null
-        ? "false"
-        : `t.trip_idx = ${sqlNumber(scope.trip_idx)}`
-      : level === "variant"
-        ? `t.pattern_idx = ${sqlNumber(scope.pattern_idx)}`
-        : level === "direction"
-          ? `t.pattern_idx IN (${list(scope.direction)})`
-          : `t.route_idx = ${sqlNumber(scope.route_idx)}`;
+    level === "variant"
+      ? `t.pattern_idx = ${sqlNumber(scope.pattern_idx)}`
+      : level === "direction"
+        ? `t.pattern_idx IN (${list(scope.direction)})`
+        : `t.route_idx = ${sqlNumber(scope.route_idx)}`;
   return (
     await db.all<{ trip_idx: number }>(`
       SELECT t.trip_idx FROM trips t JOIN patterns p USING (pattern_idx)
@@ -190,7 +177,6 @@ export async function addScopeOptions(
 ): Promise<ScopeOption[]> {
   return Promise.all(
     SCOPE_LEVELS.map(async (level): Promise<ScopeOption> => {
-      if (level === "trip" && scope.trip_idx === null) return { level, trips: 0, none: "no_trip" };
       const trips = (await tripsBetween(db, scope, level, a, b)).length;
       return trips ? { level, trips } : { level, trips, none: "not_here" };
     })

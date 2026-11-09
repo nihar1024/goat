@@ -51,7 +51,6 @@ describe("1.2 reroute a path", () => {
     level,
     pattern_idx: 0,
     direction: [0, 2],
-    trip_idx: null,
   });
   beforeEach(async () => {
     db = await openFixtureDb();

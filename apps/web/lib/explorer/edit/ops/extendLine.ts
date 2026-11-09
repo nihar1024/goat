@@ -78,15 +78,11 @@ async function tripsAtEnd(
   end: LineEnd
 ): Promise<number[]> {
   const where =
-    level === "trip"
-      ? scope.trip_idx === null
-        ? "false"
-        : `t.trip_idx = ${sqlNumber(scope.trip_idx)}`
-      : level === "variant"
-        ? `t.pattern_idx = ${sqlNumber(scope.pattern_idx)}`
-        : level === "direction"
-          ? `t.pattern_idx IN (${list(scope.direction)})`
-          : `t.route_idx = ${sqlNumber(scope.route_idx)}`;
+    level === "variant"
+      ? `t.pattern_idx = ${sqlNumber(scope.pattern_idx)}`
+      : level === "direction"
+        ? `t.pattern_idx IN (${list(scope.direction)})`
+        : `t.route_idx = ${sqlNumber(scope.route_idx)}`;
   const at = end === "end" ? "p.stops[len(p.stops)]" : "p.stops[1]";
   return (
     await db.all<{ trip_idx: number }>(`
@@ -104,7 +100,6 @@ export async function extendScopeOptions(
 ): Promise<ScopeOption[]> {
   return Promise.all(
     SCOPE_LEVELS.map(async (level): Promise<ScopeOption> => {
-      if (level === "trip" && scope.trip_idx === null) return { level, trips: 0, none: "no_trip" };
       const trips = (await tripsAtEnd(db, scope, level, stop_idx, end)).length;
       return trips ? { level, trips } : { level, trips, none: "not_here" };
     })

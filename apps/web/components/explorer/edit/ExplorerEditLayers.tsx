@@ -230,7 +230,7 @@ export function ExplorerEditLayers() {
     (at, f) => {
       const g = grabbedOf(f);
       if (!rerouting) {
-        const scope = path && drawing && lineScope(path.route_idx, drawing, choice, null);
+        const scope = path && drawing && lineScope(path.route_idx, drawing, choice);
         if (path && ends && scope)
           dispatch(
             setEditDraft({

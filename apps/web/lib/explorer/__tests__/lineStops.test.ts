@@ -27,8 +27,6 @@ async function all(db: SqlRunner): Promise<string> {
 }
 const idx = async (db: SqlRunner, stop_id: string) =>
   (await db.all<{ stop_idx: number }>(`SELECT stop_idx FROM stops WHERE stop_id = '${stop_id}'`))[0].stop_idx;
-const tripIdx = async (db: SqlRunner, trip_id: string) =>
-  (await db.all<{ trip_idx: number }>(`SELECT trip_idx FROM trips WHERE trip_id = '${trip_id}'`))[0].trip_idx;
 const calls = async (db: SqlRunner, trip_id: string) =>
   (
     await db.all<{ calls: string[] }>(`
@@ -36,9 +34,6 @@ const calls = async (db: SqlRunner, trip_id: string) =>
       FROM trips t JOIN stop_times st USING (trip_idx) JOIN stops s ON s.stop_idx = st.stop_idx
       WHERE t.trip_id = '${trip_id}'`)
   )[0].calls;
-const patternOf = async (db: SqlRunner, trip_id: string) =>
-  (await db.all<{ pattern_idx: number }>(`SELECT pattern_idx FROM trips WHERE trip_id = '${trip_id}'`))[0]
-    .pattern_idx;
 
 describe("3.2 remove a stop from a line", () => {
   let db: SqlRunner;
@@ -47,7 +42,7 @@ describe("3.2 remove a stop from a line", () => {
     db = await openFixtureDb();
     // Line 0, its first direction shown: pattern 0 (S1..S5), with its
     // short turn (pattern 2, S1..S3); the other direction is pattern 1.
-    scope = { route_idx: 0, level: "variant", pattern_idx: 0, direction: [0, 2], trip_idx: null };
+    scope = { route_idx: 0, level: "variant", pattern_idx: 0, direction: [0, 2] };
   });
 
   it("takes the stop off the variant's trips only, keeping the stop, and undo puts it all back", async () => {
@@ -67,38 +62,9 @@ describe("3.2 remove a stop from a line", () => {
     expect(await all(db)).toBe(before);
   });
 
-  it("splits a pattern when only one of its trips goes without the stop", async () => {
-    const t1 = await tripIdx(db, "T1");
-    const before = await patternOf(db, "T1");
-    const others = await db.all<{ trip_id: string }>(
-      `SELECT trip_id FROM trips WHERE pattern_idx = ${before} AND trip_id <> 'T1'`
-    );
-    const built = await removeFromLine(
-      db,
-      await idx(db, "S3"),
-      { ...scope, level: "trip", trip_idx: t1 },
-      "km"
-    );
-    if (!built.ok) throw new Error(built.refused.code);
-    await new EditSession(db).apply({ id: "r", label: "Removed", ...built.rows });
-    expect(await calls(db, "T1")).not.toContain("S3");
-    expect(await patternOf(db, "T1")).not.toBe(before);
-    for (const o of others) {
-      expect(await calls(db, o.trip_id)).toContain("S3");
-      expect(await patternOf(db, o.trip_id)).toBe(before);
-    }
-    // The new pattern is placed on T1's path, the stop left out.
-    const [placed] = await db.all<{ n: number; stops: number }>(`
-      SELECT CAST(count(*) AS INTEGER) AS n, any_value(len(p.stops)) AS stops FROM pattern_shape_stops s
-      JOIN patterns p USING (pattern_idx) WHERE pattern_idx = (SELECT pattern_idx FROM trips WHERE trip_id = 'T1')
-        AND shape_idx = (SELECT shape_idx FROM trips WHERE trip_id = 'T1')`);
-    expect(placed.n).toBe(placed.stops);
-  });
-
   it("offers each level with the trips it takes, and says why one takes none", async () => {
     const options = await removeScopeOptions(db, scope, await idx(db, "S3"));
     const by = Object.fromEntries(options.map((o) => [o.level, o]));
-    expect(by.trip).toMatchObject({ trips: 0, none: "no_trip" });
     expect(by.variant.trips).toBeGreaterThan(0);
     expect(by.direction.trips).toBeGreaterThan(by.variant.trips);
     expect(by.line.trips).toBeGreaterThan(by.direction.trips);
@@ -129,7 +95,7 @@ describe("3.1 add a stop to a line", () => {
   let scope: LineScope;
   beforeEach(async () => {
     db = await openFixtureDb();
-    scope = { route_idx: 0, level: "variant", pattern_idx: 0, direction: [0, 2], trip_idx: null };
+    scope = { route_idx: 0, level: "variant", pattern_idx: 0, direction: [0, 2] };
   });
   const times = (trip_id: string) =>
     db.all<{ stop_id: string; seq: number; arr: number | null; dep: number | null }>(`
@@ -188,25 +154,6 @@ describe("3.1 add a stop to a line", () => {
     expect(built.rows.gtfs.some((o) => o.op === "reshape")).toBe(false);
     await new EditSession(db).apply({ id: "a", label: "Added", ...built.rows });
     expect((await times("T1")).map((r) => r.stop_id)).toEqual(["S1", "S2", "ON", "S3", "S4", "S5"]);
-  });
-
-  it("adds it to one trip only, its pattern split", async () => {
-    const t1 = await tripIdx(db, "T1");
-    const others = await db.all<{ trip_id: string }>(
-      `SELECT trip_id FROM trips WHERE pattern_idx = 0 AND trip_id <> 'T1'`
-    );
-    const built = await addToLine(
-      db,
-      await idx(db, "X"),
-      await idx(db, "S2"),
-      await idx(db, "S3"),
-      { ...scope, level: "trip", trip_idx: t1 },
-      "km"
-    );
-    if (!built.ok) throw new Error(built.refused.code);
-    await new EditSession(db).apply({ id: "a", label: "Added", ...built.rows });
-    expect(await calls(db, "T1")).toContain("X");
-    for (const o of others) expect(await calls(db, o.trip_id)).not.toContain("X");
   });
 
   it("counts the other direction for the whole line, and refuses a stop as its own neighbour", async () => {

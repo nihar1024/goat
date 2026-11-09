@@ -29,7 +29,7 @@ function variantShown(line: LineScope, drawing: Drawing) {
 
 /** A level of an edit on a line, named as the direction picker names what it
  * covers: "→ place" for the direction, "Short turn → place" for a variant;
- * a trip or the whole line in words. In "Apply to" and the edits list alike. */
+ * the whole line in words. In "Apply to" and the edits list alike. */
 export function scopeName(level: ScopeLevel, line: LineScope, drawing: Drawing, t: TFunction): string {
   const direction = drawing?.directions.find((d) => d.patterns.includes(line.pattern_idx));
   const variant = variantShown(line, drawing);
@@ -39,7 +39,7 @@ export function scopeName(level: ScopeLevel, line: LineScope, drawing: Drawing, 
       interpolation: { escapeValue: false },
     });
   if ((level === "direction" || level === "variant") && direction) return directionLabel(direction.name, t);
-  return t(`explorer_scope_${level === "trip" ? "trip" : "line"}`);
+  return t("explorer_scope_line");
 }
 
 export function ScopePicker({ scope }: { scope: NonNullable<DraftEdit["scope"]> }) {

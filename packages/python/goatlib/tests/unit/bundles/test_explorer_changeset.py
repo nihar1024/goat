@@ -1045,6 +1045,61 @@ def test_a_line_left_without_a_name_is_refused(con: duckdb.DuckDBPyConnection) -
     }
 
 
+def test_a_new_line_is_saved_with_its_shapes_trips_and_stop_times(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    ops: List[Dict[str, Any]] = [
+        {
+            "role": "routes",
+            "op": "insert",
+            "key": {"route_id": "goat_1"},
+            "values": {
+                "agency_id": "A",
+                "route_short_name": "9",
+                "route_long_name": "New Line",
+                "route_type": 3,
+            },
+        }
+    ]
+    ops += [
+        {
+            "role": "shapes",
+            "op": "insert",
+            "key": {"shape_id": "goat_1_0", "shape_pt_sequence": k + 1},
+            "values": {"shape_pt_lat": 52.5, "shape_pt_lon": lon},
+        }
+        for k, lon in enumerate([13.41, 13.43, 13.45])
+    ]
+    ops.append(
+        {
+            "role": "trips",
+            "op": "insert",
+            "key": {"trip_id": "goat_1_0_001"},
+            "values": {
+                "route_id": "goat_1",
+                "service_id": "WK",
+                "shape_id": "goat_1_0",
+                "direction_id": 0,
+                "trip_headsign": "Sixth",
+            },
+        }
+    )
+    ops += [
+        {
+            "role": "stop_times",
+            "op": "insert",
+            "key": {"trip_id": "goat_1_0_001", "stop_sequence": k + 1},
+            "values": {"stop_id": stop, "arrival_time": t, "departure_time": t},
+        }
+        for k, (stop, t) in enumerate(
+            [("S2", "07:00:00"), ("S4", "07:05:00"), ("S6", "07:10:00")]
+        )
+    ]
+    applied = apply(con, ops)
+    assert applied.rows["trips"]["inserted"] == 1
+    assert line(con, "goat_1_0") is not None
+
+
 def _hms(t: Any) -> str:
     secs = int(t.total_seconds())
     return f"{secs // 3600:02d}:{secs % 3600 // 60:02d}:{secs % 60:02d}"

@@ -49,7 +49,7 @@ type LonLat = [number, number];
 export type Router = (waypoints: LonLat[]) => Promise<{ line: LonLat[]; snapped: LonLat[] } | null>;
 
 /** The lines whose paths follow the streets with Snap on. */
-const ROAD_MODES = new Set(["bus", "trolleybus", "tram"]);
+export const ROAD_MODES = new Set(["bus", "trolleybus", "tram"]);
 
 /** A route longer than this many times the straight stretch, plus
  * ROUTE_SLACK_M, is not the stretch's road: it stays straight. */
@@ -85,7 +85,7 @@ export interface MoveStopFacts {
 
 /** A stretch of a path, in metres along it: from the stop before to the
  * stop after (null: the path's start or end, at a terminus). */
-interface Stretch {
+export interface Stretch {
   a: number | null;
   b: number | null;
   /** Where the stop was on it, if it was placed. */
@@ -119,7 +119,7 @@ interface Spliced {
 }
 
 /** The point `d` metres along `pts` (ordered by d). */
-function along(pts: { lon: number; lat: number; d: number }[], d: number): LonLat {
+export function along(pts: { lon: number; lat: number; d: number }[], d: number): LonLat {
   if (d <= pts[0].d) return [pts[0].lon, pts[0].lat];
   for (let k = 1; k < pts.length; k++) {
     const p = pts[k - 1];
@@ -233,6 +233,13 @@ const round = (x: number) => Math.round(x * 10) / 10;
 /** The road for a stretch from `start` through `to` to `end` (either end
  * absent at a terminus), as `via`; null where the router has none or it
  * detours implausibly. */
+/** A route plausible for the stretch along `waypoints`: no longer than
+ * ROUTE_DETOUR times the straight way plus ROUTE_SLACK_M. */
+export function plausible(waypoints: LonLat[], line: LonLat[]): boolean {
+  const length = (xs: LonLat[]) => xs.slice(1).reduce((m, p, k) => m + metres(xs[k], p), 0);
+  return length(line) <= ROUTE_DETOUR * length(waypoints) + ROUTE_SLACK_M;
+}
+
 export async function roadVia(
   route: Router,
   start: LonLat | null,
@@ -247,9 +254,7 @@ export async function roadVia(
     return null;
   }
   if (!road || road.line.length < 2) return null;
-  const straight = waypoints.slice(1).reduce((m, p, k) => m + metres(waypoints[k], p), 0);
-  const routed = road.line.slice(1).reduce((m, p, k) => m + metres(road.line[k], p), 0);
-  if (routed > ROUTE_DETOUR * straight + ROUTE_SLACK_M) return null;
+  if (!plausible(waypoints, road.line)) return null;
   // The stop on it: the road's point nearest where the router met it there.
   const met = road.snapped[start ? 1 : 0] ?? to;
   let stop = 0;
@@ -654,30 +659,7 @@ export async function moveStop(
   }
 
   // Trips' lengths, by where each was measured from.
-  const tripList = list(facts.trip_idxs);
-  const forShapes = touchedShapes.size ? `OR shape_idx IN (${list([...touchedShapes])})` : "";
-  sql.push(
-    `UPDATE trips SET length_m = CASE trips.length_src
-       WHEN 1 THEN ${perUnit ? `CAST(x.dist * ${sqlNumber(perUnit)} AS REAL)` : "trips.length_m"}
-       WHEN 2 THEN COALESCE((SELECT length_m FROM shapes_meta m WHERE m.shape_idx = trips.shape_idx), trips.length_m)
-       ELSE CAST(x.chain AS REAL) END
-     FROM (
-       SELECT trip_idx, max(shape_dist) - min(shape_dist) AS dist, coalesce(sum(hop), 0) AS chain
-       FROM (
-         SELECT st.*, ${metresSql(
-           "lag(coalesce(s.lon, p.lon)) OVER w",
-           "lag(coalesce(s.lat, p.lat)) OVER w",
-           "coalesce(s.lon, p.lon)",
-           "coalesce(s.lat, p.lat)"
-         )} AS hop
-         FROM stop_times st JOIN stops s USING (stop_idx) LEFT JOIN stops p ON p.stop_idx = s.parent_idx
-         WHERE st.trip_idx IN (SELECT trip_idx FROM trips WHERE trip_idx IN (${tripList}) ${forShapes})
-         WINDOW w AS (PARTITION BY st.trip_idx ORDER BY st.stop_sequence)
-       ) GROUP BY trip_idx
-     ) x WHERE trips.trip_idx = x.trip_idx`,
-    `UPDATE patterns SET length_m = (SELECT CAST(median(t.length_m) AS REAL) FROM trips t
-       WHERE t.pattern_idx = patterns.pattern_idx) WHERE pattern_idx IN (${list([...touchedPatterns])})`
-  );
+  sql.push(...lengthsSql(facts.trip_idxs, [...touchedShapes], [...touchedPatterns], perUnit));
 
   const shapesTouched = [...touchedShapes];
   const touches: Touch[] = [
@@ -704,6 +686,41 @@ export async function moveStop(
     checks,
     rows: { kind: "stop_move", touches, sql, gtfs, shapes: shapesTouched },
   };
+}
+
+/** Trips' lengths after their paths or stops changed, by where each was
+ * measured from (`length_src`: the feed's distances, the path, the chain of
+ * its stops), and their patterns' lengths from them: for `trips`, and every
+ * trip on `shapes`. */
+export function lengthsSql(
+  trips: number[],
+  shapes: number[],
+  patterns: number[],
+  perUnit?: number
+): string[] {
+  const forShapes = shapes.length ? `OR shape_idx IN (${list(shapes)})` : "";
+  return [
+    `UPDATE trips SET length_m = CASE trips.length_src
+       WHEN 1 THEN ${perUnit ? `CAST(x.dist * ${sqlNumber(perUnit)} AS REAL)` : "trips.length_m"}
+       WHEN 2 THEN COALESCE((SELECT length_m FROM shapes_meta m WHERE m.shape_idx = trips.shape_idx), trips.length_m)
+       ELSE CAST(x.chain AS REAL) END
+     FROM (
+       SELECT trip_idx, max(shape_dist) - min(shape_dist) AS dist, coalesce(sum(hop), 0) AS chain
+       FROM (
+         SELECT st.*, ${metresSql(
+           "lag(coalesce(s.lon, p.lon)) OVER w",
+           "lag(coalesce(s.lat, p.lat)) OVER w",
+           "coalesce(s.lon, p.lon)",
+           "coalesce(s.lat, p.lat)"
+         )} AS hop
+         FROM stop_times st JOIN stops s USING (stop_idx) LEFT JOIN stops p ON p.stop_idx = s.parent_idx
+         WHERE st.trip_idx IN (SELECT trip_idx FROM trips WHERE trip_idx IN (${list(trips)}) ${forShapes})
+         WINDOW w AS (PARTITION BY st.trip_idx ORDER BY st.stop_sequence)
+       ) GROUP BY trip_idx
+     ) x WHERE trips.trip_idx = x.trip_idx`,
+    `UPDATE patterns SET length_m = (SELECT CAST(median(t.length_m) AS REAL) FROM trips t
+       WHERE t.pattern_idx = patterns.pattern_idx) WHERE pattern_idx IN (${list(patterns)})`,
+  ];
 }
 
 /** `<id>_goat<n>`, the first neither the feed nor this edit uses: one move

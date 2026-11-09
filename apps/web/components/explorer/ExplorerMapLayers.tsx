@@ -327,12 +327,14 @@ export function ExplorerMapLayers() {
   // What is selected below a direction (a path, the open trip's pattern),
   // drawn over the route for an editor (the selection resolver).
   const selection = useSyncExternalStore(selectionStore.subscribe, selectionStore.getSnapshot, () => null);
+  // A path being rerouted: its preview in the line's stead, its ends kept.
+  const rerouting = draft?.kind === "line-reroute";
   const [selectionLines, selectionEnds] = useMemo((): [FeatureCollection, FeatureCollection] => {
     const lines = selection ?? [];
     return [
       {
         type: "FeatureCollection",
-        features: lines.map((geometry) => ({ type: "Feature", properties: {}, geometry })),
+        features: rerouting ? [] : lines.map((geometry) => ({ type: "Feature", properties: {}, geometry })),
       },
       {
         type: "FeatureCollection",
@@ -347,7 +349,7 @@ export function ExplorerMapLayers() {
         ),
       },
     ];
-  }, [selection]);
+  }, [selection, rerouting]);
   // What a click on nothing lets go of, as it is when the click lands.
   const panelShown = useAppSelector((s) => rightPanelOpen(s.explorer));
   const pathSelected = useAppSelector((s) => s.explorer.active && s.explorer.path !== null);

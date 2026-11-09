@@ -50,4 +50,14 @@ export type EditDraft =
   | { kind: "line-stop-remove"; stop_idx: number; scope: LineScope }
   /** 3.1: a stop added to a line between `a` and `b`, for the trips its
    * scope takes; picked on the map (null until then). */
-  | { kind: "line-stop-add"; a: number; b: number; stop_idx: number | null; scope: LineScope };
+  | { kind: "line-stop-add"; a: number; b: number; stop_idx: number | null; scope: LineScope }
+  /** 1.2: the path from `a` to `b` (stops called back to back, drawn from
+   * `ends`) dragged through `via`, for the trips its scope takes. */
+  | {
+      kind: "line-reroute";
+      a: number;
+      b: number;
+      ends: [[number, number], [number, number]];
+      via: [number, number][];
+      scope: LineScope;
+    };

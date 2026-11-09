@@ -156,7 +156,7 @@ function adjacent(a: number, b: number, eitherWay: boolean): string {
 }
 
 /** The trips of `scope` at `level` that call at `a` then `b` back to back. */
-async function tripsBetween(
+export async function tripsBetween(
   db: SqlRunner,
   scope: LineScope,
   level: ScopeLevel,

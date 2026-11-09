@@ -59,13 +59,23 @@ export function ScopePicker({ scope }: { scope: NonNullable<DraftEdit["scope"]> 
   };
   // GOAT's own selector, labelled above and the panel's full width, as the
   // Stops tab's direction is.
-  const items: SelectorItem[] = SCOPE_LEVELS.filter((level) => level !== "variant" || variant).map(
-    (level) => ({
-      value: level,
-      label: `${name(level)} · ${trips(level)}`,
-      disabled: !option(level) || !!option(level)?.none,
-    })
-  );
+  // Only the levels that reach further than the one before: they are
+  // nested (a trip in a variant, in a direction, in the line), so one taking
+  // as many trips as the last takes the same ones — a stop only one direction
+  // calls at offers no whole line beyond it. The level chosen always shows.
+  let last = 0;
+  const shown = SCOPE_LEVELS.filter((level) => {
+    if (level === "variant" && !variant) return false;
+    const n = option(level)?.trips ?? 0;
+    const adds = n === 0 || n > last;
+    if (n > 0) last = Math.max(last, n);
+    return adds || level === scope.level;
+  });
+  const items: SelectorItem[] = shown.map((level) => ({
+    value: level,
+    label: `${name(level)} · ${trips(level)}`,
+    disabled: !option(level) || !!option(level)?.none,
+  }));
   return (
     <Box sx={{ pt: "4px", pb: 0.5 }}>
       <Selector

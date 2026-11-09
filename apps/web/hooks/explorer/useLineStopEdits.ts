@@ -9,7 +9,13 @@ import { useCallback } from "react";
 
 import { shownPattern } from "@/lib/explorer/directionChoice";
 import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
-import { openExplorerPanel, panelItem, setEditDraft } from "@/lib/store/explorer/slice";
+import {
+  type ExplorerPatternChoice,
+  type ExplorerRouteDrawing,
+  openExplorerPanel,
+  panelItem,
+  setEditDraft,
+} from "@/lib/store/explorer/slice";
 
 import { useRoutes } from "@/hooks/explorer/useExplorerData";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
@@ -21,6 +27,27 @@ export interface LineStopRef {
   name: string;
   lat: number | null;
   lon: number | null;
+}
+
+/** Where an edit on line `route_idx`, drawn as `drawing`, starts: the
+ * variant picked, else the direction shown; `trip_idx` the trip of it open. */
+export function lineScope(
+  route_idx: number,
+  drawing: ExplorerRouteDrawing,
+  choice: ExplorerPatternChoice | null,
+  trip_idx: number | null
+): LineScope | null {
+  const direction = drawing.directions.find((d) => d.key === choice?.direction) ?? drawing.directions[0];
+  const pattern_idx = shownPattern(choice, drawing.directions);
+  if (!direction || pattern_idx === null) return null;
+  const variant = choice?.pattern_idx != null && direction.patterns.includes(choice.pattern_idx);
+  return {
+    route_idx,
+    level: variant ? "variant" : "direction",
+    pattern_idx,
+    direction: direction.patterns,
+    trip_idx,
+  };
 }
 
 export function useLineStopEdits() {
@@ -38,21 +65,11 @@ export function useLineStopEdits() {
   /** Where an edit on the line starts; null with no line selected. */
   const scope = useCallback((): LineScope | null => {
     if (!route || !drawing || drawing.routeId !== route.route_id) return null;
-    const direction = drawing.directions.find((d) => d.key === choice?.direction) ?? drawing.directions[0];
-    const pattern_idx = shownPattern(choice, drawing.directions);
-    if (!direction || pattern_idx === null) return null;
-    const variant = choice?.pattern_idx != null && direction.patterns.includes(choice.pattern_idx);
     const ofLine =
       openTrip !== null && route.trip_lo !== null && route.trip_hi !== null
         ? openTrip >= route.trip_lo && openTrip <= route.trip_hi
         : false;
-    return {
-      route_idx: route.route_idx,
-      level: variant ? "variant" : "direction",
-      pattern_idx,
-      direction: direction.patterns,
-      trip_idx: ofLine ? openTrip : null,
-    };
+    return lineScope(route.route_idx, drawing, choice, ofLine ? openTrip : null);
   }, [route, drawing, choice, openTrip]);
 
   /** 3.1: a stop to add between `a` and `b`, picked on the map next. */

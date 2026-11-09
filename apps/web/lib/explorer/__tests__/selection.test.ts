@@ -17,7 +17,16 @@ const open = () =>
     explorerReducer(undefined, { type: "init" }),
     openExplorer({ bundleId: "b1", bundleName: "Feed" })
   );
-const PATH = { pattern_idx: 4, from_i: 1, to_i: 2, from_name: "Second", to_name: "Third" };
+const PATH = {
+  pattern_idx: 4,
+  from_i: 1,
+  to_i: 2,
+  from_name: "Second",
+  to_name: "Third",
+  from_stop: 1,
+  to_stop: 2,
+  route_idx: 0,
+};
 const STOP = { stop_idx: 4, name: "Fourth", lon: 13.43, lat: 52.5 };
 
 describe("the selection", () => {

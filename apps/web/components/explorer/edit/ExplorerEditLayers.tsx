@@ -6,11 +6,15 @@
  *   which can be dragged until it is created (board 18);
  * - with Select, the picked stop dragged to move it (board 23): where it
  *   goes, a dashed line from where it was and how far, and the paths through
- *   it as they would run, dotted in their line's colour, until Apply or Cancel.
+ *   it as they would run, dotted in their line's colour, until Apply or Cancel;
+ * - with Select, the selected path dragged off its line to reroute it (1.2):
+ *   a handle halfway along it, then one at each point it runs through, and
+ *   one halfway between each two on the path as drawn, to drag out another;
+ *   a point double-clicked goes. Handles are diamonds, never taken for stops.
  */
 import { useTheme } from "@mui/material/styles";
 import type { FeatureCollection } from "geojson";
-import type { MapLayerMouseEvent } from "maplibre-gl";
+import type { MapGeoJSONFeature, MapLayerMouseEvent } from "maplibre-gl";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Layer, Source, useMap } from "react-map-gl/maplibre";
@@ -19,10 +23,12 @@ import { draftPathsStore, previewedStore } from "@/lib/explorer/edit/draftStore"
 import { metres } from "@/lib/explorer/edit/ops/geo";
 import { mapColor, mapPalette } from "@/lib/explorer/mapPalette";
 import { networkStore } from "@/lib/explorer/network";
+import { selectionStore } from "@/lib/explorer/selectionStore";
 import { pickedStop, placeStop, setEditDraft } from "@/lib/store/explorer/slice";
 import { setMapCursor } from "@/lib/store/map/slice";
 
 import { useDragPoint } from "@/hooks/explorer/useDragPoint";
+import { lineScope } from "@/hooks/explorer/useLineStopEdits";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -36,9 +42,39 @@ export const EDIT_DRAW_ORDER = [
   "explorer-draft-stop-halo",
   "explorer-draft-stop-dot",
   "explorer-draft-move-label",
+  "explorer-reroute-band",
+  "explorer-reroute-band-point",
+  "explorer-reroute-handle",
 ];
 
 type LonLat = [number, number];
+
+/** The point halfway along `line`, by its length. */
+function halfway(line: LonLat[]): LonLat {
+  const legs = line.slice(1).map((q, k) => metres(line[k], q));
+  let rest = legs.reduce((a, b) => a + b, 0) / 2;
+  for (let k = 0; k < legs.length; k++) {
+    if (rest <= legs[k] && legs[k] > 0) {
+      const f = rest / legs[k];
+      const [p, q] = [line[k], line[k + 1]];
+      return [p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1])];
+    }
+    rest -= legs[k];
+  }
+  return line[line.length - 1];
+}
+/** The vertex of `line` nearest `p`, from `from` on. */
+function nearestVertex(line: LonLat[], p: LonLat, from: number): number {
+  let best = from;
+  for (let k = from; k < line.length; k++) if (metres(line[k], p) < metres(line[best], p)) best = k;
+  return best;
+}
+
+const pointAt = (coordinates: LonLat, properties: Record<string, unknown>) => ({
+  type: "Feature" as const,
+  geometry: { type: "Point" as const, coordinates },
+  properties,
+});
 
 /** The dot a new path is drawn with, one every DOT_SPACING px along it: a
  * signed distance field, so each path tints it with its line's colour. A row
@@ -46,6 +82,26 @@ type LonLat = [number, number];
  * levels, and its dots came out uneven. */
 const DOT = "explorer-draft-dot";
 const DOT_SPACING = 9;
+/** A path's handle (1.2): a diamond, a shape no stop or stop marker has, so
+ * a point to drag is not taken for a stop. A distance field as the dot, so
+ * it is tinted with the theme's grey (the green is the selection's) and
+ * haloed white. */
+const HANDLE = "explorer-reroute-handle-icon";
+function handleImage(): { image: ImageData; options: object } {
+  // At twice the CSS size: 12 px corner to corner, room round it for the halo.
+  const size = 40;
+  const r = 12;
+  const data = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const out = (Math.abs(x + 0.5 - size / 2) + Math.abs(y + 0.5 - size / 2) - r) / Math.SQRT2;
+      const k = (y * size + x) * 4;
+      data[k] = data[k + 1] = data[k + 2] = 255;
+      data[k + 3] = Math.max(0, Math.min(255, Math.round((0.75 - out / 8) * 255)));
+    }
+  return { image: new ImageData(data, size, size), options: { pixelRatio: 2, sdf: true } };
+}
+
 function dotImage(): { image: ImageData; options: object } {
   // At twice the CSS size: a dot 5 px across. The edge at 0.75, falling by
   // 1/8 a pixel outward, as the map reads a distance field.
@@ -86,6 +142,133 @@ export function ExplorerEditLayers() {
   // Where the point being dragged is, before it is let go.
   const [dragAt, setDragAt] = useState<LonLat | null>(null);
 
+  // The path selected, and the points a reroute of it runs through.
+  const path = useAppSelector((s) => (s.explorer.active ? s.explorer.path : null));
+  const selection = useSyncExternalStore(selectionStore.subscribe, selectionStore.getSnapshot, () => null);
+  const rerouting = draft?.kind === "line-reroute" ? draft : null;
+  const drawing = useAppSelector((s) => s.explorer.drawing);
+  const choice = useAppSelector((s) => s.explorer.pattern);
+  const selected = useMemo(() => {
+    const line = path ? (selection?.[0]?.coordinates as LonLat[] | undefined) : undefined;
+    return line && line.length > 1 ? line : null;
+  }, [path, selection]);
+  const ends = useMemo<[LonLat, LonLat] | null>(
+    () => rerouting?.ends ?? (selected ? [selected[0], selected[selected.length - 1]] : null),
+    [rerouting, selected]
+  );
+  const via = useMemo(() => rerouting?.via ?? [], [rerouting]);
+  const way = useMemo(() => (ends ? [ends[0], ...via, ends[1]] : []), [ends, via]);
+  const bendable = editor && tool === "select" && !!ends && (!!rerouting || (!!path && !draft));
+  // A handle being dragged: where it is, and which (a point `k`, or a new
+  // one between points `ins` and `ins + 1` of the way).
+  const [bend, setBend] = useState<{ at: LonLat; k?: number; ins?: number } | null>(null);
+  // The rerouted path as drawn (the preview's new stretch running from the
+  // first stop to the second), and where each point lies on it.
+  const guide = useMemo(() => {
+    if (!rerouting || !ends) return null;
+    let best: LonLat[] | null = null;
+    let score = Infinity;
+    for (const f of paths?.features ?? []) {
+      if (f.properties.kind !== "new" || f.geometry.type !== "LineString") continue;
+      const line = f.geometry.coordinates as LonLat[];
+      const s = metres(line[0], ends[0]) + metres(line[line.length - 1], ends[1]);
+      if (line.length > 1 && s < score) [best, score] = [line, s];
+    }
+    return best;
+  }, [rerouting, ends, paths]);
+  const cuts = useMemo(() => {
+    if (!guide) return [];
+    const at = [0];
+    for (const p of via) at.push(nearestVertex(guide, p, at[at.length - 1]));
+    return [...at, guide.length - 1];
+  }, [guide, via]);
+  const handles = useMemo<FeatureCollection>(() => {
+    if (!bendable) return EMPTY;
+    // Not yet rerouted: one handle, halfway along the path as it runs.
+    if (!rerouting)
+      return selected
+        ? { type: "FeatureCollection", features: [pointAt(halfway(selected), { ins: 0, ghost: true })] }
+        : EMPTY;
+    return {
+      type: "FeatureCollection",
+      features: [
+        ...way.slice(1).map((q, k) => {
+          // Halfway along the path as drawn between the two points (along
+          // the streets, with Snap); straight while it is being drawn.
+          const piece = guide ? guide.slice(cuts[k], cuts[k + 1] + 1) : [];
+          return pointAt(halfway(piece.length > 1 ? piece : [way[k], q]), { ins: k, ghost: true });
+        }),
+        ...via.map((p, k) => pointAt(p, { k, ghost: false })),
+      ],
+    };
+  }, [bendable, rerouting, selected, way, via, guide, cuts]);
+  const band = useMemo<FeatureCollection>(() => {
+    if (!bend || !way.length) return EMPTY;
+    const [before, after] =
+      bend.k !== undefined ? [way[bend.k], way[bend.k + 2]] : [way[bend.ins ?? 0], way[(bend.ins ?? 0) + 1]];
+    return {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: [before, bend.at, after] },
+          properties: {},
+        },
+        pointAt(bend.at, {}),
+      ],
+    };
+  }, [bend, way]);
+  const grabbedOf = (f?: MapGeoJSONFeature) => {
+    const p = (f?.properties ?? {}) as { k?: number; ins?: number; ghost?: boolean };
+    return p.ghost ? { ins: Number(p.ins) } : { k: Number(p.k) };
+  };
+  useDragPoint(
+    map?.getMap(),
+    ["explorer-reroute-handle"],
+    bendable,
+    (at, f) => setBend(at && { at, ...grabbedOf(f) }),
+    (at, f) => {
+      const g = grabbedOf(f);
+      if (!rerouting) {
+        const scope = path && drawing && lineScope(path.route_idx, drawing, choice, null);
+        if (path && ends && scope)
+          dispatch(
+            setEditDraft({
+              kind: "line-reroute",
+              a: path.from_stop,
+              b: path.to_stop,
+              ends,
+              via: [at],
+              scope: { ...scope, pattern_idx: path.pattern_idx },
+            })
+          );
+        return;
+      }
+      const next =
+        g.k !== undefined
+          ? via.map((p, k) => (k === g.k ? at : p))
+          : [...via.slice(0, g.ins), at, ...via.slice(g.ins)];
+      dispatch(setEditDraft({ ...rerouting, via: next }));
+    }
+  );
+  // A point double-clicked goes; the last one, and the reroute with it.
+  useEffect(() => {
+    const raw = map?.getMap();
+    if (!raw || !rerouting) return;
+    const onDouble = (e: MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      if (!f || f.properties?.ghost) return;
+      e.preventDefault();
+      const k = Number(f.properties?.k);
+      const next = via.filter((_, j) => j !== k);
+      dispatch(setEditDraft(next.length ? { ...rerouting, via: next } : null));
+    };
+    raw.on("dblclick", "explorer-reroute-handle", onDouble);
+    return () => {
+      raw.off("dblclick", "explorer-reroute-handle", onDouble);
+    };
+  }, [map, rerouting, via, dispatch]);
+
   // The picked stop where the network has it: a stop of its own (not a
   // station), which an editor can drag with Select.
   const pickedAt = useMemo<LonLat | null>(() => {
@@ -114,12 +297,17 @@ export function ExplorerEditLayers() {
     if (!map) return;
     const raw = map.getMap();
     const add = () => {
-      if (raw.hasImage(DOT)) return;
-      const { image, options } = dotImage();
-      raw.addImage(DOT, image, options);
+      for (const [id, make] of [
+        [DOT, dotImage],
+        [HANDLE, handleImage],
+      ] as const) {
+        if (raw.hasImage(id)) continue;
+        const { image, options } = make();
+        raw.addImage(id, image, options);
+      }
     };
     const onMissing = (e: { id: string }) => {
-      if (e.id === DOT) add();
+      if (e.id === DOT || e.id === HANDLE) add();
     };
     add();
     raw.on("styleimagemissing", onMissing);
@@ -210,7 +398,7 @@ export function ExplorerEditLayers() {
   // dragging): dotted in their line's colour, over the path each replaces,
   // drawn here in the network's stead and faint where it is drawn anew.
   // A stop being added to a line shows its paths as a moved one does.
-  const shown = (!!moving || draft?.kind === "line-stop-add") && !dragAt;
+  const shown = (!!moving || draft?.kind === "line-stop-add" || !!rerouting) && !dragAt && !bend;
   // In the colours the network is drawn in for the basemap under it: a dark
   // line lifted on a dark one, as ExplorerMapLayers draws it.
   const basemap = useAppSelector((s) => s.map.activeBasemap?.value);
@@ -300,6 +488,52 @@ export function ExplorerEditLayers() {
             "circle-opacity": 0.6,
             "circle-stroke-color": theme.palette.text.secondary,
             "circle-stroke-width": 1.5,
+          }}
+        />
+      </Source>
+      {/* A path's handle being dragged: straight from the points either side. */}
+      <Source key="explorer-reroute-band" id="explorer-reroute-band" type="geojson" data={band}>
+        <Layer
+          id="explorer-reroute-band"
+          type="line"
+          filter={["==", ["geometry-type"], "LineString"]}
+          paint={{
+            "line-color": theme.palette.primary.main,
+            "line-width": 2,
+            "line-dasharray": [2, 2],
+          }}
+        />
+        <Layer
+          id="explorer-reroute-band-point"
+          type="symbol"
+          filter={["==", ["geometry-type"], "Point"]}
+          layout={{ "icon-image": HANDLE, "icon-allow-overlap": true, "icon-ignore-placement": true }}
+          paint={{
+            "icon-color": theme.palette.secondary.dark,
+            "icon-halo-color": "#FFFFFF",
+            "icon-halo-width": 3,
+          }}
+        />
+      </Source>
+      {/* The path's handles, all alike: each point it runs through, and one
+          halfway between each two to drag out another. */}
+      <Source
+        key="explorer-reroute-handle"
+        id="explorer-reroute-handle"
+        type="geojson"
+        data={bend ? EMPTY : handles}>
+        <Layer
+          id="explorer-reroute-handle"
+          type="symbol"
+          layout={{
+            "icon-image": HANDLE,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          }}
+          paint={{
+            "icon-color": theme.palette.secondary.dark,
+            "icon-halo-color": "#FFFFFF",
+            "icon-halo-width": 3,
           }}
         />
       </Source>

@@ -55,7 +55,8 @@ export interface GtfsShapeReshape {
   op: "reshape";
   key: { shape_id: string };
   source: string;
-  through: string;
+  /** The stop drawn through; none for a path rerouted between two (1.2). */
+  through?: string;
   /** Metres per `shape_dist_traveled` unit, where the Explorer knows it. */
   metres_per_unit?: number;
   stretches: ShapeStretch[];

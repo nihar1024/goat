@@ -27,6 +27,7 @@ import {
   removeScopeOptions,
 } from "@/lib/explorer/edit/ops/lineStops";
 import { type MoveStopFacts, type Router, moveStop } from "@/lib/explorer/edit/ops/moveStop";
+import { type RerouteFacts, reroutePath } from "@/lib/explorer/edit/ops/reroute";
 import { locationKind } from "@/lib/explorer/edit/ops/stopRules";
 import {
   type NewStopFacts,
@@ -43,6 +44,7 @@ import {
   openExplorerPanel,
   setEditDraft,
   setEditTool,
+  setExplorerPath,
   setExplorerStopTab,
 } from "@/lib/store/explorer/slice";
 
@@ -63,7 +65,8 @@ export type Building =
   | { kind: "stop-delete"; built: Built<DeleteStopFacts> }
   | { kind: "stop-move"; built: Built<MoveStopFacts> }
   | { kind: "line-stop-remove"; built: Built<RemoveFromLineFacts> }
-  | { kind: "line-stop-add"; built: Built<AddToLineFacts> };
+  | { kind: "line-stop-add"; built: Built<AddToLineFacts> }
+  | { kind: "line-reroute"; built: Built<RerouteFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -133,7 +136,10 @@ export function useDraftEdit(): DraftEdit | null {
     // stop rests: the router answers one request a second, and asking at
     // every step of a drag queued the drop's own request behind the whole
     // drag's. Not drawn straight first and then again: one path, once.
-    if (snap && (draft.kind === "stop-move" || draft.kind === "line-stop-add")) {
+    if (
+      snap &&
+      (draft.kind === "stop-move" || draft.kind === "line-stop-add" || draft.kind === "line-reroute")
+    ) {
       // Once this build is stale, its remaining stretches ask no more of
       // the router: its one request a second goes to the drop that counts.
       const roads: Router = (waypoints) => (current ? carRoads(waypoints) : Promise.resolve(null));
@@ -174,7 +180,8 @@ export function useDraftEdit(): DraftEdit | null {
   // is now, not what was built for where it was.
   useEffect(() => {
     const paths =
-      (now?.kind === "stop-move" || now?.kind === "line-stop-add") && now.built.ok
+      (now?.kind === "stop-move" || now?.kind === "line-stop-add" || now?.kind === "line-reroute") &&
+      now.built.ok
         ? now.built.facts.paths
         : null;
     const line = (coordinates: [number, number][], kind: DraftPathKind, color: string) => ({
@@ -229,7 +236,7 @@ export function useDraftEdit(): DraftEdit | null {
   // The scope of an edit on a line, named as "Apply to" names it.
   const drawing = useAppSelector((s) => s.explorer.drawing);
   const reach =
-    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add"
+    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add" || draft?.kind === "line-reroute"
       ? scopeName(draft.scope.level, draft.scope, drawing, t as TFunction)
       : "";
   const said = shown ? wordsFor(shown, t, reach) : null;
@@ -276,6 +283,8 @@ export function useDraftEdit(): DraftEdit | null {
       }
       // A stop deleted has nothing left to show.
       if (now.kind === "stop-delete") dispatch(closeExplorerPanel());
+      // The path rerouted is let go: its line was the one before.
+      if (now.kind === "line-reroute") dispatch(setExplorerPath(null));
     } finally {
       setApplying(false);
     }
@@ -285,9 +294,16 @@ export function useDraftEdit(): DraftEdit | null {
   // An edit on a line: what each level of its scope would take.
   const [options, setOptions] = useState<{ draft: EditDraft; options: ScopeOption[] } | null>(null);
   useEffect(() => {
-    if (!db || (draft?.kind !== "line-stop-remove" && draft?.kind !== "line-stop-add")) return;
+    if (
+      !db ||
+      (draft?.kind !== "line-stop-remove" &&
+        draft?.kind !== "line-stop-add" &&
+        draft?.kind !== "line-reroute")
+    )
+      return;
     let current = true;
-    (draft.kind === "line-stop-add"
+    // A path rerouted takes the trips a stop added on it would.
+    (draft.kind === "line-stop-add" || draft.kind === "line-reroute"
       ? addScopeOptions(db, draft.scope, draft.a, draft.b)
       : removeScopeOptions(db, draft.scope, draft.stop_idx)
     )
@@ -299,13 +315,17 @@ export function useDraftEdit(): DraftEdit | null {
   }, [db, draft, edition]);
   const setLevel = useCallback(
     (level: ScopeLevel) => {
-      if (draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add")
+      if (
+        draft?.kind === "line-stop-remove" ||
+        draft?.kind === "line-stop-add" ||
+        draft?.kind === "line-reroute"
+      )
         dispatch(setEditDraft({ ...draft, scope: { ...draft.scope, level } }));
     },
     [draft, dispatch]
   );
   const scope =
-    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add"
+    draft?.kind === "line-stop-remove" || draft?.kind === "line-stop-add" || draft?.kind === "line-reroute"
       ? {
           level: draft.scope.level,
           line: draft.scope,
@@ -336,7 +356,8 @@ function tripsOf(b: Building | null): number[] | null {
   return b?.kind === "stop-delete" ||
     b?.kind === "stop-move" ||
     b?.kind === "line-stop-remove" ||
-    b?.kind === "line-stop-add"
+    b?.kind === "line-stop-add" ||
+    b?.kind === "line-reroute"
     ? (b.built.facts?.trip_idxs ?? null)
     : null;
 }
@@ -380,12 +401,18 @@ async function build(
           roads
         ),
       };
+    case "line-reroute":
+      return {
+        kind: draft.kind,
+        built: await reroutePath(db, draft.a, draft.b, draft.via, draft.scope, shapeDistUnit, roads),
+      };
   }
 }
 
 /** The same edit of the same thing, whatever its values now. */
 function sameEdit(a: EditDraft, b: EditDraft): boolean {
   if (a.kind !== b.kind) return false;
+  if (a.kind === "line-reroute" && b.kind === "line-reroute") return a.a === b.a && a.b === b.b;
   return !("stop_idx" in a) || !("stop_idx" in b) || a.stop_idx === b.stop_idx;
 }
 
@@ -506,6 +533,33 @@ function wordsFor(
           impact,
         },
         bar: { action: t("explorer_add_stop_to_line") },
+      };
+    }
+    case "line-reroute": {
+      const f = b.built.facts;
+      const m = Math.round(f?.metres ?? 0);
+      const impact = [
+        m > 0
+          ? t("explorer_path_longer", { metres: m })
+          : m < 0
+            ? t("explorer_path_shorter", { metres: -m })
+            : null,
+        f?.trips ? t("explorer_times_kept", { count: f.trips }) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        words: {
+          label: t("explorer_edit_path_rerouted", {
+            line: f?.line ?? "",
+            from: f?.from_name ?? "",
+            to: f?.to_name ?? "",
+            scope: reach,
+            ...raw,
+          }),
+          impact,
+        },
+        bar: { action: t("explorer_reroute_path") },
       };
     }
   }

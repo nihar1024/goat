@@ -19,6 +19,11 @@ export interface PatternPath {
   to_i: number;
   from_name: string;
   to_name: string;
+  /** The two stops' stop_idx, and the line the pattern is of: what an edit
+   * on the path (a reroute) starts from. */
+  from_stop: number;
+  to_stop: number;
+  route_idx: number;
   /** The line between them, along the shape. */
   line: [number, number][];
 }
@@ -34,8 +39,15 @@ export async function pathAt(
   lon: number,
   lat: number
 ): Promise<PatternPath | null> {
-  const stops = await db.all<{ shape_idx: number; i: number; d: number; name: string }>(`
-    SELECT pss.shape_idx, pss.i, pss.d, s.name
+  const stops = await db.all<{
+    shape_idx: number;
+    i: number;
+    d: number;
+    name: string;
+    stop_idx: number;
+    route_idx: number;
+  }>(`
+    SELECT pss.shape_idx, pss.i, pss.d, s.name, s.stop_idx, p.route_idx
     FROM pattern_shape_stops pss
     JOIN patterns p USING (pattern_idx)
     JOIN stops s ON s.stop_idx = p.stops[pss.i + 1]
@@ -80,6 +92,9 @@ export async function pathAt(
     to_i: to.i,
     from_name: from.name,
     to_name: to.name,
+    from_stop: from.stop_idx,
+    to_stop: to.stop_idx,
+    route_idx: from.route_idx,
     line: cut(points, from.d, to.d),
   };
 }

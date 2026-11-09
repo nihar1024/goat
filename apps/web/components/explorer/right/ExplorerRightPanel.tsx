@@ -31,6 +31,7 @@ import { ApplyBar } from "@/components/explorer/edit/ApplyBar";
 import { DeleteStopCascade } from "@/components/explorer/edit/DeleteStopCascade";
 import { InsertStopPanel } from "@/components/explorer/edit/InsertStopPanel";
 import { NewStopPanel } from "@/components/explorer/edit/NewStopPanel";
+import { ReroutePanel } from "@/components/explorer/edit/ReroutePanel";
 import { StopPanel } from "@/components/explorer/right/StopPanel";
 import { TripPanel } from "@/components/explorer/right/TripPanel";
 import { EXPLORER_RIGHT_PANEL_WIDTH } from "@/components/explorer/right/panelSize";
@@ -71,12 +72,14 @@ function RightPanel() {
   const placing = edit?.draft.kind === "stop-new" ? edit.draft : null;
   // A stop being added to a line, likewise until it is (3.1).
   const inserting = edit?.draft.kind === "line-stop-add" ? edit.draft : null;
-  if (!item && !placing && !inserting) return null;
+  // A path being rerouted, likewise (1.2).
+  const rerouting = edit?.draft.kind === "line-reroute" ? edit.draft : null;
+  if (!item && !placing && !inserting && !rerouting) return null;
   // A draft that fills the panel (a new stop, a stop added to a line) is the
   // edit itself: its fields and its confirmation one panel, outlined as the
   // edit panel is. Any other edit is made on the item shown, its
   // confirmation a panel of its own under it.
-  const whole = !!(placing || inserting);
+  const whole = !!(placing || inserting || rerouting);
   const editSx = (theme: Theme) => ({
     border: `1.5px solid ${alpha(theme.palette.primary.main, 0.7)}`,
     boxShadow: `0 0 12px ${alpha(theme.palette.primary.main, 0.35)}`,
@@ -85,8 +88,9 @@ function RightPanel() {
     <ApplyBar
       edit={edit}
       titled={!whole}
-      // Adding a stop to a line asks how far it reaches first, at the top.
-      scoped={!inserting}
+      // Adding a stop to a line, or rerouting a path, asks how far it
+      // reaches first, at the top.
+      scoped={!inserting && !rerouting}
       // What a delete takes, at the top: read before its cost.
       impact={
         edit.building?.kind === "stop-delete" ? (
@@ -148,6 +152,8 @@ function RightPanel() {
               <NewStopPanel draft={placing} />
             ) : inserting ? (
               <InsertStopPanel draft={inserting} />
+            ) : rerouting ? (
+              <ReroutePanel draft={rerouting} />
             ) : item?.kind === "stop" ? (
               <StopPanel key={item.stop.stop_idx} stop={item.stop} />
             ) : item ? (

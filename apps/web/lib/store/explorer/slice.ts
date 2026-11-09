@@ -50,6 +50,10 @@ export interface ExplorerPath {
   to_i: number;
   from_name: string;
   to_name: string;
+  /** The two stops' stop_idx, and the pattern's line. */
+  from_stop: number;
+  to_stop: number;
+  route_idx: number;
 }
 
 /** The trip strip, under a selected route (02-panel-behaviour-spec ›
@@ -640,7 +644,13 @@ export function panelItem(state: ExplorerState): ExplorerPanelItem | null {
  * or added to a line (its draft fills the panel, board 18). */
 export function rightPanelOpen(state: ExplorerState): boolean {
   const kind = state.edit.draft?.kind;
-  return state.active && (state.panel.stack.length > 0 || kind === "stop-new" || kind === "line-stop-add");
+  return (
+    state.active &&
+    (state.panel.stack.length > 0 ||
+      kind === "stop-new" ||
+      kind === "line-stop-add" ||
+      kind === "line-reroute")
+  );
 }
 
 /** The stop the right panel shows, highlighted on the map. */

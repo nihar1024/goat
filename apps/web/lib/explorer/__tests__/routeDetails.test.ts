@@ -25,10 +25,9 @@ describe("a line's own fields", () => {
       long_name: " Main Line East ",
       color: "#00aa55",
       description: "Via the centre",
-      continuous_pickup: 0,
     });
     if (!built.ok) throw new Error(built.refused.code);
-    expect(built.facts.changed).toEqual(["long_name", "description", "color", "continuous_pickup"]);
+    expect(built.facts.changed).toEqual(["long_name", "description", "color"]);
     expect(built.rows.gtfs).toEqual([
       {
         role: "routes",
@@ -38,7 +37,6 @@ describe("a line's own fields", () => {
           route_long_name: "Main Line East",
           route_desc: "Via the centre",
           route_color: "00AA55",
-          continuous_pickup: 0,
         },
       },
     ]);
@@ -58,7 +56,7 @@ describe("a line's own fields", () => {
     if (!built.ok) expect(built.refused).toMatchObject({ code: "route_both_short_and_long_name_missing" });
   });
 
-  it("checks colours, URLs and sort orders as GTFS has them", () => {
+  it("checks colours as GTFS has them", () => {
     const v = {
       short_name: "1",
       long_name: "",
@@ -67,15 +65,9 @@ describe("a line's own fields", () => {
       agency_idx: 0,
       color: "12345",
       text_color: "#ffffff",
-      url: "example.com",
-      sort_order: "-1",
-      continuous_pickup: null,
-      continuous_drop_off: null,
     };
     expect(routeFieldProblems(v)).toEqual({
       color: "invalid_color",
-      url: "invalid_url",
-      sort_order: "invalid_sort_order",
     });
   });
 });

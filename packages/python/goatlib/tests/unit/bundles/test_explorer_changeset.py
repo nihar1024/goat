@@ -1014,15 +1014,14 @@ def test_a_line_s_fields_are_edited_its_description_given_its_column(
                     "route_long_name": "Main Line East",
                     "route_desc": "Via the centre",
                     "route_color": "00AA55",
-                    "continuous_pickup": 1,
                 },
             }
         ],
     )
     assert one(
         con,
-        "SELECT route_long_name, route_desc, route_color, continuous_pickup FROM routes WHERE route_id = 'R1'",
-    ) == ("Main Line East", "Via the centre", "00AA55", 1)
+        "SELECT route_long_name, route_desc, route_color FROM routes WHERE route_id = 'R1'",
+    ) == ("Main Line East", "Via the centre", "00AA55")
 
 
 def test_a_line_left_without_a_name_is_refused(con: duckdb.DuckDBPyConnection) -> None:

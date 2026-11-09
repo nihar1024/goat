@@ -80,12 +80,8 @@ ADDABLE_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "routes": (
         "agency_id",
         "route_desc",
-        "route_url",
         "route_color",
         "route_text_color",
-        "route_sort_order",
-        "continuous_pickup",
-        "continuous_drop_off",
     ),
 }
 

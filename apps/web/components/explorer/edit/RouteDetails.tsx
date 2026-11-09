@@ -13,7 +13,6 @@ import { useTranslation } from "react-i18next";
 import { ICON_NAME, Icon } from "@p4b/ui/components/Icon";
 
 import {
-  type Continuous,
   type RouteField,
   type RouteValues,
   routeFieldProblems,
@@ -36,8 +35,6 @@ import SingleColorSelector from "@/components/map/panels/style/color/SingleColor
 
 /** The basic route types, in the order riders meet them most. */
 const ROUTE_TYPES = [3, 11, 0, 1, 2, 12, 4, 5, 6, 7];
-/** Continuous stopping as GTFS has it; none first (most lines). */
-const CONTINUOUS: Continuous[] = [null, 0, 2, 3];
 
 export function RouteDetails({ route_idx }: { route_idx: number }) {
   const { t } = useTranslation("common");
@@ -78,7 +75,7 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
       : undefined;
     return code ? t(`explorer_field_${code}`) : undefined;
   };
-  const text = (f: "short_name" | "long_name" | "description" | "url" | "sort_order", label: string) => (
+  const text = (f: "short_name" | "long_name" | "description", label: string) => (
     <Row label={label}>
       <TextField
         size="small"
@@ -88,7 +85,7 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
         helperText={error(f)}
         onBlur={() => setTouched((s) => new Set(s).add(f))}
         onChange={(e) => set(f, { [f]: e.target.value })}
-        inputProps={{ "aria-label": label, ...(f === "sort_order" ? { inputMode: "numeric" } : {}) }}
+        inputProps={{ "aria-label": label }}
         sx={FIELD_SX}
       />
     </Row>
@@ -157,11 +154,6 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
   );
   const typeLabel = (k: number) =>
     k in BASIC_LABELS ? t(`explorer_mode_${modeOf(k)}`) : `${t(`explorer_mode_${modeOf(k)}`)} (${k})`;
-  const continuousOptions = CONTINUOUS.map((c) => ({
-    value: c === null ? "none" : String(c),
-    label: t(`explorer_continuous_${c === null ? "none" : c}`),
-  }));
-  const continuousOf = (v: string): Continuous => (v === "none" ? null : (Number(v) as Continuous));
 
   return (
     <Stack sx={{ minHeight: "100%", pb: 2, mx: -2.5 }}>
@@ -197,20 +189,6 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
             )}
           {color("color", t("explorer_line_field_color"))}
           {color("text_color", t("explorer_line_field_text_color"))}
-          {text("url", t("explorer_line_field_url"))}
-          {text("sort_order", t("explorer_line_field_sort_order"))}
-          {select(
-            t("explorer_line_field_continuous_pickup"),
-            values.continuous_pickup === null ? "none" : String(values.continuous_pickup),
-            continuousOptions,
-            (v) => set("continuous_pickup", { continuous_pickup: continuousOf(v) })
-          )}
-          {select(
-            t("explorer_line_field_continuous_drop_off"),
-            values.continuous_drop_off === null ? "none" : String(values.continuous_drop_off),
-            continuousOptions,
-            (v) => set("continuous_drop_off", { continuous_drop_off: continuousOf(v) })
-          )}
         </Stack>
       </DetailsSection>
       {!deleting && (

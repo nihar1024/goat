@@ -50,10 +50,6 @@ export function newLineProblems(v: NewLineValues): Partial<Record<NewLineField, 
     ...v,
     description: "",
     text_color: "",
-    url: "",
-    sort_order: "",
-    continuous_pickup: null,
-    continuous_drop_off: null,
   });
   const problems: Partial<Record<NewLineField, string>> = {};
   if (named.short_name) problems.short_name = named.short_name;
@@ -112,10 +108,6 @@ export async function newLine(
       ...values,
       description: "",
       text_color: "",
-      url: "",
-      sort_order: "",
-      continuous_pickup: null,
-      continuous_drop_off: null,
     }),
   };
   const route_id = routeId ?? (await freshRouteId(db, random));

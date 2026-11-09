@@ -844,6 +844,43 @@ def test_a_shape_whose_distances_measure_nothing_falls_back_to_the_stop_times_un
     assert all(x < y for x, y in zip(d, d[1:])), d
 
 
+def test_a_path_rerouted_between_two_stops_moves_the_stops_past_it_on(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    # SH1 from S2 to S3 (a quarter to half its length) bent out north: no
+    # stop drawn through, S1 and S2 stay, S3 on lie as much further on.
+    before = [_dist(con, "T1", k) for k in range(1, 6)]
+    times = con.execute(
+        "SELECT arrival_time FROM stop_times WHERE trip_id = 'T1' ORDER BY stop_sequence"
+    ).fetchall()
+    apply(
+        con,
+        [
+            {
+                "role": "shapes",
+                "op": "reshape",
+                "key": {"shape_id": "SH1"},
+                "source": "SH1",
+                "metres_per_unit": 1000,
+                "stretches": [
+                    {"from": 0.25, "to": 0.5, "points": [[13.407, 52.51]]}
+                ],
+            }
+        ],
+    )
+    after = [_dist(con, "T1", k) for k in range(1, 6)]
+    assert after[:2] == before[:2]
+    moved = [y - x for x, y in zip(before[2:], after[2:])]
+    assert moved[0] > 0
+    assert moved == pytest.approx([moved[0]] * 3)
+    assert (
+        con.execute(
+            "SELECT arrival_time FROM stop_times WHERE trip_id = 'T1' ORDER BY stop_sequence"
+        ).fetchall()
+        == times
+    )
+
+
 def _hms(t: Any) -> str:
     secs = int(t.total_seconds())
     return f"{secs // 3600:02d}:{secs % 3600 // 60:02d}:{secs % 60:02d}"

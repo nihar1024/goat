@@ -169,7 +169,10 @@ class ShapeReshape(BaseModel):
     op: Literal["reshape"]
     key: Dict[str, Value]
     source: str
-    through: str
+    #: The stop the stretches are drawn through (a moved or added stop);
+    #: none for a path rerouted between two stops (1.2): then every stop time
+    #: past a stretch moves on by as far as the shape did there.
+    through: Optional[str] = None
     #: Metres per ``shape_dist_traveled`` unit, as the Explorer found the
     #: feed's: for stop times measured along a shape that gives no distances.
     metres_per_unit: Optional[float] = Field(None, gt=0)

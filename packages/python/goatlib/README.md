@@ -151,7 +151,9 @@ stretches the browser redrew, as shares of the path's length, which the server
 cuts into the feed's full-resolution shape (the snapshot's is simplified),
 keeping `shape_dist_traveled` in the feed's unit on the shape and on the stop
 times of the trips that run it (the trips it names, as they were on the shape
-when redrawn: a later edit may move some onto a copy). A stop added to a line
+when redrawn: a later edit may move some onto a copy). A path rerouted between
+two stops sends the same `reshape` without a stop drawn through: each stop time
+past a stretch moves on by as far as the shape did there. A stop added to a line
 between two stop times numbered one apart sends a `shift` first, which numbers
 the trip's later stop times one on; rows named before it keep the numbers they
 had then and are renumbered with the feed's, so a change set stays in the

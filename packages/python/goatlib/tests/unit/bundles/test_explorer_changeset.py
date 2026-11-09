@@ -931,6 +931,75 @@ def test_a_shape_another_trip_runs_stays_when_a_line_goes(
     assert one(con, "SELECT count(*) FROM shapes WHERE shape_id = 'SH1'") == (5,)
 
 
+def test_a_line_extended_past_its_end_runs_on_and_keeps_its_distances(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    before = [_dist(con, "T1", k) for k in range(1, 6)]
+    apply(
+        con,
+        [
+            {
+                "role": "stop_times",
+                "op": "insert",
+                "key": {"trip_id": "T1", "stop_sequence": 6},
+                "values": {
+                    "stop_id": "S6",
+                    "arrival_time": "08:10:00",
+                    "departure_time": "08:10:00",
+                    "shape_dist_traveled": 3.4,
+                },
+            },
+            {
+                "role": "shapes",
+                "op": "reshape",
+                "key": {"shape_id": "SH1"},
+                "source": "SH1",
+                "metres_per_unit": 1000,
+                "trips": ["T1", "T2", "T4"],
+                "stretches": [{"from": 1.0, "to": None, "points": [[13.45, 52.5]]}],
+            },
+        ],
+    )
+    assert [_dist(con, "T1", k) for k in range(1, 7)] == before + [pytest.approx(3.4)]
+    assert one(
+        con,
+        "SELECT shape_pt_lon FROM shapes WHERE shape_id = 'SH1' ORDER BY shape_pt_sequence DESC LIMIT 1",
+    ) == (pytest.approx(13.45),)
+
+
+def test_a_line_extended_before_its_start_moves_its_distances_on(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    before = [_dist(con, "T1", k) for k in range(1, 6)]
+    apply(
+        con,
+        [
+            {
+                "role": "stop_times",
+                "op": "insert",
+                "key": {"trip_id": "T1", "stop_sequence": 0},
+                "values": {
+                    "stop_id": "X",
+                    "arrival_time": "07:58:00",
+                    "departure_time": "07:58:00",
+                },
+            },
+            {
+                "role": "shapes",
+                "op": "reshape",
+                "key": {"shape_id": "SH1"},
+                "source": "SH1",
+                "metres_per_unit": 1000,
+                "trips": ["T1", "T2", "T4"],
+                "stretches": [{"from": None, "to": 0.0, "points": [[13.39, 52.5]]}],
+            },
+        ],
+    )
+    moved = [_dist(con, "T1", k) - b for k, b in zip(range(1, 6), before)]
+    assert moved[0] == pytest.approx(0.677, abs=0.01)
+    assert moved == pytest.approx([moved[0]] * 5)
+
+
 def _hms(t: Any) -> str:
     secs = int(t.total_seconds())
     return f"{secs // 3600:02d}:{secs % 3600 // 60:02d}:{secs % 60:02d}"

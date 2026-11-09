@@ -146,7 +146,9 @@ own old faults do not block an unrelated edit.
 
 What the browser cannot hold the change set does on the server. A stop deleted
 takes the transfers, pathways and stop areas naming it (the snapshot has none
-of those tables). A stop moved sends each path through it as a `reshape`: the
+of those tables); a route or trip deleted likewise takes the fare rules,
+attributions and transfers naming it, and a shape its trips ran that no trip
+runs any more. A stop moved sends each path through it as a `reshape`: the
 stretches the browser redrew, as shares of the path's length, which the server
 cuts into the feed's full-resolution shape (the snapshot's is simplified),
 keeping `shape_dist_traveled` in the feed's unit on the shape and on the stop

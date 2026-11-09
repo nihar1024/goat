@@ -234,7 +234,7 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
 const BASIC_LABELS: Record<number, true> = Object.fromEntries(ROUTE_TYPES.map((k) => [k, true]));
 
 /** A colour field's swatch, opening GOAT's colour picker. */
-function Swatch({
+export function Swatch({
   hex,
   label,
   onPick,

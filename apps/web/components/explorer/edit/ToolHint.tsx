@@ -10,7 +10,7 @@ import { useAppSelector } from "@/hooks/store/ContextHooks";
 export function ToolHint() {
   const { t } = useTranslation("common");
   const tool = useAppSelector((s) => s.explorer.edit.tool);
-  if (tool !== "stop") return null;
+  if (tool !== "stop" && tool !== "route") return null;
   return (
     <Box
       role="status"

@@ -9,7 +9,7 @@ import { type PayloadAction, createSlice } from "@reduxjs/toolkit";
 
 import type { DirectionName, VariantKind } from "@/lib/explorer/derive/directions";
 import { directionsOnShapes } from "@/lib/explorer/directionChoice";
-import { type EditDraft, NO_STOP_VALUES } from "@/lib/explorer/edit/drafts";
+import { type EditDraft, NO_LINE_VALUES, NO_STOP_VALUES } from "@/lib/explorer/edit/drafts";
 import type { ChangeSummary } from "@/lib/explorer/edit/types";
 import type { ModeKey } from "@/lib/explorer/modes";
 import { setMapMode } from "@/lib/store/map/slice";
@@ -487,7 +487,13 @@ const explorerSlice = createSlice({
     setEditTool: (state, action: PayloadAction<ExplorerEditTool>) => {
       state.edit.tool = action.payload;
       state.edit.listOpen = false;
-      state.edit.draft = null;
+      // The Route tool draws a new line (1.1): its panel open from the start.
+      state.edit.draft =
+        action.payload === "route" ? { kind: "line-new", stops: [], values: NO_LINE_VALUES } : null;
+      if (action.payload === "route") {
+        state.panel = { stack: [], fromRoute: null };
+        state.path = null;
+      }
     },
     setEditEnabled: (state, action: PayloadAction<boolean>) => {
       state.edit.enabled = action.payload;
@@ -652,7 +658,8 @@ export function rightPanelOpen(state: ExplorerState): boolean {
       kind === "line-reroute" ||
       kind === "line-delete" ||
       kind === "line-extend" ||
-      kind === "route-details")
+      kind === "route-details" ||
+      kind === "line-new")
   );
 }
 

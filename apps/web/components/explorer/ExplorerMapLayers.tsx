@@ -24,6 +24,7 @@ import { GEOAPI_BASE_URL } from "@/lib/constants";
 import { vehicleFrame } from "@/lib/explorer/derive/vehicles";
 import { directionsOnShapes } from "@/lib/explorer/directionChoice";
 import { previewedStore } from "@/lib/explorer/edit/draftStore";
+import { NO_LINE_VALUES } from "@/lib/explorer/edit/drafts";
 import { routeMatches } from "@/lib/explorer/filters";
 import { highlightStore } from "@/lib/explorer/highlightStore";
 import { mapColor, mapPalette } from "@/lib/explorer/mapPalette";
@@ -323,6 +324,8 @@ export function ExplorerMapLayers() {
   // A stop being added to a line (3.1): the next stop clicked is the one.
   const draft = useAppSelector((s) => s.explorer.edit.draft);
   const adding = useRef(draft);
+  const draftNow = useRef(draft);
+  draftNow.current = draft;
   adding.current = draft?.kind === "line-stop-add" || draft?.kind === "line-extend" ? draft : null;
   // What is selected below a direction (a path, the open trip's pattern),
   // drawn over the route for an editor (the selection resolver).
@@ -493,6 +496,22 @@ export function ExplorerMapLayers() {
       return null;
     };
     const onClick = (e: MapLayerMouseEvent) => {
+      // The Route tool: each stop clicked is the line's next (1.1).
+      if (toolNow.current === "route") {
+        const [stop] = near(e.point, STOP_LAYERS);
+        if (!stop) return;
+        const next = Number(stop.properties?.stop_idx);
+        const drawing = draftNow.current?.kind === "line-new" ? draftNow.current : null;
+        if (drawing?.stops[drawing.stops.length - 1] === next) return;
+        dispatch(
+          setEditDraft({
+            kind: "line-new",
+            stops: [...(drawing?.stops ?? []), next],
+            values: drawing?.values ?? NO_LINE_VALUES,
+          })
+        );
+        return;
+      }
       if (toolNow.current !== "select") return;
       const insert = adding.current;
       if (insert?.kind === "line-stop-add") {

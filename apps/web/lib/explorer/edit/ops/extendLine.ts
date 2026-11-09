@@ -113,7 +113,7 @@ export async function extendScopeOptions(
 
 /** Where along `line` each of `points` lies (the nearest vertex on from the
  * one before), in metres from its start. */
-function placesOn(line: LonLat[], points: LonLat[]): number[] {
+export function placesOn(line: LonLat[], points: LonLat[]): number[] {
   const at = [0];
   for (let k = 1; k < line.length; k++) at.push(at[k - 1] + metres(line[k - 1], line[k]));
   let from = 0;

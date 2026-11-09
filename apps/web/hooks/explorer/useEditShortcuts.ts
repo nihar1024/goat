@@ -49,6 +49,8 @@ export function useEditShortcuts(
         dispatch(setEditTool("select"));
       } else if (!mod && !e.altKey && key === "s") {
         dispatch(setEditTool("stop"));
+      } else if (!mod && !e.altKey && key === "r") {
+        dispatch(setEditTool("route"));
       } else if (key === "escape") {
         // The edit being made first; then another tool: back to Select;
         // Select: nothing selected (board 17).

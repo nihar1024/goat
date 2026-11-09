@@ -38,6 +38,35 @@ export const NO_STOP_VALUES: StopValues = {
   platform_code: "",
 };
 
+/** A new line's fields, as its panel has them; text as typed. */
+export interface NewLineValues {
+  short_name: string;
+  long_name: string;
+  route_type: number;
+  agency_idx: number;
+  color: string;
+  service_idx: number | null;
+  /** First and last departure, "HH:MM" (past 24:00 for after midnight). */
+  first: string;
+  last: string;
+  /** Minutes between departures, and from the first stop to the last. */
+  headway: string;
+  running: string;
+}
+
+export const NO_LINE_VALUES: NewLineValues = {
+  short_name: "",
+  long_name: "",
+  route_type: 3,
+  agency_idx: 0,
+  color: "",
+  service_idx: null,
+  first: "",
+  last: "",
+  headway: "",
+  running: "",
+};
+
 export type EditDraft =
   /** 2.4: a stop's details, as the Details tab has them. */
   | { kind: "stop-details"; stop_idx: number; values: StopValues }
@@ -65,6 +94,8 @@ export type EditDraft =
     }
   /** 1.5: a line deleted, with the stops no other line serves if `stops`. */
   | { kind: "line-delete"; route_idx: number; stops: boolean }
+  /** 1.1: a line drawn through `stops`, picked on the map in order. */
+  | { kind: "line-new"; stops: number[]; values: NewLineValues }
   /** A line's own fields, as its Properties tab has them. */
   | { kind: "route-details"; route_idx: number; values: RouteValues }
   /** 1.3: the line run on past its terminus `stop_idx` (at its `end`)

@@ -54,7 +54,7 @@ const TOOLS: { tool: ExplorerEditTool; mark: ReactNode; key: string; ready: bool
     tool: "route",
     mark: <Icon iconName={ICON_NAME.ROUTE} style={{ fontSize: 12 }} htmlColor="inherit" />,
     key: "R",
-    ready: false,
+    ready: true,
   },
   // Area (board 20) is left out until it is built (6 Nov 2026).
 ];

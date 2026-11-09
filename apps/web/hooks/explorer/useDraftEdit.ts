@@ -29,6 +29,7 @@ import {
   removeScopeOptions,
 } from "@/lib/explorer/edit/ops/lineStops";
 import { type MoveStopFacts, type Router, moveStop } from "@/lib/explorer/edit/ops/moveStop";
+import { type NewLineFacts, newLine } from "@/lib/explorer/edit/ops/newLine";
 import { type RerouteFacts, reroutePath } from "@/lib/explorer/edit/ops/reroute";
 import { type RouteDetailsFacts, editRouteDetails } from "@/lib/explorer/edit/ops/routes";
 import { locationKind } from "@/lib/explorer/edit/ops/stopRules";
@@ -73,7 +74,8 @@ export type Building =
   | { kind: "line-reroute"; built: Built<RerouteFacts> }
   | { kind: "line-delete"; built: Built<DeleteLineFacts> }
   | { kind: "line-extend"; built: Built<ExtendLineFacts> }
-  | { kind: "route-details"; built: Built<RouteDetailsFacts> };
+  | { kind: "route-details"; built: Built<RouteDetailsFacts> }
+  | { kind: "line-new"; built: Built<NewLineFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -132,8 +134,14 @@ export function useDraftEdit(): DraftEdit | null {
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
-    // A stop to add not picked yet: nothing to build.
-    if (!db || !draft || (draft.kind === "line-stop-add" && draft.stop_idx === null)) return;
+    // A stop to add not picked yet, a line with fewer than two: nothing to build.
+    if (
+      !db ||
+      !draft ||
+      (draft.kind === "line-stop-add" && draft.stop_idx === null) ||
+      (draft.kind === "line-new" && draft.stops.length < 2)
+    )
+      return;
     let current = true;
     const run = (roads?: Router) =>
       build(db, draft, shapeDistUnit, roads)
@@ -148,7 +156,8 @@ export function useDraftEdit(): DraftEdit | null {
       (draft.kind === "stop-move" ||
         draft.kind === "line-stop-add" ||
         draft.kind === "line-reroute" ||
-        draft.kind === "line-extend")
+        draft.kind === "line-extend" ||
+        draft.kind === "line-new")
     ) {
       // Once this build is stale, its remaining stretches ask no more of
       // the router: its one request a second goes to the drop that counts.
@@ -193,7 +202,8 @@ export function useDraftEdit(): DraftEdit | null {
       (now?.kind === "stop-move" ||
         now?.kind === "line-stop-add" ||
         now?.kind === "line-reroute" ||
-        now?.kind === "line-extend") &&
+        now?.kind === "line-extend" ||
+        now?.kind === "line-new") &&
       now.built.ok
         ? now.built.facts.paths
         : null;
@@ -298,11 +308,20 @@ export function useDraftEdit(): DraftEdit | null {
       if (now.kind === "line-reroute") dispatch(setExplorerPath(null));
       // A line deleted has nothing left to show either.
       if (now.kind === "line-delete") dispatch(selectExplorerRoute(null));
+      // A line drawn: back to Select, the line open.
+      if (now.kind === "line-new") {
+        dispatch(setEditTool("select"));
+        dispatch(selectExplorerRoute(now.built.facts.route_id));
+      }
     } finally {
       setApplying(false);
     }
   }, [now, said, priced, session, applyChange, dispatch, draft]);
-  const cancel = useCallback(() => dispatch(setEditDraft(null)), [dispatch]);
+  // Cancelling a line being drawn puts the Route tool down too.
+  const cancel = useCallback(
+    () => dispatch(draft?.kind === "line-new" ? setEditTool("select") : setEditDraft(null)),
+    [dispatch, draft]
+  );
 
   // An edit on a line: what each level of its scope would take.
   const [options, setOptions] = useState<{ draft: EditDraft; options: ScopeOption[] } | null>(null);
@@ -363,7 +382,8 @@ function tripsOf(b: Building | null): number[] | null {
     b?.kind === "line-stop-add" ||
     b?.kind === "line-reroute" ||
     b?.kind === "line-delete" ||
-    b?.kind === "line-extend"
+    b?.kind === "line-extend" ||
+    b?.kind === "line-new"
     ? (b.built.facts?.trip_idxs ?? null)
     : null;
 }
@@ -407,6 +427,8 @@ async function build(
           roads
         ),
       };
+    case "line-new":
+      return { kind: draft.kind, built: await newLine(db, draft.stops, draft.values, roads) };
     case "route-details":
       return { kind: draft.kind, built: await editRouteDetails(db, draft.route_idx, draft.values) };
     case "line-extend":
@@ -558,6 +580,18 @@ function wordsFor(
           impact,
         },
         bar: { action: t("explorer_add_stop_to_line") },
+      };
+    }
+    case "line-new": {
+      const f = b.built.facts;
+      return {
+        words: {
+          label: t("explorer_edit_line_created", { line: f?.line ?? "", ...raw }),
+          impact: f?.trips
+            ? [t("explorer_trips", { count: f.trips }), t("explorer_both_ways")].join(" · ")
+            : undefined,
+        },
+        bar: { action: t("explorer_create_line") },
       };
     }
     case "route-details": {

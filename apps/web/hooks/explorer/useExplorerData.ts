@@ -106,6 +106,25 @@ export function useRouteRecord(db: SqlRunner | undefined, route_idx: number) {
   return useQuery(db, `route-record:${route_idx}`, (d) => routeRecord(d, route_idx));
 }
 
+/** The feed's services, for a new line's days: with their weekdays (Mon=1
+ * … Sun=64), none for one that only calendar_dates gives. */
+export interface ServiceRow {
+  service_idx: number;
+  service_id: string;
+  days: number | null;
+  /** How many trips run on it. */
+  trips: number;
+}
+export function useServices(db: SqlRunner | undefined) {
+  return useQuery(db, "services", (d) =>
+    // Most used first: the days most lines run, at the top.
+    d.all<ServiceRow>(`
+      SELECT s.service_idx, s.service_id, s.days, CAST(count(t.trip_idx) AS INTEGER) AS trips
+      FROM services s LEFT JOIN trips t USING (service_idx)
+      GROUP BY ALL ORDER BY trips DESC, s.service_id`)
+  );
+}
+
 export function useAgencies(db: SqlRunner | undefined) {
   return useQuery(db, "agencies", (d) =>
     d.all<AgencyRow>("SELECT agency_idx, name FROM agencies ORDER BY name, agency_idx")

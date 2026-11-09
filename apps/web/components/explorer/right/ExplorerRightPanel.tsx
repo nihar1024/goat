@@ -32,6 +32,7 @@ import { DeleteLineCascade } from "@/components/explorer/edit/DeleteLineCascade"
 import { DeleteStopCascade } from "@/components/explorer/edit/DeleteStopCascade";
 import { ExtendPanel } from "@/components/explorer/edit/ExtendPanel";
 import { InsertStopPanel } from "@/components/explorer/edit/InsertStopPanel";
+import { NewLinePanel } from "@/components/explorer/edit/NewLinePanel";
 import { NewStopPanel } from "@/components/explorer/edit/NewStopPanel";
 import { ReroutePanel } from "@/components/explorer/edit/ReroutePanel";
 import { StopPanel } from "@/components/explorer/right/StopPanel";
@@ -78,15 +79,18 @@ function RightPanel() {
   const rerouting = edit?.draft.kind === "line-reroute" ? edit.draft : null;
   // A line being extended (1.3).
   const extending = edit?.draft.kind === "line-extend" ? edit.draft : null;
+  // A line being drawn with the Route tool (1.1).
+  const drawingLine = edit?.draft.kind === "line-new" ? edit.draft : null;
   // A line being deleted: its delete card alone, nothing open above it (1.5).
   // Or a line's own fields being edited: the line's in the left panel.
   const deletingLine = edit?.draft.kind === "line-delete" || edit?.draft.kind === "route-details";
-  if (!item && !placing && !inserting && !rerouting && !extending && !deletingLine) return null;
+  if (!item && !placing && !inserting && !rerouting && !extending && !drawingLine && !deletingLine)
+    return null;
   // A draft that fills the panel (a new stop, a stop added to a line) is the
   // edit itself: its fields and its confirmation one panel, outlined as the
   // edit panel is. Any other edit is made on the item shown, its
   // confirmation a panel of its own under it.
-  const whole = !!(placing || inserting || rerouting || extending);
+  const whole = !!(placing || inserting || rerouting || extending || drawingLine);
   const editSx = (theme: Theme) => ({
     border: `1.5px solid ${alpha(theme.palette.primary.main, 0.7)}`,
     boxShadow: `0 0 12px ${alpha(theme.palette.primary.main, 0.35)}`,
@@ -172,6 +176,8 @@ function RightPanel() {
                 <ReroutePanel draft={rerouting} />
               ) : extending ? (
                 <ExtendPanel draft={extending} />
+              ) : drawingLine ? (
+                <NewLinePanel draft={drawingLine} />
               ) : item?.kind === "stop" ? (
                 <StopPanel key={item.stop.stop_idx} stop={item.stop} />
               ) : item ? (

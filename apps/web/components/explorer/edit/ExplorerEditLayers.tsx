@@ -399,7 +399,11 @@ export function ExplorerEditLayers() {
   // drawn here in the network's stead and faint where it is drawn anew.
   // A stop being added to a line shows its paths as a moved one does.
   const shown =
-    (!!moving || draft?.kind === "line-stop-add" || draft?.kind === "line-extend" || !!rerouting) &&
+    (!!moving ||
+      draft?.kind === "line-stop-add" ||
+      draft?.kind === "line-extend" ||
+      draft?.kind === "line-new" ||
+      !!rerouting) &&
     !dragAt &&
     !bend;
   // In the colours the network is drawn in for the basemap under it: a dark

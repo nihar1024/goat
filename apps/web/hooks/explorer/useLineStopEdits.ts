@@ -9,7 +9,7 @@ import { useCallback } from "react";
 
 import { shownPattern } from "@/lib/explorer/directionChoice";
 import type { LineEnd } from "@/lib/explorer/edit/ops/extendLine";
-import type { CutEnd, LineScope } from "@/lib/explorer/edit/ops/lineStops";
+import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
 import {
   type ExplorerPatternChoice,
   type ExplorerRouteDrawing,
@@ -103,17 +103,5 @@ export function useLineStopEdits() {
     [scope, dispatch]
   );
 
-  /** 1.4: the line cut back at `stop`, ending or starting there, its panel
-   * open for the Apply bar. */
-  const cutLine = useCallback(
-    (stop: LineStopRef, end: CutEnd) => {
-      const s = scope();
-      if (!s || !route) return;
-      dispatch(openExplorerPanel({ item: { kind: "stop", stop }, fromRoute: route.route_id }));
-      dispatch(setEditDraft({ kind: "line-cut", stop_idx: stop.stop_idx, end, scope: s }));
-    },
-    [scope, route, dispatch]
-  );
-
-  return { insertBetween, removeFromLine, extend, cutLine, ready: !!route && !!drawing };
+  return { insertBetween, removeFromLine, extend, ready: !!route && !!drawing };
 }

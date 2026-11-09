@@ -403,7 +403,6 @@ export function ExplorerEditLayers() {
       draft?.kind === "line-stop-add" ||
       draft?.kind === "line-extend" ||
       draft?.kind === "line-new" ||
-      draft?.kind === "line-cut" ||
       !!rerouting) &&
     !dragAt &&
     !bend;

@@ -7,7 +7,6 @@ import {
   type LineScope,
   addScopeOptions,
   addToLine,
-  cutLine,
   removeFromLine,
   removeScopeOptions,
 } from "@/lib/explorer/edit/ops/lineStops";
@@ -218,72 +217,5 @@ describe("3.1 add a stop to a line", () => {
     const own = await addToLine(db, s2, s2, s3, scope, "km");
     expect(own.ok).toBe(false);
     if (!own.ok) expect(own.refused.code).toBe("goat_add_neighbour");
-  });
-});
-
-describe("1.4 cut a line back", () => {
-  let db: SqlRunner;
-  let scope: LineScope;
-  beforeEach(async () => {
-    db = await openFixtureDb();
-    scope = { route_idx: 0, level: "variant", pattern_idx: 0, direction: [0, 2], trip_idx: null };
-  });
-
-  it("ends the variant's trips at a stop, the stops past it gone from them, and undo puts it all back", async () => {
-    const before = await all(db);
-    const built = await cutLine(db, await idx(db, "S4"), "end", scope, "km");
-    if (!built.ok) throw new Error(built.refused.code);
-    expect(built.facts.dropped).toBe(1);
-    const session = new EditSession(db);
-    await session.apply({ id: "c", label: "Cut", ...built.rows });
-    expect(Array.from(await calls(db, "T1"))).toEqual(["S1", "S2", "S3", "S4"]);
-    // The short turn and the other direction as they were.
-    expect(Array.from(await calls(db, "T4"))).toEqual(["S1", "S2", "S3"]);
-    // Its last time now at S4; the stops themselves stay.
-    const [t1] = await db.all<{ last: number; s4: number }>(`
-      SELECT t.last_arr_s AS last, st.arrival_s AS s4 FROM trips t JOIN stop_times st USING (trip_idx)
-      JOIN stops s USING (stop_idx) WHERE t.trip_id = 'T1' AND s.stop_id = 'S4'`);
-    expect(t1.last).toBe(t1.s4);
-    expect(await db.all("SELECT 1 FROM stops WHERE stop_id = 'S5'")).toHaveLength(1);
-    expect(built.rows.gtfs.every((o) => o.role !== "stops" && o.op !== "reshape")).toBe(true);
-    await session.undo();
-    expect(await all(db)).toBe(before);
-  });
-
-  it("starts them at a stop, the stops before it gone", async () => {
-    const built = await cutLine(db, await idx(db, "S2"), "start", scope, "km");
-    if (!built.ok) throw new Error(built.refused.code);
-    await new EditSession(db).apply({ id: "c", label: "Cut", ...built.rows });
-    expect(Array.from(await calls(db, "T1"))).toEqual(["S2", "S3", "S4", "S5"]);
-  });
-
-  it("cuts one trip back alone, its pattern split", async () => {
-    const t1 = await tripIdx(db, "T1");
-    const others = await db.all<{ trip_id: string }>(
-      `SELECT trip_id FROM trips WHERE pattern_idx = 0 AND trip_id <> 'T1'`
-    );
-    const built = await cutLine(
-      db,
-      await idx(db, "S4"),
-      "end",
-      { ...scope, level: "trip", trip_idx: t1 },
-      "km"
-    );
-    if (!built.ok) throw new Error(built.refused.code);
-    await new EditSession(db).apply({ id: "c", label: "Cut", ...built.rows });
-    expect(await calls(db, "T1")).not.toContain("S5");
-    for (const o of others) expect(await calls(db, o.trip_id)).toContain("S5");
-  });
-
-  it("refuses a cut that leaves one stop, cuts nothing, or ends a trip where it has no time", async () => {
-    const one = await cutLine(db, await idx(db, "S1"), "end", scope, "km");
-    expect(!one.ok && one.refused.code).toBe("unusable_trip");
-    const none = await cutLine(db, await idx(db, "S5"), "end", scope, "km");
-    expect(!none.ok && none.refused.code).toBe("goat_cut_nothing");
-    await db.exec(`UPDATE stop_times SET arrival_s = NULL, departure_s = NULL
-                   WHERE trip_idx = (SELECT trip_idx FROM trips WHERE trip_id = 'T1')
-                     AND stop_idx = (SELECT stop_idx FROM stops WHERE stop_id = 'S4')`);
-    const untimed = await cutLine(db, await idx(db, "S4"), "end", scope, "km");
-    expect(!untimed.ok && untimed.refused.code).toBe("missing_trip_edge");
   });
 });

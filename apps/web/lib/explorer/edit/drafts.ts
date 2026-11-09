@@ -5,7 +5,7 @@
  * Cancel, Esc or picking something else lets it go with no trace.
  */
 import type { LineEnd } from "@/lib/explorer/edit/ops/extendLine";
-import type { CutEnd, LineScope } from "@/lib/explorer/edit/ops/lineStops";
+import type { LineScope } from "@/lib/explorer/edit/ops/lineStops";
 import type { RouteValues } from "@/lib/explorer/edit/ops/routes";
 
 /** GTFS wheelchair_boarding: 0 unknown (or as its station), 1 accessible,
@@ -79,9 +79,6 @@ export type EditDraft =
   | { kind: "stop-move"; stop_idx: number; lon: number; lat: number }
   /** 3.2: a stop taken off a line, for the trips its scope takes. */
   | { kind: "line-stop-remove"; stop_idx: number; scope: LineScope }
-  /** 1.4: the line cut back at a stop, for the trips its scope takes:
-   * ending there, or starting there. */
-  | { kind: "line-cut"; stop_idx: number; end: CutEnd; scope: LineScope }
   /** 3.1: a stop added to a line between `a` and `b`, for the trips its
    * scope takes; picked on the map (null until then). */
   | { kind: "line-stop-add"; a: number; b: number; stop_idx: number | null; scope: LineScope }

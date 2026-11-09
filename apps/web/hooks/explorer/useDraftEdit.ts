@@ -14,6 +14,7 @@ import type { SqlRunner } from "@/lib/explorer/db/types";
 import { tripsAnnualFigures } from "@/lib/explorer/derive/cost";
 import { type DraftPathKind, draftPathsStore } from "@/lib/explorer/edit/draftStore";
 import type { EditDraft, StopValues } from "@/lib/explorer/edit/drafts";
+import { type DeleteLineFacts, deleteLine } from "@/lib/explorer/edit/ops/deleteLine";
 import { type DeleteStopFacts, deleteStop } from "@/lib/explorer/edit/ops/deleteStop";
 import {
   type AddToLineFacts,
@@ -42,6 +43,7 @@ import { rateFor } from "@/lib/explorer/settings";
 import {
   closeExplorerPanel,
   openExplorerPanel,
+  selectExplorerRoute,
   setEditDraft,
   setEditTool,
   setExplorerPath,
@@ -66,7 +68,8 @@ export type Building =
   | { kind: "stop-move"; built: Built<MoveStopFacts> }
   | { kind: "line-stop-remove"; built: Built<RemoveFromLineFacts> }
   | { kind: "line-stop-add"; built: Built<AddToLineFacts> }
-  | { kind: "line-reroute"; built: Built<RerouteFacts> };
+  | { kind: "line-reroute"; built: Built<RerouteFacts> }
+  | { kind: "line-delete"; built: Built<DeleteLineFacts> };
 
 /** What the Apply bar says of the draft. */
 export interface BarWords {
@@ -285,6 +288,8 @@ export function useDraftEdit(): DraftEdit | null {
       if (now.kind === "stop-delete") dispatch(closeExplorerPanel());
       // The path rerouted is let go: its line was the one before.
       if (now.kind === "line-reroute") dispatch(setExplorerPath(null));
+      // A line deleted has nothing left to show either.
+      if (now.kind === "line-delete") dispatch(selectExplorerRoute(null));
     } finally {
       setApplying(false);
     }
@@ -357,7 +362,8 @@ function tripsOf(b: Building | null): number[] | null {
     b?.kind === "stop-move" ||
     b?.kind === "line-stop-remove" ||
     b?.kind === "line-stop-add" ||
-    b?.kind === "line-reroute"
+    b?.kind === "line-reroute" ||
+    b?.kind === "line-delete"
     ? (b.built.facts?.trip_idxs ?? null)
     : null;
 }
@@ -401,6 +407,8 @@ async function build(
           roads
         ),
       };
+    case "line-delete":
+      return { kind: draft.kind, built: await deleteLine(db, draft.route_idx, draft.stops) };
     case "line-reroute":
       return {
         kind: draft.kind,
@@ -413,6 +421,7 @@ async function build(
 function sameEdit(a: EditDraft, b: EditDraft): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "line-reroute" && b.kind === "line-reroute") return a.a === b.a && a.b === b.b;
+  if (a.kind === "line-delete" && b.kind === "line-delete") return a.route_idx === b.route_idx;
   return !("stop_idx" in a) || !("stop_idx" in b) || a.stop_idx === b.stop_idx;
 }
 
@@ -533,6 +542,19 @@ function wordsFor(
           impact,
         },
         bar: { action: t("explorer_add_stop_to_line") },
+      };
+    }
+    case "line-delete": {
+      const f = b.built.facts;
+      const impact = [
+        f?.trips ? t("explorer_trips", { count: f.trips }) : null,
+        f?.stops_deleted ? t("explorer_stops_deleted", { count: f.only_here }) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        words: { label: t("explorer_edit_line_deleted", { line: f?.line ?? "", ...raw }), impact },
+        bar: { action: t("explorer_delete_line"), danger: true },
       };
     }
     case "line-reroute": {

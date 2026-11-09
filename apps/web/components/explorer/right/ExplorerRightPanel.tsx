@@ -28,6 +28,7 @@ import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { RouteBadge, routeName } from "@/components/explorer/RouteBadge";
 import { ICON_GAP } from "@/components/explorer/SectionHeader";
 import { ApplyBar } from "@/components/explorer/edit/ApplyBar";
+import { DeleteLineCascade } from "@/components/explorer/edit/DeleteLineCascade";
 import { DeleteStopCascade } from "@/components/explorer/edit/DeleteStopCascade";
 import { InsertStopPanel } from "@/components/explorer/edit/InsertStopPanel";
 import { NewStopPanel } from "@/components/explorer/edit/NewStopPanel";
@@ -74,7 +75,9 @@ function RightPanel() {
   const inserting = edit?.draft.kind === "line-stop-add" ? edit.draft : null;
   // A path being rerouted, likewise (1.2).
   const rerouting = edit?.draft.kind === "line-reroute" ? edit.draft : null;
-  if (!item && !placing && !inserting && !rerouting) return null;
+  // A line being deleted: its delete card alone, nothing open above it (1.5).
+  const deletingLine = edit?.draft.kind === "line-delete";
+  if (!item && !placing && !inserting && !rerouting && !deletingLine) return null;
   // A draft that fills the panel (a new stop, a stop added to a line) is the
   // edit itself: its fields and its confirmation one panel, outlined as the
   // edit panel is. Any other edit is made on the item shown, its
@@ -95,6 +98,8 @@ function RightPanel() {
       impact={
         edit.building?.kind === "stop-delete" ? (
           <DeleteStopCascade edit={edit} routeByIdx={routeByIdx} />
+        ) : edit.building?.kind === "line-delete" ? (
+          <DeleteLineCascade edit={edit} routeByIdx={routeByIdx} />
         ) : null
       }
     />
@@ -105,68 +110,76 @@ function RightPanel() {
       {/* The item, and under it, while an edit is made, its confirmation as
           a panel of its own, as the left panel has the operating cost. */}
       <Stack spacing={2} sx={{ height: "100%", width: EXPLORER_RIGHT_PANEL_WIDTH, pointerEvents: "none" }}>
-        <FloatingPanel
-          width={EXPLORER_RIGHT_PANEL_WIDTH}
-          maxHeight="100%"
-          minHeight={0}
-          sx={(theme) => ({ flex: 1, minHeight: 0, ...(whole ? editSx(theme) : {}) })}>
-          {/* The back link starts on the panel's content line: its own padding
+        {(item || whole) && (
+          <FloatingPanel
+            width={EXPLORER_RIGHT_PANEL_WIDTH}
+            maxHeight="100%"
+            minHeight={0}
+            sx={(theme) => ({ flex: 1, minHeight: 0, ...(whole ? editSx(theme) : {}) })}>
+            {/* The back link starts on the panel's content line: its own padding
           (0.5) and the row's (2) make the content's (PX). */}
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={0.5}
-            sx={{ pl: 2, pr: 1.5, pt: 1, minHeight: 36 }}>
-            <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
-              {previous ? (
-                // Back to the item this one was opened from.
-                <ButtonBase
-                  onClick={() => dispatch(explorerPanelBack())}
-                  sx={{ gap: ICON_GAP, color: "text.secondary", borderRadius: 1, px: 0.5, maxWidth: "100%" }}>
-                  <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
-                  <Typography variant="caption" noWrap>
-                    {previousName}
-                  </Typography>
-                </ButtonBase>
-              ) : fromRoute ? (
-                // The route it belongs to, open in the left panel.
-                <Stack direction="row" spacing={ICON_GAP} alignItems="center" sx={{ px: 0.5, minWidth: 0 }}>
-                  <RouteBadge route={fromRoute} small />
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {routeName(fromRoute, t)}
-                  </Typography>
-                </Stack>
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={0.5}
+              sx={{ pl: 2, pr: 1.5, pt: 1, minHeight: 36 }}>
+              <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
+                {previous ? (
+                  // Back to the item this one was opened from.
+                  <ButtonBase
+                    onClick={() => dispatch(explorerPanelBack())}
+                    sx={{
+                      gap: ICON_GAP,
+                      color: "text.secondary",
+                      borderRadius: 1,
+                      px: 0.5,
+                      maxWidth: "100%",
+                    }}>
+                    <Icon iconName={ICON_NAME.CHEVRON_LEFT} style={{ fontSize: 11 }} />
+                    <Typography variant="caption" noWrap>
+                      {previousName}
+                    </Typography>
+                  </ButtonBase>
+                ) : fromRoute ? (
+                  // The route it belongs to, open in the left panel.
+                  <Stack direction="row" spacing={ICON_GAP} alignItems="center" sx={{ px: 0.5, minWidth: 0 }}>
+                    <RouteBadge route={fromRoute} small />
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {routeName(fromRoute, t)}
+                    </Typography>
+                  </Stack>
+                ) : null}
+              </Box>
+              <Tooltip title={t("explorer_panel_close")}>
+                <IconButton
+                  size="small"
+                  aria-label={t("explorer_panel_close")}
+                  onClick={() => dispatch(closeExplorerPanel())}>
+                  <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 14 }} htmlColor="inherit" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+            <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+              {placing ? (
+                <NewStopPanel draft={placing} />
+              ) : inserting ? (
+                <InsertStopPanel draft={inserting} />
+              ) : rerouting ? (
+                <ReroutePanel draft={rerouting} />
+              ) : item?.kind === "stop" ? (
+                <StopPanel key={item.stop.stop_idx} stop={item.stop} />
+              ) : item ? (
+                <TripPanel
+                  key={`${item.trip_idx}:${item.run_dep_s}`}
+                  trip_idx={item.trip_idx}
+                  run_dep_s={item.run_dep_s}
+                />
               ) : null}
             </Box>
-            <Tooltip title={t("explorer_panel_close")}>
-              <IconButton
-                size="small"
-                aria-label={t("explorer_panel_close")}
-                onClick={() => dispatch(closeExplorerPanel())}>
-                <Icon iconName={ICON_NAME.XCLOSE} style={{ fontSize: 14 }} htmlColor="inherit" />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-          <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-            {placing ? (
-              <NewStopPanel draft={placing} />
-            ) : inserting ? (
-              <InsertStopPanel draft={inserting} />
-            ) : rerouting ? (
-              <ReroutePanel draft={rerouting} />
-            ) : item?.kind === "stop" ? (
-              <StopPanel key={item.stop.stop_idx} stop={item.stop} />
-            ) : item ? (
-              <TripPanel
-                key={`${item.trip_idx}:${item.run_dep_s}`}
-                trip_idx={item.trip_idx}
-                run_dep_s={item.run_dep_s}
-              />
-            ) : null}
-          </Box>
-          {/* The draft's confirmation at its foot, set off by a line. */}
-          {whole && <Box sx={{ borderTop: 1, borderColor: "divider", flexShrink: 0 }}>{applyBar}</Box>}
-        </FloatingPanel>
+            {/* The draft's confirmation at its foot, set off by a line. */}
+            {whole && <Box sx={{ borderTop: 1, borderColor: "divider", flexShrink: 0 }}>{applyBar}</Box>}
+          </FloatingPanel>
+        )}
         {edit && !whole && (
           <FloatingPanel
             width={EXPLORER_RIGHT_PANEL_WIDTH}

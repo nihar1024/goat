@@ -649,7 +649,8 @@ export function rightPanelOpen(state: ExplorerState): boolean {
     (state.panel.stack.length > 0 ||
       kind === "stop-new" ||
       kind === "line-stop-add" ||
-      kind === "line-reroute")
+      kind === "line-reroute" ||
+      kind === "line-delete")
   );
 }
 

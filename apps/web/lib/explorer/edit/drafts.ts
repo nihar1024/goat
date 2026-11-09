@@ -60,4 +60,6 @@ export type EditDraft =
       ends: [[number, number], [number, number]];
       via: [number, number][];
       scope: LineScope;
-    };
+    }
+  /** 1.5: a line deleted, with the stops no other line serves if `stops`. */
+  | { kind: "line-delete"; route_idx: number; stops: boolean };

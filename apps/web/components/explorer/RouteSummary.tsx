@@ -3,7 +3,7 @@
  * Overview (board 22, the default; read-only until editing), Stops (board
  * 10) and Schedule (board 11).
  */
-import { Box, ButtonBase, Skeleton, Stack, Tab, Tabs, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Skeleton, Stack, Tab, Tabs, Typography } from "@mui/material";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -15,6 +15,7 @@ import { modeOf, routeColor } from "@/lib/explorer/modes";
 import {
   type ExplorerRouteTab,
   selectExplorerRoute,
+  setEditDraft,
   setExplorerDrawing,
   setExplorerRouteTab,
 } from "@/lib/store/explorer/slice";
@@ -153,10 +154,40 @@ export function RouteSummary({ route }: { route: RouteRow }) {
         {!summary.data && !summary.error && tab !== "calendar" && <SummarySkeleton />}
         {tab === "calendar" && <RouteCalendar trips={route} id={`route:${route.route_idx}`} of="line" />}
         {summary.data && tab === "service" && <RouteService route={route} data={summary.data} />}
+        {summary.data && tab === "service" && <DeleteLineButton route={route} />}
         {summary.data && tab === "stops" && (
           <RouteStops route={route} directions={summary.data.directions.map((d) => d.direction)} />
         )}
       </Box>
+    </Stack>
+  );
+}
+
+/** For an editor, at the foot of the line's overview, at the right, as a
+ * stop's delete sits at the foot of its details: what it takes with it is
+ * said once it is pressed (the delete card, 1.5). */
+function DeleteLineButton({ route }: { route: RouteRow }) {
+  const { t } = useTranslation("common");
+  const dispatch = useAppDispatch();
+  const editor = useAppSelector((s) => s.explorer.edit.enabled);
+  const deleting = useAppSelector(
+    (s) =>
+      s.explorer.edit.draft?.kind === "line-delete" && s.explorer.edit.draft.route_idx === route.route_idx
+  );
+  if (!editor || deleting) return null;
+  return (
+    <Stack direction="row" justifyContent="flex-end" sx={{ pb: 2 }}>
+      <Button
+        size="small"
+        variant="outlined"
+        color="error"
+        onClick={() =>
+          dispatch(setEditDraft({ kind: "line-delete", route_idx: route.route_idx, stops: false }))
+        }
+        startIcon={<Icon iconName={ICON_NAME.TRASH} style={{ fontSize: 12 }} htmlColor="inherit" />}
+        sx={{ flexShrink: 0, borderRadius: "16px", px: 1.5, fontWeight: 700, textTransform: "none" }}>
+        {t("explorer_delete_line")}
+      </Button>
     </Stack>
   );
 }

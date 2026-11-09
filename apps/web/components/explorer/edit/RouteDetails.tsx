@@ -6,7 +6,7 @@
  * foot, at the right, its delete; what that takes with it is said once it
  * is pressed (the delete card, 1.5).
  */
-import { Box, Button, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Button, ButtonBase, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -21,15 +21,18 @@ import {
 } from "@/lib/explorer/edit/ops/routes";
 import { modeOf } from "@/lib/explorer/modes";
 import { setEditDraft } from "@/lib/store/explorer/slice";
+import { rgbToHex } from "@/lib/utils/helpers";
 
 import { useDraftEditShown } from "@/hooks/explorer/useDraftEdit";
 import { useAgencies, useRouteRecord } from "@/hooks/explorer/useExplorerData";
 import { useAppDispatch, useAppSelector } from "@/hooks/store/ContextHooks";
 
+import { ArrowPopper } from "@/components/ArrowPoper";
 import { useExplorer } from "@/components/explorer/ExplorerContext";
 import { PX } from "@/components/explorer/SectionHeader";
 import { DetailsSection, FIELD_SX, OPTION_SX, POPUP_SX, Row } from "@/components/explorer/edit/StopDetails";
 import { modeIcon } from "@/components/explorer/modeIcon";
+import SingleColorSelector from "@/components/map/panels/style/color/SingleColorSelector";
 
 /** The basic route types, in the order riders meet them most. */
 const ROUTE_TYPES = [3, 11, 0, 1, 2, 12, 4, 5, 6, 7];
@@ -106,19 +109,13 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
           inputProps={{ "aria-label": label }}
           InputProps={{
             // The colour as it is typed, once it is one.
+            // The colour as typed, once it is one; clicked, GOAT's colour
+            // picker, as the map's layer styles have it.
             startAdornment: (
-              <Box
-                aria-hidden
-                sx={{
-                  ml: 1,
-                  width: 14,
-                  height: 14,
-                  flexShrink: 0,
-                  borderRadius: "3px",
-                  border: 1,
-                  borderColor: "divider",
-                  bgcolor: /^[0-9A-Fa-f]{6}$/.test(hex) ? `#${hex}` : "transparent",
-                }}
+              <Swatch
+                hex={/^[0-9A-Fa-f]{6}$/.test(hex) ? hex : null}
+                label={label}
+                onPick={(picked) => set(f, { [f]: picked })}
               />
             ),
           }}
@@ -235,3 +232,52 @@ export function RouteDetails({ route_idx }: { route_idx: number }) {
 
 /** The basic types, named by their mode alone. */
 const BASIC_LABELS: Record<number, true> = Object.fromEntries(ROUTE_TYPES.map((k) => [k, true]));
+
+/** A colour field's swatch, opening GOAT's colour picker. */
+function Swatch({
+  hex,
+  label,
+  onPick,
+}: {
+  hex: string | null;
+  label: string;
+  onPick: (hex: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <ArrowPopper
+      open={open}
+      placement="bottom"
+      arrow={false}
+      onClose={() => setOpen(false)}
+      content={
+        <Paper
+          sx={{
+            py: 3,
+            boxShadow: "rgba(0, 0, 0, 0.16) 0px 6px 12px 0px",
+            width: "235px",
+            maxHeight: "500px",
+          }}>
+          <SingleColorSelector
+            selectedColor={hex ? `#${hex}` : "#000000"}
+            onSelectColor={(rgb) => onPick(rgbToHex(rgb).replace(/^#/, "").toUpperCase())}
+          />
+        </Paper>
+      }>
+      <ButtonBase
+        aria-label={label}
+        onClick={() => setOpen((o) => !o)}
+        sx={{
+          ml: 1,
+          width: 16,
+          height: 16,
+          flexShrink: 0,
+          borderRadius: "3px",
+          border: 1,
+          borderColor: "divider",
+          bgcolor: hex ? `#${hex}` : "transparent",
+        }}
+      />
+    </ArrowPopper>
+  );
+}

@@ -87,6 +87,24 @@ STOP_REFERENCES: Dict[str, Tuple[str, ...]] = {
     "stop_areas": ("stop_id",),
 }
 
+#: Likewise the rows naming a route or a trip: a line deleted takes them
+#: with it (1.5).
+ROUTE_REFERENCES: Dict[str, Tuple[str, ...]] = {
+    "fare_rules": ("route_id",),
+    "attributions": ("route_id",),
+    "transfers": ("from_route_id", "to_route_id"),
+}
+TRIP_REFERENCES: Dict[str, Tuple[str, ...]] = {
+    "attributions": ("trip_id",),
+    "transfers": ("from_trip_id", "to_trip_id"),
+}
+#: Per role a change set deletes from: the tables whose rows go with it.
+REFERENCES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    "stops": STOP_REFERENCES,
+    "routes": ROUTE_REFERENCES,
+    "trips": TRIP_REFERENCES,
+}
+
 #: Columns a client never writes: the bundle derives them.
 DERIVED_COLUMNS = frozenset({"geometry", "bbox", "xmin", "ymin", "xmax", "ymax"})
 
@@ -1188,6 +1206,10 @@ def apply_changeset(
         else set()
     )
 
+    # The shapes of the trips it deletes: dropped after, where no trip runs
+    # them any more.
+    freed = _shapes_of_deleted_trips(t, net)
+
     applied = Applied()
     for role, rows in net.items():
         if not rows:
@@ -1217,7 +1239,8 @@ def apply_changeset(
                     counts["inserted"] += 1
         applied.rows[role] = counts
 
-    _cascade_stops(t, net, applied)
+    _cascade_references(t, net, applied)
+    unused = _drop_unused_shapes(t, freed, applied)
     reshaped: Set[str] = set()
     for op in changeset.ops:
         if isinstance(op, ShapeReshape):
@@ -1228,7 +1251,7 @@ def apply_changeset(
             "shapes", {"inserted": 0, "updated": 0, "deleted": 0}
         )
         counts["updated"] += len(reshaped)
-    _real_lines(t, touched.ids("shapes", "shape_id") | reshaped, derived)
+    _real_lines(t, touched.ids("shapes", "shape_id") | reshaped | unused, derived)
     _chain_lines(t, chains_before, reach, derived)
 
     after = _check(t, touched)
@@ -1462,25 +1485,79 @@ def _reshape(t: _Tables, op: ShapeReshape) -> None:
     )
 
 
-def _cascade_stops(
+def _cascade_references(
     t: _Tables, net: Mapping[str, Mapping[Tuple[Any, ...], _Net]], applied: Applied
 ) -> None:
-    """Delete the rows of ``STOP_REFERENCES`` that name a stop the change set
-    deleted, counted with what it wrote."""
-    gone = [key[0] for key, n in net.get("stops", {}).items() if n.kind == "delete"]
-    if not gone:
-        return
-    for role, columns in STOP_REFERENCES.items():
-        present = [c for c in columns if t.has(role) and c in t.columns(role)]
-        if not present:
+    """Delete the rows of ``REFERENCES`` that name a stop, route or trip the
+    change set deleted, counted with what it wrote."""
+    for owner, references in REFERENCES.items():
+        gone = [key[0] for key, n in net.get(owner, {}).items() if n.kind == "delete"]
+        if not gone:
             continue
-        where = " OR ".join(f"{_ident(c)} IN (SELECT UNNEST($gone))" for c in present)
-        (n,) = t.con.execute(
-            f"SELECT count(*) FROM {t.name(role)} WHERE {where}", {"gone": gone}
-        ).fetchone()
-        if n:
-            t.con.execute(f"DELETE FROM {t.name(role)} WHERE {where}", {"gone": gone})
-            applied.rows[role] = {"inserted": 0, "updated": 0, "deleted": int(n)}
+        for role, columns in references.items():
+            present = [c for c in columns if t.has(role) and c in t.columns(role)]
+            if not present:
+                continue
+            where = " OR ".join(
+                f"{_ident(c)} IN (SELECT UNNEST($gone))" for c in present
+            )
+            (n,) = t.con.execute(
+                f"SELECT count(*) FROM {t.name(role)} WHERE {where}", {"gone": gone}
+            ).fetchone()
+            if n:
+                t.con.execute(
+                    f"DELETE FROM {t.name(role)} WHERE {where}", {"gone": gone}
+                )
+                counts = applied.rows.setdefault(
+                    role, {"inserted": 0, "updated": 0, "deleted": 0}
+                )
+                counts["deleted"] += int(n)
+
+
+def _shapes_of_deleted_trips(
+    t: _Tables, net: Mapping[str, Mapping[Tuple[Any, ...], _Net]]
+) -> Set[str]:
+    """The shapes the trips ``net`` deletes run, before they go."""
+    gone = [key[0] for key, n in net.get("trips", {}).items() if n.kind == "delete"]
+    if not gone or not t.has("trips") or "shape_id" not in t.columns("trips"):
+        return set()
+    return {
+        str(r[0])
+        for r in t.con.execute(
+            f"SELECT DISTINCT shape_id FROM {t.name('trips')} "
+            "WHERE trip_id IN (SELECT UNNEST($gone)) AND shape_id IS NOT NULL",
+            {"gone": gone},
+        ).fetchall()
+    }
+
+
+def _drop_unused_shapes(t: _Tables, freed: Set[str], applied: Applied) -> Set[str]:
+    """Delete the shapes of ``freed`` no trip runs any more (a line deleted,
+    1.5): a shape nothing runs is a line the map would still draw. Returns
+    their ids, whose lines go with them."""
+    if not freed or not t.has("shapes"):
+        return set()
+    shapes = t.name("shapes")
+    unused = {
+        str(r[0])
+        for r in t.con.execute(
+            f"SELECT DISTINCT shape_id FROM {shapes} "
+            "WHERE CAST(shape_id AS VARCHAR) IN (SELECT UNNEST($freed)) "
+            f"AND shape_id NOT IN (SELECT shape_id FROM {t.name('trips')} "
+            "WHERE shape_id IS NOT NULL)",
+            {"freed": sorted(freed)},
+        ).fetchall()
+    }
+    if unused:
+        t.con.execute(
+            f"DELETE FROM {shapes} WHERE CAST(shape_id AS VARCHAR) IN (SELECT UNNEST($u))",
+            {"u": sorted(unused)},
+        )
+        counts = applied.rows.setdefault(
+            "shapes", {"inserted": 0, "updated": 0, "deleted": 0}
+        )
+        counts["deleted"] += len(unused)
+    return unused
 
 
 def _drop_scratch(con: Any) -> None:

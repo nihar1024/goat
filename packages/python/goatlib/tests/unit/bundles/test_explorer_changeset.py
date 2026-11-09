@@ -862,9 +862,7 @@ def test_a_path_rerouted_between_two_stops_moves_the_stops_past_it_on(
                 "key": {"shape_id": "SH1"},
                 "source": "SH1",
                 "metres_per_unit": 1000,
-                "stretches": [
-                    {"from": 0.25, "to": 0.5, "points": [[13.407, 52.51]]}
-                ],
+                "stretches": [{"from": 0.25, "to": 0.5, "points": [[13.407, 52.51]]}],
             }
         ],
     )
@@ -879,6 +877,58 @@ def test_a_path_rerouted_between_two_stops_moves_the_stops_past_it_on(
         ).fetchall()
         == times
     )
+
+
+def _line_deleted(
+    con: duckdb.DuckDBPyConnection, route_id: str
+) -> List[Dict[str, Any]]:
+    trips = [
+        r[0]
+        for r in con.execute(
+            f"SELECT trip_id FROM trips WHERE route_id = '{route_id}'"
+        ).fetchall()
+    ]
+    ops: List[Dict[str, Any]] = [
+        {
+            "role": "stop_times",
+            "op": "delete",
+            "key": {"trip_id": t, "stop_sequence": q},
+        }
+        for t, q in con.execute(
+            "SELECT trip_id, stop_sequence FROM stop_times WHERE trip_id IN (SELECT UNNEST($t))",
+            {"t": trips},
+        ).fetchall()
+    ]
+    ops += [{"role": "trips", "op": "delete", "key": {"trip_id": t}} for t in trips]
+    ops.append({"role": "routes", "op": "delete", "key": {"route_id": route_id}})
+    return ops
+
+
+def test_a_line_deleted_takes_its_shapes_and_fare_rules(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    con.execute("CREATE TABLE fare_rules (fare_id VARCHAR, route_id VARCHAR)")
+    con.execute("INSERT INTO fare_rules VALUES ('F', 'R1'), ('F', 'R2')")
+    applied = apply_changeset(
+        con,
+        {**TABLES, "fare_rules": "fare_rules"},
+        ChangeSet(ops=_line_deleted(con, "R1")),
+    )
+    assert one(con, "SELECT count(*) FROM routes WHERE route_id = 'R1'") == (0,)
+    # SH1, run by R1's trips only, goes, and its line with it.
+    assert one(con, "SELECT count(*) FROM shapes WHERE shape_id = 'SH1'") == (0,)
+    assert line(con, "SH1") is None
+    assert applied.rows["shapes"]["deleted"] == 1
+    assert con.execute("SELECT route_id FROM fare_rules").fetchall() == [("R2",)]
+    assert applied.rows["fare_rules"]["deleted"] == 1
+
+
+def test_a_shape_another_trip_runs_stays_when_a_line_goes(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    con.execute("UPDATE trips SET shape_id = 'SH1' WHERE trip_id = 'U1'")
+    apply(con, _line_deleted(con, "R1"))
+    assert one(con, "SELECT count(*) FROM shapes WHERE shape_id = 'SH1'") == (5,)
 
 
 def _hms(t: Any) -> str:

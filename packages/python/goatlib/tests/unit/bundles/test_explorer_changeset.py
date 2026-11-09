@@ -1000,6 +1000,51 @@ def test_a_line_extended_before_its_start_moves_its_distances_on(
     assert moved == pytest.approx([moved[0]] * 5)
 
 
+def test_a_line_s_fields_are_edited_its_description_given_its_column(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    apply(
+        con,
+        [
+            {
+                "role": "routes",
+                "op": "update",
+                "key": {"route_id": "R1"},
+                "values": {
+                    "route_long_name": "Main Line East",
+                    "route_desc": "Via the centre",
+                    "route_color": "00AA55",
+                    "continuous_pickup": 1,
+                },
+            }
+        ],
+    )
+    assert one(
+        con,
+        "SELECT route_long_name, route_desc, route_color, continuous_pickup FROM routes WHERE route_id = 'R1'",
+    ) == ("Main Line East", "Via the centre", "00AA55", 1)
+
+
+def test_a_line_left_without_a_name_is_refused(con: duckdb.DuckDBPyConnection) -> None:
+    con.begin()
+    with pytest.raises(ChangeSetIntegrityError) as caught:
+        apply(
+            con,
+            [
+                {
+                    "role": "routes",
+                    "op": "update",
+                    "key": {"route_id": "R1"},
+                    "values": {"route_short_name": None, "route_long_name": None},
+                }
+            ],
+        )
+    con.rollback()
+    assert {n.code for n in caught.value.notices} == {
+        "route_both_short_and_long_name_missing"
+    }
+
+
 def _hms(t: Any) -> str:
     secs = int(t.total_seconds())
     return f"{secs // 3600:02d}:{secs % 3600 // 60:02d}:{secs % 60:02d}"

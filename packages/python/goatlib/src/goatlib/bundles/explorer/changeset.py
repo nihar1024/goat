@@ -77,6 +77,16 @@ ADDABLE_COLUMNS: Dict[str, Tuple[str, ...]] = {
         "platform_code",
     ),
     "trips": ("trip_headsign",),
+    "routes": (
+        "agency_id",
+        "route_desc",
+        "route_url",
+        "route_color",
+        "route_text_color",
+        "route_sort_order",
+        "continuous_pickup",
+        "continuous_drop_off",
+    ),
 }
 
 #: Tables the Explorer does not edit whose rows name a stop: a stop deleted

@@ -36,7 +36,7 @@ from goatlib.io.config import parquet_copy_options
 
 #: Bumped when a file's columns or meaning change; part of the files' URLs,
 #: so a browser never mixes files of two versions.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 #: GTFS ``shape_dist_traveled`` has no fixed unit. The feed's unit is the one
 #: of these (metres per unit) nearest to what its stops' straight-line
@@ -307,7 +307,11 @@ def _routes(con: Any, rel: Rel, present: Present) -> None:
                    {_col(r, "route_type", "SMALLINT")} AS route_type,
                    {_col(r, "route_color", "VARCHAR")} AS color,
                    {_col(r, "route_text_color", "VARCHAR")} AS text_color,
-                   {_col(r, "route_sort_order", "INTEGER")} AS sort_order
+                   {_col(r, "route_sort_order", "INTEGER")} AS sort_order,
+                   {_col(r, "route_desc", "VARCHAR")} AS description,
+                   {_col(r, "route_url", "VARCHAR")} AS url,
+                   {_col(r, "continuous_pickup", "SMALLINT")} AS continuous_pickup,
+                   {_col(r, "continuous_drop_off", "SMALLINT")} AS continuous_drop_off
             FROM {rel["routes"]}
             WHERE "route_id" IS NOT NULL
             QUALIFY row_number() OVER (PARTITION BY "route_id") = 1
@@ -323,7 +327,8 @@ def _routes(con: Any, rel: Rel, present: Present) -> None:
                             short_name NULLS LAST, long_name NULLS LAST, route_id
                ) - 1 AS INTEGER) AS route_idx,
                route_id, CAST(agency_idx AS INTEGER) AS agency_idx, short_name,
-               long_name, route_type, color, text_color, sort_order
+               long_name, route_type, color, text_color, sort_order, description, url,
+               continuous_pickup, continuous_drop_off
         FROM joined
         """
     )
